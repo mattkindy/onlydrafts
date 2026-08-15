@@ -182,8 +182,17 @@ async function main(): Promise<void> {
   }
 
   const weeks = [...byWeek.keys()].sort((a, b) => a - b);
+  const actualPoints = new Map<string, number>();
 
-  const evaluateBoard = (challenger: BoardEntry[], label: string): void => {
+  for (const e of season) {
+    actualPoints.set(`${e.playerId}|${e.week}`, e.target);
+  }
+
+  const evaluateBoard = (
+    challenger: BoardEntry[],
+    label: string,
+    realized = false,
+  ): void => {
     const challengerValue = new Map(
       challenger.map((entry) => [entry.playerId, entry.value]),
     );
@@ -195,14 +204,23 @@ async function main(): Promise<void> {
       let slotChallengerWins = 0;
       let slotFieldWins = 0;
 
-      for (let sim = 0; sim < SIMS_PER_SLOT; sim++) {
+      const sims = realized ? 1 : SIMS_PER_SLOT;
+
+      for (let sim = 0; sim < sims; sim++) {
         const rng = seededRng(slot * SIMS_PER_SLOT + sim + 1);
 
         for (let w = 0; w < weeks.length; w++) {
           const rostered = byWeek
             .get(weeks[w]!)!
             .filter((p) => rosters.some((r) => r.has(p.playerId)));
-          const outcomes = drawWeekOutcomes(rostered, residuals, rng);
+          const outcomes = realized
+            ? new Map(
+                rostered.map((p) => [
+                  p.playerId,
+                  actualPoints.get(`${p.playerId}|${weeks[w]}`) ?? 0,
+                ]),
+              )
+            : drawWeekOutcomes(rostered, residuals, rng);
 
           const points = rosters.map((roster, team) => {
             const candidates = rostered
@@ -237,8 +255,8 @@ async function main(): Promise<void> {
         }
       }
 
-      challengerSum += slotChallengerWins / SIMS_PER_SLOT;
-      fieldSum += slotFieldWins / SIMS_PER_SLOT / (TEAMS - 1);
+      challengerSum += slotChallengerWins / sims;
+      fieldSum += slotFieldWins / sims / (TEAMS - 1);
     }
 
     console.log(
@@ -252,6 +270,11 @@ async function main(): Promise<void> {
   evaluateBoard(modelBoard, "model projections");
   evaluateBoard(vorBoard(naiveBoard), "naive + replacement");
   evaluateBoard(vorBoard(modelBoard), "model + replacement");
+
+  console.log("\nsame boards scored against the season that actually happened:");
+  evaluateBoard(modelBoard, "model projections", true);
+  evaluateBoard(vorBoard(naiveBoard), "naive + replacement", true);
+  evaluateBoard(vorBoard(modelBoard), "model + replacement", true);
 }
 
 main().catch((error) => {
