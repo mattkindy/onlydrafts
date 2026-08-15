@@ -1,0 +1,81 @@
+# depth-chart
+
+Fantasy football draft analysis built on a graph. Player performance is
+shaped by relationships: who coaches the offense, who else competes for
+targets, which defenses show up on the schedule, whether the quarterback
+changed. Most projection systems flatten those into per-player averages.
+This project keeps them as edges and asks whether the structure predicts
+fantasy output better than the averages do.
+
+## The graph
+
+Nodes:
+
+- **Player**, with position and career stint history
+- **Team**
+- **Coach**, with a role (head coach, offensive coordinator, defensive
+  coordinator)
+- **Game**, one per scheduled matchup, carrying season, week, and site
+
+Edges, each with a validity span so the graph can be queried "as of"
+any week:
+
+- Player plays for Team (a stint)
+- Coach works for Team in a role (a stint)
+- Team plays in Game, home or away
+
+Everything the model uses is a feature computed by walking this graph at
+a point in time. Examples worth testing early:
+
+- **Continuity**: does the player have the same offensive coordinator as
+  last season? The same quarterback?
+- **Competition**: how many players at the same position joined the
+  roster since last season, weighted by their draft capital?
+- **Scheme inheritance**: when a coordinator moves teams, do his skill
+  players' usage patterns move with him?
+- **Schedule shape**: strength of opposing defenses by week, bye timing,
+  rest differentials.
+
+## Prediction and backtest
+
+The target is weekly fantasy points. Scoring is a set of per-stat
+weights in `src/scoring/`: start from a standard, half, or full PPR
+preset and override any weight to match a league's settings. The loop:
+
+1. Build the graph as of draft day for season S using only information
+   available then.
+2. Extract features per player, predict the season's weekly points.
+3. Score against what actually happened, with seasons S-3 through S-1
+   as training data.
+
+Baselines to beat, in order of difficulty: last season's points per
+game, then ADP-implied rank. Metrics live in `src/backtest/`: RMSE on
+points and Spearman rank correlation within each position, since draft
+decisions are rankings, not point estimates.
+
+## Data
+
+- **nflverse** publishes weekly player stats, rosters, and schedules as
+  flat files. `scripts/fetchData.ts` downloads them to `data/raw/`,
+  which stays out of git.
+- Coaching staff history has no single flat-file source. The plan is a
+  hand-curated `data/coaches.csv` seeded from Pro Football Reference,
+  small enough to maintain by hand (32 teams, 3 roles, ~10 seasons).
+
+## Getting started
+
+```
+npm install
+npm test
+npx tsx scripts/fetchData.ts --seasons 2021-2025
+```
+
+## Layout
+
+```
+src/graph/      node and edge types, as-of queries
+src/scoring/    fantasy point formulas per format
+src/backtest/   metrics and season splits
+scripts/        data download
+data/           raw and curated inputs (raw is gitignored)
+```

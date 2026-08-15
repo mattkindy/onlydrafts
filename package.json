@@ -1,0 +1,18 @@
+{
+  "name": "depth-chart",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Graph-based fantasy football draft analysis and backtesting",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "fetch": "tsx scripts/fetchData.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
