@@ -53,7 +53,16 @@ a point in time. Examples worth testing early:
 
 The target is weekly fantasy points. Scoring is a set of per-stat
 weights in `src/scoring/`: start from a standard, half, or full PPR
-preset and override any weight to match a league's settings. The loop:
+preset and override any weight to match a league's settings.
+
+A player's week decomposes as team opportunities, times his share of
+them, times efficiency. The share term is the team's depth chart as it
+stood that week, so predicting it is part of the job: injuries elevate
+backups, committees drift, rookies ramp up. Season simulations carry a
+depth chart per simulated week and reshuffle it when a simulated injury
+removes a starter, which is where handcuff value comes from without
+being hand-assigned. nflverse's weekly depth charts and snap counts are
+the historical ground truth to train and score against. The loop:
 
 1. Build the graph as of draft day for season S using only information
    available then.
@@ -99,6 +108,15 @@ of its players:
 The season simulation is what makes all of this scoreable: simulate
 weeks, fill lineups, and count wins, so a backtest can judge whole
 rosters and draft strategies rather than isolated player projections.
+
+Filling the lineup each simulated week is itself the start/sit tool,
+called once per week with only that week's pre-kickoff information. The
+policy has to be explicit and held fixed when comparing drafts, because
+a deep bench is only worth what the lineup policy can extract from it.
+It also gets its own score: run the same seasons under
+hindsight-optimal lineups, the model's policy, and a naive
+projection-order policy, and the share of the naive-to-optimal gap the
+model closes is the tool's value, measured in wins.
 
 ## Data
 
