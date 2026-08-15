@@ -59,6 +59,18 @@ game, then ADP-implied rank. Metrics live in `src/backtest/`: RMSE on
 points and Spearman rank correlation within each position, since draft
 decisions are rankings, not point estimates.
 
+Two rules keep the comparison fair:
+
+- **ADP is a dated snapshot.** Each season's baseline uses the latest
+  ADP available before that season's drafts, and the model gets a
+  matching information cutoff. Comparing against stale July ADP
+  flatters the model; letting the model see September news that the
+  ADP snapshot predates flatters it worse.
+- **Injuries are not misses.** Predictions are scored per game played.
+  A player who tears an ACL in the preseason drops out of evaluation
+  rather than counting against the model, unless injury risk itself
+  becomes a modeled feature someday. Even then, some of it is dice.
+
 ## From player rankings to roster decisions
 
 A draft picks a roster, and a roster is worth more or less than the sum
