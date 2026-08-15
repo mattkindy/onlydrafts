@@ -2,17 +2,13 @@
 // the test seasons, scoring the ridge against season average and last
 // four games. Run: npx tsx scripts/weeklyBacktest.ts
 
+import { loadGames } from "../src/data/nflverse.js";
+import { type WeeklyExample } from "../src/features/weekly.js";
 import {
-  loadGames,
-  loadPlayerStats,
-  loadSnapCounts,
-} from "../src/data/nflverse.js";
-import { presets } from "../src/scoring/fantasyPoints.js";
-import { summarizeSeason } from "../src/features/seasonSummary.js";
-import {
-  buildWeeklyExamples,
-  type WeeklyExample,
-} from "../src/features/weekly.js";
+  WEEKLY_FEATURES,
+  weeklyExamplesForSeason,
+  weeklyRow,
+} from "../src/features/weeklyModel.js";
 import { spearman } from "../src/backtest/metrics.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import {
@@ -21,36 +17,6 @@ import {
 } from "../src/backtest/intervals.js";
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
-
-const FEATURES = [
-  "intercept",
-  "isQB",
-  "isRB",
-  "isTE",
-  "last4",
-  "seasonPpg",
-  "prevPpg",
-  "snapRecent",
-  "oppIndex",
-  "home",
-  "impliedTotal",
-] as const;
-
-function row(e: WeeklyExample): number[] {
-  return [
-    1,
-    e.position === "QB" ? 1 : 0,
-    e.position === "RB" ? 1 : 0,
-    e.position === "TE" ? 1 : 0,
-    e.last4,
-    e.seasonPpg,
-    e.prevPpg,
-    e.snapRecent,
-    e.oppIndex,
-    e.home ? 1 : 0,
-    e.impliedTotal,
-  ];
-}
 
 function parseList(arg: string | undefined, fallback: number[]): number[] {
   if (!arg) {
@@ -66,31 +32,6 @@ function parseList(arg: string | undefined, fallback: number[]): number[] {
   }
 
   return arg.split(",").map(Number);
-}
-
-async function examplesForSeason(
-  season: number,
-  games: Awaited<ReturnType<typeof loadGames>>,
-): Promise<WeeklyExample[]> {
-  const stats = await loadPlayerStats(season);
-  const prevStats = await loadPlayerStats(season - 1);
-  const prevSummaries = summarizeSeason(prevStats, presets.ppr);
-  const prevPpg = new Map<string, number>();
-
-  for (const [id, summary] of prevSummaries) {
-    if (summary.games >= 4) {
-      prevPpg.set(id, summary.pointsPerGame);
-    }
-  }
-
-  return buildWeeklyExamples(
-    season,
-    stats,
-    prevPpg,
-    games,
-    await loadSnapCounts(season),
-    presets.ppr,
-  );
 }
 
 /** mean Spearman across position-weeks with at least ten players */
@@ -134,12 +75,12 @@ async function rollingWeekly(
       .filter((s) => s < testSeason)
       .flatMap((s) => cache.get(s)!);
     const test = cache.get(testSeason)!;
-    const weights = fitRidge(train.map(row), train.map((e) => e.target), 25);
+    const weights = fitRidge(train.map(weeklyRow), train.map((e) => e.target), 25);
 
     const predictors: ((e: WeeklyExample) => number)[] = [
       (e) => e.seasonPpg,
       (e) => e.last4,
-      (e) => predictRidge(weights, row(e)),
+      (e) => predictRidge(weights, weeklyRow(e)),
     ];
 
     for (let v = 0; v < names.length; v++) {
@@ -176,32 +117,32 @@ async function main(): Promise<void> {
   const cache = new Map<number, WeeklyExample[]>();
 
   for (const season of allSeasons) {
-    cache.set(season, await examplesForSeason(season, games));
+    cache.set(season, await weeklyExamplesForSeason(season, games));
   }
 
   await rollingWeekly(allSeasons, cache);
 
   const train = trainSeasons.flatMap((s) => cache.get(s)!);
 
-  const weights = fitRidge(train.map(row), train.map((e) => e.target), 25);
+  const weights = fitRidge(train.map(weeklyRow), train.map((e) => e.target), 25);
 
   console.log(`train examples: ${train.length}`);
   console.log("weights:");
 
-  for (let i = 0; i < FEATURES.length; i++) {
-    console.log(`  ${FEATURES[i]!.padEnd(12)} ${weights[i]!.toFixed(3)}`);
+  for (let i = 0; i < WEEKLY_FEATURES.length; i++) {
+    console.log(`  ${WEEKLY_FEATURES[i]!.padEnd(12)} ${weights[i]!.toFixed(3)}`);
   }
 
   const variants: [string, (e: WeeklyExample) => number][] = [
     ["season-avg", (e) => e.seasonPpg],
     ["last4", (e) => e.last4],
-    ["ridge", (e) => predictRidge(weights, row(e))],
+    ["ridge", (e) => predictRidge(weights, weeklyRow(e))],
   ];
 
   const residualModel = buildResidualModel(
     train.map((e) => ({
       position: e.position,
-      predicted: predictRidge(weights, row(e)),
+      predicted: predictRidge(weights, weeklyRow(e)),
       actual: e.target,
     })),
     5,
@@ -222,7 +163,7 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const predicted = predictRidge(weights, row(e));
+        const predicted = predictRidge(weights, weeklyRow(e));
         const lo80 = outcomeQuantile(residualModel, position, predicted, 0.1);
         const hi80 = outcomeQuantile(residualModel, position, predicted, 0.9);
         const lo50 = outcomeQuantile(residualModel, position, predicted, 0.25);
