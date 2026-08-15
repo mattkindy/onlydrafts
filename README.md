@@ -62,8 +62,19 @@ volume by depth-chart shares, then apply per-player efficiency. Vegas
 spreads and totals enter the game layer the way the seed prior entered
 bracket-oracle, as a strong market prior the graph features learn to
 adjust, and closing lines are the benchmark that layer has to face.
-Script-level simulation is deep enough; play-by-play fidelity costs
-more than it returns for fantasy purposes.
+
+Inside a simulated game, the two coaching staffs are the decision
+makers, in the way a franchise-mode sim treats them. Before kickoff
+they set starters and rotations against this specific opponent, and
+schedule context applies (a locked playoff seed rests starters in week
+18). In play, each staff follows a tendency profile learned from
+play-by-play: pace, pass rate by score and clock, how quickly starters
+leave a blowout, committee splits. Profiles attach to the coach, not
+the team, so they move when he does. Mid-game events reroute the rest
+of that same game: a second-quarter injury hands the backup three
+quarters of touches in this box score, not next week's. Individual
+plays are never simulated; drives, rotations, and decisions are the
+unit of fidelity.
 
 A player's week decomposes as team opportunities, times his share of
 them, times efficiency. The share term is the team's depth chart as it
