@@ -31,9 +31,11 @@ work is in the commit history and the README.
   the game simulator.
 - Rookie projection from draft capital; rookies are invisible to every
   current evaluation.
-- Dated ADP snapshots from an actual market as the draft baseline.
-  Every draft comparison so far uses last-season points as the
-  stand-in for ADP.
+- ADP is in: Fantasy Football Calculator preseason snapshots, 2016
+  through 2025, with an evaluation in scripts/adpEval.ts. Remaining:
+  use the ADP board inside the draft simulations, and add rookies to
+  the comparison, since the market ranks them and the model cannot
+  yet.
 - Rerun the draft simulation scored against realized 2024 outcomes
   rather than value implied by our own weekly model.
 - Per-position weekly models; one pooled set of weights leaves QB
