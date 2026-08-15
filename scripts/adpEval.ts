@@ -13,6 +13,12 @@ import {
   projectDraftExamples,
   type SeasonExample,
 } from "../src/features/seasonModel.js";
+import {
+  fitRookieModel,
+  predictRookie,
+  rookiesFor,
+  type RookieExample,
+} from "../src/features/rookies.js";
 
 const ALL_SEASONS = [
   2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025,
@@ -50,6 +56,15 @@ async function main(): Promise<void> {
     const fit = fitSeasonModel(train);
     const board = await projectDraftExamples(target, data);
     const adp = await loadAdp(target);
+
+    const rookieTrain: RookieExample[] = [];
+
+    for (const t of ALL_SEASONS.filter((s) => s >= 2017 && s < target)) {
+      rookieTrain.push(...(await rookiesFor(t, data)));
+    }
+
+    const rookieWeights = fitRookieModel(rookieTrain);
+    const rookieClass = await rookiesFor(target, data);
     const prevNames = data.get(target - 1)!.summaries;
     const actuals = data.get(target)!.summaries;
 
@@ -87,6 +102,22 @@ async function main(): Promise<void> {
         .get("adp+model")!
         .push(spearman(adpRank.map((r, i) => -(r + modelRank[i]!)), actual));
     };
+
+    for (const r of rookieClass) {
+      const entry = adp.get(`${normalizeName(r.name)}|${r.position}`);
+
+      if (!entry || r.actualPpg === undefined || r.actualGames < MIN_TARGET_GAMES) {
+        continue;
+      }
+
+      rows.push({
+        name: r.name,
+        adp: entry.adp,
+        projection: predictRookie(rookieWeights, r),
+        prevPpg: 0,
+        actual: r.actualPpg,
+      });
+    }
 
     score(rows, results);
     score([...rows].sort((a, b) => a.adp - b.adp).slice(0, 30), topResults);
