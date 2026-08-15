@@ -10,6 +10,7 @@ import { summarizeSeason, type SeasonSummary } from "./seasonSummary.js";
 import { primaryQbByTeam, projectedQbByTeam } from "./teamQb.js";
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
 import { fitGbm, predictGbm, type GbmModel } from "../backtest/gbm.js";
+import { loadCoaches } from "../data/coaches.js";
 import { spearman } from "../backtest/metrics.js";
 
 export const SEASON_POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -42,6 +43,12 @@ export interface SeasonExample {
   tdPointShare: number;
   /** share of the team's five most-used linemen last season still rostered */
   olRetention: number;
+  /** the target team's offensive coordinator differs from last season's */
+  ocChanged: boolean;
+  /** the target team's head coach differs from last season's */
+  hcChanged: boolean;
+  /** a mover whose new coordinator ran his old team's offense recently */
+  ocReunion: boolean;
 }
 
 export interface SeasonData {
@@ -76,6 +83,8 @@ export const SEASON_RIDGE_FEATURES = [
   "tdShare",
   "olRetention",
   "olRetentionRB",
+  "ocChanged",
+  "ocReunion",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -142,6 +151,9 @@ interface DraftContext {
   prevQb: Map<string, string>;
   /** per team: share of last season's five most-used linemen still rostered */
   olRetention: Map<string, number>;
+  ocChanged: Map<string, boolean>;
+  hcChanged: Map<string, boolean>;
+  coachOf: (team: string, season: number, role: string) => string | undefined;
 }
 
 interface Lineman {
@@ -259,6 +271,21 @@ async function draftContext(
     }
   }
 
+  const coaches = await loadCoaches();
+  const coachOf = (team: string, season: number, role: string) =>
+    coaches.get(`${team}|${season}|${role}`);
+  const ocChanged = new Map<string, boolean>();
+  const hcChanged = new Map<string, boolean>();
+
+  for (const teamId of new Set([...olRetention.keys(), ...targetOl.keys()])) {
+    const oc = coachOf(teamId, target, "OC");
+    const prevOc = coachOf(teamId, target - 1, "OC");
+    const hc = coachOf(teamId, target, "HC");
+    const prevHc = coachOf(teamId, target - 1, "HC");
+    ocChanged.set(teamId, oc === undefined || oc !== prevOc);
+    hcChanged.set(teamId, hc === undefined || hc !== prevHc);
+  }
+
   return {
     entryYear,
     birthYear,
@@ -267,6 +294,9 @@ async function draftContext(
     projectedQb: projectedQbByTeam(rosterWeekOne, prev.summaries),
     prevQb: primaryQbByTeam(prev.stats),
     olRetention,
+    ocChanged,
+    hcChanged,
+    coachOf,
   };
 }
 
@@ -317,10 +347,41 @@ export async function examplesForTransition(
       gamesPrev: was.games,
       tdPointShare: was.tdPointShare,
       olRetention: context.olRetention.get(targetTeam) ?? 0.6,
+      ocChanged: context.ocChanged.get(targetTeam) ?? true,
+      hcChanged: context.hcChanged.get(targetTeam) ?? true,
+      ocReunion: moved && reunion(context, data, playerId, targetTeam, target),
     });
   }
 
   return examples;
+}
+
+function reunion(
+  context: DraftContext,
+  data: Map<number, SeasonData>,
+  playerId: string,
+  targetTeam: string,
+  target: number,
+): boolean {
+  const newOc = context.coachOf(targetTeam, target, "OC");
+
+  if (!newOc) {
+    return false;
+  }
+
+  for (let s = target - 3; s < target; s++) {
+    const oldTeam = data.get(s)?.summaries.get(playerId)?.primaryTeamId;
+
+    if (
+      oldTeam &&
+      oldTeam !== targetTeam &&
+      context.coachOf(oldTeam, s, "OC") === newOc
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function ageOf(
@@ -432,6 +493,8 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
     e.tdPointShare,
     e.olRetention,
     e.position === "RB" ? e.olRetention : 0,
+    e.ocChanged ? 1 : 0,
+    e.ocReunion ? 1 : 0,
   ];
 }
 
@@ -464,6 +527,9 @@ export function seasonGbmRow(e: SeasonExample): number[] {
     e.olRetention,
     e.snapPct,
     e.prevPpg,
+    e.ocChanged ? 1 : 0,
+    e.hcChanged ? 1 : 0,
+    e.ocReunion ? 1 : 0,
   ];
 }
 
@@ -552,6 +618,9 @@ export async function projectDraftBoard(
       gamesPrev: was.games,
       tdPointShare: was.tdPointShare,
       olRetention: context.olRetention.get(targetTeam) ?? 0.6,
+      ocChanged: context.ocChanged.get(targetTeam) ?? true,
+      hcChanged: context.hcChanged.get(targetTeam) ?? true,
+      ocReunion: moved && reunion(context, data, playerId, targetTeam, target),
     };
 
     board.set(playerId, predictSeason(fit, example));
