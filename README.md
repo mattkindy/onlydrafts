@@ -59,6 +59,28 @@ game, then ADP-implied rank. Metrics live in `src/backtest/`: RMSE on
 points and Spearman rank correlation within each position, since draft
 decisions are rankings, not point estimates.
 
+## From player rankings to roster decisions
+
+A draft picks a roster, and a roster is worth more or less than the sum
+of its players:
+
+- **Bye coverage**: two stars sharing a bye week cost a likely loss that
+  their individual projections never show.
+- **Replacement value**: the tenth-best QB and the tenth-best RB are
+  different distances from what's freely available on waivers, so raw
+  points overvalue QBs at the draft.
+- **Correlation**: a QB stacked with his WR raises the roster's ceiling
+  because their big weeks arrive together. A RB facing your own DST
+  works against you in the same way.
+- **Weekly decisions**: the same weekly predictions that score a draft
+  also answer the in-season question, who do I start this week, using
+  that week's matchup, and that tool is where this project likely ends
+  up.
+
+The season simulation is what makes all of this scoreable: simulate
+weeks, fill lineups, and count wins, so a backtest can judge whole
+rosters and draft strategies rather than isolated player projections.
+
 ## Data
 
 - **nflverse** publishes weekly player stats, rosters, and schedules as
