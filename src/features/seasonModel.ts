@@ -12,6 +12,7 @@ import { fitRidge, predictRidge } from "../backtest/ridge.js";
 import { fitGbm, predictGbm, type GbmModel } from "../backtest/gbm.js";
 import { loadCoaches } from "../data/coaches.js";
 import { loadAdp } from "../data/adp.js";
+import { loadTendencies } from "../data/tendencies.js";
 import { spearman } from "../backtest/metrics.js";
 
 export const SEASON_POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -56,6 +57,12 @@ export interface SeasonExample {
   airYardsPerGame: number;
   /** preseason market rank for the target season, undefined when unlisted */
   adp?: number;
+  /**
+   * incoming coordinator's neutral pass rate at his last stop minus
+   * this team's rate last season; zero when the staff is unchanged or
+   * unknown
+   */
+  passShift: number;
 }
 
 export interface SeasonData {
@@ -93,6 +100,7 @@ export const SEASON_RIDGE_FEATURES = [
   "ocChanged",
   "ocReunion",
   "logAdp",
+  "passShiftSigned",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -162,6 +170,7 @@ interface DraftContext {
   ocChanged: Map<string, boolean>;
   hcChanged: Map<string, boolean>;
   coachOf: (team: string, season: number, role: string) => string | undefined;
+  passShift: Map<string, number>;
 }
 
 interface Lineman {
@@ -280,10 +289,26 @@ async function draftContext(
   }
 
   const coaches = await loadCoaches();
+  const tendencies = await loadTendencies();
   const coachOf = (team: string, season: number, role: string) =>
     coaches.get(`${team}|${season}|${role}`);
   const ocChanged = new Map<string, boolean>();
   const hcChanged = new Map<string, boolean>();
+  const passShift = new Map<string, number>();
+
+  const ocStops = new Map<string, { team: string; season: number }[]>();
+
+  for (const [key, name] of coaches) {
+    const [team, seasonText, role] = key.split("|");
+
+    if (role !== "OC" || !name) {
+      continue;
+    }
+
+    const list = ocStops.get(name) ?? [];
+    list.push({ team: team!, season: Number(seasonText) });
+    ocStops.set(name, list);
+  }
 
   for (const teamId of new Set([...olRetention.keys(), ...targetOl.keys()])) {
     const oc = coachOf(teamId, target, "OC");
@@ -292,6 +317,21 @@ async function draftContext(
     const prevHc = coachOf(teamId, target - 1, "HC");
     ocChanged.set(teamId, oc === undefined || oc !== prevOc);
     hcChanged.set(teamId, hc === undefined || hc !== prevHc);
+
+    const teamPrev = tendencies.get(`${teamId}|${target - 1}`)?.neutralPassRate;
+
+    if (oc === undefined || oc === prevOc || teamPrev === undefined) {
+      passShift.set(teamId, 0);
+      continue;
+    }
+
+    const stop = (ocStops.get(oc) ?? [])
+      .filter((s) => s.season < target && s.team !== teamId)
+      .sort((a, b) => b.season - a.season)[0];
+    const ocPrev = stop
+      ? tendencies.get(`${stop.team}|${stop.season}`)?.neutralPassRate
+      : undefined;
+    passShift.set(teamId, ocPrev === undefined ? 0 : ocPrev - teamPrev);
   }
 
   return {
@@ -305,6 +345,7 @@ async function draftContext(
     ocChanged,
     hcChanged,
     coachOf,
+    passShift,
   };
 }
 
@@ -363,6 +404,7 @@ export async function examplesForTransition(
       carriesPerGame: was.carriesPerGame,
       airYardsPerGame: was.airYardsPerGame,
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
+      passShift: context.passShift.get(targetTeam) ?? 0,
     });
   }
 
@@ -509,6 +551,7 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
     e.ocChanged ? 1 : 0,
     e.ocReunion ? 1 : 0,
     Math.log(e.adp ?? 250),
+    e.passShift * (e.position === "RB" ? -1 : 1),
   ];
 }
 
@@ -548,6 +591,8 @@ export function seasonGbmRow(e: SeasonExample): number[] {
     e.carriesPerGame,
     e.airYardsPerGame,
     Math.log(e.adp ?? 250),
+    e.passShift,
+    e.position === "RB" ? e.passShift : 0,
   ];
 }
 
@@ -643,6 +688,7 @@ export async function projectDraftExamples(
       carriesPerGame: was.carriesPerGame,
       airYardsPerGame: was.airYardsPerGame,
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
+      passShift: context.passShift.get(targetTeam) ?? 0,
     };
 
     examples.push(example);
