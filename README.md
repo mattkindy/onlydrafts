@@ -55,6 +55,16 @@ The target is weekly fantasy points. Scoring is a set of per-stat
 weights in `src/scoring/`: start from a standard, half, or full PPR
 preset and override any weight to match a league's settings.
 
+Prediction runs top-down, and each layer's quality compounds into the
+next: simulate the game's score flow (margin, total, who trails and
+throws), derive each team's play volume and pass/run mix from it, split
+volume by depth-chart shares, then apply per-player efficiency. Vegas
+spreads and totals enter the game layer the way the seed prior entered
+bracket-oracle, as a strong market prior the graph features learn to
+adjust, and closing lines are the benchmark that layer has to face.
+Script-level simulation is deep enough; play-by-play fidelity costs
+more than it returns for fantasy purposes.
+
 A player's week decomposes as team opportunities, times his share of
 them, times efficiency. The share term is the team's depth chart as it
 stood that week, so predicting it is part of the job: injuries elevate
