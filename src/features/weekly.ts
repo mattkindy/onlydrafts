@@ -14,6 +14,9 @@ export interface WeeklyExample {
   week: number;
   /** PPR points actually scored in the target week */
   target: number;
+  /** opportunity actually seen in the target week, training labels only */
+  targetTargets: number;
+  targetCarries: number;
   /** mean points over the last four games played before this week */
   last4: number;
   /** mean opportunity over the same games */
@@ -215,6 +218,8 @@ export function buildWeeklyExamples(
         season,
         week: row.week,
         target: pointsOf(row),
+        targetTargets: row.targets,
+        targetCarries: row.carries,
         last4: lastFour.reduce((s, x) => s + x, 0) / lastFour.length,
         targetsRecent: meanOf((r) => r.targets),
         carriesRecent: meanOf((r) => r.carries),

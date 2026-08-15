@@ -61,6 +61,70 @@ function weeklyScore(
   return scores.reduce((s, x) => s + x, 0) / scores.length;
 }
 
+interface TwoStage {
+  targets: number[];
+  carries: number[];
+  points: number[];
+}
+
+function opportunityRow(e: WeeklyExample): number[] {
+  return [
+    1,
+    e.position === "QB" ? 1 : 0,
+    e.position === "RB" ? 1 : 0,
+    e.position === "TE" ? 1 : 0,
+    e.targetsRecent,
+    e.carriesRecent,
+    e.snapRecent,
+    e.impliedTotal,
+  ];
+}
+
+function fitTwoStage(train: WeeklyExample[]): TwoStage {
+  const X = train.map(opportunityRow);
+  const targets = fitRidge(X, train.map((e) => e.targetTargets), 25);
+  const carries = fitRidge(X, train.map((e) => e.targetCarries), 25);
+
+  const pointsX = train.map((e) =>
+    pointsRow(e, predictRidge(targets, opportunityRow(e)), predictRidge(carries, opportunityRow(e))),
+  );
+  const points = fitRidge(pointsX, train.map((e) => e.target), 25);
+
+  return { targets, carries, points };
+}
+
+function pointsRow(
+  e: WeeklyExample,
+  predTargets: number,
+  predCarries: number,
+): number[] {
+  return [
+    1,
+    e.position === "QB" ? 1 : 0,
+    e.position === "RB" ? 1 : 0,
+    e.position === "TE" ? 1 : 0,
+    predTargets,
+    predCarries,
+    e.last4,
+    e.seasonPpg,
+    e.oppIndex,
+    e.impliedTotal,
+    e.airYardsRecent,
+  ];
+}
+
+function predictTwoStage(model: TwoStage, e: WeeklyExample): number {
+  const opportunity = opportunityRow(e);
+  return predictRidge(
+    model.points,
+    pointsRow(
+      e,
+      predictRidge(model.targets, opportunity),
+      predictRidge(model.carries, opportunity),
+    ),
+  );
+}
+
 function fitPerPosition(
   train: WeeklyExample[],
 ): Map<string, number[]> {
@@ -82,7 +146,7 @@ async function rollingWeekly(
   seasons: number[],
   cache: Map<number, WeeklyExample[]>,
 ): Promise<void> {
-  const names = ["season-avg", "last4", "ridge", "ridge-per-pos"];
+  const names = ["season-avg", "last4", "ridge", "ridge-per-pos", "two-stage"];
   const scores = new Map<string, number[]>(names.map((n) => [n, []]));
   const testSeasons = seasons.filter((s) => s >= seasons[0]! + 3);
 
@@ -93,6 +157,7 @@ async function rollingWeekly(
     const test = cache.get(testSeason)!;
     const weights = fitRidge(train.map(weeklyRow), train.map((e) => e.target), 25);
     const perPosition = fitPerPosition(train);
+    const twoStage = fitTwoStage(train);
 
     const predictors: ((e: WeeklyExample) => number)[] = [
       (e) => e.seasonPpg,
@@ -100,6 +165,7 @@ async function rollingWeekly(
       (e) => predictRidge(weights, weeklyRow(e)),
       (e) =>
         predictRidge(perPosition.get(e.position) ?? weights, weeklyRow(e)),
+      (e) => predictTwoStage(twoStage, e),
     ];
 
     for (let v = 0; v < names.length; v++) {
