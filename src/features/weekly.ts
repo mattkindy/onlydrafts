@@ -30,6 +30,8 @@ export interface WeeklyExample {
   home: boolean;
   /** Vegas implied points for the player's team, 21.5 when no line exists */
   impliedTotal: number;
+  teamId: string;
+  opponent: string;
 }
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -216,6 +218,8 @@ export function buildWeeklyExamples(
         oppIndex: leagueMean > 0 ? defAllowed / leagueMean : 1,
         home: slot.home,
         impliedTotal: slot.impliedTotal,
+        teamId: row.teamId,
+        opponent: slot.opponent,
       });
     }
   }

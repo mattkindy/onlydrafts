@@ -101,6 +101,8 @@ async function main(): Promise<void> {
         playerId: e.playerId,
         position: e.position,
         predicted: predictRidge(weights, weeklyRow(e)),
+        teamId: e.teamId,
+        gameKey: `${e.week}|${[e.teamId, e.opponent].sort().join("@")}`,
       });
       byWeek.set(e.week, list);
     }
