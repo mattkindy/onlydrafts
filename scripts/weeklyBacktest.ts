@@ -15,6 +15,10 @@ import {
 } from "../src/features/weekly.js";
 import { spearman } from "../src/backtest/metrics.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
+import {
+  buildResidualModel,
+  outcomeQuantile,
+} from "../src/backtest/intervals.js";
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 
@@ -193,6 +197,54 @@ async function main(): Promise<void> {
     ["last4", (e) => e.last4],
     ["ridge", (e) => predictRidge(weights, row(e))],
   ];
+
+  const residualModel = buildResidualModel(
+    train.map((e) => ({
+      position: e.position,
+      predicted: predictRidge(weights, row(e)),
+      actual: e.target,
+    })),
+    5,
+  );
+
+  console.log("\ninterval calibration on the test seasons:");
+  console.log("pos   inside-80%  inside-50%  mean-80%-width");
+
+  for (const position of POSITIONS) {
+    let in80 = 0;
+    let in50 = 0;
+    let width = 0;
+    let count = 0;
+
+    for (const season of testSeasons) {
+      for (const e of cache.get(season)!) {
+        if (e.position !== position) {
+          continue;
+        }
+
+        const predicted = predictRidge(weights, row(e));
+        const lo80 = outcomeQuantile(residualModel, position, predicted, 0.1);
+        const hi80 = outcomeQuantile(residualModel, position, predicted, 0.9);
+        const lo50 = outcomeQuantile(residualModel, position, predicted, 0.25);
+        const hi50 = outcomeQuantile(residualModel, position, predicted, 0.75);
+
+        count++;
+        width += hi80 - lo80;
+
+        if (e.target >= lo80 && e.target <= hi80) {
+          in80++;
+        }
+
+        if (e.target >= lo50 && e.target <= hi50) {
+          in50++;
+        }
+      }
+    }
+
+    console.log(
+      `${position.padEnd(4)} ${((in80 / count) * 100).toFixed(1).padStart(9)}% ${((in50 / count) * 100).toFixed(1).padStart(10)}% ${(width / count).toFixed(1).padStart(13)}`,
+    );
+  }
 
   for (const season of testSeasons) {
     const test = cache.get(season)!;
