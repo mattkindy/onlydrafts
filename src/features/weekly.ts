@@ -14,15 +14,21 @@ export interface WeeklyExample {
   week: number;
   /** PPR points actually scored in the target week */
   target: number;
-  /** opportunity actually seen in the target week, training labels only */
+  /** stats actually seen in the target week, training labels only */
   targetTargets: number;
   targetCarries: number;
+  targetReceptions: number;
+  targetRecYds: number;
+  targetRushYds: number;
   /** mean points over the last four games played before this week */
   last4: number;
   /** mean opportunity over the same games */
   targetsRecent: number;
   carriesRecent: number;
   airYardsRecent: number;
+  receptionsRecent: number;
+  recYdsRecent: number;
+  rushYdsRecent: number;
   /** mean points over all games played earlier this season */
   seasonPpg: number;
   /** previous season's points per game, 0 for rookies */
@@ -220,10 +226,16 @@ export function buildWeeklyExamples(
         target: pointsOf(row),
         targetTargets: row.targets,
         targetCarries: row.carries,
+        targetReceptions: row.statLine.receptions,
+        targetRecYds: row.statLine.recYds,
+        targetRushYds: row.statLine.rushYds,
         last4: lastFour.reduce((s, x) => s + x, 0) / lastFour.length,
         targetsRecent: meanOf((r) => r.targets),
         carriesRecent: meanOf((r) => r.carries),
         airYardsRecent: meanOf((r) => r.airYards),
+        receptionsRecent: meanOf((r) => r.statLine.receptions),
+        recYdsRecent: meanOf((r) => r.statLine.recYds),
+        rushYdsRecent: meanOf((r) => r.statLine.rushYds),
         seasonPpg: all.reduce((s, x) => s + x, 0) / all.length,
         prevPpg: prevPpgById.get(playerId) ?? 0,
         snapRecent:
