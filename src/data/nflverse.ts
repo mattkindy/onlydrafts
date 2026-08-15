@@ -20,6 +20,8 @@ export interface GameRow extends Game {
 
 export interface PlayerWeekStats {
   playerId: string;
+  playerName: string;
+  position: string;
   season: number;
   week: number;
   teamId: string;
@@ -108,6 +110,8 @@ export async function loadPlayerStats(
 
       return {
         playerId: row["player_id"] ?? "",
+        playerName: row["player_display_name"] ?? row["player_name"] ?? "",
+        position: row["position"] ?? "",
         season: toNumber(row["season"]) ?? season,
         week: toNumber(row["week"]) ?? 0,
         teamId: row["recent_team"] ?? "",
