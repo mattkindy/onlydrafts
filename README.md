@@ -35,6 +35,12 @@ a point in time. Examples worth testing early:
   players' usage patterns move with him?
 - **Schedule shape**: strength of opposing defenses by week, bye timing,
   rest differentials.
+- **Non-scoring personnel**: linemen and defenders never earn fantasy
+  points, but their edges shape the players who do. OL continuity moves
+  a back's efficiency, a defense that lost its best pass rusher changes
+  every opposing quarterback's week, and a team whose own defense got
+  worse trails more and throws more. The graph includes every roster
+  spot for this reason; scoring stays limited to the fantasy positions.
 
 ## Prediction and backtest
 

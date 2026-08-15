@@ -11,7 +11,30 @@
  * A span with an undefined end is still open.
  */
 
-export type Position = "QB" | "RB" | "WR" | "TE" | "K" | "DST";
+/**
+ * Where a player lines up. Every roster spot is in the graph because
+ * non-scoring players shape scoring ones (see README); only the
+ * FantasyPosition subset is ever scored.
+ */
+export type RosterPosition =
+  | "QB"
+  | "RB"
+  | "WR"
+  | "TE"
+  | "OL"
+  | "DL"
+  | "EDGE"
+  | "LB"
+  | "CB"
+  | "S"
+  | "K"
+  | "P";
+
+/**
+ * What a fantasy roster drafts. DST is a team unit, not a player, so it
+ * appears here and never as a RosterPosition.
+ */
+export type FantasyPosition = "QB" | "RB" | "WR" | "TE" | "K" | "DST";
 
 export type CoachRole = "HC" | "OC" | "DC";
 
@@ -28,7 +51,7 @@ export interface Span {
 export interface Player {
   id: string;
   name: string;
-  position: Position;
+  position: RosterPosition;
   /** NFL draft year and overall pick, when drafted */
   draft?: { season: number; overall: number };
 }
