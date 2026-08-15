@@ -11,6 +11,8 @@ import {
   examplesForTransition,
   fitSeasonModel,
   predictSeason,
+  predictSeasonGbm,
+  predictSeasonBlend,
   type SeasonExample,
 } from "../src/features/seasonModel.js";
 
@@ -44,6 +46,8 @@ function variantsFor(
       (e) => blended(e, fit.weight) * (fit.ratios.get(e.group) ?? 1),
     ],
     ["blended+ridge", (e) => predictSeason(fit, e)],
+    ["blended+gbm", (e) => predictSeasonGbm(fit, e)],
+    ["ridge+gbm mix", (e) => predictSeasonBlend(fit, e)],
   ];
 }
 
@@ -51,7 +55,7 @@ function rollingEvaluation(
   targets: number[],
   transitions: Map<number, SeasonExample[]>,
 ): void {
-  const names = ["carry-forward", "blended+groups", "blended+ridge"];
+  const names = ["carry-forward", "blended+groups", "blended+ridge", "blended+gbm", "ridge+gbm mix"];
   const scores = new Map<string, number[]>(names.map((n) => [n, []]));
 
   const topScores = new Map<string, number[]>(names.map((n) => [n, []]));

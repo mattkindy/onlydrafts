@@ -9,6 +9,7 @@ import { presets } from "../scoring/fantasyPoints.js";
 import { summarizeSeason, type SeasonSummary } from "./seasonSummary.js";
 import { primaryQbByTeam, projectedQbByTeam } from "./teamQb.js";
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
+import { fitGbm, predictGbm, type GbmModel } from "../backtest/gbm.js";
 import { spearman } from "../backtest/metrics.js";
 
 export const SEASON_POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -53,6 +54,7 @@ export interface SeasonModelFit {
   weight: number;
   ratios: Map<Group, number>;
   ridgeWeights: number[];
+  gbm: GbmModel;
 }
 
 export const SEASON_RIDGE_FEATURES = [
@@ -72,6 +74,8 @@ export const SEASON_RIDGE_FEATURES = [
   "age29plusRB",
   "gamesFrac",
   "tdShare",
+  "olRetention",
+  "olRetentionRB",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -140,34 +144,47 @@ interface DraftContext {
   olRetention: Map<string, number>;
 }
 
+interface Lineman {
+  playerId: string;
+  /** mean offensive snap share last season */
+  weight: number;
+}
+
+/**
+ * Each team's line, weighted by snaps rather than headcount, so
+ * losing a 95 percent starter counts near one and losing a rotational
+ * body counts near nothing.
+ */
 function primaryLine(
   roster: Awaited<ReturnType<typeof loadWeeklyRosters>>,
-): Map<string, string[]> {
-  const weeksOnTeam = new Map<string, Map<string, number>>();
+  snapShare: Map<string, number>,
+): Map<string, Lineman[]> {
+  const seen = new Map<string, Map<string, string>>();
 
   for (const appearance of roster) {
     if (mapPosition(appearance.rawPosition) !== "OL") {
       continue;
     }
 
-    const perPlayer = weeksOnTeam.get(appearance.teamId) ?? new Map();
-    perPlayer.set(
-      appearance.playerId,
-      (perPlayer.get(appearance.playerId) ?? 0) + 1,
-    );
-    weeksOnTeam.set(appearance.teamId, perPlayer);
+    const perTeam = seen.get(appearance.teamId) ?? new Map<string, string>();
+    perTeam.set(appearance.playerId, appearance.name);
+    seen.set(appearance.teamId, perTeam);
   }
 
-  const line = new Map<string, string[]>();
+  const line = new Map<string, Lineman[]>();
 
-  for (const [teamId, perPlayer] of weeksOnTeam) {
-    line.set(
-      teamId,
-      [...perPlayer.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([playerId]) => playerId),
-    );
+  for (const [teamId, players] of seen) {
+    const linemen: Lineman[] = [];
+
+    for (const [playerId, name] of players) {
+      const weight = snapShare.get(`${normalizeName(name)}|${teamId}`) ?? 0;
+
+      if (weight >= 0.25) {
+        linemen.push({ playerId, weight });
+      }
+    }
+
+    line.set(teamId, linemen);
   }
 
   return line;
@@ -179,7 +196,7 @@ async function draftContext(
 ): Promise<DraftContext> {
   const rosterWeekOne = await loadWeeklyRosters(target);
   const prevRoster = await loadWeeklyRosters(target - 1);
-  const prevLine = primaryLine(prevRoster);
+  const prevLine = primaryLine(prevRoster, prev.snapShare);
   const targetOl = new Map<string, Set<string>>();
 
   for (const appearance of rosterWeekOne) {
@@ -195,10 +212,13 @@ async function draftContext(
 
   const olRetention = new Map<string, number>();
 
-  for (const [teamId, five] of prevLine) {
+  for (const [teamId, linemen] of prevLine) {
     const current = targetOl.get(teamId);
-    const kept = five.filter((id) => current?.has(id)).length;
-    olRetention.set(teamId, five.length === 0 ? 1 : kept / five.length);
+    const total = linemen.reduce((s, l) => s + l.weight, 0);
+    const kept = linemen
+      .filter((l) => current?.has(l.playerId))
+      .reduce((s, l) => s + l.weight, 0);
+    olRetention.set(teamId, total === 0 ? 1 : kept / total);
   }
   const entryYear = new Map<string, number>();
   const rookieCapital = new Map<string, number>();
@@ -410,6 +430,8 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
     e.age !== undefined && e.age >= 29 && e.position === "RB" ? 1 : 0,
     e.gamesPrev / 17,
     e.tdPointShare,
+    e.olRetention,
+    e.position === "RB" ? e.olRetention : 0,
   ];
 }
 
@@ -426,14 +448,56 @@ export function fitRatioModel(
   return fitRidge(X, y, 5);
 }
 
+/** raw signals for the tree model, which finds its own interactions */
+export function seasonGbmRow(e: SeasonExample): number[] {
+  return [
+    e.position === "QB" ? 1 : 0,
+    e.position === "RB" ? 1 : 0,
+    e.position === "TE" ? 1 : 0,
+    e.moved ? 1 : 0,
+    e.group === "skill-stayer-new-qb" || e.group === "qb-mover" ? 1 : 0,
+    e.expYears ?? 5,
+    e.age ?? 27,
+    e.rookieCapital,
+    e.gamesPrev / 17,
+    e.tdPointShare,
+    e.olRetention,
+    e.snapPct,
+    e.prevPpg,
+  ];
+}
+
 export function fitSeasonModel(examples: SeasonExample[]): SeasonModelFit {
   const weight = fitBlendWeight(examples);
+  const usable = examples.filter((e) => blended(e, weight) > 1);
+  const gbm = fitGbm(
+    usable.map(seasonGbmRow),
+    usable.map((e) =>
+      Math.log(Math.min(Math.max(e.actualPpg / blended(e, weight), 0.2), 3)),
+    ),
+    { trees: 200, depth: 3, rate: 0.05, minLeaf: 40 },
+  );
 
   return {
     weight,
     ratios: fitGroupRatios(examples, weight),
     ridgeWeights: fitRatioModel(examples, weight),
+    gbm,
   };
+}
+
+export function predictSeasonGbm(fit: SeasonModelFit, e: SeasonExample): number {
+  return blended(e, fit.weight) * Math.exp(predictGbm(fit.gbm, seasonGbmRow(e)));
+}
+
+/** ridge and trees average their log adjustments, bracket-oracle style */
+export function predictSeasonBlend(
+  fit: SeasonModelFit,
+  e: SeasonExample,
+): number {
+  const ridgeAdj = predictRidge(fit.ridgeWeights, seasonRidgeRow(e));
+  const gbmAdj = predictGbm(fit.gbm, seasonGbmRow(e));
+  return blended(e, fit.weight) * Math.exp((ridgeAdj + gbmAdj) / 2);
 }
 
 export function predictSeason(fit: SeasonModelFit, e: SeasonExample): number {
