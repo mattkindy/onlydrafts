@@ -105,7 +105,10 @@ export async function loadSnapCounts(season: number): Promise<SnapCountWeek[]> {
 export async function loadPlayerStats(
   season: number,
 ): Promise<PlayerWeekStats[]> {
-  const rows = await readRows(`player_stats_${season}.csv`);
+  // nflverse renamed this release after 2024; both schemas parse below
+  const legacy = `player_stats_${season}.csv`;
+  const renamed = `stats_player_week_${season}.csv`;
+  const rows = await readRows(legacy).catch(() => readRows(renamed));
 
   return rows
     .filter((row) => row["season_type"] === "REG" && row["player_id"])
@@ -138,7 +141,7 @@ export async function loadPlayerStats(
         position: row["position"] ?? "",
         season: toNumber(row["season"]) ?? season,
         week: toNumber(row["week"]) ?? 0,
-        teamId: row["recent_team"] ?? "",
+        teamId: row["recent_team"] ?? row["team"] ?? "",
         statLine,
       };
     });

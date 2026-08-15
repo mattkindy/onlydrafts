@@ -579,15 +579,14 @@ export function predictSeason(fit: SeasonModelFit, e: SeasonExample): number {
  * here reads the target season's stats, so the board is fair to draft
  * from. actualPpg is set to 0 and never read by prediction.
  */
-export async function projectDraftBoard(
+export async function projectDraftExamples(
   target: number,
   data: Map<number, SeasonData>,
-  fit: SeasonModelFit,
-): Promise<Map<string, number>> {
+): Promise<SeasonExample[]> {
   const prev = data.get(target - 1)!;
   const prev2 = data.get(target - 2);
   const context = await draftContext(target, prev);
-  const board = new Map<string, number>();
+  const examples: SeasonExample[] = [];
 
   for (const [playerId, was] of prev.summaries) {
     if (!SEASON_POSITIONS.includes(was.position) || was.games < 4) {
@@ -623,8 +622,17 @@ export async function projectDraftBoard(
       ocReunion: moved && reunion(context, data, playerId, targetTeam, target),
     };
 
-    board.set(playerId, predictSeason(fit, example));
+    examples.push(example);
   }
 
-  return board;
+  return examples;
+}
+
+export async function projectDraftBoard(
+  target: number,
+  data: Map<number, SeasonData>,
+  fit: SeasonModelFit,
+): Promise<Map<string, number>> {
+  const examples = await projectDraftExamples(target, data);
+  return new Map(examples.map((e) => [e.playerId, predictSeason(fit, e)]));
 }
