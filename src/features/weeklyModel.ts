@@ -19,6 +19,9 @@ export const WEEKLY_FEATURES = [
   "oppIndex",
   "home",
   "impliedTotal",
+  "targetsRecent",
+  "carriesRecent",
+  "airYardsRecent",
 ] as const;
 
 export function weeklyRow(e: WeeklyExample): number[] {
@@ -34,6 +37,9 @@ export function weeklyRow(e: WeeklyExample): number[] {
     e.oppIndex,
     e.home ? 1 : 0,
     e.impliedTotal,
+    e.targetsRecent,
+    e.carriesRecent,
+    e.airYardsRecent,
   ];
 }
 

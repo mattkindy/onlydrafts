@@ -11,6 +11,7 @@ import { primaryQbByTeam, projectedQbByTeam } from "./teamQb.js";
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
 import { fitGbm, predictGbm, type GbmModel } from "../backtest/gbm.js";
 import { loadCoaches } from "../data/coaches.js";
+import { loadAdp } from "../data/adp.js";
 import { spearman } from "../backtest/metrics.js";
 
 export const SEASON_POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -49,6 +50,12 @@ export interface SeasonExample {
   hcChanged: boolean;
   /** a mover whose new coordinator ran his old team's offense recently */
   ocReunion: boolean;
+  /** previous season per-game opportunity */
+  targetsPerGame: number;
+  carriesPerGame: number;
+  airYardsPerGame: number;
+  /** preseason market rank for the target season, undefined when unlisted */
+  adp?: number;
 }
 
 export interface SeasonData {
@@ -85,6 +92,7 @@ export const SEASON_RIDGE_FEATURES = [
   "olRetentionRB",
   "ocChanged",
   "ocReunion",
+  "logAdp",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -308,6 +316,7 @@ export async function examplesForTransition(
   const current = data.get(target)!;
   const prev2 = data.get(target - 2);
   const context = await draftContext(target, prev);
+  const adp = await loadAdp(target).catch(() => new Map());
   const examples: SeasonExample[] = [];
 
   for (const [playerId, was] of prev.summaries) {
@@ -350,6 +359,10 @@ export async function examplesForTransition(
       ocChanged: context.ocChanged.get(targetTeam) ?? true,
       hcChanged: context.hcChanged.get(targetTeam) ?? true,
       ocReunion: moved && reunion(context, data, playerId, targetTeam, target),
+      targetsPerGame: was.targetsPerGame,
+      carriesPerGame: was.carriesPerGame,
+      airYardsPerGame: was.airYardsPerGame,
+      adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
     });
   }
 
@@ -495,6 +508,7 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
     e.position === "RB" ? e.olRetention : 0,
     e.ocChanged ? 1 : 0,
     e.ocReunion ? 1 : 0,
+    Math.log(e.adp ?? 250),
   ];
 }
 
@@ -530,6 +544,10 @@ export function seasonGbmRow(e: SeasonExample): number[] {
     e.ocChanged ? 1 : 0,
     e.hcChanged ? 1 : 0,
     e.ocReunion ? 1 : 0,
+    e.targetsPerGame,
+    e.carriesPerGame,
+    e.airYardsPerGame,
+    Math.log(e.adp ?? 250),
   ];
 }
 
@@ -586,6 +604,7 @@ export async function projectDraftExamples(
   const prev = data.get(target - 1)!;
   const prev2 = data.get(target - 2);
   const context = await draftContext(target, prev);
+  const adp = await loadAdp(target).catch(() => new Map());
   const examples: SeasonExample[] = [];
 
   for (const [playerId, was] of prev.summaries) {
@@ -620,6 +639,10 @@ export async function projectDraftExamples(
       ocChanged: context.ocChanged.get(targetTeam) ?? true,
       hcChanged: context.hcChanged.get(targetTeam) ?? true,
       ocReunion: moved && reunion(context, data, playerId, targetTeam, target),
+      targetsPerGame: was.targetsPerGame,
+      carriesPerGame: was.carriesPerGame,
+      airYardsPerGame: was.airYardsPerGame,
+      adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
     };
 
     examples.push(example);

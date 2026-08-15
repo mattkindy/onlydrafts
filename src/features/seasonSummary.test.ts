@@ -13,6 +13,9 @@ function week(
     season: 2024,
     teamId: "DET",
     statLine: { ...emptyStatLine(), receptions: 5, recYds: 50 },
+    targets: 0,
+    carries: 0,
+    airYards: 0,
     ...overrides,
   };
 }

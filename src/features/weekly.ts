@@ -16,6 +16,10 @@ export interface WeeklyExample {
   target: number;
   /** mean points over the last four games played before this week */
   last4: number;
+  /** mean opportunity over the same games */
+  targetsRecent: number;
+  carriesRecent: number;
+  airYardsRecent: number;
   /** mean points over all games played earlier this season */
   seasonPpg: number;
   /** previous season's points per game, 0 for rookies */
@@ -175,8 +179,11 @@ export function buildWeeklyExamples(
       }
 
       const pointsOf = (r: PlayerWeekStats) => fantasyPoints(r.statLine, rules);
-      const lastFour = earlier.slice(-4).map(pointsOf);
+      const recent = earlier.slice(-4);
+      const lastFour = recent.map(pointsOf);
       const all = earlier.map(pointsOf);
+      const meanOf = (pick: (r: PlayerWeekStats) => number) =>
+        recent.reduce((s, r) => s + pick(r), 0) / recent.length;
 
       const slot = schedule.get(`${row.teamId}|${row.week}`);
 
@@ -209,6 +216,9 @@ export function buildWeeklyExamples(
         week: row.week,
         target: pointsOf(row),
         last4: lastFour.reduce((s, x) => s + x, 0) / lastFour.length,
+        targetsRecent: meanOf((r) => r.targets),
+        carriesRecent: meanOf((r) => r.carries),
+        airYardsRecent: meanOf((r) => r.airYards),
         seasonPpg: all.reduce((s, x) => s + x, 0) / all.length,
         prevPpg: prevPpgById.get(playerId) ?? 0,
         snapRecent:

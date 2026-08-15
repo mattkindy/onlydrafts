@@ -14,6 +14,9 @@ function qbWeek(playerId: string, teamId: string, week: number): PlayerWeekStats
     week,
     teamId,
     statLine: emptyStatLine(),
+    targets: 0,
+    carries: 0,
+    airYards: 0,
   };
 }
 
@@ -52,6 +55,9 @@ describe("projectedQbByTeam", () => {
         games: 10,
         pointsPerGame: ppg,
         tdPointShare: 0,
+        targetsPerGame: 0,
+        carriesPerGame: 0,
+        airYardsPerGame: 0,
         primaryTeamId: "DET",
       },
     ];

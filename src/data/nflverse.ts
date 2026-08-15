@@ -26,6 +26,9 @@ export interface PlayerWeekStats {
   week: number;
   teamId: string;
   statLine: StatLine;
+  targets: number;
+  carries: number;
+  airYards: number;
 }
 
 function toNumber(value: string | undefined): number | undefined {
@@ -143,6 +146,9 @@ export async function loadPlayerStats(
         week: toNumber(row["week"]) ?? 0,
         teamId: row["recent_team"] ?? row["team"] ?? "",
         statLine,
+        targets: n("targets"),
+        carries: n("carries"),
+        airYards: n("receiving_air_yards"),
       };
     });
 }

@@ -12,6 +12,9 @@ function statWeek(week: number, recYds: number): PlayerWeekStats {
     week,
     teamId: "DET",
     statLine: { ...emptyStatLine(), recYds },
+    targets: 0,
+    carries: 0,
+    airYards: 0,
   };
 }
 
