@@ -2,7 +2,12 @@
 // the test set; earlier ones train the blend weight and group ratios.
 // Run: npx tsx scripts/backtest.ts --seasons 2020-2024
 
-import { loadPlayerStats, loadWeeklyRosters } from "../src/data/nflverse.js";
+import {
+  loadPlayerStats,
+  loadSnapCounts,
+  loadWeeklyRosters,
+} from "../src/data/nflverse.js";
+import { normalizeName } from "../src/data/names.js";
 import { presets } from "../src/scoring/fantasyPoints.js";
 import {
   summarizeSeason,
@@ -35,11 +40,37 @@ interface Example {
   expYears?: number;
   /** draft capital of the best rookie arriving at this player's position */
   rookieCapital: number;
+  /** previous season's mean offensive snap share, 0 when unmatched */
+  snapPct: number;
 }
 
 interface SeasonData {
   stats: Awaited<ReturnType<typeof loadPlayerStats>>;
   summaries: Map<string, SeasonSummary>;
+  /** normalized name + team -> mean offensive snap share for the season */
+  snapShare: Map<string, number>;
+}
+
+async function loadSnapShare(season: number): Promise<Map<string, number>> {
+  const weeks = await loadSnapCounts(season);
+  const totals = new Map<string, { sum: number; games: number }>();
+
+  for (const week of weeks) {
+    const key = `${normalizeName(week.playerName)}|${week.teamId}`;
+    const entry = totals.get(key) ?? { sum: 0, games: 0 };
+    const pct = week.offensePct > 1.5 ? week.offensePct / 100 : week.offensePct;
+    entry.sum += pct;
+    entry.games += 1;
+    totals.set(key, entry);
+  }
+
+  const result = new Map<string, number>();
+
+  for (const [key, { sum, games }] of totals) {
+    result.set(key, games === 0 ? 0 : sum / games);
+  }
+
+  return result;
 }
 
 function groupOf(
@@ -125,6 +156,10 @@ async function examplesFor(
       group: groupOf(was.position, moved, qbChanged),
       expYears: entered === undefined ? undefined : target - entered,
       rookieCapital: rookieCapital.get(`${targetTeam}|${was.position}`) ?? 0,
+      snapPct:
+        prev.snapShare.get(
+          `${normalizeName(was.playerName)}|${was.primaryTeamId}`,
+        ) ?? 0,
     });
   }
 
@@ -326,7 +361,11 @@ async function main(): Promise<void> {
 
   for (const season of seasons) {
     const stats = await loadPlayerStats(season);
-    data.set(season, { stats, summaries: summarizeSeason(stats, presets.ppr) });
+    data.set(season, {
+      stats,
+      summaries: summarizeSeason(stats, presets.ppr),
+      snapShare: await loadSnapShare(season),
+    });
   }
 
   const targets = seasons.slice(1);

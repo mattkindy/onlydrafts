@@ -78,6 +78,29 @@ export async function loadWeeklyRosters(
     }));
 }
 
+export interface SnapCountWeek {
+  playerName: string;
+  teamId: string;
+  season: number;
+  week: number;
+  /** share of the team's offensive snaps this player was on the field for */
+  offensePct: number;
+}
+
+export async function loadSnapCounts(season: number): Promise<SnapCountWeek[]> {
+  const rows = await readRows(`snap_counts_${season}.csv`);
+
+  return rows
+    .filter((row) => row["game_type"] === "REG" && row["player"])
+    .map((row) => ({
+      playerName: row["player"] ?? "",
+      teamId: row["team"] ?? "",
+      season: toNumber(row["season"]) ?? season,
+      week: toNumber(row["week"]) ?? 0,
+      offensePct: toNumber(row["offense_pct"]) ?? 0,
+    }));
+}
+
 export async function loadPlayerStats(
   season: number,
 ): Promise<PlayerWeekStats[]> {

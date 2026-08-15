@@ -18,6 +18,10 @@ function weeklyRosterUrl(season: number): string {
   return `https://github.com/nflverse/nflverse-data/releases/download/weekly_rosters/roster_weekly_${season}.csv`;
 }
 
+function snapCountsUrl(season: number): string {
+  return `https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_${season}.csv`;
+}
+
 function parseSeasons(arg: string | undefined): number[] {
   if (!arg) {
     return [2021, 2022, 2023, 2024, 2025];
@@ -73,6 +77,7 @@ async function main(): Promise<void> {
   for (const season of seasons) {
     await download(playerStatsUrl(season), `player_stats_${season}.csv`);
     await download(weeklyRosterUrl(season), `roster_weekly_${season}.csv`);
+    await download(snapCountsUrl(season), `snap_counts_${season}.csv`);
   }
 }
 
