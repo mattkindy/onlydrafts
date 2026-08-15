@@ -75,6 +75,7 @@ export async function loadWeeklyRosters(
       college: row["college"] || undefined,
       draftYear: toNumber(row["entry_year"]),
       draftOverall: toNumber(row["draft_number"]),
+      birthDate: row["birth_date"] || undefined,
     }));
 }
 

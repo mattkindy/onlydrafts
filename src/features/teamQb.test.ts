@@ -51,6 +51,7 @@ describe("projectedQbByTeam", () => {
         season: 2023,
         games: 10,
         pointsPerGame: ppg,
+        tdPointShare: 0,
         primaryTeamId: "DET",
       },
     ];

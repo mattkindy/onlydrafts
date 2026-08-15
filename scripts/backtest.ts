@@ -54,20 +54,36 @@ function rollingEvaluation(
   const names = ["carry-forward", "blended+groups", "blended+ridge"];
   const scores = new Map<string, number[]>(names.map((n) => [n, []]));
 
+  const topScores = new Map<string, number[]>(names.map((n) => [n, []]));
+
   for (let i = 2; i < targets.length; i++) {
     const test = transitions.get(targets[i]!)!;
     const train = targets.slice(0, i).flatMap((t) => transitions.get(t)!);
     const variants = variantsFor(train);
     const actual = test.map((e) => e.actualPpg);
+    const top = [...test]
+      .sort((a, b) => b.prevPpg - a.prevPpg)
+      .slice(0, 30);
+    const topActual = top.map((e) => e.actualPpg);
 
     for (const [name, predict] of variants) {
       scores.get(name)!.push(spearman(test.map(predict), actual));
+      topScores.get(name)!.push(spearman(top.map(predict), topActual));
     }
   }
 
   console.log("rolling evaluation, all positions pooled:");
 
   for (const [name, list] of scores) {
+    const mean = list.reduce((s, x) => s + x, 0) / list.length;
+    console.log(
+      `  ${name.padEnd(16)} mean ${mean.toFixed(3)}  per season: ${list.map((s) => s.toFixed(3)).join(", ")}`,
+    );
+  }
+
+  console.log("\nsame, restricted to each season's top 30 by previous points:");
+
+  for (const [name, list] of topScores) {
     const mean = list.reduce((s, x) => s + x, 0) / list.length;
     console.log(
       `  ${name.padEnd(16)} mean ${mean.toFixed(3)}  per season: ${list.map((s) => s.toFixed(3)).join(", ")}`,

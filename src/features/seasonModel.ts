@@ -32,6 +32,12 @@ export interface SeasonExample {
   expYears?: number;
   rookieCapital: number;
   snapPct: number;
+  /** age in the target season, undefined when the roster omits birth date */
+  age?: number;
+  /** games played in the previous season, out of 17 */
+  gamesPrev: number;
+  /** share of previous season points that came from touchdowns */
+  tdPointShare: number;
 }
 
 export interface SeasonData {
@@ -59,6 +65,10 @@ export const SEASON_RIDGE_FEATURES = [
   "movedVet",
   "rookieCap",
   "rookieCapRB",
+  "age29plus",
+  "age29plusRB",
+  "gamesFrac",
+  "tdShare",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -118,6 +128,7 @@ export function groupOf(
 
 interface DraftContext {
   entryYear: Map<string, number>;
+  birthYear: Map<string, number>;
   rookieCapital: Map<string, number>;
   weekOneTeam: Map<string, string>;
   projectedQb: Map<string, string>;
@@ -133,9 +144,19 @@ async function draftContext(
   const rookieCapital = new Map<string, number>();
   const weekOneTeam = new Map<string, string>();
 
+  const birthYear = new Map<string, number>();
+
   for (const appearance of rosterWeekOne) {
     if (appearance.draftYear !== undefined) {
       entryYear.set(appearance.playerId, appearance.draftYear);
+    }
+
+    if (appearance.birthDate) {
+      const year = Number(appearance.birthDate.slice(0, 4));
+
+      if (!Number.isNaN(year)) {
+        birthYear.set(appearance.playerId, year);
+      }
     }
 
     if (appearance.week === 1) {
@@ -160,6 +181,7 @@ async function draftContext(
 
   return {
     entryYear,
+    birthYear,
     rookieCapital,
     weekOneTeam,
     projectedQb: projectedQbByTeam(rosterWeekOne, prev.summaries),
@@ -210,10 +232,22 @@ export async function examplesForTransition(
         prev.snapShare.get(
           `${normalizeName(was.playerName)}|${was.primaryTeamId}`,
         ) ?? 0,
+      age: ageOf(context, playerId, target),
+      gamesPrev: was.games,
+      tdPointShare: was.tdPointShare,
     });
   }
 
   return examples;
+}
+
+function ageOf(
+  context: DraftContext,
+  playerId: string,
+  target: number,
+): number | undefined {
+  const born = context.birthYear.get(playerId);
+  return born === undefined ? undefined : target - born;
 }
 
 export function blended(example: SeasonExample, weight: number): number {
@@ -310,6 +344,10 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
     moved * vet,
     e.rookieCapital,
     e.position === "RB" ? e.rookieCapital : 0,
+    e.age !== undefined && e.age >= 29 ? 1 : 0,
+    e.age !== undefined && e.age >= 29 && e.position === "RB" ? 1 : 0,
+    e.gamesPrev / 17,
+    e.tdPointShare,
   ];
 }
 
@@ -384,6 +422,9 @@ export async function projectDraftBoard(
       rookieCapital:
         context.rookieCapital.get(`${targetTeam}|${was.position}`) ?? 0,
       snapPct: 0,
+      age: ageOf(context, playerId, target),
+      gamesPrev: was.games,
+      tdPointShare: was.tdPointShare,
     };
 
     board.set(playerId, predictSeason(fit, example));

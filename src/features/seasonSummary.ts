@@ -12,6 +12,8 @@ export interface SeasonSummary {
   season: number;
   games: number;
   pointsPerGame: number;
+  /** share of the season's points that came from touchdowns */
+  tdPointShare: number;
   /** the team this player logged the most weeks for */
   primaryTeamId: string;
 }
@@ -23,10 +25,17 @@ export function summarizeSeason(
   const summaries = new Map<string, SeasonSummary>();
   const teamWeeks = new Map<string, Map<string, number>>();
   const totals = new Map<string, number>();
+  const tdTotals = new Map<string, number>();
 
   for (const week of weeks) {
     const points = fantasyPoints(week.statLine, rules);
     totals.set(week.playerId, (totals.get(week.playerId) ?? 0) + points);
+
+    const tdPoints =
+      week.statLine.passTd * rules.passTd +
+      week.statLine.rushTd * rules.rushTd +
+      week.statLine.recTd * rules.recTd;
+    tdTotals.set(week.playerId, (tdTotals.get(week.playerId) ?? 0) + tdPoints);
 
     const existing = summaries.get(week.playerId);
 
@@ -40,6 +49,7 @@ export function summarizeSeason(
         season: week.season,
         games: 1,
         pointsPerGame: 0,
+        tdPointShare: 0,
         primaryTeamId: week.teamId,
       });
     }
@@ -50,8 +60,9 @@ export function summarizeSeason(
   }
 
   for (const [playerId, summary] of summaries) {
-    summary.pointsPerGame =
-      Math.round(((totals.get(playerId) ?? 0) / summary.games) * 100) / 100;
+    const total = totals.get(playerId) ?? 0;
+    summary.pointsPerGame = Math.round((total / summary.games) * 100) / 100;
+    summary.tdPointShare = total > 0 ? (tdTotals.get(playerId) ?? 0) / total : 0;
 
     const perTeam = teamWeeks.get(playerId);
 

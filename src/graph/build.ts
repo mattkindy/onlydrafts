@@ -20,6 +20,8 @@ export interface RosterAppearance {
   college?: string;
   draftYear?: number;
   draftOverall?: number;
+  /** ISO date string when the source has it */
+  birthDate?: string;
 }
 
 /** nflverse roster labels collapsed into the graph's position groups. */
