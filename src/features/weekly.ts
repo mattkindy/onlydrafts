@@ -28,6 +28,8 @@ export interface WeeklyExample {
    */
   oppIndex: number;
   home: boolean;
+  /** Vegas implied points for the player's team, 21.5 when no line exists */
+  impliedTotal: number;
 }
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -36,6 +38,22 @@ const FIRST_WEEK = 5;
 interface TeamWeek {
   opponent: string;
   home: boolean;
+  impliedTotal: number;
+}
+
+const DEFAULT_IMPLIED = 21.5;
+
+/**
+ * spread_line in the games file is from the home team's side: positive
+ * means the home team is favored by that many points.
+ */
+function impliedFor(game: GameRow, home: boolean): number {
+  if (game.totalLine === undefined || game.spreadLine === undefined) {
+    return DEFAULT_IMPLIED;
+  }
+
+  const half = game.totalLine / 2;
+  return home ? half + game.spreadLine / 2 : half - game.spreadLine / 2;
 }
 
 export function buildWeeklyExamples(
@@ -56,10 +74,12 @@ export function buildWeeklyExamples(
     schedule.set(`${game.homeTeamId}|${game.week}`, {
       opponent: game.awayTeamId,
       home: true,
+      impliedTotal: impliedFor(game, true),
     });
     schedule.set(`${game.awayTeamId}|${game.week}`, {
       opponent: game.homeTeamId,
       home: false,
+      impliedTotal: impliedFor(game, false),
     });
   }
 
@@ -195,6 +215,7 @@ export function buildWeeklyExamples(
             : snapWeeks.reduce((s, x) => s + x, 0) / snapWeeks.length,
         oppIndex: leagueMean > 0 ? defAllowed / leagueMean : 1,
         home: slot.home,
+        impliedTotal: slot.impliedTotal,
       });
     }
   }

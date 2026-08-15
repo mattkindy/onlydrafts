@@ -29,6 +29,7 @@ const FEATURES = [
   "snapRecent",
   "oppIndex",
   "home",
+  "impliedTotal",
 ] as const;
 
 function row(e: WeeklyExample): number[] {
@@ -43,6 +44,7 @@ function row(e: WeeklyExample): number[] {
     e.snapRecent,
     e.oppIndex,
     e.home ? 1 : 0,
+    e.impliedTotal,
   ];
 }
 
@@ -114,6 +116,45 @@ function weeklyScore(
   return scores.reduce((s, x) => s + x, 0) / scores.length;
 }
 
+/** each season from 2019 on gets tested with only earlier seasons trained */
+async function rollingWeekly(
+  seasons: number[],
+  cache: Map<number, WeeklyExample[]>,
+): Promise<void> {
+  const names = ["season-avg", "last4", "ridge"];
+  const scores = new Map<string, number[]>(names.map((n) => [n, []]));
+  const testSeasons = seasons.filter((s) => s >= seasons[0]! + 3);
+
+  for (const testSeason of testSeasons) {
+    const train = seasons
+      .filter((s) => s < testSeason)
+      .flatMap((s) => cache.get(s)!);
+    const test = cache.get(testSeason)!;
+    const weights = fitRidge(train.map(row), train.map((e) => e.target), 25);
+
+    const predictors: ((e: WeeklyExample) => number)[] = [
+      (e) => e.seasonPpg,
+      (e) => e.last4,
+      (e) => predictRidge(weights, row(e)),
+    ];
+
+    for (let v = 0; v < names.length; v++) {
+      scores.get(names[v]!)!.push(weeklyScore(test, predictors[v]!));
+    }
+  }
+
+  console.log(`rolling weekly evaluation, test seasons ${testSeasons.join(", ")}:`);
+
+  for (const [name, list] of scores) {
+    const mean = list.reduce((s, x) => s + x, 0) / list.length;
+    console.log(
+      `  ${name.padEnd(12)} mean ${mean.toFixed(3)}  per season: ${list.map((s) => s.toFixed(3)).join(", ")}`,
+    );
+  }
+
+  console.log("");
+}
+
 async function main(): Promise<void> {
   const trainFlag = process.argv.indexOf("--train");
   const testFlag = process.argv.indexOf("--test");
@@ -127,11 +168,16 @@ async function main(): Promise<void> {
   );
 
   const games = await loadGames();
-  const train: WeeklyExample[] = [];
+  const allSeasons = [...trainSeasons, ...testSeasons];
+  const cache = new Map<number, WeeklyExample[]>();
 
-  for (const season of trainSeasons) {
-    train.push(...(await examplesForSeason(season, games)));
+  for (const season of allSeasons) {
+    cache.set(season, await examplesForSeason(season, games));
   }
+
+  await rollingWeekly(allSeasons, cache);
+
+  const train = trainSeasons.flatMap((s) => cache.get(s)!);
 
   const weights = fitRidge(train.map(row), train.map((e) => e.target), 25);
 
@@ -149,7 +195,7 @@ async function main(): Promise<void> {
   ];
 
   for (const season of testSeasons) {
-    const test = await examplesForSeason(season, games);
+    const test = cache.get(season)!;
     console.log(`\n${season}: ${test.length} player-weeks`);
 
     for (const position of [...POSITIONS, undefined]) {
