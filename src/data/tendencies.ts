@@ -31,3 +31,37 @@ export async function loadTendencies(): Promise<Map<string, TeamTendency>> {
 
   return cached;
 }
+
+export interface WeekTendencyCounts {
+  neutralPlays: number;
+  neutralPasses: number;
+}
+
+let cachedWeeks: Map<string, WeekTendencyCounts> | undefined;
+
+/** `${team}|${season}|${week}` -> neutral-situation play counts */
+export async function loadWeeklyTendencyCounts(): Promise<
+  Map<string, WeekTendencyCounts>
+> {
+  if (cachedWeeks) {
+    return cachedWeeks;
+  }
+
+  const rows = parseCsv(
+    await readFile(
+      join(RAW_DIR, "..", "curated", "teamTendencyWeeks.csv"),
+      "utf8",
+    ),
+  );
+  cachedWeeks = new Map(
+    rows.map((row) => [
+      `${row["team"]}|${row["season"]}|${row["week"]}`,
+      {
+        neutralPlays: Number(row["neutralPlays"]),
+        neutralPasses: Number(row["neutralPasses"]),
+      },
+    ]),
+  );
+
+  return cachedWeeks;
+}

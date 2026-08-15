@@ -6,6 +6,10 @@ import {
 import { presets } from "../scoring/fantasyPoints.js";
 import { summarizeSeason } from "./seasonSummary.js";
 import { buildWeeklyExamples, type WeeklyExample } from "./weekly.js";
+import {
+  loadTendencies,
+  loadWeeklyTendencyCounts,
+} from "../data/tendencies.js";
 
 export const WEEKLY_FEATURES = [
   "intercept",
@@ -22,6 +26,8 @@ export const WEEKLY_FEATURES = [
   "targetsRecent",
   "carriesRecent",
   "airYardsRecent",
+  "passTend",
+  "passTendRB",
 ] as const;
 
 export function weeklyRow(e: WeeklyExample): number[] {
@@ -40,6 +46,8 @@ export function weeklyRow(e: WeeklyExample): number[] {
     e.targetsRecent,
     e.carriesRecent,
     e.airYardsRecent,
+    e.passTendency - 0.57,
+    e.position === "RB" ? e.passTendency - 0.57 : 0,
   ];
 }
 
@@ -58,6 +66,17 @@ export async function weeklyExamplesForSeason(
     }
   }
 
+  const seasonRates = await loadTendencies();
+  const priorSeasonRate = new Map<string, number>();
+
+  for (const [key, tendency] of seasonRates) {
+    const [team, s] = key.split("|");
+
+    if (Number(s) === season - 1) {
+      priorSeasonRate.set(team!, tendency.neutralPassRate);
+    }
+  }
+
   return buildWeeklyExamples(
     season,
     stats,
@@ -65,5 +84,6 @@ export async function weeklyExamplesForSeason(
     games,
     await loadSnapCounts(season),
     presets.ppr,
+    { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
   );
 }

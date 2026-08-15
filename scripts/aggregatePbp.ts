@@ -9,6 +9,7 @@ import { RAW_DIR } from "../src/data/nflverse.js";
 
 const SEASONS = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 const OUT = join(RAW_DIR, "..", "curated", "teamTendencies.csv");
+const OUT_WEEKS = join(RAW_DIR, "..", "curated", "teamTendencyWeeks.csv");
 
 /** splits one csv line, honoring double quotes; embedded newlines lose the row */
 function splitLine(line: string): string[] {
@@ -53,6 +54,7 @@ interface Tendency {
 async function aggregateSeason(
   season: number,
   into: Map<string, Tendency>,
+  weeks: Map<string, { plays: number; passes: number; neutralPlays: number; neutralPasses: number }>,
 ): Promise<void> {
   const path = join(RAW_DIR, `play_by_play_${season}.csv`);
 
@@ -100,7 +102,12 @@ async function aggregateSeason(
       continue;
     }
 
+    const week = Number(at("week"));
     const key = `${team}|${season}`;
+    const weekKey = `${team}|${season}|${week}`;
+    const weekEntry =
+      weeks.get(weekKey) ?? { plays: 0, passes: 0, neutralPlays: 0, neutralPasses: 0 };
+    weeks.set(weekKey, weekEntry);
     const entry =
       into.get(key) ??
       ({ plays: 0, passes: 0, neutralPlays: 0, neutralPasses: 0, games: new Set() } as Tendency);
@@ -111,17 +118,21 @@ async function aggregateSeason(
       Number.isFinite(diff) && Math.abs(diff) <= 7 && quarter >= 1 && quarter <= 3;
 
     entry.plays++;
+    weekEntry.plays++;
     entry.games.add(at("game_id"));
 
     if (isPass) {
       entry.passes++;
+      weekEntry.passes++;
     }
 
     if (neutral) {
       entry.neutralPlays++;
+      weekEntry.neutralPlays++;
 
       if (isPass) {
         entry.neutralPasses++;
+        weekEntry.neutralPasses++;
       }
     }
 
@@ -133,9 +144,10 @@ async function aggregateSeason(
 
 async function main(): Promise<void> {
   const tendencies = new Map<string, Tendency>();
+  const weeks = new Map<string, { plays: number; passes: number; neutralPlays: number; neutralPasses: number }>();
 
   for (const season of SEASONS) {
-    await aggregateSeason(season, tendencies);
+    await aggregateSeason(season, tendencies, weeks);
   }
 
   const rows = ["team,season,plays,games,passRate,neutralPassRate"];
@@ -155,7 +167,18 @@ async function main(): Promise<void> {
   }
 
   writeFileSync(OUT, rows.join("\n") + "\n");
-  console.log(`${rows.length - 1} team seasons written`);
+
+  const weekRows = ["team,season,week,plays,passes,neutralPlays,neutralPasses"];
+
+  for (const [key, w] of weeks) {
+    const [team, season, week] = key.split("|");
+    weekRows.push(
+      [team, season, week, w.plays, w.passes, w.neutralPlays, w.neutralPasses].join(","),
+    );
+  }
+
+  writeFileSync(OUT_WEEKS, weekRows.join("\n") + "\n");
+  console.log(`${rows.length - 1} team seasons, ${weekRows.length - 1} team weeks written`);
 }
 
 main().catch((error) => {

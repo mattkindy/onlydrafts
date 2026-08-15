@@ -43,6 +43,8 @@ export interface WeeklyExample {
   home: boolean;
   /** Vegas implied points for the player's team, 21.5 when no line exists */
   impliedTotal: number;
+  /** team's neutral-situation pass rate before this week, 0.57 unknown */
+  passTendency: number;
   teamId: string;
   opponent: string;
 }
@@ -71,6 +73,11 @@ function impliedFor(game: GameRow, home: boolean): number {
   return home ? half + game.spreadLine / 2 : half - game.spreadLine / 2;
 }
 
+export interface TendencyInputs {
+  weekCounts: Map<string, { neutralPlays: number; neutralPasses: number }>;
+  priorSeasonRate: Map<string, number>;
+}
+
 export function buildWeeklyExamples(
   season: number,
   stats: PlayerWeekStats[],
@@ -78,6 +85,7 @@ export function buildWeeklyExamples(
   games: GameRow[],
   snaps: SnapCountWeek[],
   rules: ScoringRules,
+  tendencies?: TendencyInputs,
 ): WeeklyExample[] {
   const schedule = new Map<string, TeamWeek>();
 
@@ -171,6 +179,30 @@ export function buildWeeklyExamples(
     return sum / games;
   };
 
+  const tendencyFor = (team: string, before: number): number => {
+    if (!tendencies) {
+      return 0.57;
+    }
+
+    let plays = 0;
+    let passes = 0;
+
+    for (let w = 1; w < before; w++) {
+      const counts = tendencies.weekCounts.get(`${team}|${season}|${w}`);
+
+      if (counts) {
+        plays += counts.neutralPlays;
+        passes += counts.neutralPasses;
+      }
+    }
+
+    if (plays >= 80) {
+      return passes / plays;
+    }
+
+    return tendencies.priorSeasonRate.get(team) ?? 0.57;
+  };
+
   const examples: WeeklyExample[] = [];
 
   for (const [playerId, rows] of byPlayer) {
@@ -245,6 +277,7 @@ export function buildWeeklyExamples(
         oppIndex: leagueMean > 0 ? defAllowed / leagueMean : 1,
         home: slot.home,
         impliedTotal: slot.impliedTotal,
+        passTendency: tendencyFor(row.teamId, row.week),
         teamId: row.teamId,
         opponent: slot.opponent,
       });
