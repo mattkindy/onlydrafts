@@ -36,6 +36,7 @@ interface Row {
 
 async function main(): Promise<void> {
   const data = await buildSeasonData(ALL_SEASONS);
+  const games = (await import("../src/data/nflverse.js").then((m) => m.loadGames()));
   const results = new Map<string, number[]>([
     ["adp", []],
     ["model", []],
@@ -60,11 +61,11 @@ async function main(): Promise<void> {
     const rookieTrain: RookieExample[] = [];
 
     for (const t of ALL_SEASONS.filter((s) => s >= 2017 && s < target)) {
-      rookieTrain.push(...(await rookiesFor(t, data)));
+      rookieTrain.push(...(await rookiesFor(t, data, games)));
     }
 
     const rookieWeights = fitRookieModel(rookieTrain);
-    const rookieClass = await rookiesFor(target, data);
+    const rookieClass = await rookiesFor(target, data, games);
     const prevNames = data.get(target - 1)!.summaries;
     const actuals = data.get(target)!.summaries;
 

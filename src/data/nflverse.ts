@@ -16,6 +16,8 @@ export const RAW_DIR = join(import.meta.dirname, "..", "..", "data", "raw");
 export interface GameRow extends Game {
   spreadLine?: number;
   totalLine?: number;
+  homeScore?: number;
+  awayScore?: number;
 }
 
 export interface PlayerWeekStats {
@@ -58,6 +60,8 @@ export async function loadGames(): Promise<GameRow[]> {
       awayTeamId: row["away_team"] ?? "",
       spreadLine: toNumber(row["spread_line"]),
       totalLine: toNumber(row["total_line"]),
+      homeScore: toNumber(row["home_score"]),
+      awayScore: toNumber(row["away_score"]),
     }));
 }
 

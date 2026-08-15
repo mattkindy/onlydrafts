@@ -2,6 +2,7 @@
 // predicted from earlier classes only, then compared to the market.
 // Run: npx tsx scripts/rookieEval.ts
 
+import { loadGames } from "../src/data/nflverse.js";
 import { spearman } from "../src/backtest/metrics.js";
 import { buildSeasonData } from "../src/features/seasonModel.js";
 import {
@@ -17,10 +18,11 @@ const SEASONS = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 202
 
 async function main(): Promise<void> {
   const data = await buildSeasonData(SEASONS);
+  const games = await loadGames();
   const classes = new Map<number, RookieExample[]>();
 
   for (const season of SEASONS.slice(2)) {
-    classes.set(season, await rookiesFor(season, data));
+    classes.set(season, await rookiesFor(season, data, games));
   }
 
   const modelScores: number[] = [];
