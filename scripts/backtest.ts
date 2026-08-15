@@ -1,34 +1,74 @@
-// First backtest: does knowing a player changed teams improve on the
-// carry-forward baseline (this season's PPG = last season's)? The last
-// transition is the test set. Run: npx tsx scripts/backtest.ts
+// Backtest of season-to-season PPG prediction. The last transition is
+// the test set; earlier ones train the blend weight and group ratios.
+// Run: npx tsx scripts/backtest.ts --seasons 2020-2024
 
-import { loadPlayerStats } from "../src/data/nflverse.js";
+import { loadPlayerStats, loadWeeklyRosters } from "../src/data/nflverse.js";
 import { presets } from "../src/scoring/fantasyPoints.js";
 import {
   summarizeSeason,
   type SeasonSummary,
 } from "../src/features/seasonSummary.js";
+import { primaryQbByTeam, projectedQbByTeam } from "../src/features/teamQb.js";
 import { spearman } from "../src/backtest/metrics.js";
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 const MIN_GAMES = 6;
+const MIN_GROUP = 25;
+
+type Group =
+  | "qb-stayer"
+  | "qb-mover"
+  | "skill-stayer-same-qb"
+  | "skill-stayer-new-qb"
+  | "skill-mover";
 
 interface Example {
   playerId: string;
   position: string;
   prevPpg: number;
+  prev2Ppg?: number;
   actualPpg: number;
   moved: boolean;
+  group: Group;
 }
 
-function examplesFor(
-  prev: Map<string, SeasonSummary>,
-  target: Map<string, SeasonSummary>,
-): Example[] {
+interface SeasonData {
+  stats: Awaited<ReturnType<typeof loadPlayerStats>>;
+  summaries: Map<string, SeasonSummary>;
+}
+
+function groupOf(
+  position: string,
+  moved: boolean,
+  qbChanged: boolean,
+): Group {
+  if (position === "QB") {
+    return moved ? "qb-mover" : "qb-stayer";
+  }
+
+  if (moved) {
+    return "skill-mover";
+  }
+
+  return qbChanged ? "skill-stayer-new-qb" : "skill-stayer-same-qb";
+}
+
+async function examplesFor(
+  target: number,
+  data: Map<number, SeasonData>,
+): Promise<Example[]> {
+  const prev = data.get(target - 1)!;
+  const current = data.get(target)!;
+  const prev2 = data.get(target - 2);
+
+  const prevQb = primaryQbByTeam(prev.stats);
+  const rosterWeekOne = await loadWeeklyRosters(target);
+  const projectedQb = projectedQbByTeam(rosterWeekOne, prev.summaries);
+
   const examples: Example[] = [];
 
-  for (const [playerId, was] of prev) {
-    const is = target.get(playerId);
+  for (const [playerId, was] of prev.summaries) {
+    const is = current.summaries.get(playerId);
 
     if (!is || !POSITIONS.includes(was.position)) {
       continue;
@@ -38,28 +78,100 @@ function examplesFor(
       continue;
     }
 
+    const moved = was.primaryTeamId !== is.primaryTeamId;
+    const targetTeam = is.primaryTeamId;
+    const qbChanged =
+      prevQb.get(targetTeam) !== projectedQb.get(targetTeam) ||
+      projectedQb.get(targetTeam) === undefined;
+
     examples.push({
       playerId,
       position: was.position,
       prevPpg: was.pointsPerGame,
+      prev2Ppg: prev2?.summaries.get(playerId)?.pointsPerGame,
       actualPpg: is.pointsPerGame,
-      moved: was.primaryTeamId !== is.primaryTeamId,
+      moved,
+      group: groupOf(was.position, moved, qbChanged),
     });
   }
 
   return examples;
 }
 
-function meanRatio(examples: Example[]): number {
-  const ratios = examples
-    .filter((e) => e.prevPpg > 1)
-    .map((e) => Math.min(e.actualPpg / e.prevPpg, 3));
+function blended(example: Example, weight: number): number {
+  if (example.prev2Ppg === undefined) {
+    return example.prevPpg;
+  }
+
+  return (1 - weight) * example.prevPpg + weight * example.prev2Ppg;
+}
+
+function fitBlendWeight(examples: Example[]): number {
+  let bestWeight = 0;
+  let bestScore = -Infinity;
+
+  for (let weight = 0; weight <= 0.5; weight += 0.05) {
+    const score = spearman(
+      examples.map((e) => blended(e, weight)),
+      examples.map((e) => e.actualPpg),
+    );
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestWeight = weight;
+    }
+  }
+
+  return bestWeight;
+}
+
+function meanRatio(pairs: [number, number][]): number {
+  const ratios = pairs
+    .filter(([basis]) => basis > 1)
+    .map(([basis, actual]) => Math.min(actual / basis, 3));
 
   if (ratios.length === 0) {
     return 1;
   }
 
   return ratios.reduce((s, r) => s + r, 0) / ratios.length;
+}
+
+function fitGroupRatios(
+  examples: Example[],
+  weight: number,
+): Map<Group, number> {
+  const fallback = new Map<boolean, number>();
+
+  for (const moved of [false, true]) {
+    fallback.set(
+      moved,
+      meanRatio(
+        examples
+          .filter((e) => e.moved === moved)
+          .map((e) => [blended(e, weight), e.actualPpg]),
+      ),
+    );
+  }
+
+  const ratios = new Map<Group, number>();
+  const groups = new Set(examples.map((e) => e.group));
+
+  for (const group of groups) {
+    const members = examples.filter((e) => e.group === group);
+
+    if (members.length < MIN_GROUP) {
+      ratios.set(group, fallback.get(members[0]!.moved) ?? 1);
+      continue;
+    }
+
+    ratios.set(
+      group,
+      meanRatio(members.map((e) => [blended(e, weight), e.actualPpg])),
+    );
+  }
+
+  return ratios;
 }
 
 function parseSeasons(arg: string | undefined): number[] {
@@ -86,64 +198,66 @@ async function main(): Promise<void> {
     flag === -1 ? undefined : process.argv[flag + 1],
   );
 
-  const summaries = new Map<number, Map<string, SeasonSummary>>();
+  const data = new Map<number, SeasonData>();
 
   for (const season of seasons) {
-    summaries.set(
-      season,
-      summarizeSeason(await loadPlayerStats(season), presets.ppr),
-    );
+    const stats = await loadPlayerStats(season);
+    data.set(season, { stats, summaries: summarizeSeason(stats, presets.ppr) });
   }
 
-  const transitions = seasons.slice(1).map((target) => ({
-    target,
-    examples: examplesFor(summaries.get(target - 1)!, summaries.get(target)!),
-  }));
+  const targets = seasons.slice(1);
+  const transitions = new Map<number, Example[]>();
 
-  const test = transitions[transitions.length - 1]!;
-  const train = transitions.slice(0, -1);
+  for (const target of targets) {
+    transitions.set(target, await examplesFor(target, data));
+  }
 
-  const trainExamples = train.flatMap((t) => t.examples);
-  const stayerRatio = meanRatio(trainExamples.filter((e) => !e.moved));
-  const moverRatio = meanRatio(trainExamples.filter((e) => e.moved));
+  const testTarget = targets[targets.length - 1]!;
+  const trainExamples = targets
+    .slice(0, -1)
+    .flatMap((t) => transitions.get(t)!);
+  const testExamples = transitions.get(testTarget)!;
 
-  console.log(
-    `train transitions: ${train.map((t) => `${t.target - 1}->${t.target}`).join(", ")}`,
-  );
-  console.log(`test transition: ${test.target - 1}->${test.target}`);
-  console.log(
-    `train examples: ${trainExamples.length} (${trainExamples.filter((e) => e.moved).length} movers)`,
-  );
-  console.log(
-    `learned ratios: stayers ${stayerRatio.toFixed(3)}, movers ${moverRatio.toFixed(3)}\n`,
-  );
+  const weight = fitBlendWeight(trainExamples);
+  const ratios = fitGroupRatios(trainExamples, weight);
 
-  console.log("Spearman within position on the test transition:");
-  console.log("pos     n  movers  baseline  with-move-adj");
+  console.log(`test transition: ${testTarget - 1}->${testTarget}`);
+  console.log(`train examples: ${trainExamples.length}`);
+  console.log(`blend weight on season minus two: ${weight.toFixed(2)}`);
+  console.log("group ratios:");
+
+  for (const [group, ratio] of [...ratios.entries()].sort()) {
+    const count = trainExamples.filter((e) => e.group === group).length;
+    console.log(`  ${group.padEnd(22)} ${ratio.toFixed(3)}  (n=${count})`);
+  }
+
+  const variants: [string, (e: Example) => number][] = [
+    ["carry-forward", (e) => e.prevPpg],
+    ["blended", (e) => blended(e, weight)],
+    ["blended+groups", (e) => blended(e, weight) * (ratios.get(e.group) ?? 1)],
+  ];
+
+  console.log("\nSpearman on the test transition:");
+  console.log(`pos     n  ${variants.map(([name]) => name.padStart(15)).join("")}`);
 
   const groups: (string | undefined)[] = [...POSITIONS, undefined];
 
   for (const position of groups) {
     const rows = position
-      ? test.examples.filter((e) => e.position === position)
-      : test.examples;
+      ? testExamples.filter((e) => e.position === position)
+      : testExamples;
 
     if (rows.length < 10) {
       continue;
     }
 
     const actual = rows.map((e) => e.actualPpg);
-    const baseline = rows.map((e) => e.prevPpg);
-    const adjusted = rows.map(
-      (e) => e.prevPpg * (e.moved ? moverRatio : stayerRatio),
+    const scores = variants.map(([, predict]) =>
+      spearman(rows.map(predict), actual),
     );
 
-    const movers = rows.filter((e) => e.moved).length;
-    const sBase = spearman(baseline, actual);
-    const sAdj = spearman(adjusted, actual);
-
     console.log(
-      `${(position ?? "all").padEnd(4)} ${String(rows.length).padStart(5)} ${String(movers).padStart(7)}  ${sBase.toFixed(3).padStart(8)}  ${sAdj.toFixed(3).padStart(13)}`,
+      `${(position ?? "all").padEnd(4)} ${String(rows.length).padStart(5)}  ${scores.map((s) => s.toFixed(3).padStart(15)).join("")}`,
     );
   }
 }
