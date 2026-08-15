@@ -10,6 +10,7 @@ import {
 } from "../src/features/seasonSummary.js";
 import { primaryQbByTeam, projectedQbByTeam } from "../src/features/teamQb.js";
 import { spearman } from "../src/backtest/metrics.js";
+import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 const MIN_GAMES = 6;
@@ -30,6 +31,8 @@ interface Example {
   actualPpg: number;
   moved: boolean;
   group: Group;
+  /** seasons since entering the league, undefined when the roster omits it */
+  expYears?: number;
 }
 
 interface SeasonData {
@@ -65,6 +68,14 @@ async function examplesFor(
   const rosterWeekOne = await loadWeeklyRosters(target);
   const projectedQb = projectedQbByTeam(rosterWeekOne, prev.summaries);
 
+  const entryYear = new Map<string, number>();
+
+  for (const appearance of rosterWeekOne) {
+    if (appearance.draftYear !== undefined) {
+      entryYear.set(appearance.playerId, appearance.draftYear);
+    }
+  }
+
   const examples: Example[] = [];
 
   for (const [playerId, was] of prev.summaries) {
@@ -84,6 +95,8 @@ async function examplesFor(
       prevQb.get(targetTeam) !== projectedQb.get(targetTeam) ||
       projectedQb.get(targetTeam) === undefined;
 
+    const entered = entryYear.get(playerId);
+
     examples.push({
       playerId,
       position: was.position,
@@ -92,6 +105,7 @@ async function examplesFor(
       actualPpg: is.pointsPerGame,
       moved,
       group: groupOf(was.position, moved, qbChanged),
+      expYears: entered === undefined ? undefined : target - entered,
     });
   }
 
@@ -174,6 +188,48 @@ function fitGroupRatios(
   return ratios;
 }
 
+const RIDGE_FEATURES = [
+  "intercept",
+  "isQB",
+  "isRB",
+  "isTE",
+  "moved",
+  "newQbSkillStayer",
+  "young",
+  "vet",
+  "movedYoung",
+  "movedVet",
+] as const;
+
+function ridgeRow(e: Example): number[] {
+  const young = e.expYears !== undefined && e.expYears <= 3 ? 1 : 0;
+  const vet = e.expYears !== undefined && e.expYears >= 8 ? 1 : 0;
+  const moved = e.moved ? 1 : 0;
+
+  return [
+    1,
+    e.position === "QB" ? 1 : 0,
+    e.position === "RB" ? 1 : 0,
+    e.position === "TE" ? 1 : 0,
+    moved,
+    e.group === "skill-stayer-new-qb" ? 1 : 0,
+    young,
+    vet,
+    moved * young,
+    moved * vet,
+  ];
+}
+
+function fitRatioModel(examples: Example[], weight: number): number[] {
+  const usable = examples.filter((e) => blended(e, weight) > 1);
+  const X = usable.map(ridgeRow);
+  const y = usable.map((e) =>
+    Math.log(Math.min(Math.max(e.actualPpg / blended(e, weight), 0.2), 3)),
+  );
+
+  return fitRidge(X, y, 5);
+}
+
 function parseSeasons(arg: string | undefined): number[] {
   const fallback = [2020, 2021, 2022, 2023, 2024];
 
@@ -231,10 +287,21 @@ async function main(): Promise<void> {
     console.log(`  ${group.padEnd(22)} ${ratio.toFixed(3)}  (n=${count})`);
   }
 
+  const ridgeWeights = fitRatioModel(trainExamples, weight);
+
+  console.log("ridge weights (log-ratio scale):");
+
+  for (let i = 0; i < RIDGE_FEATURES.length; i++) {
+    console.log(`  ${RIDGE_FEATURES[i]!.padEnd(18)} ${ridgeWeights[i]!.toFixed(3)}`);
+  }
+
   const variants: [string, (e: Example) => number][] = [
     ["carry-forward", (e) => e.prevPpg],
-    ["blended", (e) => blended(e, weight)],
     ["blended+groups", (e) => blended(e, weight) * (ratios.get(e.group) ?? 1)],
+    [
+      "blended+ridge",
+      (e) => blended(e, weight) * Math.exp(predictRidge(ridgeWeights, ridgeRow(e))),
+    ],
   ];
 
   console.log("\nSpearman on the test transition:");
