@@ -33,6 +33,8 @@ interface Example {
   group: Group;
   /** seasons since entering the league, undefined when the roster omits it */
   expYears?: number;
+  /** draft capital of the best rookie arriving at this player's position */
+  rookieCapital: number;
 }
 
 interface SeasonData {
@@ -69,10 +71,26 @@ async function examplesFor(
   const projectedQb = projectedQbByTeam(rosterWeekOne, prev.summaries);
 
   const entryYear = new Map<string, number>();
+  const rookieCapital = new Map<string, number>();
 
   for (const appearance of rosterWeekOne) {
     if (appearance.draftYear !== undefined) {
       entryYear.set(appearance.playerId, appearance.draftYear);
+    }
+
+    const position = appearance.rawPosition.toUpperCase();
+
+    if (
+      appearance.week === 1 &&
+      appearance.draftYear === target &&
+      POSITIONS.includes(position)
+    ) {
+      const capital =
+        appearance.draftOverall === undefined
+          ? 0.05
+          : (257 - Math.min(appearance.draftOverall, 257)) / 256;
+      const key = `${appearance.teamId}|${position}`;
+      rookieCapital.set(key, Math.max(rookieCapital.get(key) ?? 0, capital));
     }
   }
 
@@ -106,6 +124,7 @@ async function examplesFor(
       moved,
       group: groupOf(was.position, moved, qbChanged),
       expYears: entered === undefined ? undefined : target - entered,
+      rookieCapital: rookieCapital.get(`${targetTeam}|${was.position}`) ?? 0,
     });
   }
 
@@ -199,6 +218,8 @@ const RIDGE_FEATURES = [
   "vet",
   "movedYoung",
   "movedVet",
+  "rookieCap",
+  "rookieCapRB",
 ] as const;
 
 function ridgeRow(e: Example): number[] {
@@ -217,6 +238,8 @@ function ridgeRow(e: Example): number[] {
     vet,
     moved * young,
     moved * vet,
+    e.rookieCapital,
+    e.position === "RB" ? e.rookieCapital : 0,
   ];
 }
 
@@ -248,6 +271,51 @@ function parseSeasons(arg: string | undefined): number[] {
   return arg.split(",").map(Number);
 }
 
+/**
+ * Scores every variant on each transition that has at least two earlier
+ * transitions to train on, so a conclusion never rests on one test
+ * season.
+ */
+function rollingEvaluation(
+  targets: number[],
+  transitions: Map<number, Example[]>,
+): void {
+  const names = ["carry-forward", "blended+groups", "blended+ridge"];
+  const sums = new Map<string, number[]>(names.map((n) => [n, []]));
+
+  for (let i = 2; i < targets.length; i++) {
+    const test = transitions.get(targets[i]!)!;
+    const train = targets.slice(0, i).flatMap((t) => transitions.get(t)!);
+
+    const weight = fitBlendWeight(train);
+    const ratios = fitGroupRatios(train, weight);
+    const ridgeWeights = fitRatioModel(train, weight);
+
+    const predictors: ((e: Example) => number)[] = [
+      (e) => e.prevPpg,
+      (e) => blended(e, weight) * (ratios.get(e.group) ?? 1),
+      (e) => blended(e, weight) * Math.exp(predictRidge(ridgeWeights, ridgeRow(e))),
+    ];
+
+    const actual = test.map((e) => e.actualPpg);
+
+    for (let v = 0; v < names.length; v++) {
+      sums.get(names[v]!)!.push(spearman(test.map(predictors[v]!), actual));
+    }
+  }
+
+  console.log("rolling evaluation, all positions pooled:");
+
+  for (const [name, scores] of sums) {
+    const mean = scores.reduce((s, x) => s + x, 0) / scores.length;
+    console.log(
+      `  ${name.padEnd(16)} mean ${mean.toFixed(3)}  per season: ${scores.map((s) => s.toFixed(3)).join(", ")}`,
+    );
+  }
+
+  console.log("");
+}
+
 async function main(): Promise<void> {
   const flag = process.argv.indexOf("--seasons");
   const seasons = parseSeasons(
@@ -267,6 +335,8 @@ async function main(): Promise<void> {
   for (const target of targets) {
     transitions.set(target, await examplesFor(target, data));
   }
+
+  rollingEvaluation(targets, transitions);
 
   const testTarget = targets[targets.length - 1]!;
   const trainExamples = targets
