@@ -16,8 +16,11 @@ work is in the commit history and the README.
 - Chemistry: pair tenure from stint overlaps, target-weighted pair
   efficiency with shrinkage, college teammate overlap. Tenure and
   college need only roster data; pair efficiency needs play-by-play.
-- OL continuity: the graph already includes linemen; the feature (how
-  many of last season's line remain, snap-weighted) is unbuilt.
+- OL continuity, snap-weighted. The roster-based version (share of
+  last season's five most-used linemen still on the week-1 roster) is
+  computed and available on SeasonExample, and it learned the expected
+  direction in training but slightly hurt held-out scores, so it is
+  out of the ridge. Retry with lines defined by snap counts.
 - Defensive personnel loss as a game-script signal for opposing
   offenses.
 - Depth chart ingestion (nflverse `depth_charts`) for the weekly role

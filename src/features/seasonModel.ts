@@ -4,6 +4,7 @@ import {
   loadWeeklyRosters,
 } from "../data/nflverse.js";
 import { normalizeName } from "../data/names.js";
+import { mapPosition } from "../graph/build.js";
 import { presets } from "../scoring/fantasyPoints.js";
 import { summarizeSeason, type SeasonSummary } from "./seasonSummary.js";
 import { primaryQbByTeam, projectedQbByTeam } from "./teamQb.js";
@@ -38,6 +39,8 @@ export interface SeasonExample {
   gamesPrev: number;
   /** share of previous season points that came from touchdowns */
   tdPointShare: number;
+  /** share of the team's five most-used linemen last season still rostered */
+  olRetention: number;
 }
 
 export interface SeasonData {
@@ -133,6 +136,41 @@ interface DraftContext {
   weekOneTeam: Map<string, string>;
   projectedQb: Map<string, string>;
   prevQb: Map<string, string>;
+  /** per team: share of last season's five most-used linemen still rostered */
+  olRetention: Map<string, number>;
+}
+
+function primaryLine(
+  roster: Awaited<ReturnType<typeof loadWeeklyRosters>>,
+): Map<string, string[]> {
+  const weeksOnTeam = new Map<string, Map<string, number>>();
+
+  for (const appearance of roster) {
+    if (mapPosition(appearance.rawPosition) !== "OL") {
+      continue;
+    }
+
+    const perPlayer = weeksOnTeam.get(appearance.teamId) ?? new Map();
+    perPlayer.set(
+      appearance.playerId,
+      (perPlayer.get(appearance.playerId) ?? 0) + 1,
+    );
+    weeksOnTeam.set(appearance.teamId, perPlayer);
+  }
+
+  const line = new Map<string, string[]>();
+
+  for (const [teamId, perPlayer] of weeksOnTeam) {
+    line.set(
+      teamId,
+      [...perPlayer.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([playerId]) => playerId),
+    );
+  }
+
+  return line;
 }
 
 async function draftContext(
@@ -140,6 +178,28 @@ async function draftContext(
   prev: SeasonData,
 ): Promise<DraftContext> {
   const rosterWeekOne = await loadWeeklyRosters(target);
+  const prevRoster = await loadWeeklyRosters(target - 1);
+  const prevLine = primaryLine(prevRoster);
+  const targetOl = new Map<string, Set<string>>();
+
+  for (const appearance of rosterWeekOne) {
+    if (
+      appearance.week === 1 &&
+      mapPosition(appearance.rawPosition) === "OL"
+    ) {
+      const set = targetOl.get(appearance.teamId) ?? new Set<string>();
+      set.add(appearance.playerId);
+      targetOl.set(appearance.teamId, set);
+    }
+  }
+
+  const olRetention = new Map<string, number>();
+
+  for (const [teamId, five] of prevLine) {
+    const current = targetOl.get(teamId);
+    const kept = five.filter((id) => current?.has(id)).length;
+    olRetention.set(teamId, five.length === 0 ? 1 : kept / five.length);
+  }
   const entryYear = new Map<string, number>();
   const rookieCapital = new Map<string, number>();
   const weekOneTeam = new Map<string, string>();
@@ -186,6 +246,7 @@ async function draftContext(
     weekOneTeam,
     projectedQb: projectedQbByTeam(rosterWeekOne, prev.summaries),
     prevQb: primaryQbByTeam(prev.stats),
+    olRetention,
   };
 }
 
@@ -235,6 +296,7 @@ export async function examplesForTransition(
       age: ageOf(context, playerId, target),
       gamesPrev: was.games,
       tdPointShare: was.tdPointShare,
+      olRetention: context.olRetention.get(targetTeam) ?? 0.6,
     });
   }
 
@@ -425,6 +487,7 @@ export async function projectDraftBoard(
       age: ageOf(context, playerId, target),
       gamesPrev: was.games,
       tdPointShare: was.tdPointShare,
+      olRetention: context.olRetention.get(targetTeam) ?? 0.6,
     };
 
     board.set(playerId, predictSeason(fit, example));

@@ -61,12 +61,28 @@ function weeklyScore(
   return scores.reduce((s, x) => s + x, 0) / scores.length;
 }
 
+function fitPerPosition(
+  train: WeeklyExample[],
+): Map<string, number[]> {
+  const weights = new Map<string, number[]>();
+
+  for (const position of POSITIONS) {
+    const rows = train.filter((e) => e.position === position);
+    weights.set(
+      position,
+      fitRidge(rows.map(weeklyRow), rows.map((e) => e.target), 25),
+    );
+  }
+
+  return weights;
+}
+
 /** each season from 2019 on gets tested with only earlier seasons trained */
 async function rollingWeekly(
   seasons: number[],
   cache: Map<number, WeeklyExample[]>,
 ): Promise<void> {
-  const names = ["season-avg", "last4", "ridge"];
+  const names = ["season-avg", "last4", "ridge", "ridge-per-pos"];
   const scores = new Map<string, number[]>(names.map((n) => [n, []]));
   const testSeasons = seasons.filter((s) => s >= seasons[0]! + 3);
 
@@ -76,11 +92,14 @@ async function rollingWeekly(
       .flatMap((s) => cache.get(s)!);
     const test = cache.get(testSeason)!;
     const weights = fitRidge(train.map(weeklyRow), train.map((e) => e.target), 25);
+    const perPosition = fitPerPosition(train);
 
     const predictors: ((e: WeeklyExample) => number)[] = [
       (e) => e.seasonPpg,
       (e) => e.last4,
       (e) => predictRidge(weights, weeklyRow(e)),
+      (e) =>
+        predictRidge(perPosition.get(e.position) ?? weights, weeklyRow(e)),
     ];
 
     for (let v = 0; v < names.length; v++) {
