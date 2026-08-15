@@ -35,6 +35,13 @@ a point in time. Examples worth testing early:
   players' usage patterns move with him?
 - **Schedule shape**: strength of opposing defenses by week, bye timing,
   rest differentials.
+- **Chemistry**: pair tenure from overlapping stints, QB and WR first.
+  Games and targets together, efficiency of the pair relative to each
+  player's numbers with other partners (shrunk hard toward zero, since
+  small pair samples make "both guys are good" masquerade as
+  chemistry), and reunion triangles, where a player joins a team that
+  employs his former coordinator. College overlap seeds the pair
+  history before the NFL does.
 - **Non-scoring personnel**: linemen and defenders never earn fantasy
   points, but their edges shape the players who do. OL continuity moves
   a back's efficiency, a defense that lost its best pass rusher changes
