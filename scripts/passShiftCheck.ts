@@ -30,6 +30,20 @@ async function main(): Promise<void> {
       (e.position === "WR" || e.position === "TE" || e.position === "RB"),
   );
 
+  const stable = examples.filter(
+    (e) =>
+      !e.moved &&
+      !e.ocChanged &&
+      !e.hcChanged &&
+      blended(e, weight) > 5 &&
+      e.position !== "QB",
+  );
+  const stableRatios = stable.map((e) =>
+    Math.min(e.actualPpg / blended(e, weight), 3),
+  );
+  console.log(
+    `baseline, same OC and HC: ${stable.length} players, mean ratio ${(stableRatios.reduce((s, x) => s + x, 0) / stableRatios.length).toFixed(3)}`,
+  );
   console.log(`${stayers.length} stayers under a new coordinator with a measured shift`);
   console.log("group                          n   mean actual/expected");
 
@@ -38,6 +52,10 @@ async function main(): Promise<void> {
     ["catchers, runnier OC (<-3%)", (e) => e.position !== "RB" && e.passShift < -0.03],
     ["RBs, passier OC (>+3%)", (e) => e.position === "RB" && e.passShift > 0.03],
     ["RBs, runnier OC (<-3%)", (e) => e.position === "RB" && e.passShift < -0.03],
+    ["new OC, same HC", (e) => !e.hcChanged],
+    ["new OC, new HC", (e) => e.hcChanged],
+    ["new OC same HC, passier", (e) => !e.hcChanged && e.passShift > 0.03],
+    ["new OC same HC, runnier", (e) => !e.hcChanged && e.passShift < -0.03],
   ];
 
   for (const [label, match] of groups) {

@@ -97,10 +97,10 @@ export const SEASON_RIDGE_FEATURES = [
   "tdShare",
   "olRetention",
   "olRetentionRB",
-  "ocChanged",
+  "regimeChange",
+  "ocOnlyChange",
   "ocReunion",
   "logAdp",
-  "passShiftSigned",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -548,10 +548,10 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
     e.tdPointShare,
     e.olRetention,
     e.position === "RB" ? e.olRetention : 0,
-    e.ocChanged ? 1 : 0,
+    e.hcChanged ? 1 : 0,
+    e.ocChanged && !e.hcChanged ? 1 : 0,
     e.ocReunion ? 1 : 0,
     Math.log(e.adp ?? 250),
-    e.passShift * (e.position === "RB" ? -1 : 1),
   ];
 }
 
