@@ -256,6 +256,27 @@ async function main(): Promise<void> {
     })
     .sort((a, b) => b.vor - a.vor);
 
+  // the measured best ordering blends market rank with model rank; players
+  // the market has not priced keep their model rank
+  const modelRank = new Map(board.map((p, i) => [p.key, i + 1]));
+  const marketOrder = board
+    .filter((p) => p.adp !== null)
+    .sort((a, b) => (a.adp ?? 999) - (b.adp ?? 999));
+  const marketRank = new Map(marketOrder.map((p, i) => [p.key, i + 1]));
+
+  for (const p of board) {
+    const mine = modelRank.get(p.key)!;
+    const theirs = marketRank.get(p.key);
+    (p as unknown as { blend: number }).blend =
+      theirs === undefined ? mine : (mine + theirs) / 2;
+  }
+
+  board.sort(
+    (a, b) =>
+      (a as unknown as { blend: number }).blend -
+      (b as unknown as { blend: number }).blend,
+  );
+
   await writeFile(
     join(DOCS, "data", `board-${season}.json`),
     JSON.stringify({ season, players: board }),
