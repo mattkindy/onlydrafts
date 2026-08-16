@@ -21,7 +21,8 @@ import {
   type ResidualModel,
   type SeasonNoise,
 } from "../backtest/intervals.js";
-import { presets, fantasyPoints } from "../scoring/fantasyPoints.js";
+import { fantasyPoints } from "../scoring/fantasyPoints.js";
+import { scoring } from "../scoring/active.js";
 import type { SeasonPlayer } from "../sim/playerSeason.js";
 import type { GameRow } from "../data/nflverse.js";
 
@@ -146,7 +147,7 @@ export async function buildPreseasonWorld(
       continue;
     }
 
-    const points = fantasyPoints(row.statLine, presets.ppr);
+    const points = fantasyPoints(row.statLine, scoring());
     const key = `${defense}|${row.position}`;
     const entry = allowed.get(key) ?? { points: 0, games: new Set<string>() };
     entry.points += points;

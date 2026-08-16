@@ -3,7 +3,7 @@ import {
   loadPlayerStats,
   loadSnapCounts,
 } from "../data/nflverse.js";
-import { presets } from "../scoring/fantasyPoints.js";
+import { scoring } from "../scoring/active.js";
 import { summarizeSeason } from "./seasonSummary.js";
 import { buildWeeklyExamples, type WeeklyExample } from "./weekly.js";
 import {
@@ -57,7 +57,7 @@ export async function weeklyExamplesForSeason(
 ): Promise<WeeklyExample[]> {
   const stats = await loadPlayerStats(season);
   const prevStats = await loadPlayerStats(season - 1);
-  const prevSummaries = summarizeSeason(prevStats, presets.ppr);
+  const prevSummaries = summarizeSeason(prevStats, scoring());
   const prevPpg = new Map<string, number>();
 
   for (const [id, summary] of prevSummaries) {
@@ -83,7 +83,7 @@ export async function weeklyExamplesForSeason(
     prevPpg,
     games,
     await loadSnapCounts(season),
-    presets.ppr,
+    scoring(),
     { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
   );
 }
@@ -96,7 +96,7 @@ export async function weeklyProspectiveForWeek(
 ): Promise<WeeklyExample[]> {
   const stats = await loadPlayerStats(season);
   const prevStats = await loadPlayerStats(season - 1);
-  const prevSummaries = summarizeSeason(prevStats, presets.ppr);
+  const prevSummaries = summarizeSeason(prevStats, scoring());
   const prevPpg = new Map<string, number>();
 
   for (const [id, summary] of prevSummaries) {
@@ -122,7 +122,7 @@ export async function weeklyProspectiveForWeek(
     prevPpg,
     games,
     await loadSnapCounts(season),
-    presets.ppr,
+    scoring(),
     { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
     week,
   );

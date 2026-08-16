@@ -14,6 +14,8 @@ import type { WeeklyExample } from "../src/features/weekly.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
+import { fetchLeagueScoring } from "../src/data/leagueScoring.js";
+import { setScoring } from "../src/scoring/active.js";
 import { buildPreseasonWorld } from "../src/features/preseason.js";
 import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
 import { seededRng } from "../src/sim/rng.js";
@@ -28,6 +30,16 @@ function argOf(flag: string, fallback: string): string {
 
 async function main(): Promise<void> {
   const season = Number(argOf("--season", "2025"));
+  const leagueId = argOf("--league", "");
+
+  if (leagueId) {
+    const rules = await fetchLeagueScoring(leagueId);
+    setScoring(rules);
+    console.log(
+      `scoring from league ${leagueId}: ${rules.receptions} per catch, ` +
+        `${rules.passTd} per passing touchdown`,
+    );
+  }
   const weeksArg = argOf("--weeks", "");
   const range = weeksArg.match(/^(\d+)-(\d+)$/);
   const weeks = weeksArg === ""

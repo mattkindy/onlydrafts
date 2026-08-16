@@ -5,7 +5,7 @@ import {
 } from "../data/nflverse.js";
 import { normalizeName } from "../data/names.js";
 import { mapPosition } from "../graph/build.js";
-import { presets } from "../scoring/fantasyPoints.js";
+import { scoring } from "../scoring/active.js";
 import { summarizeSeason, type SeasonSummary } from "./seasonSummary.js";
 import { primaryQbByTeam, projectedQbByTeam } from "./teamQb.js";
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
@@ -136,7 +136,7 @@ export async function buildSeasonData(
     const stats = await loadPlayerStats(season).catch(() => []);
     data.set(season, {
       stats,
-      summaries: summarizeSeason(stats, presets.ppr),
+      summaries: summarizeSeason(stats, scoring()),
       snapShare: await loadSnapShare(season).catch(() => new Map<string, number>()),
     });
   }
