@@ -25,6 +25,8 @@ function game(week: number): GameRow {
     week,
     homeTeamId: "DET",
     awayTeamId: "KC",
+    indoors: false,
+    divisional: false,
   };
 }
 

@@ -18,6 +18,15 @@ export interface GameRow extends Game {
   totalLine?: number;
   homeScore?: number;
   awayScore?: number;
+  /** miles per hour at kickoff, absent indoors */
+  wind?: number;
+  temp?: number;
+  /** a closed roof or a dome takes the weather out of it */
+  indoors: boolean;
+  /** days since each side last played, 7 on a normal week */
+  homeRest?: number;
+  awayRest?: number;
+  divisional: boolean;
 }
 
 export interface PlayerWeekStats {
@@ -62,6 +71,12 @@ export async function loadGames(): Promise<GameRow[]> {
       totalLine: toNumber(row["total_line"]),
       homeScore: toNumber(row["home_score"]),
       awayScore: toNumber(row["away_score"]),
+      wind: toNumber(row["wind"]),
+      temp: toNumber(row["temp"]),
+      indoors: /dome|closed/i.test(row["roof"] ?? ""),
+      homeRest: toNumber(row["home_rest"]),
+      awayRest: toNumber(row["away_rest"]),
+      divisional: row["div_game"] === "1" || row["div_game"] === "TRUE",
     }));
 }
 
