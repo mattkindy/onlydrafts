@@ -29,14 +29,16 @@ function argOf(flag: string, fallback: string): string {
 
 async function main(): Promise<void> {
   const season = Number(argOf("--season", "2025"));
-  const weeksArg = argOf("--weeks", "10-12");
+  const weeksArg = argOf("--weeks", "");
   const range = weeksArg.match(/^(\d+)-(\d+)$/);
-  const weeks = range
+  const weeks = weeksArg === ""
+    ? []
+    : range
     ? Array.from(
         { length: Number(range[2]) - Number(range[1]) + 1 },
         (_, i) => Number(range[1]) + i,
       )
-    : weeksArg.split(",").map(Number);
+      : weeksArg.split(",").map(Number);
 
   const games = await loadGames();
   const train: WeeklyExample[] = [];

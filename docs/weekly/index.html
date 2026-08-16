@@ -227,7 +227,8 @@ async function boot() {
     $("keepn").value = saved.keepn ?? 2;
     if (saved.week && [...$("week").options].some((o) => o.value === saved.week)) $("week").value = saved.week;
   }
-  setView(active ? (saved && saved.view ? saved.view : "start") : "leagues");
+  const fallbackView = meta.weeks.length ? "start" : "draft";
+  setView(active ? (saved && saved.view ? saved.view : fallbackView) : "leagues");
   if (view === "leagues" && leagues.length) renderLeagues();
 }
 
@@ -250,7 +251,7 @@ function setView(next) {
 
   for (const b of document.querySelectorAll("#subnav button")) b.classList.toggle("on", b.dataset.view === next);
   $("userwrap").hidden = next !== "leagues";
-  $("weekwrap").hidden = next === "draft" || next === "history" || next === "leagues";
+  $("weekwrap").hidden = !meta.weeks.length || next === "draft" || next === "history" || next === "leagues";
   $("teamwrap").hidden = true;
   $("keepwrap").hidden = next !== "draft";
   $("manualwrap").style.display = next === "start" || next === "waivers" || next === "draft" ? "block" : "none";
@@ -350,8 +351,9 @@ function renderLeagues() {
     div.addEventListener("click", async () => {
       active = lg;
       store_set("active", active);
-      setView("start");
-      await renderStart();
+      setView(meta.weeks.length ? "start" : "draft");
+      if (meta.weeks.length) await renderStart();
+      else await renderDraftView();
       refreshGoLabel();
     });
     grid.appendChild(div);
@@ -448,7 +450,14 @@ function myKeys() {
 
 const isMine = (mine, key) => [...mine].some((k) => key.includes(k) || k.includes(key));
 
+function seasonNotStarted() {
+  $("out").innerHTML = '<div class="empty"><b>The season has not kicked off yet.</b> ' +
+    "Weekly projections need a few games of this year's snaps and targets, so they turn on once the season is a month old. " +
+    "Until then, use <b>draft help</b>.</div>";
+}
+
 async function renderStart() {
+  if (!meta.weeks.length) return seasonNotStarted();
   const slate = await slateFor($("week").value);
   const mine = myKeys();
   const out = $("out");
@@ -479,6 +488,7 @@ async function renderStart() {
 }
 
 async function renderWaivers() {
+  if (!meta.weeks.length) return seasonNotStarted();
   const slate = await slateFor($("week").value);
   const mine = myKeys();
   const out = $("out");
@@ -643,14 +653,40 @@ function renderDraft(staleAt) {
     out.appendChild(table);
   }
 
+  const drafted = new Set(mineList.map((p) => p.key));
+  const rosterNow = active
+    ? active.myRoster
+        .map((r) => boardLookup(r.key))
+        .filter((p) => p && !drafted.has(p.key))
+    : [];
+
   if (mineList.length > 0) {
     const mh = document.createElement("h2");
-    mh.textContent = "your team (" + Object.entries(counts).filter(([, c]) => c > 0).map(([pos, c]) => c + " " + pos).join(", ") + ")";
+    mh.textContent = "you drafted (" + Object.entries(counts).filter(([, c]) => c > 0).map(([pos, c]) => c + " " + pos).join(", ") + ")";
     out.appendChild(mh);
     const myGrid = document.createElement("div");
     myGrid.className = "cards";
     for (const p of mineList) myGrid.appendChild(card(p, { mine: true, big: p.vor, sub: p.ppg.toFixed(1) + " a game" }));
     out.appendChild(myGrid);
+  }
+
+  if (rosterNow.length > 0) {
+    const rh = document.createElement("h2");
+    rh.textContent = "on your sleeper roster now (" + rosterNow.length + ")";
+    out.appendChild(rh);
+    const rGrid = document.createElement("div");
+    rGrid.className = "cards";
+
+    for (const p of rosterNow) {
+      rGrid.appendChild(card(p, {
+        mine: true,
+        big: p.vor,
+        sub: p.ppg.toFixed(1) + " a game" + (p.bye ? " &middot; bye " + p.bye : ""),
+        tag: "tap to mark as a keeper",
+      }));
+    }
+
+    out.appendChild(rGrid);
   }
 
   const owners = Object.keys(s.teams);

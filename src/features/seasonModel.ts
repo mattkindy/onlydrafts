@@ -131,11 +131,13 @@ export async function buildSeasonData(
   const data = new Map<number, SeasonData>();
 
   for (const season of seasons) {
-    const stats = await loadPlayerStats(season);
+    // the upcoming season has rosters but no games yet, so its stats and
+    // snaps are missing until week 1
+    const stats = await loadPlayerStats(season).catch(() => []);
     data.set(season, {
       stats,
       summaries: summarizeSeason(stats, presets.ppr),
-      snapShare: await loadSnapShare(season),
+      snapShare: await loadSnapShare(season).catch(() => new Map<string, number>()),
     });
   }
 
