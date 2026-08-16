@@ -87,3 +87,43 @@ export async function weeklyExamplesForSeason(
     { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
   );
 }
+
+/** feature rows for a week that has not been played yet */
+export async function weeklyProspectiveForWeek(
+  season: number,
+  week: number,
+  games: Awaited<ReturnType<typeof loadGames>>,
+): Promise<WeeklyExample[]> {
+  const stats = await loadPlayerStats(season);
+  const prevStats = await loadPlayerStats(season - 1);
+  const prevSummaries = summarizeSeason(prevStats, presets.ppr);
+  const prevPpg = new Map<string, number>();
+
+  for (const [id, summary] of prevSummaries) {
+    if (summary.games >= 4) {
+      prevPpg.set(id, summary.pointsPerGame);
+    }
+  }
+
+  const seasonRates = await loadTendencies();
+  const priorSeasonRate = new Map<string, number>();
+
+  for (const [key, tendency] of seasonRates) {
+    const [team, s] = key.split("|");
+
+    if (Number(s) === season - 1) {
+      priorSeasonRate.set(team!, tendency.neutralPassRate);
+    }
+  }
+
+  return buildWeeklyExamples(
+    season,
+    stats,
+    prevPpg,
+    games,
+    await loadSnapCounts(season),
+    presets.ppr,
+    { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
+    week,
+  );
+}

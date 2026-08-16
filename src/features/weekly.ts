@@ -86,6 +86,7 @@ export function buildWeeklyExamples(
   snaps: SnapCountWeek[],
   rules: ScoringRules,
   tendencies?: TendencyInputs,
+  prospectiveWeek?: number,
 ): WeeklyExample[] {
   const schedule = new Map<string, TeamWeek>();
 
@@ -203,6 +204,84 @@ export function buildWeeklyExamples(
     return tendencies.priorSeasonRate.get(team) ?? 0.57;
   };
 
+  const assemble = (
+    playerId: string,
+    rows: PlayerWeekStats[],
+    week: number,
+    reference: PlayerWeekStats,
+    target: PlayerWeekStats | undefined,
+  ): WeeklyExample | undefined => {
+    const earlier = rows.filter((r) => r.week < week);
+
+    if (earlier.length < 2) {
+      return undefined;
+    }
+
+    const pointsOf = (r: PlayerWeekStats) => fantasyPoints(r.statLine, rules);
+    const recent = earlier.slice(-4);
+    const lastFour = recent.map(pointsOf);
+    const all = earlier.map(pointsOf);
+    const meanOf = (pick: (r: PlayerWeekStats) => number) =>
+      recent.reduce((s, r) => s + pick(r), 0) / recent.length;
+
+    const teamId = reference.teamId;
+    const slot = schedule.get(`${teamId}|${week}`);
+
+    if (!slot) {
+      return undefined;
+    }
+
+    const defWeeks = week - 1;
+    const defAllowed = cumulativeMean(
+      allowed.get(`${slot.opponent}|${reference.position}`),
+      week,
+      defWeeks,
+    );
+    const leagueMean =
+      cumulativeMean(leagueTotal.get(reference.position), week, defWeeks) / 32;
+
+    const series = snapSeries.get(
+      `${normalizeName(reference.playerName)}|${teamId}`,
+    );
+    const snapWeeks = earlier
+      .map((r) => series?.get(r.week))
+      .filter((v): v is number => v !== undefined)
+      .slice(-2);
+
+    return {
+      playerId,
+      playerName: reference.playerName,
+      position: reference.position,
+      season,
+      week,
+      target: target ? pointsOf(target) : 0,
+      targetTargets: target?.targets ?? 0,
+      targetCarries: target?.carries ?? 0,
+      targetReceptions: target?.statLine.receptions ?? 0,
+      targetRecYds: target?.statLine.recYds ?? 0,
+      targetRushYds: target?.statLine.rushYds ?? 0,
+      last4: lastFour.reduce((s, x) => s + x, 0) / lastFour.length,
+      targetsRecent: meanOf((r) => r.targets),
+      carriesRecent: meanOf((r) => r.carries),
+      airYardsRecent: meanOf((r) => r.airYards),
+      receptionsRecent: meanOf((r) => r.statLine.receptions),
+      recYdsRecent: meanOf((r) => r.statLine.recYds),
+      rushYdsRecent: meanOf((r) => r.statLine.rushYds),
+      seasonPpg: all.reduce((s, x) => s + x, 0) / all.length,
+      prevPpg: prevPpgById.get(playerId) ?? 0,
+      snapRecent:
+        snapWeeks.length === 0
+          ? 0
+          : snapWeeks.reduce((s, x) => s + x, 0) / snapWeeks.length,
+      oppIndex: leagueMean > 0 ? defAllowed / leagueMean : 1,
+      home: slot.home,
+      impliedTotal: slot.impliedTotal,
+      passTendency: tendencyFor(teamId, week),
+      teamId,
+      opponent: slot.opponent,
+    };
+  };
+
   const examples: WeeklyExample[] = [];
 
   for (const [playerId, rows] of byPlayer) {
@@ -213,75 +292,34 @@ export function buildWeeklyExamples(
         continue;
       }
 
-      const earlier = rows.filter((r) => r.week < row.week);
+      const example = assemble(playerId, rows, row.week, row, row);
 
-      if (earlier.length < 2) {
-        continue;
+      if (example) {
+        examples.push(example);
       }
-
-      const pointsOf = (r: PlayerWeekStats) => fantasyPoints(r.statLine, rules);
-      const recent = earlier.slice(-4);
-      const lastFour = recent.map(pointsOf);
-      const all = earlier.map(pointsOf);
-      const meanOf = (pick: (r: PlayerWeekStats) => number) =>
-        recent.reduce((s, r) => s + pick(r), 0) / recent.length;
-
-      const slot = schedule.get(`${row.teamId}|${row.week}`);
-
-      if (!slot) {
-        continue;
-      }
-
-      const defWeeks = row.week - 1;
-      const defAllowed = cumulativeMean(
-        allowed.get(`${slot.opponent}|${row.position}`),
-        row.week,
-        defWeeks,
-      );
-      const leagueMean =
-        cumulativeMean(leagueTotal.get(row.position), row.week, defWeeks) / 32;
-
-      const series = snapSeries.get(
-        `${normalizeName(row.playerName)}|${row.teamId}`,
-      );
-      const snapWeeks = earlier
-        .map((r) => series?.get(r.week))
-        .filter((v): v is number => v !== undefined)
-        .slice(-2);
-
-      examples.push({
-        playerId,
-        playerName: row.playerName,
-        position: row.position,
-        season,
-        week: row.week,
-        target: pointsOf(row),
-        targetTargets: row.targets,
-        targetCarries: row.carries,
-        targetReceptions: row.statLine.receptions,
-        targetRecYds: row.statLine.recYds,
-        targetRushYds: row.statLine.rushYds,
-        last4: lastFour.reduce((s, x) => s + x, 0) / lastFour.length,
-        targetsRecent: meanOf((r) => r.targets),
-        carriesRecent: meanOf((r) => r.carries),
-        airYardsRecent: meanOf((r) => r.airYards),
-        receptionsRecent: meanOf((r) => r.statLine.receptions),
-        recYdsRecent: meanOf((r) => r.statLine.recYds),
-        rushYdsRecent: meanOf((r) => r.statLine.rushYds),
-        seasonPpg: all.reduce((s, x) => s + x, 0) / all.length,
-        prevPpg: prevPpgById.get(playerId) ?? 0,
-        snapRecent:
-          snapWeeks.length === 0
-            ? 0
-            : snapWeeks.reduce((s, x) => s + x, 0) / snapWeeks.length,
-        oppIndex: leagueMean > 0 ? defAllowed / leagueMean : 1,
-        home: slot.home,
-        impliedTotal: slot.impliedTotal,
-        passTendency: tendencyFor(row.teamId, row.week),
-        teamId: row.teamId,
-        opponent: slot.opponent,
-      });
     }
+  }
+
+  if (prospectiveWeek !== undefined) {
+    const prospective: WeeklyExample[] = [];
+
+    for (const [playerId, rows] of byPlayer) {
+      rows.sort((a, b) => a.week - b.week);
+      const before = rows.filter((r) => r.week < prospectiveWeek);
+      const last = before[before.length - 1];
+
+      if (!last) {
+        continue;
+      }
+
+      const example = assemble(playerId, rows, prospectiveWeek, last, undefined);
+
+      if (example) {
+        prospective.push(example);
+      }
+    }
+
+    return prospective;
   }
 
   return examples;
