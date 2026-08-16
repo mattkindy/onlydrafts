@@ -1,4 +1,5 @@
 import { presets, type ScoringRules } from "../scoring/fantasyPoints.js";
+import type { StarterSlots } from "../features/replacement.js";
 
 /**
  * A league's scoring, read from Sleeper so projections match the rules
@@ -29,47 +30,38 @@ export async function fetchLeagueScoring(
 }
 
 /**
- * How many starters the league actually plays at each position, flex
- * slots included. Replacement level comes right after this line, which
- * is what makes value over replacement mean anything in a league.
+ * The lineup a league starts, read from Sleeper. Flex slots stay
+ * separate from dedicated ones so replacement level can fill them from
+ * whichever position is deeper instead of splitting them by a guess.
  */
-export async function fetchStarterCounts(
+export async function fetchStarterSlots(
   leagueId: string,
-): Promise<Record<string, number>> {
+): Promise<StarterSlots> {
   const league = (await fetch(
     "https://api.sleeper.app/v1/league/" + leagueId,
   ).then((r) => r.json())) as {
     roster_positions?: string[];
     total_rosters?: number;
   };
-  const teams = league.total_rosters ?? 12;
-  const slots = league.roster_positions ?? [];
-  const counts = { QB: 0, RB: 0, WR: 0, TE: 0 };
-  let flex = 0;
-  let superFlex = 0;
+  const slots: StarterSlots = {
+    teams: league.total_rosters ?? 12,
+    QB: 0,
+    RB: 0,
+    WR: 0,
+    TE: 0,
+    flex: 0,
+    superFlex: 0,
+  };
 
-  for (const slot of slots) {
+  for (const slot of league.roster_positions ?? []) {
     if (slot === "FLEX" || slot === "REC_FLEX" || slot === "WRRB_FLEX") {
-      flex++;
+      slots.flex++;
     } else if (slot === "SUPER_FLEX" || slot === "QB_FLEX") {
-      superFlex++;
+      slots.superFlex++;
     } else if (slot === "QB" || slot === "RB" || slot === "WR" || slot === "TE") {
-      counts[slot]++;
+      slots[slot]++;
     }
   }
 
-  // flex slots go mostly to backs and receivers, the way lineups fill
-  counts.RB += flex * 0.45;
-  counts.WR += flex * 0.45;
-  counts.TE += flex * 0.1;
-  counts.QB += superFlex * 0.8;
-  counts.RB += superFlex * 0.1;
-  counts.WR += superFlex * 0.1;
-
-  return {
-    QB: Math.round(counts.QB * teams),
-    RB: Math.round(counts.RB * teams),
-    WR: Math.round(counts.WR * teams),
-    TE: Math.round(counts.TE * teams),
-  };
+  return slots;
 }

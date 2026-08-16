@@ -1,31 +1,46 @@
-// Works out who each team keeps by surplus over the pick it costs,
-// then reprices the draft pool with replacement levels set by what
-// actually survives the keeper round.
-// Run: npx tsx scripts/keeperBoard.ts
+/**
+ * Works out who each team keeps by surplus over the pick it costs, then
+ * reprices the draft pool against the players who survive the keeper
+ * round. Replacement level comes from the same code the board uses, so
+ * the two cannot disagree.
+ *
+ * Run: npx tsx scripts/keeperBoard.ts --league <sleeper id>
+ */
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
 import { normalizeName } from "../src/data/names.js";
+import { fetchStarterSlots } from "../src/data/leagueScoring.js";
+import { DEFAULT_SLOTS, replacementLevels } from "../src/features/replacement.js";
 
-const TEAMS = 12;
 const KEEPERS = 3;
-const STARTERS = { QB: 12, RB: 23, WR: 35, TE: 14 };
 
 interface BoardPlayer {
   name: string;
   key: string;
   position: string;
-  team: string;
   ppg: number;
-  vor: number;
   adp: number | null;
   game: { ev: number; q1: number; q3: number };
 }
 
-const pickOfRound = (round: number) => (round - 1) * TEAMS + TEAMS / 2;
+function argOf(flag: string, fallback: string): string {
+  const index = process.argv.indexOf(flag);
+  return index === -1 ? fallback : process.argv[index + 1]!;
+}
 
 async function main(): Promise<void> {
+  const leagueId = argOf("--league", "");
+  const slots = leagueId ? await fetchStarterSlots(leagueId) : DEFAULT_SLOTS;
+
+  if (!leagueId) {
+    console.warn(
+      "no --league given, so this uses a generic 12-team lineup " +
+        "rather than your league's\n",
+    );
+  }
+
   const board = JSON.parse(
     await readFile(
       join(import.meta.dirname, "..", "docs", "weekly", "data", "board-2026.json"),
@@ -40,6 +55,8 @@ async function main(): Promise<void> {
       board.players.find((p) => p.key.includes(key) || key.includes(p.key))
     );
   };
+  const pickOfRound = (round: number) =>
+    (round - 1) * slots.teams + slots.teams / 2;
 
   const rows = parseCsv(
     await readFile(
@@ -48,7 +65,10 @@ async function main(): Promise<void> {
     ),
   );
 
-  const byTeam = new Map<string, { player: BoardPlayer; cost: number; surplus: number }[]>();
+  const byTeam = new Map<
+    string,
+    { player: BoardPlayer; cost: number; surplus: number }[]
+  >();
 
   for (const row of rows) {
     const player = look(row["player"] ?? "");
@@ -58,17 +78,12 @@ async function main(): Promise<void> {
     }
 
     const listed = Number(row["cost"]);
-    const adpRound = Math.ceil(player.adp / TEAMS);
+    const adpRound = Math.ceil(player.adp / slots.teams);
     // a consecutive keep costs the earlier of its listed round and this
     // year's market round, so the market can erase the discount
-    const costRound = row["consecutive"] === "1" ? Math.min(listed, adpRound) : listed;
-    const entry = {
-      player,
-      cost: costRound,
-      surplus: pickOfRound(costRound) - player.adp,
-    };
+    const cost = row["consecutive"] === "1" ? Math.min(listed, adpRound) : listed;
     const list = byTeam.get(row["team"] ?? "") ?? [];
-    list.push(entry);
+    list.push({ player, cost, surplus: pickOfRound(cost) - player.adp });
     byTeam.set(row["team"] ?? "", list);
   }
 
@@ -83,50 +98,53 @@ async function main(): Promise<void> {
     }
 
     console.log(
-      (team === "kindy" ? "YOU " : "    ") + team.padEnd(10) +
+      team.padEnd(10) +
         best
           .map(
             (k) =>
-              `${k.player.name} (${k.player.position}, r${k.cost} for a pick-${k.player.adp?.toFixed(0)} player)`,
+              `${k.player.name} (${k.player.position}, r${k.cost} for a ` +
+              `pick-${k.player.adp?.toFixed(0)} player)`,
           )
           .join(", "),
     );
   }
 
-  const pool = board.players
-    .filter((p) => !kept.has(p.key))
-    .sort((a, b) => b.ppg - a.ppg);
+  const pool = board.players.filter((p) => !kept.has(p.key));
+  const full = replacementLevels(board.players, slots);
+  const thinned = replacementLevels(pool, slots);
 
-  console.log("\nreplacement level once keepers are gone:");
-  console.log("pos  full pool  after keepers  change");
+  console.log("\nreplacement level, before and after the keeper round:");
+  console.log("pos  everyone  after keepers  change  starters");
 
-  const newReplacement: Record<string, number> = {};
-
-  for (const [position, rank] of Object.entries(STARTERS)) {
-    const all = board.players
-      .filter((p) => p.position === position)
-      .sort((a, b) => b.ppg - a.ppg);
-    const left = pool.filter((p) => p.position === position);
-    const before = all[rank - 1]?.ppg ?? 0;
-    const after = left[rank - 1]?.ppg ?? 0;
-    newReplacement[position] = after;
+  for (const position of Object.keys(thinned.levels)) {
+    const before = full.levels[position]!;
+    const after = thinned.levels[position]!;
     console.log(
-      position.padEnd(4) + before.toFixed(1).padStart(9) + after.toFixed(1).padStart(14) +
-        ("  " + (after - before).toFixed(1)).padStart(8),
+      position.padEnd(4) +
+        before.toFixed(1).padStart(8) +
+        after.toFixed(1).padStart(14) +
+        ("  " + (after - before).toFixed(1)).padStart(8) +
+        String(thinned.starters[position]).padStart(10),
     );
   }
 
   const repriced = pool
-    .map((p) => ({ p, vor: p.ppg - (newReplacement[p.position] ?? 0) }))
+    .map((p) => ({ p, vor: p.ppg - thinned.levels[p.position]! }))
     .sort((a, b) => b.vor - a.vor);
 
   console.log("\nbest available, repriced against the thinned pool:");
 
   repriced.slice(0, 16).forEach(({ p, vor }, i) => {
     console.log(
-      String(i + 1).padStart(3) + " " + p.name.padEnd(20) + p.position.padEnd(3) +
-        p.game.ev.toFixed(1).padStart(6) + "/g  vor " + vor.toFixed(1).padStart(5) +
-        "  adp " + (p.adp?.toFixed(0) ?? "-"),
+      String(i + 1).padStart(3) +
+        " " +
+        p.name.padEnd(20) +
+        p.position.padEnd(3) +
+        p.game.ev.toFixed(1).padStart(6) +
+        "/g  vor " +
+        vor.toFixed(1).padStart(5) +
+        "  adp " +
+        (p.adp?.toFixed(0) ?? "-"),
     );
   });
 }

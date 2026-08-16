@@ -1,6 +1,6 @@
 // Builds the static weekly site into docs/: the page plus prediction
 // JSON for the requested weeks, ready for GitHub Pages.
-// Run: npx tsx scripts/buildSite.ts --season 2025 --weeks 10-12
+// Run: npx tsx scripts/buildSite.ts --league <sleeper id> --weeks 10-12
 
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -16,9 +16,17 @@ import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.j
 import { normalizeName } from "../src/data/names.js";
 import {
   fetchLeagueScoring,
-  fetchStarterCounts,
+  fetchStarterSlots,
 } from "../src/data/leagueScoring.js";
+import {
+  DEFAULT_SLOTS,
+  replacementLevels,
+} from "../src/features/replacement.js";
 import { setScoring } from "../src/scoring/active.js";
+import {
+  scoringRules,
+  type ScoringFormat,
+} from "../src/scoring/fantasyPoints.js";
 import { buildPreseasonWorld } from "../src/features/preseason.js";
 import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
 import { seededRng } from "../src/sim/rng.js";
@@ -26,14 +34,19 @@ import { loadAdp } from "../src/data/adp.js";
 
 const DOCS = join(import.meta.dirname, "..", "docs", "weekly");
 
+/** the season being drafted for; a new one starts in March */
+const CURRENT_SEASON = new Date().getUTCFullYear() -
+  (new Date().getUTCMonth() < 2 ? 1 : 0);
+
 function argOf(flag: string, fallback: string): string {
   const index = process.argv.indexOf(flag);
   return index === -1 ? fallback : process.argv[index + 1]!;
 }
 
 async function main(): Promise<void> {
-  const season = Number(argOf("--season", "2025"));
+  const season = Number(argOf("--season", String(CURRENT_SEASON)));
   const leagueId = argOf("--league", "");
+  const format = argOf("--scoring", "");
 
   if (leagueId) {
     const rules = await fetchLeagueScoring(leagueId);
@@ -42,7 +55,17 @@ async function main(): Promise<void> {
       `scoring from league ${leagueId}: ${rules.receptions} per catch, ` +
         `${rules.passTd} per passing touchdown`,
     );
+  } else if (format) {
+    setScoring(scoringRules(format as ScoringFormat));
+    console.log(`scoring: ${format}`);
+  } else {
+    console.warn(
+      "no --league or --scoring given, so the board is scored PPR, " +
+        "which is wrong for most leagues",
+    );
   }
+
+  console.log(`building the ${season} board`);
   const weeksArg = argOf("--weeks", "");
   const range = weeksArg.match(/^(\d+)-(\d+)$/);
   const weeks = weeksArg === ""
@@ -191,24 +214,31 @@ async function main(): Promise<void> {
 
     return { plus, minus };
   };
-  const REPLACEMENT_RANK: Record<string, number> = leagueId
-    ? await fetchStarterCounts(leagueId)
-    : { QB: 20, RB: 40, WR: 40, TE: 16 };
+  const slots = leagueId
+    ? await fetchStarterSlots(leagueId)
+    : DEFAULT_SLOTS;
+
+  if (!leagueId) {
+    console.warn(
+      "no --league given, so value over replacement uses a generic " +
+        "12-team lineup rather than your league's",
+    );
+  }
+
+  const pool = world.players.map((p) => ({
+    position: p.position,
+    ppg: p.projectedPpg,
+  }));
+  const { levels, starters } = replacementLevels(pool, slots);
   console.log(
     "replacement level: " +
-      Object.entries(REPLACEMENT_RANK)
-        .map(([position, rank]) => position + rank)
+      Object.keys(levels)
+        .map((position) =>
+          `${position} ${levels[position]!.toFixed(1)} after ${starters[position]} start`,
+        )
         .join(", "),
   );
-  const replacement = new Map<string, number>();
-
-  for (const position of Object.keys(REPLACEMENT_RANK)) {
-    const list = world.players
-      .filter((p) => p.position === position)
-      .sort((a, b) => b.projectedPpg - a.projectedPpg);
-    const at = list[Math.min(REPLACEMENT_RANK[position]!, list.length) - 1];
-    replacement.set(position, at?.projectedPpg ?? 0);
-  }
+  const replacement = new Map(Object.entries(levels));
 
   const adp = await loadAdp(season).catch(() => new Map());
   console.log("simulating seasons for the board...");
