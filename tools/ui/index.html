@@ -73,6 +73,13 @@
   .tag { font-size: .72rem; font-weight: 700; color: var(--go); margin-top: .45rem; }
   .tag.warn { color: var(--mark); }
   .hint { color: var(--faint); font-size: .78rem; }
+  #explain h1 { font-size: 1.25rem; margin: .2rem 0 .15rem; }
+  #explain p { color: var(--muted); font-size: .85rem; margin: 0 0 .9rem; }
+  .empty { background: var(--panel); border: 1px dashed var(--edge);
+    border-radius: 12px; padding: 1.2rem; color: var(--muted); font-size: .88rem; }
+  .empty b { color: var(--ink); }
+  .step { display: flex; gap: .5rem; align-items: baseline; margin: .35rem 0; }
+  .step span:first-child { color: var(--go); font-weight: 700; }
   table.grid { border-collapse: collapse; font-size: .68rem; width: 100%;
     overflow-x: auto; display: block; background: var(--panel);
     border: 1px solid var(--edge); border-radius: 10px; }
@@ -107,12 +114,17 @@
 <div class="wrap">
   <nav>
     <span class="brand" id="home">depth<b>chart</b></span>
-    <button data-view="leagues">leagues</button>
-    <button data-view="draft">draft</button>
-    <button data-view="start">start</button>
-    <button data-view="waivers">waivers</button>
-    <button data-view="history">history</button>
+    <button data-view="leagues">my leagues</button>
+    <button data-view="draft">draft help</button>
+    <button data-view="start">who to start</button>
+    <button data-view="waivers">who to add</button>
+    <button data-view="history">past advice</button>
   </nav>
+
+  <div id="explain">
+    <h1 id="title"></h1>
+    <p id="blurb"></p>
+  </div>
 
   <div class="controls" id="ctl">
     <label id="userwrap">sleeper user <input id="username" size="12"></label>
@@ -222,13 +234,26 @@ function setView(next) {
   $("manualhint").textContent = next === "draft"
     ? "extra names to mark taken, one per line"
     : "no sleeper league? paste your roster, one name per line";
-  $("legend").textContent = {
-    leagues: "type your sleeper username and load; pick a league",
-    draft: "big number weighs a player's value over replacement by the starting slots you still need; click a card for details and keeper marking",
-    start: "bar spans floor to ceiling; the mark is the projection; click a card for details",
-    waivers: "your players next to the best outside your roster; click a card for details",
-    history: "",
-  }[next] ?? "";
+  const copy = {
+    leagues: ["My leagues",
+      "Type your Sleeper username to pull your leagues, then tap one to work with it. Everything else on this page uses whichever league is selected.",
+      ""],
+    draft: ["Draft help",
+      "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
+      "The big number is value over a replacement starter, weighted by the slots you still have open. Dimmed cards are players another team will probably keep. Tap any card for details."],
+    start: ["Who to start",
+      "Your roster for one week, ranked by projected points, so you can set a lineup.",
+      "The bar shows the range from a bad week to a great one; the gold mark is the projection. Tap a card for the week-by-week season and what is helping or hurting."],
+    waivers: ["Who to add",
+      "Your players next to the best available at each position, so you can see whether a pickup is an upgrade.",
+      "A green tag means that player projects clearly ahead of your weakest starter at the spot."],
+    history: ["Past advice",
+      "What this page told you and when, so you can check it against how the weeks actually went.",
+      ""],
+  }[next] ?? ["", "", ""];
+  $("title").textContent = copy[0];
+  $("blurb").textContent = copy[1];
+  $("legend").textContent = copy[2];
   $("out").innerHTML = "";
   if (draftPoll && next !== "draft") { clearInterval(draftPoll); draftPoll = null; }
   refreshGoLabel();
@@ -280,6 +305,14 @@ async function loadLeagues() {
 function renderLeagues() {
   const out = $("out");
   out.innerHTML = "";
+
+  if (!leagues.length) {
+    out.innerHTML = '<div class="empty"><b>Start here.</b>' +
+      '<div class="step"><span>1</span><span>Type your Sleeper username above.</span></div>' +
+      '<div class="step"><span>2</span><span>Press load. Your leagues appear as cards.</span></div>' +
+      '<div class="step"><span>3</span><span>Tap a league, then use draft help, who to start, or who to add.</span></div></div>';
+    return;
+  }
   const h = document.createElement("h2");
   h.textContent = "your leagues";
   out.appendChild(h);
@@ -398,6 +431,11 @@ async function renderStart() {
   const max = Math.max(...slate.players.map((p) => p.ceiling));
   const starts = [];
 
+  if (mine.size === 0) {
+    out.innerHTML = '<div class="empty"><b>Showing the best players in the league.</b> ' +
+      'Pick a league on <b>my leagues</b> (or paste your roster above) to see only your players.</div>';
+  }
+
   for (const position of POSITIONS) {
     const rows = slate.players.filter((p) => p.position === position);
     const owned = rows.filter((p) => isMine(mine, p.key));
@@ -424,7 +462,10 @@ async function renderWaivers() {
   const suggestions = [];
 
   if (mine.size === 0) {
-    out.innerHTML = '<p class="hint">pick a league on the leagues tab, or paste a roster</p>';
+    out.innerHTML = '<div class="empty"><b>No roster yet.</b>' +
+      '<div class="step"><span>1</span><span>Open <b>my leagues</b> and load your Sleeper username.</span></div>' +
+      '<div class="step"><span>2</span><span>Tap the league you want.</span></div>' +
+      '<div class="step"><span>or</span><span>Paste your roster in the box above, one name per line.</span></div></div>';
     return;
   }
 
