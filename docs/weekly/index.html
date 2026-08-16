@@ -288,10 +288,10 @@ function setView(next) {
       ""],
     roster: ["My roster",
       "Everyone Sleeper currently has on your team, with this season's projection for each.",
-      "Before a keeper draft this is last season's roster until the league clears it. Ev is the expected season total; the pair after it is the middle half of simulated seasons. Tap a player for the full distribution and to mark a keeper."],
+      "Before a keeper draft this is last season's roster until the league clears it. Each card shows points in a typical game and the middle half of his weeks. Tap a player for the season distribution and to mark a keeper."],
     draft: ["Draft help",
       "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
-      "The big number is value over a replacement starter, weighted by the slots your draft roster still needs. Underneath, ev is the expected season total and the pair after it is the middle half of simulated seasons. Players stay on the board until they are actually kept or drafted."],
+      "The big number is value over a replacement starter, weighted by the slots your draft roster still needs. Underneath is what he scores in a typical game and the middle half of his weeks. Players stay on the board until they are actually kept or drafted."],
     start: ["Who to start",
       "Your roster for one week, ranked by projected points, so you can set a lineup.",
       "The bar shows the range from a bad week to a great one; the gold mark is the projection. Tap a card for the week-by-week season and what is helping or hurting."],
@@ -412,6 +412,12 @@ function openDetail(p, slatePlayer) {
     " &middot; " + (b.team ?? p.team ?? "") +
     (b.ppg ? " &middot; " + b.ppg.toFixed(1) + " a game projected" : "") +
     (b.adp ? " &middot; adp " + b.adp.toFixed(0) : "") + "</div>" +
+    (b.game
+      ? "<h2>per game</h2>" +
+        '<div class="fact">expected ' + b.game.ev + " points</div>" +
+        '<div class="fact">middle half of games ' + b.game.q1 + " to " + b.game.q3 + "</div>" +
+        '<div class="fact">a bad week ' + b.game.low + ", a big week " + b.game.high + "</div>"
+      : "") +
     (b.sim
       ? "<h2>season total, 2000 simulations</h2>" +
         '<div class="fact">expected ' + b.sim.ev + " points</div>" +
@@ -552,7 +558,7 @@ async function renderRoster() {
       grid.appendChild(card(p, {
         mine: true,
         big: p.ppg,
-        sub: (p.sim ? "ev " + p.sim.ev + " &middot; mid half " + p.sim.q1 + " to " + p.sim.q3 : "") +
+        sub: (p.game ? p.game.ev + " a game &middot; " + p.game.q1 + " to " + p.game.q3 : "") +
           (p.bye ? " &middot; bye " + p.bye : ""),
         tag: marked[p.key] ? "marked as your keeper" : "tap to mark as a keeper",
       }));
@@ -778,7 +784,7 @@ function renderDraft(staleAt) {
     const lastYear = s.rosteredBy[p.key];
     grid.appendChild(card(p, {
       big: score,
-      sub: (p.sim ? "ev " + p.sim.ev + " &middot; " + p.sim.q1 + " to " + p.sim.q3 : p.ppg.toFixed(1) + " a game") +
+      sub: (p.game ? p.game.ev + " a game &middot; " + p.game.q1 + " to " + p.game.q3 : p.ppg.toFixed(1) + " a game") +
         (p.bye ? " &middot; bye " + p.bye : ""),
       tag: shown <= 3
         ? "fills " + p.position

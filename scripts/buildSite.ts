@@ -12,10 +12,7 @@ import {
 } from "../src/features/weeklyModel.js";
 import type { WeeklyExample } from "../src/features/weekly.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
-import {
-  buildResidualModel,
-  outcomeQuantile,
-} from "../src/backtest/intervals.js";
+import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
 import { buildPreseasonWorld } from "../src/features/preseason.js";
 import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
@@ -209,6 +206,13 @@ async function main(): Promise<void> {
     .map((p) => {
       const f = factors(p.playerId, p.projectedPpg);
       const sim = simById.get(p.playerId);
+      const perGame = (q: number) =>
+        Number(
+          Math.max(
+            0,
+            outcomeQuantile(world.residuals, p.position, p.projectedPpg, q),
+          ).toFixed(1),
+        );
       return {
         name: p.name,
         key: normalizeName(p.name),
@@ -220,6 +224,14 @@ async function main(): Promise<void> {
         ),
         adp: adp.get(`${normalizeName(p.name)}|${p.position}`)?.adp ?? null,
         bye: world.byeWeek.get(p.teamId) ?? null,
+        game: {
+          ev: Number(p.projectedPpg.toFixed(1)),
+          q1: perGame(0.25),
+          mid: perGame(0.5),
+          q3: perGame(0.75),
+          low: perGame(0.1),
+          high: perGame(0.9),
+        },
         sim: sim
           ? {
               ev: Math.round(sim.meanTotal),
