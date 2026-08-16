@@ -14,7 +14,10 @@ import type { WeeklyExample } from "../src/features/weekly.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
-import { fetchLeagueScoring } from "../src/data/leagueScoring.js";
+import {
+  fetchLeagueScoring,
+  fetchStarterCounts,
+} from "../src/data/leagueScoring.js";
 import { setScoring } from "../src/scoring/active.js";
 import { buildPreseasonWorld } from "../src/features/preseason.js";
 import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
@@ -188,7 +191,15 @@ async function main(): Promise<void> {
 
     return { plus, minus };
   };
-  const REPLACEMENT_RANK: Record<string, number> = { QB: 20, RB: 40, WR: 40, TE: 16 };
+  const REPLACEMENT_RANK: Record<string, number> = leagueId
+    ? await fetchStarterCounts(leagueId)
+    : { QB: 20, RB: 40, WR: 40, TE: 16 };
+  console.log(
+    "replacement level: " +
+      Object.entries(REPLACEMENT_RANK)
+        .map(([position, rank]) => position + rank)
+        .join(", "),
+  );
   const replacement = new Map<string, number>();
 
   for (const position of Object.keys(REPLACEMENT_RANK)) {
