@@ -17,6 +17,9 @@ export interface SeasonSummary {
   targetsPerGame: number;
   carriesPerGame: number;
   airYardsPerGame: number;
+  /** points per game in the first and last thirds of his season */
+  earlyPpg: number;
+  latePpg: number;
   /** the team this player logged the most weeks for */
   primaryTeamId: string;
 }
@@ -30,6 +33,7 @@ export function summarizeSeason(
   const totals = new Map<string, number>();
   const tdTotals = new Map<string, number>();
   const volumes = new Map<string, { targets: number; carries: number; airYards: number }>();
+  const byWeek = new Map<string, { week: number; points: number }[]>();
 
   for (const week of weeks) {
     const points = fantasyPoints(week.statLine, rules);
@@ -40,6 +44,10 @@ export function summarizeSeason(
       week.statLine.rushTd * rules.rushTd +
       week.statLine.recTd * rules.recTd;
     tdTotals.set(week.playerId, (tdTotals.get(week.playerId) ?? 0) + tdPoints);
+
+    const line = byWeek.get(week.playerId) ?? [];
+    line.push({ week: week.week, points });
+    byWeek.set(week.playerId, line);
 
     const volume = volumes.get(week.playerId) ?? { targets: 0, carries: 0, airYards: 0 };
     volume.targets += week.targets;
@@ -63,6 +71,8 @@ export function summarizeSeason(
         targetsPerGame: 0,
         carriesPerGame: 0,
         airYardsPerGame: 0,
+        earlyPpg: 0,
+        latePpg: 0,
         primaryTeamId: week.teamId,
       });
     }
@@ -76,6 +86,19 @@ export function summarizeSeason(
     const total = totals.get(playerId) ?? 0;
     summary.pointsPerGame = Math.round((total / summary.games) * 100) / 100;
     summary.tdPointShare = total > 0 ? (tdTotals.get(playerId) ?? 0) / total : 0;
+
+    const line = (byWeek.get(playerId) ?? []).sort((a, b) => a.week - b.week);
+
+    if (line.length >= 6) {
+      const third = Math.max(2, Math.floor(line.length / 3));
+      const mean = (rows: { points: number }[]) =>
+        rows.reduce((s, r) => s + r.points, 0) / rows.length;
+      summary.earlyPpg = mean(line.slice(0, third));
+      summary.latePpg = mean(line.slice(-third));
+    } else {
+      summary.earlyPpg = summary.pointsPerGame;
+      summary.latePpg = summary.pointsPerGame;
+    }
 
     const volume = volumes.get(playerId);
 

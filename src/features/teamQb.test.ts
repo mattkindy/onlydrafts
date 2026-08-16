@@ -58,6 +58,8 @@ describe("projectedQbByTeam", () => {
         targetsPerGame: 0,
         carriesPerGame: 0,
         airYardsPerGame: 0,
+        earlyPpg: 0,
+        latePpg: 0,
         primaryTeamId: "DET",
       },
     ];

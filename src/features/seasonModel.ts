@@ -55,6 +55,9 @@ export interface SeasonExample {
   targetsPerGame: number;
   carriesPerGame: number;
   airYardsPerGame: number;
+  /** how his previous season started and finished, points a game */
+  earlyPpg: number;
+  latePpg: number;
   /** preseason market rank for the target season, undefined when unlisted */
   adp?: number;
   /**
@@ -101,6 +104,7 @@ export const SEASON_RIDGE_FEATURES = [
   "ocOnlyChange",
   "ocReunion",
   "logAdp",
+  "finishedStrong",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -405,6 +409,8 @@ export async function examplesForTransition(
       targetsPerGame: was.targetsPerGame,
       carriesPerGame: was.carriesPerGame,
       airYardsPerGame: was.airYardsPerGame,
+      earlyPpg: was.earlyPpg,
+      latePpg: was.latePpg,
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     });
@@ -554,6 +560,7 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
     e.ocChanged && !e.hcChanged ? 1 : 0,
     e.ocReunion ? 1 : 0,
     Math.log(e.adp ?? 250),
+    e.prevPpg > 0 ? (e.latePpg - e.earlyPpg) / Math.max(4, e.prevPpg) : 0,
   ];
 }
 
@@ -595,6 +602,8 @@ export function seasonGbmRow(e: SeasonExample): number[] {
     Math.log(e.adp ?? 250),
     e.passShift,
     e.position === "RB" ? e.passShift : 0,
+    e.earlyPpg,
+    e.latePpg,
   ];
 }
 
@@ -689,6 +698,8 @@ export async function projectDraftExamples(
       targetsPerGame: was.targetsPerGame,
       carriesPerGame: was.carriesPerGame,
       airYardsPerGame: was.airYardsPerGame,
+      earlyPpg: was.earlyPpg,
+      latePpg: was.latePpg,
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     };
