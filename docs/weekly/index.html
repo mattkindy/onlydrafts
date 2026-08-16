@@ -77,7 +77,15 @@
   .card .nm { font-weight: 700; font-size: .92rem; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
   .card .big { font-size: 1.35rem; font-weight: 800;
-    font-variant-numeric: tabular-nums; }
+    font-variant-numeric: tabular-nums; display: flex; flex-direction: column;
+    align-items: flex-end; line-height: 1.1; }
+  .card .unit { font-size: .6rem; font-weight: 600; font-style: normal;
+    color: var(--faint); letter-spacing: .06em; text-transform: uppercase; }
+  .card .val { color: var(--muted); font-weight: 700; white-space: nowrap; }
+  .card .note { color: var(--faint); font-size: .72rem; margin-top: .35rem; }
+  .rangenum { display: flex; justify-content: space-between; color: var(--faint);
+    font-size: .65rem; margin-top: .2rem; }
+  .rangenum span:nth-child(2) { color: var(--muted); }
   .card .sub { color: var(--faint); font-size: .74rem;
     display: flex; justify-content: space-between; margin-top: .1rem; gap: .5rem; }
   .range { position: relative; height: 8px; background: var(--chip);
@@ -151,7 +159,6 @@
     <button data-view="draft">draft help</button>
     <button data-view="start">who to start</button>
     <button data-view="waivers">who to add</button>
-    <button data-view="history">past advice</button>
   </div>
 
   <div id="explain">
@@ -233,12 +240,6 @@ function keeperKeyFor(league) { return "keepers." + league; }
 function markedKeepers() { return active ? store_get(keeperKeyFor(active.leagueId), {}) : {}; }
 function saveMarkedKeepers(map) { if (active) store_set(keeperKeyFor(active.leagueId), map); }
 
-function logHistory(note) {
-  const history = store_get("history", []);
-  history.unshift({ at: new Date().toISOString().slice(0, 16).replace("T", " "), view, week: $("week").value, note });
-  store_set("history", history.slice(0, 50));
-}
-
 async function boot() {
   const bust = "?v=" + Math.floor(Date.now() / 60000);
   meta = await (await fetch("data/index.json" + bust)).json();
@@ -286,7 +287,7 @@ function setView(next) {
   $("weekwrap").hidden = !needsWeek;
   $("teamwrap").hidden = true;
   $("keepwrap").hidden = next !== "draft";
-  $("ctl").hidden = next === "history" || (next === "roster" && !!active) ||
+  $("ctl").hidden = (next === "roster" && !!active) ||
     ((next === "start" || next === "waivers") && !meta.weeks.length);
   $("filterwrap").hidden = next !== "draft";
   $("manualwrap").style.display = next === "start" || next === "waivers" || next === "draft" ? "block" : "none";
@@ -310,9 +311,6 @@ function setView(next) {
     waivers: ["Who to add",
       "Your players next to the best available at each position, so you can see whether a pickup is an upgrade.",
       "A green tag means that player projects clearly ahead of your weakest starter at the spot."],
-    history: ["Past advice",
-      "What this page told you and when, so you can check it against how the weeks actually went.",
-      ""],
   }[next] ?? ["", "", ""];
   $("title").textContent = copy[0];
   $("blurb").textContent = copy[1];
@@ -320,7 +318,6 @@ function setView(next) {
   $("out").innerHTML = "";
   if (draftPoll && next !== "draft") { clearInterval(draftPoll); draftPoll = null; }
   refreshGoLabel();
-  if (next === "history") renderHistory();
   if (next === "leagues" && leagues.length) renderLeagues();
 }
 
@@ -499,23 +496,73 @@ function ownerOf(key) {
   return null;
 }
 
-function card(p, opts = {}) {
+/*
+ * Every card states what its big number measures. The two views answer
+ * different questions, so they get different cards: a week card is
+ * points in one game, a season card is points a game across the year.
+ * Passing a bare number with no unit is what let a draft score and a
+ * weekly projection look identical on screen.
+ */
+/** one scale for every season card on screen, so the bars compare */
+function seasonScale(players) {
+  return Math.max(12, ...players.map((p) => (p.game ? p.game.q3 : p.ppg) ?? 0)) * 1.05;
+}
+
+function card(p, opts) {
   const div = document.createElement("div");
   div.className = "card" + (opts.mine ? " mine" : "") + (opts.kept ? " kept" : "");
-  const max = opts.max ?? 40;
-  const big = opts.big !== undefined ? opts.big : (p.predicted ?? p.vor);
-  const range = p.floor !== undefined
-    ? '<div class="range"><span class="span" style="left:' + (p.floor / max) * 100 +
-      "%; width:" + ((p.ceiling - p.floor) / max) * 100 + '%"></span><span class="mark" style="left:' +
-      (p.predicted / max) * 100 + '%"></span></div>'
+  const r = opts.range;
+  const span = (v) => Math.max(0, Math.min(100, (v / opts.max) * 100));
+  const range = r
+    ? '<div class="range"><span class="span" style="left:' + span(r.low) +
+      "%; width:" + (span(r.high) - span(r.low)) + '%"></span>' +
+      '<span class="mark" style="left:' + span(r.mid) + '%"></span></div>' +
+      '<div class="rangenum"><span>' + r.low.toFixed(1) + "</span><span>" +
+      r.label + "</span><span>" + r.high.toFixed(1) + "</span></div>"
     : "";
-  const tag = opts.tag ? '<div class="tag' + (opts.warn ? " warn" : "") + '">' + opts.tag + "</div>" : "";
-  div.innerHTML = '<div class="top"><span class="nm">' + p.name + '</span><span class="big">' +
-    big.toFixed(1) + '</span></div><div class="sub"><span>' + p.position + " &middot; " +
-    (p.team ?? "") + (p.opponent ? " &middot; " + p.opponent : "") + "</span><span>" +
-    (opts.sub ?? "") + "</span></div>" + range + tag;
+  const aside = opts.aside
+    ? '<span class="val">' + opts.aside.label + " " + opts.aside.value.toFixed(1) + "</span>"
+    : "";
+  const tag = opts.tag
+    ? '<div class="tag' + (opts.warn ? " warn" : "") + '">' + opts.tag + "</div>"
+    : "";
+  div.innerHTML =
+    '<div class="top"><span class="nm">' + p.name + '</span>' +
+    '<span class="big">' + opts.value.toFixed(1) +
+    '<em class="unit">' + opts.unit + "</em></span></div>" +
+    '<div class="sub"><span>' + p.position + " &middot; " + (p.team ?? "") +
+    (p.opponent ? " &middot; " + p.opponent : "") + "</span>" + aside + "</div>" +
+    range + (opts.note ? '<div class="note">' + opts.note + "</div>" : "") + tag;
   div.addEventListener("click", () => openDetail(p));
   return div;
+}
+
+/** one game: what he scores this week, and how wrong that could be */
+function weekCard(p, opts = {}) {
+  return card(p, {
+    ...opts,
+    value: p.predicted,
+    unit: "this week",
+    range: { low: p.floor, mid: p.predicted, high: p.ceiling, label: "floor to ceiling" },
+    note: p.snaps + "% of snaps recently",
+  });
+}
+
+/** the season: what he scores in a typical game, and how those vary */
+function seasonCard(p, opts = {}) {
+  const g = p.game;
+  return card(p, {
+    ...opts,
+    value: g ? g.ev : p.ppg,
+    unit: "a game",
+    range: g
+      ? { low: g.q1, mid: g.ev, high: g.q3, label: "middle half of games" }
+      : undefined,
+    note: [
+      p.adp ? "usually drafted at pick " + p.adp.toFixed(0) : "undrafted in mocks",
+      p.bye ? "bye " + p.bye : "",
+    ].filter(Boolean).join(" &middot; "),
+  });
 }
 
 async function slateFor(key) {
@@ -580,6 +627,10 @@ async function renderRoster() {
     byPosition.set(position, [...(byPosition.get(position) ?? []), entry]);
   }
 
+  const seasonMax = seasonScale(
+    [...byPosition.values()].flat().map((x) => x.p).filter(Boolean),
+  );
+
   for (const position of [...POSITIONS, "other"]) {
     const rows = byPosition.get(position);
     if (!rows) continue;
@@ -598,11 +649,9 @@ async function renderRoster() {
         continue;
       }
 
-      grid.appendChild(card(p, {
+      grid.appendChild(seasonCard(p, {
         mine: true,
-        big: p.ppg,
-        sub: (p.game ? p.game.ev + " a game &middot; " + p.game.q1 + " to " + p.game.q3 : "") +
-          (p.bye ? " &middot; bye " + p.bye : ""),
+        max: seasonMax,
         tag: marked[p.key] ? "marked as your keeper" : "tap to mark as a keeper",
       }));
     }
@@ -634,12 +683,10 @@ async function renderStart() {
     out.appendChild(h);
     const grid = document.createElement("div");
     grid.className = "cards";
-    for (const p of shown) grid.appendChild(card(p, { mine: mine.size > 0, max, sub: p.snaps + "% snaps" }));
+    for (const p of shown) grid.appendChild(weekCard(p, { mine: mine.size > 0, max }));
     out.appendChild(grid);
     if (mine.size > 0 && owned[0]) starts.push(position + ": " + owned[0].name + " " + owned[0].predicted.toFixed(1));
   }
-
-  if (starts.length > 0) logHistory("starts: " + starts.join("; "));
 }
 
 async function renderWaivers() {
@@ -669,16 +716,14 @@ async function renderWaivers() {
     out.appendChild(h);
     const grid = document.createElement("div");
     grid.className = "cards";
-    for (const p of owned) grid.appendChild(card(p, { mine: true, max, sub: p.snaps + "% snaps" }));
+    for (const p of owned) grid.appendChild(weekCard(p, { mine: true, max, tag: "already yours" }));
     for (const p of outside) {
       const gain = worst ? p.predicted - worst.predicted : 0;
       if (worst && gain > 2) suggestions.push(p.name + " +" + gain.toFixed(1) + " over " + worst.name);
-      grid.appendChild(card(p, { max, sub: p.snaps + "% snaps", tag: worst && gain > 2 ? "+" + gain.toFixed(1) + " over " + worst.name : "" }));
+      grid.appendChild(weekCard(p, { max, tag: worst && gain > 2 ? "+" + gain.toFixed(1) + " a week over " + worst.name : "" }));
     }
     out.appendChild(grid);
   }
-
-  logHistory(suggestions.length ? "waiver ideas: " + suggestions.slice(0, 3).join("; ") : "no waiver moves clear the bar");
 }
 
 function picksUntil(mySlot, overall, teams, rounds) {
@@ -841,6 +886,7 @@ function renderDraft(staleAt) {
   const grid = document.createElement("div");
   grid.className = "cards";
   let shown = 0;
+  const seasonMax = seasonScale(scored.slice(0, 20).map(({ p }) => p));
   // Where your own picks fall in this list. Everyone above a line is
   // expected to be gone by the time that pick comes around.
   const upcoming = myUpcomingPicks(s.grid, s.clock ? s.clock.overall : 1);
@@ -860,11 +906,9 @@ function renderDraft(staleAt) {
 
     shown++;
     const lastYear = s.rosteredBy[p.key];
-    grid.appendChild(card(p, {
-      big: score,
-      sub: (p.game ? p.game.ev + " a game &middot; " + p.game.q1 + " to " + p.game.q3 : p.ppg.toFixed(1) + " a game") +
-        (p.adp ? " &middot; goes " + p.adp.toFixed(0) + (p.adpLow ? " (" + p.adpHigh + " to " + p.adpLow + ")" : "") : " &middot; undrafted") +
-        (p.bye ? " &middot; bye " + p.bye : ""),
+    grid.appendChild(seasonCard(p, {
+      max: seasonMax,
+      aside: { label: "value here", value: score },
       tag: shown <= 3
         ? "fills " + p.position
         : lastYear ? "was on " + lastYear + " last season" : "",
@@ -918,7 +962,7 @@ function renderDraft(staleAt) {
     out.appendChild(mh);
     const myGrid = document.createElement("div");
     myGrid.className = "cards";
-    for (const p of mineList) myGrid.appendChild(card(p, { mine: true, big: p.vor, sub: p.ppg.toFixed(1) + " a game" }));
+    for (const p of mineList) myGrid.appendChild(seasonCard(p, { mine: true, max: seasonMax, aside: { label: "over replacement", value: p.vor } }));
     out.appendChild(myGrid);
   }
 
@@ -930,10 +974,10 @@ function renderDraft(staleAt) {
     rGrid.className = "cards";
 
     for (const p of rosterNow) {
-      rGrid.appendChild(card(p, {
+      rGrid.appendChild(seasonCard(p, {
         mine: true,
-        big: p.vor,
-        sub: p.ppg.toFixed(1) + " a game" + (p.bye ? " &middot; bye " + p.bye : ""),
+        max: seasonMax,
+        aside: { label: "over replacement", value: p.vor },
         tag: "tap to mark as a keeper",
       }));
     }
@@ -983,19 +1027,6 @@ async function renderDraftView() {
   }
 }
 
-function renderHistory() {
-  const out = $("out");
-  out.innerHTML = "";
-  const history = store_get("history", []);
-  if (!history.length) { out.innerHTML = '<p class="hint">nothing yet</p>'; return; }
-  for (const entry of history) {
-    const div = document.createElement("div");
-    div.className = "card plain";
-    div.innerHTML = '<div class="sub"><span>' + entry.at + "</span><span>" + entry.view + " &middot; " + (entry.week ?? "") + '</span></div><div style="font-size:.85rem; margin-top:.3rem">' + entry.note + "</div>";
-    out.appendChild(div);
-  }
-}
-
 for (const label of ["ALL", ...POSITIONS]) {
   const button = document.createElement("button");
   button.textContent = label.toLowerCase();
@@ -1020,7 +1051,6 @@ document.querySelectorAll("#subnav button").forEach((b) =>
       if (view === "start") await renderStart();
       else if (view === "roster") await renderRoster();
       else if (view === "waivers") await renderWaivers();
-      else if (view === "history") renderHistory();
       else if (view === "draft") await renderDraftView();
     } catch (error) {
       $("status").textContent = String(error);
@@ -1040,7 +1070,6 @@ $("go").addEventListener("click", async () => {
     else if (view === "roster") await renderRoster();
     else if (view === "start") await renderStart();
     else if (view === "waivers") await renderWaivers();
-    else if (view === "history") renderHistory();
     else if (draftPoll) { clearInterval(draftPoll); draftPoll = null; status.textContent = "paused"; }
     else await renderDraftView();
     refreshGoLabel();
