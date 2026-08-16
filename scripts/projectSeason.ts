@@ -34,7 +34,7 @@ import { loadAdp } from "../src/data/adp.js";
 import { normalizeName } from "../src/data/names.js";
 import { spearman } from "../src/backtest/metrics.js";
 
-const SIMS = 1000;
+const SIMS = 10000;
 
 function argOf(flag: string, fallback: number): number {
   const index = process.argv.indexOf(flag);
@@ -243,7 +243,7 @@ async function main(): Promise<void> {
     oppAdjust,
     catcherLoading,
     SIMS,
-    seededRng(11),
+    seededRng(argOf("--seed", 11)),
     seasonNoise,
   ).sort((a, b) => b.meanTotal - a.meanTotal);
 
