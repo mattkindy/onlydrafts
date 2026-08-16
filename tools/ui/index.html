@@ -118,40 +118,38 @@
 
 <script>
 const POSITIONS = ["QB", "RB", "WR", "TE"];
+const STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1 };
 let view = "start";
 let meta = null;
 let board = null;
 const slates = {};
-let sleeper = { players: null, rosters: null, leagueId: null };
+let sleeper = { players: null, rosters: null };
 let draftPoll = null;
 let taken = new Set();
+let draftTeams = {};
+let myDraftKeys = new Set();
+let draftUsers = [];
 
 const $ = (id) => document.getElementById(id);
+const norm = (n) => n.toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b\.?$/, "").replace(/[^a-z]/g, "");
 
 const store = {
   get(key, fallback) {
     try {
       const raw = localStorage.getItem("dc." + key);
       return raw ? JSON.parse(raw) : fallback;
-    } catch {
-      return fallback;
-    }
+    } catch { return fallback; }
   },
   set(key, value) {
-    try {
-      localStorage.setItem("dc." + key, JSON.stringify(value));
-    } catch {}
+    try { localStorage.setItem("dc." + key, JSON.stringify(value)); } catch {}
   },
 };
 
 function saveSettings() {
   store.set("settings", {
-    league: $("league").value,
-    draftId: $("draftid").value,
-    team: $("team").value,
-    manual: $("manual").value,
-    week: $("week").value,
-    view,
+    league: $("league").value, draftId: $("draftid").value,
+    team: $("team").value, manual: $("manual").value,
+    week: $("week").value, view,
   });
 }
 
@@ -162,16 +160,9 @@ function logHistory(note) {
 }
 
 async function sleeperPlayers() {
-  if (sleeper.players) {
-    return sleeper.players;
-  }
-
+  if (sleeper.players) return sleeper.players;
   const cached = store.get("players", null);
-
-  if (cached) {
-    sleeper.players = cached;
-    return cached;
-  }
+  if (cached) { sleeper.players = cached; return cached; }
 
   $("status").textContent = "fetching player list (5MB, once ever)...";
   $("prog").hidden = false;
@@ -181,16 +172,13 @@ async function sleeperPlayers() {
   const trimmed = {};
 
   for (const [id, p] of Object.entries(raw)) {
-    if (p.full_name && p.position) {
-      trimmed[id] = { full_name: p.full_name, position: p.position };
-    }
+    if (p.full_name && p.position) trimmed[id] = { full_name: p.full_name, position: p.position };
   }
 
   store.set("players", trimmed);
   sleeper.players = trimmed;
   return trimmed;
 }
-const norm = (n) => n.toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b\.?$/, "").replace(/[^a-z]/g, "");
 
 async function boot() {
   meta = await (await fetch("data/index.json")).json();
@@ -203,17 +191,13 @@ async function boot() {
   }
 
   $("week").value = `${meta.weeks.at(-1).season}|${meta.weeks.at(-1).week}`;
-
   const saved = store.get("settings", null);
 
   if (saved) {
     $("league").value = saved.league ?? "";
     $("draftid").value = saved.draftId ?? "";
     $("manual").value = saved.manual ?? "";
-
-    if (saved.week && [...$("week").options].some((o) => o.value === saved.week)) {
-      $("week").value = saved.week;
-    }
+    if (saved.week && [...$("week").options].some((o) => o.value === saved.week)) $("week").value = saved.week;
   }
 
   setView(saved && saved.view && saved.view !== "history" ? saved.view : "start");
@@ -226,38 +210,38 @@ function setView(next) {
     button.classList.toggle("on", button.dataset.view === next);
   }
 
-  $("weekwrap").hidden = next === "draft";
+  $("weekwrap").hidden = next === "draft" || next === "history";
   $("draftwrap").hidden = next !== "draft";
+  document.querySelector("#manualwrap .hint").textContent =
+    next === "draft"
+      ? "extra keepers to mark taken, one name per line (league keepers load automatically)"
+      : "no sleeper? paste your roster, one name per line";
   $("legend").textContent =
     next === "draft"
-      ? "cards rank by value over a replacement starter; drafted players drop out as picks come in"
-      : "bar spans floor to ceiling; the red mark is the projection";
+      ? "cards rank by value over a replacement starter, weighted by what your roster still needs"
+      : "bar spans floor to ceiling; the mark is the projection";
   $("out").innerHTML = "";
 
-  if (draftPoll && next !== "draft") {
-    clearInterval(draftPoll);
-    draftPoll = null;
-  }
+  if (draftPoll && next !== "draft") { clearInterval(draftPoll); draftPoll = null; }
+  if (next === "history") renderHistory();
 }
 
-async function loadSleeper(leagueId, status, prog) {
-  status.textContent = "fetching league...";
+async function loadSleeper(leagueId) {
+  $("status").textContent = "fetching league...";
   const [rosters, users] = await Promise.all([
     fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`).then((r) => r.json()),
     fetch(`https://api.sleeper.app/v1/league/${leagueId}/users`).then((r) => r.json()),
   ]);
-
-  await sleeperPlayers();
-
+  const players = await sleeperPlayers();
   const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
+  draftUsers = users.map((u) => u.display_name);
   sleeper.rosters = rosters.map((r) => ({
     owner: nameOf.get(r.owner_id) ?? r.owner_id,
     keys: (r.players ?? [])
-      .map((id) => sleeper.players[id])
+      .map((id) => players[id])
       .filter((p) => p && p.full_name)
       .map((p) => norm(p.full_name)),
   }));
-  sleeper.leagueId = leagueId;
 
   $("team").innerHTML = "";
 
@@ -270,20 +254,13 @@ async function loadSleeper(leagueId, status, prog) {
 
   $("teamwrap").hidden = false;
   const saved = store.get("settings", null);
-
-  if (saved && saved.team && sleeper.rosters.some((r) => r.owner === saved.team)) {
-    $("team").value = saved.team;
-  }
-
-  status.textContent = "pick your team, then load again";
+  if (saved && saved.team && sleeper.rosters.some((r) => r.owner === saved.team)) $("team").value = saved.team;
+  $("status").textContent = "pick your team, then load again";
 }
 
 function myKeys() {
   const manual = $("manual").value.trim();
-
-  if (manual) {
-    return new Set(manual.split("\n").map(norm).filter(Boolean));
-  }
+  if (manual) return new Set(manual.split("\n").map(norm).filter(Boolean));
 
   if (sleeper.rosters) {
     const roster = sleeper.rosters.find((r) => r.owner === $("team").value);
@@ -297,7 +274,7 @@ const isMine = (mine, key) => [...mine].some((k) => key.includes(k) || k.include
 
 function card(p, opts = {}) {
   const div = document.createElement("div");
-  div.className = "card" + (opts.mine ? " mine" : "") + (opts.gone ? " gone" : "");
+  div.className = "card" + (opts.mine ? " mine" : "");
   const max = opts.max ?? 40;
   const range =
     p.floor !== undefined
@@ -309,20 +286,22 @@ function card(p, opts = {}) {
   const tag = opts.tag ? `<div class="tag${opts.warn ? " warn" : ""}">${opts.tag}</div>` : "";
   div.innerHTML = `
     <div class="top"><span class="nm">${p.name}</span><span class="big">${(p.predicted ?? p.vor).toFixed(1)}</span></div>
-    <div class="sub"><span>${p.position} · ${p.team}${p.opponent ? " · " + p.opponent : ""}</span><span>${opts.sub ?? ""}</span></div>
+    <div class="sub"><span>${p.position} &middot; ${p.team}${p.opponent ? " &middot; " + p.opponent : ""}</span><span>${opts.sub ?? ""}</span></div>
     ${range}${tag}`;
   return div;
 }
 
-async function renderStart() {
-  const key = $("week").value;
-
+async function slateFor(key) {
   if (!slates[key]) {
     const parts = key.split("|");
     slates[key] = await (await fetch(`data/slate-${parts[0]}-${parts[1]}.json`)).json();
   }
 
-  const slate = slates[key];
+  return slates[key];
+}
+
+async function renderStart() {
+  const slate = await slateFor($("week").value);
   const mine = myKeys();
   const out = $("out");
   out.innerHTML = "";
@@ -334,37 +313,22 @@ async function renderStart() {
     const owned = rows.filter((p) => isMine(mine, p.key));
     const shown = mine.size > 0 ? owned : rows.slice(0, 8);
     const h = document.createElement("h2");
-    h.className = "mono";
     h.textContent = position;
     out.appendChild(h);
     const grid = document.createElement("div");
     grid.className = "cards";
 
-    for (const p of shown) {
-      grid.appendChild(card(p, { mine: mine.size > 0, max, sub: `${p.snaps}% snaps` }));
-    }
+    for (const p of shown) grid.appendChild(card(p, { mine: mine.size > 0, max, sub: `${p.snaps}% snaps` }));
 
     out.appendChild(grid);
-
-    if (mine.size > 0 && owned[0]) {
-      starts.push(`${position}: ${owned[0].name} ${owned[0].predicted.toFixed(1)}`);
-    }
+    if (mine.size > 0 && owned[0]) starts.push(`${position}: ${owned[0].name} ${owned[0].predicted.toFixed(1)}`);
   }
 
-  if (starts.length > 0) {
-    logHistory(`starts: ${starts.join("; ")}`);
-  }
+  if (starts.length > 0) logHistory(`starts: ${starts.join("; ")}`);
 }
 
 async function renderWaivers() {
-  const key = $("week").value;
-
-  if (!slates[key]) {
-    const parts = key.split("|");
-    slates[key] = await (await fetch(`data/slate-${parts[0]}-${parts[1]}.json`)).json();
-  }
-
-  const slate = slates[key];
+  const slate = await slateFor($("week").value);
   const mine = myKeys();
   const out = $("out");
   out.innerHTML = "";
@@ -382,40 +346,23 @@ async function renderWaivers() {
     const worst = owned.at(-1);
     const outside = rows.filter((p) => !owned.includes(p)).slice(0, 6);
     const h = document.createElement("h2");
-    h.className = "mono";
     h.textContent = position;
     out.appendChild(h);
     const grid = document.createElement("div");
     grid.className = "cards";
 
-    for (const p of owned) {
-      grid.appendChild(card(p, { mine: true, max, sub: `${p.snaps}% snaps` }));
-    }
+    for (const p of owned) grid.appendChild(card(p, { mine: true, max, sub: `${p.snaps}% snaps` }));
 
     for (const p of outside) {
       const gain = worst ? p.predicted - worst.predicted : 0;
-
-      if (worst && gain > 2) {
-        suggestions.push(`${p.name} +${gain.toFixed(1)} over ${worst.name}`);
-      }
-
-      grid.appendChild(
-        card(p, {
-          max,
-          sub: `${p.snaps}% snaps`,
-          tag: worst && gain > 2 ? `+${gain.toFixed(1)} over ${worst.name}` : "",
-        }),
-      );
+      if (worst && gain > 2) suggestions.push(`${p.name} +${gain.toFixed(1)} over ${worst.name}`);
+      grid.appendChild(card(p, { max, sub: `${p.snaps}% snaps`, tag: worst && gain > 2 ? `+${gain.toFixed(1)} over ${worst.name}` : "" }));
     }
 
     out.appendChild(grid);
   }
 
-  logHistory(
-    suggestions.length > 0
-      ? `waiver ideas: ${suggestions.slice(0, 3).join("; ")}`
-      : "no waiver moves clear the bar",
-  );
+  logHistory(suggestions.length > 0 ? `waiver ideas: ${suggestions.slice(0, 3).join("; ")}` : "no waiver moves clear the bar");
 }
 
 async function findDraftId(leagueId) {
@@ -423,80 +370,195 @@ async function findDraftId(leagueId) {
   return drafts && drafts[0] ? drafts[0].draft_id : null;
 }
 
-async function pollPicks(draftId) {
-  const picks = await fetch(`https://api.sleeper.app/v1/draft/${draftId}/picks`).then((r) => r.json());
-  taken = new Set();
+function manualTaken() {
+  const manual = $("manual").value.trim();
+  return manual ? manual.split("\n").map(norm).filter(Boolean) : [];
+}
 
-  if (sleeper.players) {
-    for (const pick of picks) {
-      const p = sleeper.players[pick.player_id];
+function needFactor(position, count) {
+  const starters = STARTERS[position] ?? 0;
+  if (count < starters) return 1;
+  if (position === "RB" || position === "WR") return count < starters + 2 ? 0.6 : 0.35;
+  return 0.2;
+}
 
-      if (p && p.full_name) {
-        taken.add(norm(p.full_name));
+async function pollPicks(draftId, leagueId) {
+  taken = new Set(manualTaken());
+  draftTeams = {};
+  myDraftKeys = new Set();
+  const players = await sleeperPlayers();
+  const me = $("team").value;
+
+  if (leagueId) {
+    const [rosters, users] = await Promise.all([
+      fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`).then((r) => r.json()),
+      fetch(`https://api.sleeper.app/v1/league/${leagueId}/users`).then((r) => r.json()),
+    ]);
+    const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
+
+    if ($("team").options.length === 0) {
+      for (const u of users) {
+        const option = document.createElement("option");
+        option.value = option.textContent = u.display_name;
+        $("team").appendChild(option);
+      }
+
+      const saved = store.get("settings", null);
+      if (saved && saved.team) $("team").value = saved.team;
+      $("teamwrap").hidden = false;
+    }
+
+    for (const r of rosters) {
+      const owner = nameOf.get(r.owner_id) ?? r.owner_id;
+
+      for (const id of r.players ?? []) {
+        const p = players[id];
+
+        if (p && p.full_name) {
+          const key = norm(p.full_name);
+          taken.add(key);
+          (draftTeams[owner] = draftTeams[owner] ?? []).push(p.full_name + " (kept)");
+          if (owner === me) myDraftKeys.add(key);
+        }
       }
     }
   }
 
-  renderDraft(picks.length);
-}
+  let pickCount;
 
-function renderDraft(pickCount) {
-  if (!board) {
-    return;
+  if (draftId) {
+    const picks = await fetch(`https://api.sleeper.app/v1/draft/${draftId}/picks`).then((r) => r.json());
+    const users = await fetch(`https://api.sleeper.app/v1/draft/${draftId}`).then((r) => r.json()).catch(() => null);
+    pickCount = picks.length;
+
+    for (const pick of picks) {
+      const p = players[pick.player_id];
+      if (!p || !p.full_name) continue;
+      const key = norm(p.full_name);
+      taken.add(key);
+      const owner = (pick.metadata && pick.metadata.team) || `slot ${pick.draft_slot}`;
+      const label = draftUsers.length && pick.picked_by
+        ? (sleeper.rosters?.find(() => false), owner)
+        : owner;
+      (draftTeams[label] = draftTeams[label] ?? []).push(p.full_name);
+      if ($("team").value && pick.metadata && norm(pick.metadata.team ?? "") === norm(me)) myDraftKeys.add(key);
+    }
   }
 
+  store.set("draft", {
+    draftId, leagueId, taken: [...taken], teams: draftTeams,
+    mine: [...myDraftKeys], pickCount,
+    at: new Date().toISOString().slice(0, 16).replace("T", " "),
+  });
+  renderDraft(pickCount);
+}
+
+function renderDraft(pickCount, staleAt) {
+  if (!board) return;
   const out = $("out");
   out.innerHTML = "";
-  const status = document.createElement("h2");
-  status.className = "mono";
-  status.textContent = pickCount !== undefined
-    ? `pick ${pickCount + 1}, best available by value over replacement`
-    : "the full board by value over replacement";
-  out.appendChild(status);
 
-  const available = board.players.filter((p) => !taken.has(p.key));
+  const counts = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  const mineList = [];
+
+  for (const p of board.players) {
+    if (myDraftKeys.has(p.key)) {
+      counts[p.position] = (counts[p.position] ?? 0) + 1;
+      mineList.push(p);
+    }
+  }
+
+  const h = document.createElement("h2");
+  h.textContent = (pickCount !== undefined ? `pick ${pickCount + 1}, ` : "") +
+    "recommended for your roster" + (staleAt ? ` as of ${staleAt}` : "");
+  out.appendChild(h);
+
+  const scored = board.players
+    .filter((p) => !taken.has(p.key))
+    .map((p) => ({ p, score: p.vor * needFactor(p.position, counts[p.position] ?? 0) }))
+    .sort((a, b) => b.score - a.score);
+
   const grid = document.createElement("div");
   grid.className = "cards";
 
-  for (const p of available.slice(0, 24)) {
-    grid.appendChild(
-      card(
-        { ...p, predicted: undefined },
-        {
-          sub: `${p.ppg.toFixed(1)} a game${p.adp ? " · adp " + p.adp.toFixed(0) : ""}${p.bye ? " · bye " + p.bye : ""}`,
-        },
-      ),
-    );
-  }
+  scored.slice(0, 18).forEach(({ p, score }, i) => {
+    grid.appendChild(card(
+      { ...p, predicted: undefined },
+      {
+        sub: `${p.ppg.toFixed(1)} a game${p.adp ? " &middot; adp " + p.adp.toFixed(0) : ""}${p.bye ? " &middot; bye " + p.bye : ""}`,
+        tag: i < 3 ? `pick this: fills ${p.position}, need-adjusted ${score.toFixed(1)}` : "",
+      },
+    ));
+  });
 
   out.appendChild(grid);
+
+  if (mineList.length > 0) {
+    const mh = document.createElement("h2");
+    mh.textContent = `your team (${Object.entries(counts).filter(([, c]) => c > 0).map(([pos, c]) => `${c} ${pos}`).join(", ")})`;
+    out.appendChild(mh);
+    const myGrid = document.createElement("div");
+    myGrid.className = "cards";
+
+    for (const p of mineList) {
+      myGrid.appendChild(card({ ...p, predicted: undefined }, { mine: true, sub: `${p.ppg.toFixed(1)} a game` }));
+    }
+
+    out.appendChild(myGrid);
+  }
+
+  const owners = Object.keys(draftTeams);
+
+  if (owners.length > 0) {
+    const th = document.createElement("h2");
+    th.textContent = "all teams";
+    out.appendChild(th);
+    const teamGrid = document.createElement("div");
+    teamGrid.className = "cards";
+
+    for (const owner of owners) {
+      const div = document.createElement("div");
+      div.className = "card" + (owner === $("team").value ? " mine" : "");
+      div.innerHTML = `<div class="nm">${owner}</div><div class="sub" style="display:block; margin-top:.3rem">${draftTeams[owner].join("<br>")}</div>`;
+      teamGrid.appendChild(div);
+    }
+
+    out.appendChild(teamGrid);
+  }
 }
 
 async function renderDraftView() {
-  if (!board) {
-    board = await (await fetch(`data/board-${meta.boardSeason}.json`)).json();
-  }
-
+  if (!board) board = await (await fetch(`data/board-${meta.boardSeason}.json`)).json();
   let draftId = $("draftid").value.trim();
   const leagueId = $("league").value.trim();
 
   if (!draftId && leagueId) {
     $("status").textContent = "finding the league's draft...";
-    draftId = await findDraftId(leagueId);
-
-    if (draftId) {
-      $("draftid").value = draftId;
-    }
+    draftId = (await findDraftId(leagueId)) ?? "";
+    if (draftId) $("draftid").value = draftId;
   }
 
-  if (draftId) {
-    await sleeperPlayers();
-
-    $("status").textContent = "watching the draft, refreshing every 5s";
-    await pollPicks(draftId);
-    draftPoll = setInterval(() => pollPicks(draftId), 5000);
+  if (draftId || leagueId) {
+    $("status").textContent = draftId
+      ? "watching the draft, refreshing every 5s; close and load later to catch up"
+      : "keepers loaded from league rosters";
+    await pollPicks(draftId, leagueId);
+    if (draftId) draftPoll = setInterval(() => pollPicks(draftId, leagueId), 5000);
   } else {
-    renderDraft();
+    const saved = store.get("draft", null);
+
+    if (saved && saved.taken) {
+      taken = new Set([...saved.taken, ...manualTaken()]);
+      draftTeams = saved.teams ?? {};
+      myDraftKeys = new Set(saved.mine ?? []);
+      renderDraft(saved.pickCount, saved.at);
+      $("status").textContent = "saved draft state; enter the league to refresh";
+    } else {
+      taken = new Set(manualTaken());
+      draftTeams = {};
+      myDraftKeys = new Set();
+      renderDraft();
+    }
   }
 }
 
@@ -513,19 +575,13 @@ function renderHistory() {
   for (const entry of history) {
     const div = document.createElement("div");
     div.className = "card";
-    div.innerHTML = `<div class="sub"><span>${entry.at}</span><span>${entry.view} · ${entry.week ?? ""}</span></div><div style="font-size:.85rem; margin-top:.3rem">${entry.note}</div>`;
+    div.innerHTML = `<div class="sub"><span>${entry.at}</span><span>${entry.view} &middot; ${entry.week ?? ""}</span></div><div style="font-size:.85rem; margin-top:.3rem">${entry.note}</div>`;
     out.appendChild(div);
   }
 }
 
 document.querySelectorAll("nav button").forEach((button) =>
-  button.addEventListener("click", () => {
-    setView(button.dataset.view);
-
-    if (button.dataset.view === "history") {
-      renderHistory();
-    }
-  }),
+  button.addEventListener("click", () => setView(button.dataset.view)),
 );
 
 $("go").addEventListener("click", async () => {
@@ -535,21 +591,17 @@ $("go").addEventListener("click", async () => {
     const leagueId = $("league").value.trim();
 
     if (view !== "draft" && leagueId && !sleeper.rosters) {
-      await loadSleeper(leagueId, status, $("prog"));
+      await loadSleeper(leagueId);
+      saveSettings();
       return;
     }
 
     status.textContent = "";
 
-    if (view === "start") {
-      await renderStart();
-    } else if (view === "waivers") {
-      await renderWaivers();
-    } else if (view === "history") {
-      renderHistory();
-    } else {
-      await renderDraftView();
-    }
+    if (view === "start") await renderStart();
+    else if (view === "waivers") await renderWaivers();
+    else if (view === "history") renderHistory();
+    else await renderDraftView();
 
     saveSettings();
   } catch (error) {
