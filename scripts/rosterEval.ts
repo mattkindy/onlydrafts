@@ -1,0 +1,264 @@
+// The composition experiment: a challenger drafts risk-aware while
+// eleven teams draft by ADP, scored in simulated wins against the same
+// challenger drafting by pure projection order.
+// Run: npx tsx scripts/rosterEval.ts --season 2025
+
+import { buildPreseasonWorld } from "../src/features/preseason.js";
+import { simulatePreseasonLeague } from "../src/sim/preseasonLeague.js";
+import { seededRng } from "../src/sim/rng.js";
+import { loadAdp } from "../src/data/adp.js";
+import { normalizeName } from "../src/data/names.js";
+import type { SeasonPlayer } from "../src/sim/playerSeason.js";
+import { loadPlayerStats } from "../src/data/nflverse.js";
+import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
+import { pickLineup } from "../src/sim/lineup.js";
+
+const TEAMS = 12;
+const SIMS = 400;
+const ROSTER_LIMITS: Record<string, number> = { QB: 2, RB: 4, WR: 4, TE: 2 };
+const ROSTER_SIZE = 10;
+
+function argOf(flag: string, fallback: number): number {
+  const index = process.argv.indexOf(flag);
+  return index === -1 ? fallback : Number(process.argv[index + 1]);
+}
+
+function snakeOrder(round: number): number[] {
+  const order = Array.from({ length: TEAMS }, (_, i) => i);
+  return round % 2 === 0 ? order : order.reverse();
+}
+
+type Picker = (
+  available: SeasonPlayer[],
+  roster: SeasonPlayer[],
+) => SeasonPlayer | undefined;
+
+function draft(
+  ordered: SeasonPlayer[],
+  challengerSlot: number,
+  challengerPick: Picker,
+): string[][] {
+  const rosters: SeasonPlayer[][] = Array.from({ length: TEAMS }, () => []);
+  const counts = Array.from({ length: TEAMS }, () => new Map<string, number>());
+  const taken = new Set<string>();
+
+  const fits = (team: number, player: SeasonPlayer) =>
+    !taken.has(player.playerId) &&
+    (counts[team]!.get(player.position) ?? 0) <
+      (ROSTER_LIMITS[player.position] ?? 0);
+
+  for (let round = 0; round < ROSTER_SIZE; round++) {
+    for (const team of snakeOrder(round)) {
+      const available = ordered.filter((p) => fits(team, p));
+      const player =
+        team === challengerSlot
+          ? challengerPick(available, rosters[team]!)
+          : available[0];
+
+      if (!player) {
+        continue;
+      }
+
+      rosters[team]!.push(player);
+      counts[team]!.set(
+        player.position,
+        (counts[team]!.get(player.position) ?? 0) + 1,
+      );
+      taken.add(player.playerId);
+    }
+  }
+
+  return rosters.map((r) => r.map((p) => p.playerId));
+}
+
+async function main(): Promise<void> {
+  const season = argOf("--season", 2025);
+  const world = await buildPreseasonWorld(season);
+  const adp = await loadAdp(season);
+
+  const adpOrdered = world.players
+    .map((p) => ({
+      p,
+      adp: adp.get(`${normalizeName(p.name)}|${p.position}`)?.adp ?? 999,
+    }))
+    .filter((x) => x.adp < 999)
+    .sort((a, b) => a.adp - b.adp)
+    .map((x) => x.p);
+
+  // replacement value per position, the board form that wins realized tests
+  const REPLACEMENT_RANK: Record<string, number> = { QB: 20, RB: 40, WR: 40, TE: 16 };
+  const replacement = new Map<string, number>();
+
+  for (const position of Object.keys(REPLACEMENT_RANK)) {
+    const list = world.players
+      .filter((p) => p.position === position)
+      .sort((a, b) => b.projectedPpg - a.projectedPpg);
+    const at = list[Math.min(REPLACEMENT_RANK[position]!, list.length) - 1];
+    replacement.set(position, at?.projectedPpg ?? 0);
+  }
+
+  const vorOf = (p: SeasonPlayer) =>
+    p.projectedPpg - (replacement.get(p.position) ?? 0);
+
+  const projectionPick: Picker = (available) =>
+    [...available].sort((a, b) => vorOf(b) - vorOf(a))[0];
+
+  const durablePools = new Set([
+    world.players.find((p) => p.gamesPool.length > 0)?.gamesPool,
+  ]);
+
+  const riskAwarePick: Picker = (available, roster) => {
+    const sorted = [...available].sort((a, b) => vorOf(b) - vorOf(a));
+    const best = sorted[0];
+
+    if (!best) {
+      return undefined;
+    }
+
+    const window = sorted.filter((p) => vorOf(best) - vorOf(p) <= 1.0);
+
+    const byeCount = new Map<number, number>();
+
+    for (const own of roster) {
+      const bye = world.byeWeek.get(own.teamId);
+
+      if (bye !== undefined) {
+        byeCount.set(bye, (byeCount.get(bye) ?? 0) + 1);
+      }
+    }
+
+    const meanGames = (p: SeasonPlayer) =>
+      p.gamesPool.length === 0
+        ? 14
+        : p.gamesPool.reduce((s, x) => s + x, 0) / p.gamesPool.length;
+
+    const score = (p: SeasonPlayer) => {
+      const bye = world.byeWeek.get(p.teamId);
+      const byePenalty = bye !== undefined ? (byeCount.get(bye) ?? 0) * 0.4 : 0;
+      const sameTeam = roster.filter((own) => own.teamId === p.teamId).length;
+      return meanGames(p) - byePenalty - sameTeam * 0.3;
+    };
+
+    return [...window].sort((a, b) => score(b) - score(a))[0];
+  };
+
+  const report = (label: string, picker: Picker) => {
+    let challengerSum = 0;
+    let fieldSum = 0;
+
+    for (let slot = 0; slot < TEAMS; slot++) {
+      const rosters = draft(adpOrdered, slot, picker);
+      const result = simulatePreseasonLeague(
+        world.playersById,
+        rosters,
+        season,
+        world.games,
+        world.residuals,
+        world.oppAdjust,
+        world.catcherLoading,
+        world.seasonNoise,
+        SIMS,
+        seededRng(slot * 7 + 1),
+      );
+
+      const mean = (team: number) =>
+        result.winsPerSim[team]!.reduce((s, x) => s + x, 0) / SIMS;
+      challengerSum += mean(slot);
+      let others = 0;
+
+      for (let team = 0; team < TEAMS; team++) {
+        if (team !== slot) {
+          others += mean(team);
+        }
+      }
+
+      fieldSum += others / (TEAMS - 1);
+    }
+
+    console.log(
+      `${label.padEnd(24)} ${(challengerSum / TEAMS).toFixed(2)} wins vs field ${(fieldSum / TEAMS).toFixed(2)}`,
+    );
+  };
+
+  console.log(`${season}, ${SIMS} simulated seasons per slot, challenger rotated through all slots:`);
+  report("adp order (control)", (available) => available[0]);
+  report("model + replacement", projectionPick);
+  report("model + repl + risk", riskAwarePick);
+
+  // the same drafts scored against the season that actually happened
+  const stats = await loadPlayerStats(season);
+  const actualWeekly = new Map<string, number>();
+
+  for (const row of stats) {
+    if (row.week <= 14) {
+      actualWeekly.set(
+        `${row.playerId}|${row.week}`,
+        fantasyPoints(row.statLine, presets.ppr),
+      );
+    }
+  }
+
+  const realized = (label: string, picker: Picker) => {
+    let challengerSum = 0;
+    let fieldSum = 0;
+
+    for (let slot = 0; slot < TEAMS; slot++) {
+      const rosters = draft(adpOrdered, slot, picker);
+      const wins = new Array<number>(TEAMS).fill(0);
+
+      for (let w = 0; w < 14; w++) {
+        const week = w + 1;
+        const teamPoints = rosters.map((roster) => {
+          const candidates = roster
+            .filter((id) => actualWeekly.has(`${id}|${week}`))
+            .map((id) => ({
+              playerId: id,
+              position: world.playersById.get(id)!.position,
+              score: world.playersById.get(id)!.projectedPpg,
+            }));
+
+          let points = 0;
+
+          for (const starter of pickLineup(candidates)) {
+            points += actualWeekly.get(`${starter}|${week}`) ?? 0;
+          }
+
+          return points;
+        });
+
+        const rotating = Array.from({ length: TEAMS - 1 }, (_, i) => i + 1);
+        const shift = w % (TEAMS - 1);
+        const ring = [0, ...rotating.slice(shift), ...rotating.slice(0, shift)];
+
+        for (let i = 0; i < TEAMS / 2; i++) {
+          const a = ring[i]!;
+          const b = ring[TEAMS - 1 - i]!;
+
+          if (teamPoints[a]! > teamPoints[b]!) {
+            wins[a]!++;
+          } else {
+            wins[b]!++;
+          }
+        }
+      }
+
+      challengerSum += wins[slot]!;
+      fieldSum +=
+        wins.reduce((s, x, team) => (team === slot ? s : s + x), 0) / (TEAMS - 1);
+    }
+
+    console.log(
+      `${label.padEnd(24)} ${(challengerSum / TEAMS).toFixed(2)} wins vs field ${(fieldSum / TEAMS).toFixed(2)}`,
+    );
+  };
+
+  console.log(`\nsame drafts against the ${season} season that happened:`);
+  realized("adp order (control)", (available) => available[0]);
+  realized("model + replacement", projectionPick);
+  realized("model + repl + risk", riskAwarePick);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
