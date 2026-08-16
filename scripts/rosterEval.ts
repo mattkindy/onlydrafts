@@ -31,12 +31,37 @@ function snakeOrder(round: number): number[] {
 type Picker = (
   available: SeasonPlayer[],
   roster: SeasonPlayer[],
+  rng: () => number,
 ) => SeasonPlayer | undefined;
+
+/** most drafters take near the top of the board; some reach */
+const noisyAdpPick: Picker = (available, _roster, rng) => {
+  if (available.length === 0) {
+    return undefined;
+  }
+
+  if (rng() < 0.1) {
+    return available[Math.floor(rng() * Math.min(12, available.length))];
+  }
+
+  const weights = [0.45, 0.25, 0.15, 0.1, 0.05];
+  let u = rng();
+
+  for (let i = 0; i < weights.length; i++) {
+    u -= weights[i]!;
+
+    if (u <= 0) {
+      return available[Math.min(i, available.length - 1)];
+    }
+  }
+
+  return available[0];
+};
 
 function draft(
   ordered: SeasonPlayer[],
-  challengerSlot: number,
-  challengerPick: Picker,
+  pickers: Picker[],
+  rng: () => number,
 ): string[][] {
   const rosters: SeasonPlayer[][] = Array.from({ length: TEAMS }, () => []);
   const counts = Array.from({ length: TEAMS }, () => new Map<string, number>());
@@ -50,10 +75,7 @@ function draft(
   for (let round = 0; round < ROSTER_SIZE; round++) {
     for (const team of snakeOrder(round)) {
       const available = ordered.filter((p) => fits(team, p));
-      const player =
-        team === challengerSlot
-          ? challengerPick(available, rosters[team]!)
-          : available[0];
+      const player = pickers[team]!(available, rosters[team]!, rng);
 
       if (!player) {
         continue;
@@ -69,6 +91,13 @@ function draft(
   }
 
   return rosters.map((r) => r.map((p) => p.playerId));
+}
+
+function fieldFor(challengerSlot: number, challenger: Picker, sharp: Picker): Picker[] {
+  const pickers: Picker[] = Array.from({ length: TEAMS }, () => noisyAdpPick);
+  pickers[challengerSlot] = challenger;
+  pickers[(challengerSlot + 6) % TEAMS] = sharp;
+  return pickers;
 }
 
 async function main(): Promise<void> {
@@ -142,45 +171,62 @@ async function main(): Promise<void> {
     return [...window].sort((a, b) => score(b) - score(a))[0];
   };
 
+  const DRAFTS = 3;
+
   const report = (label: string, picker: Picker) => {
     let challengerSum = 0;
     let fieldSum = 0;
+    let playoffSum = 0;
+    let titleSum = 0;
+    let count = 0;
 
     for (let slot = 0; slot < TEAMS; slot++) {
-      const rosters = draft(adpOrdered, slot, picker);
-      const result = simulatePreseasonLeague(
-        world.playersById,
-        rosters,
-        season,
-        world.games,
-        world.residuals,
-        world.oppAdjust,
-        world.catcherLoading,
-        world.seasonNoise,
-        SIMS,
-        seededRng(slot * 7 + 1),
-      );
+      for (let d = 0; d < DRAFTS; d++) {
+        const draftRng = seededRng(slot * 100 + d + 1);
+        const rosters = draft(
+          adpOrdered,
+          fieldFor(slot, picker, projectionPick),
+          draftRng,
+        );
+        const result = simulatePreseasonLeague(
+          world.playersById,
+          rosters,
+          season,
+          world.games,
+          world.residuals,
+          world.oppAdjust,
+          world.catcherLoading,
+          world.seasonNoise,
+          SIMS,
+          seededRng(slot * 7 + d + 1),
+        );
 
-      const mean = (team: number) =>
-        result.winsPerSim[team]!.reduce((s, x) => s + x, 0) / SIMS;
-      challengerSum += mean(slot);
-      let others = 0;
+        const mean = (team: number) =>
+          result.winsPerSim[team]!.reduce((s, x) => s + x, 0) / SIMS;
+        challengerSum += mean(slot);
+        playoffSum += result.playoffs[slot]! / SIMS;
+        titleSum += result.titles[slot]! / SIMS;
+        let others = 0;
 
-      for (let team = 0; team < TEAMS; team++) {
-        if (team !== slot) {
-          others += mean(team);
+        for (let team = 0; team < TEAMS; team++) {
+          if (team !== slot) {
+            others += mean(team);
+          }
         }
-      }
 
-      fieldSum += others / (TEAMS - 1);
+        fieldSum += others / (TEAMS - 1);
+        count++;
+      }
     }
 
     console.log(
-      `${label.padEnd(24)} ${(challengerSum / TEAMS).toFixed(2)} wins vs field ${(fieldSum / TEAMS).toFixed(2)}`,
+      `${label.padEnd(24)} ${(challengerSum / count).toFixed(2)} wins vs field ${(fieldSum / count).toFixed(2)}, playoffs ${((playoffSum / count) * 100).toFixed(0)}%, title ${((titleSum / count) * 100).toFixed(1)}%`,
     );
   };
 
-  console.log(`${season}, ${SIMS} simulated seasons per slot, challenger rotated through all slots:`);
+  console.log(
+    `${season}: noisy ADP field with one sharp opponent on our board, challenger rotated through all slots`,
+  );
   report("adp order (control)", (available) => available[0]);
   report("model + replacement", projectionPick);
   report("model + repl + risk", riskAwarePick);
@@ -198,12 +244,20 @@ async function main(): Promise<void> {
     }
   }
 
+  const REALIZED_DRAFTS = 12;
+
   const realized = (label: string, picker: Picker) => {
     let challengerSum = 0;
     let fieldSum = 0;
+    let count = 0;
 
     for (let slot = 0; slot < TEAMS; slot++) {
-      const rosters = draft(adpOrdered, slot, picker);
+      for (let d = 0; d < REALIZED_DRAFTS; d++) {
+      const rosters = draft(
+        adpOrdered,
+        fieldFor(slot, picker, projectionPick),
+        seededRng(slot * 1000 + d + 1),
+      );
       const wins = new Array<number>(TEAMS).fill(0);
 
       for (let w = 0; w < 14; w++) {
@@ -245,10 +299,12 @@ async function main(): Promise<void> {
       challengerSum += wins[slot]!;
       fieldSum +=
         wins.reduce((s, x, team) => (team === slot ? s : s + x), 0) / (TEAMS - 1);
+      count++;
+      }
     }
 
     console.log(
-      `${label.padEnd(24)} ${(challengerSum / TEAMS).toFixed(2)} wins vs field ${(fieldSum / TEAMS).toFixed(2)}`,
+      `${label.padEnd(24)} ${(challengerSum / count).toFixed(2)} wins vs field ${(fieldSum / count).toFixed(2)}`,
     );
   };
 

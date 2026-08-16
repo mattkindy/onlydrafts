@@ -6,8 +6,12 @@ import { pickLineup } from "./lineup.js";
 import type { SeasonPlayer } from "./playerSeason.js";
 
 export interface LeagueResult {
-  /** per team: wins in each simulated season */
+  /** per team: regular season wins in each simulated season */
   winsPerSim: number[][];
+  /** per team: simulated seasons reaching the four-team playoff */
+  playoffs: number[];
+  /** per team: simulated seasons winning the final */
+  titles: number[];
 }
 
 function pairings(week: number, teams: number): [number, number][] {
@@ -45,7 +49,7 @@ export function simulatePreseasonLeague(
   const schedule = new Map<number, Map<string, { opponent: string; gameKey: string }>>();
 
   for (const game of games) {
-    if (game.season !== season || game.week > 14) {
+    if (game.season !== season || game.week > 16) {
       continue;
     }
 
@@ -61,6 +65,9 @@ export function simulatePreseasonLeague(
     .map((id) => playersById.get(id))
     .filter((p): p is SeasonPlayer => p !== undefined);
   const winsPerSim: number[][] = rosters.map(() => []);
+  const playoffs = rosters.map(() => 0);
+  const titles = rosters.map(() => 0);
+  const REGULAR_WEEKS = 14;
 
   for (let sim = 0; sim < sims; sim++) {
     const bias = new Map<string, number>();
@@ -88,6 +95,8 @@ export function simulatePreseasonLeague(
     }
 
     const wins = rosters.map(() => 0);
+    const seasonPoints = rosters.map(() => 0);
+    const pointsByWeek = new Map<number, number[]>();
 
     for (let w = 0; w < weekNumbers.length; w++) {
       const weekNumber = weekNumbers[w]!;
@@ -134,11 +143,19 @@ export function simulatePreseasonLeague(
         return points;
       });
 
-      for (const [a, b] of pairings(w, rosters.length)) {
-        if (teamPoints[a]! > teamPoints[b]!) {
-          wins[a]!++;
-        } else {
-          wins[b]!++;
+      pointsByWeek.set(weekNumber, teamPoints);
+
+      if (w < REGULAR_WEEKS) {
+        for (let team = 0; team < rosters.length; team++) {
+          seasonPoints[team]! += teamPoints[team]!;
+        }
+
+        for (const [a, b] of pairings(w, rosters.length)) {
+          if (teamPoints[a]! > teamPoints[b]!) {
+            wins[a]!++;
+          } else {
+            wins[b]!++;
+          }
         }
       }
     }
@@ -146,7 +163,31 @@ export function simulatePreseasonLeague(
     for (let team = 0; team < rosters.length; team++) {
       winsPerSim[team]!.push(wins[team]!);
     }
+
+    const seeds = rosters
+      .map((_, team) => team)
+      .sort(
+        (a, b) => wins[b]! - wins[a]! || seasonPoints[b]! - seasonPoints[a]!,
+      )
+      .slice(0, 4);
+
+    for (const team of seeds) {
+      playoffs[team]!++;
+    }
+
+    const semiWeek = weekNumbers[REGULAR_WEEKS];
+    const finalWeek = weekNumbers[REGULAR_WEEKS + 1];
+    const semiPoints = semiWeek !== undefined ? pointsByWeek.get(semiWeek) : undefined;
+    const finalPoints = finalWeek !== undefined ? pointsByWeek.get(finalWeek) : undefined;
+
+    if (semiPoints && finalPoints) {
+      const winner = (a: number, b: number, points: number[]) =>
+        points[a]! >= points[b]! ? a : b;
+      const finalistOne = winner(seeds[0]!, seeds[3]!, semiPoints);
+      const finalistTwo = winner(seeds[1]!, seeds[2]!, semiPoints);
+      titles[winner(finalistOne, finalistTwo, finalPoints)]!++;
+    }
   }
 
-  return { winsPerSim };
+  return { winsPerSim, playoffs, titles };
 }
