@@ -55,3 +55,23 @@ work is in the commit history and the README.
 - A Datalog engine at current scale; the code keeps facts and derived
   features separated so one can slot in later.
 - Injury prediction; evaluation scores per game played instead.
+
+## Measured negative: weekly kernel over the preseason schedule
+
+Running the weekly model across all 17 games before kickoff, with last
+season's rates standing in for recent form, does not beat multiplying
+the season projection by an opponent factor. On 2025, 3673 held-out
+player-weeks: flat 0.547, weekly kernel 0.514, weekly kernel rescaled
+to the season projection 0.546.
+
+The reason is worth keeping. Before a season starts, the only inputs
+that move week to week are the opponent, home or away, and the game's
+expected scoring, and together they are small next to the player's own
+level. A typical player's best projected week beats his worst by 3 to
+5 percent either way. That is not a modelling failure, it is what is
+knowable in August, and the flat weeks on the board are close to right.
+
+What is wrong is the band around each week rather than the week itself.
+Every player draws his spread from one of five buckets per position, so
+A.J. Brown and CeeDee Lamb get the same range at the same average when
+their actual seasons look nothing alike. See scripts/preseasonWeeklyEval.ts.
