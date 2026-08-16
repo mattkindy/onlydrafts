@@ -16,6 +16,7 @@ import { writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { RAW_DIR } from "../src/data/nflverse.js";
+import { situationOf } from "../src/model/situations.js";
 
 const SEASONS = [2021, 2022, 2023, 2024, 2025];
 const OUT = join(RAW_DIR, "..", "curated", "situations.csv");
@@ -40,23 +41,6 @@ function splitLine(line: string): string[] {
   return cells;
 }
 
-/**
- * The situations a play-caller actually treats differently. Kept few
- * on purpose: every extra split halves the plays behind each number.
- */
-function situationOf(
-  down: number, toGo: number, yard: number, behind: number, secondsLeft: number,
-): string {
-  if (yard <= 3) return "goal line";
-  if (yard <= 10) return "inside ten";
-  if (yard <= 20) return "red zone";
-  if (down >= 3 && toGo <= 2) return "third and short";
-  if (down >= 3) return "third and long";
-  if (secondsLeft <= 240 && behind > 0) return "chasing late";
-  if (secondsLeft <= 240 && behind < -7) return "ahead late";
-  if (down <= 2 && toGo >= 8) return "early and long";
-  return "early down";
-}
 
 interface Tally {
   plays: number;

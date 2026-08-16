@@ -19,6 +19,9 @@ import {
   LEAGUE_PLAYS, SITUATIONS, simulateSituationalWeek,
   type Situation, type SituationalRole,
 } from "../src/model/situationalWeek.js";
+import {
+  ROLLS_UP_TO, zeroBySituation as zero, type FineSituation,
+} from "../src/model/situations.js";
 import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
 
 const RULES = presets.standard;
@@ -27,20 +30,9 @@ const SCORE_ON = 2025;
 const RUNS = 3000;
 
 /** the csv's situation names, mapped onto the four the model keeps */
-const MAPS_TO: Record<string, Situation> = {
-  "early down": "openField",
-  "early and long": "openField",
-  "chasing late": "openField",
-  "ahead late": "openField",
-  "third and short": "thirdAndShort",
-  "third and long": "thirdAndLong",
-  "red zone": "nearGoal",
-  "inside ten": "nearGoal",
-  "goal line": "nearGoal",
-};
 
-const zero = (): Record<Situation, number> =>
-  ({ openField: 0, thirdAndShort: 0, thirdAndLong: 0, nearGoal: 0 });
+
+
 
 async function fitRoles(season: number) {
   const rows = parseCsv(
@@ -54,6 +46,7 @@ async function fitRoles(season: number) {
     yards: Record<Situation, number>;
   }>();
   const teamPlays = new Map<string, Record<Situation, number>>();
+  const perSituation = new Map<string, Map<string, number>>();
   const positions = new Map<string, string>();
   const played = new Map<string, number>();
 
@@ -63,7 +56,7 @@ async function fitRoles(season: number) {
   }
 
   for (const row of rows) {
-    const to = MAPS_TO[row["situation"] ?? ""];
+    const to = ROLLS_UP_TO[(row["situation"] ?? "") as FineSituation];
     const id = row["player"] ?? "";
     const team = row["team"] ?? "";
     if (!to || !["RB", "WR", "TE"].includes(positions.get(id) ?? "")) continue;
@@ -75,9 +68,12 @@ async function fitRoles(season: number) {
     entry.yards[to] += Number(row["yards"]);
     players.set(id, entry);
 
-    const counts = teamPlays.get(team) ?? zero();
-    counts[to] = Math.max(counts[to], Number(row["teamPlays"]));
-    teamPlays.set(team, counts);
+    // teamPlays repeats on every player's row, so take one reading per
+    // play-by-play situation and then add the ones that map together.
+    // Taking the max instead undercounted the goal-line snaps by half.
+    const seen = perSituation.get(team) ?? new Map<string, number>();
+    seen.set(row["situation"] ?? "", Number(row["teamPlays"]));
+    perSituation.set(team, seen);
   }
 
   const situational = new Map<string, SituationalRole[]>();
@@ -114,6 +110,17 @@ async function fitRoles(season: number) {
       touchdownShare: scores / Math.max(1, allPlays * 0.05),
       availability,
     }]);
+  }
+
+  for (const [team, seen] of perSituation) {
+    const counts = zero();
+
+    for (const [situation, plays] of seen) {
+      const to = ROLLS_UP_TO[situation as FineSituation];
+      if (to) counts[to] += plays;
+    }
+
+    teamPlays.set(team, counts);
   }
 
   const perGame = new Map<string, Record<Situation, number>>();

@@ -16,17 +16,9 @@
 import type { Draws, PlayerLine } from "./playerWeek.js";
 import { shareDraw } from "./playerWeek.js";
 import type { StatLine } from "../scoring/fantasyPoints.js";
+import { SITUATIONS, type Situation } from "./situations.js";
 
-/**
- * The situations worth keeping apart, measured by whether a player's
- * share in one predicts next season better than his overall share:
- * third down and the goal line do, the red zone at large does not.
- */
-export const SITUATIONS = [
-  "openField", "thirdAndShort", "thirdAndLong", "nearGoal",
-] as const;
-
-export type Situation = (typeof SITUATIONS)[number];
+export { SITUATIONS, type Situation } from "./situations.js";
 
 /** plays a game an average offence gets in each, from 2021 to 2025 */
 export const LEAGUE_PLAYS: Record<Situation, number> = {
@@ -109,13 +101,15 @@ export function simulateSituationalWeek(
       const player = roster[i]!;
       const touches = Math.round(plays * shares[i]!);
 
-      for (let touch = 0; touch < touches; touch++) {
-        const throughAir = draws.uniform() < team.passShare && player.position !== "RB"
-          ? true
-          : draws.uniform() < team.passShare * 0.3;
-        const caught = !throughAir || draws.uniform() < player.catchRate;
+      // A receiver's touch is a target; a back's is mostly a hand-off.
+      // Routing them by a coin weighted on the team's pass share sent
+      // two fifths of every receiver's work to the ground.
+      const airShare = player.position === "RB" ? 0.22 : 0.97;
 
-        if (throughAir && !caught) {
+      for (let touch = 0; touch < touches; touch++) {
+        const throughAir = draws.uniform() < airShare;
+
+        if (throughAir && draws.uniform() >= player.catchRate) {
           continue;
         }
 
