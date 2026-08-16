@@ -296,6 +296,11 @@ function setView(next) {
 
   for (const b of document.querySelectorAll("#subnav button")) b.classList.toggle("on", b.dataset.view === next);
   applyToolbar(next);
+  const preseason = (next === "start" || next === "waivers") && !meta.weeks.length;
+
+  if (preseason) {
+    $("manualwrap").hidden = true;
+  }
   const copy = {
     leagues: ["My leagues",
       "Type your Sleeper username, then tap a league to open it. Draft help, lineups, and waivers all live inside a league.",
@@ -315,7 +320,7 @@ function setView(next) {
   }[next] ?? ["", "", ""];
   $("title").textContent = copy[0];
   $("blurb").textContent = copy[1];
-  $("legend").textContent = copy[2];
+  $("legend").textContent = preseason ? "" : copy[2];
   $("out").innerHTML = "";
   if (draftPoll && next !== "draft") { clearInterval(draftPoll); draftPoll = null; }
   refreshGoLabel();
