@@ -13,6 +13,8 @@ import { fitGbm, predictGbm, type GbmModel } from "../backtest/gbm.js";
 import { loadCoaches } from "../data/coaches.js";
 import { loadAdp } from "../data/adp.js";
 import { loadTendencies } from "../data/tendencies.js";
+import { loadCompromisedWeeks } from "../data/injuries.js";
+import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { spearman } from "../backtest/metrics.js";
 
 export const SEASON_POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -58,6 +60,10 @@ export interface SeasonExample {
   /** how his previous season started and finished, points a game */
   earlyPpg: number;
   latePpg: number;
+  /** last season's scoring in games he was not on the injury report */
+  healthyPpg?: number;
+  /** share of last season's games he played while listed */
+  compromised: number;
   /** preseason market rank for the target season, undefined when unlisted */
   adp?: number;
   /**
@@ -72,6 +78,10 @@ export interface SeasonData {
   stats: Awaited<ReturnType<typeof loadPlayerStats>>;
   summaries: Map<string, SeasonSummary>;
   snapShare: Map<string, number>;
+  /** points per game in weeks he was not on the injury report */
+  healthyPpg: Map<string, number>;
+  /** share of his games played while listed */
+  compromised: Map<string, number>;
 }
 
 export interface SeasonModelFit {
@@ -105,6 +115,8 @@ export const SEASON_RIDGE_FEATURES = [
   "ocReunion",
   "logAdp",
   "finishedStrong",
+  "healthyBoost",
+  "playedHurtShare",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -138,10 +150,38 @@ export async function buildSeasonData(
     // the upcoming season has rosters but no games yet, so its stats and
     // snaps are missing until week 1
     const stats = await loadPlayerStats(season).catch(() => []);
+    const hurt = await loadCompromisedWeeks(season).catch(() => new Set<string>());
+    const healthy = new Map<string, { points: number; games: number }>();
+    const listed = new Map<string, { hurt: number; games: number }>();
+
+    for (const row of stats) {
+      const tally = listed.get(row.playerId) ?? { hurt: 0, games: 0 };
+      tally.games++;
+
+      if (hurt.has(`${row.playerId}|${row.week}`)) {
+        tally.hurt++;
+      } else {
+        const clean = healthy.get(row.playerId) ?? { points: 0, games: 0 };
+        clean.points += fantasyPoints(row.statLine, scoring());
+        clean.games++;
+        healthy.set(row.playerId, clean);
+      }
+
+      listed.set(row.playerId, tally);
+    }
+
     data.set(season, {
       stats,
       summaries: summarizeSeason(stats, scoring()),
       snapShare: await loadSnapShare(season).catch(() => new Map<string, number>()),
+      healthyPpg: new Map(
+        [...healthy.entries()]
+          .filter(([, v]) => v.games >= 3)
+          .map(([id, v]) => [id, v.points / v.games]),
+      ),
+      compromised: new Map(
+        [...listed.entries()].map(([id, v]) => [id, v.games ? v.hurt / v.games : 0]),
+      ),
     });
   }
 
@@ -411,6 +451,8 @@ export async function examplesForTransition(
       airYardsPerGame: was.airYardsPerGame,
       earlyPpg: was.earlyPpg,
       latePpg: was.latePpg,
+      healthyPpg: prev.healthyPpg.get(playerId),
+      compromised: prev.compromised.get(playerId) ?? 0,
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     });
@@ -561,6 +603,10 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
     e.ocReunion ? 1 : 0,
     Math.log(e.adp ?? 250),
     e.prevPpg > 0 ? (e.latePpg - e.earlyPpg) / Math.max(4, e.prevPpg) : 0,
+    e.healthyPpg !== undefined && e.prevPpg > 0
+      ? (e.healthyPpg - e.prevPpg) / Math.max(4, e.prevPpg)
+      : 0,
+    e.compromised,
   ];
 }
 
@@ -604,6 +650,8 @@ export function seasonGbmRow(e: SeasonExample): number[] {
     e.position === "RB" ? e.passShift : 0,
     e.earlyPpg,
     e.latePpg,
+    e.healthyPpg ?? e.prevPpg,
+    e.compromised,
   ];
 }
 
@@ -700,6 +748,8 @@ export async function projectDraftExamples(
       airYardsPerGame: was.airYardsPerGame,
       earlyPpg: was.earlyPpg,
       latePpg: was.latePpg,
+      healthyPpg: prev.healthyPpg.get(playerId),
+      compromised: prev.compromised.get(playerId) ?? 0,
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     };
