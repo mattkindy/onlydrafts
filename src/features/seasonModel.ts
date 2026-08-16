@@ -68,6 +68,14 @@ export interface SeasonExample {
   clearPpg?: number;
   /** share of last season's games inside a soft tissue shadow */
   softShadow: number;
+  /** his own NFL draft capital, 0 to 1 */
+  ownCapital: number;
+  /** the best rival at his position on his team, by recent scoring */
+  rivalPpg: number;
+  /** that room's best draft capital other than his own */
+  rivalCapital: number;
+  /** how much of the room's recent production belongs to him */
+  ownShare: number;
   /** preseason market rank for the target season, undefined when unlisted */
   adp?: number;
   /**
@@ -127,6 +135,8 @@ export const SEASON_RIDGE_FEATURES = [
   "playedHurtShare",
   "clearBoost",
   "softShadowShare",
+  "roomShare",
+  "rivalOverMe",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -250,6 +260,15 @@ export function groupOf(
   return qbChanged ? "skill-stayer-new-qb" : "skill-stayer-same-qb";
 }
 
+export interface RoomMate {
+  playerId: string;
+  /** 0 to 1, higher for an earlier NFL draft pick */
+  capital: number;
+  /** recency weighted scoring, last season counting most */
+  recentPpg: number;
+  rookie: boolean;
+}
+
 interface DraftContext {
   entryYear: Map<string, number>;
   birthYear: Map<string, number>;
@@ -259,6 +278,8 @@ interface DraftContext {
   prevQb: Map<string, string>;
   /** per team: share of last season's five most-used linemen still rostered */
   olRetention: Map<string, number>;
+  /** per team and position: everyone competing there next season */
+  roomBy: Map<string, RoomMate[]>;
   ocChanged: Map<string, boolean>;
   hcChanged: Map<string, boolean>;
   coachOf: (team: string, season: number, role: string) => string | undefined;
@@ -314,6 +335,7 @@ function primaryLine(
 async function draftContext(
   target: number,
   prev: SeasonData,
+  prev2Summaries_?: Map<string, SeasonSummary>,
 ): Promise<DraftContext> {
   const rosterWeekOne = await loadWeeklyRosters(target);
   const prevRoster = await loadWeeklyRosters(target - 1);
@@ -380,6 +402,39 @@ async function draftContext(
     }
   }
 
+  const roomBy = new Map<string, RoomMate[]>();
+  const prev2Summaries = prev2Summaries_;
+
+  for (const appearance of rosterWeekOne) {
+    if (appearance.week !== 1) {
+      continue;
+    }
+
+    const position = appearance.rawPosition.toUpperCase();
+
+    if (!SEASON_POSITIONS.includes(position)) {
+      continue;
+    }
+
+    const last = prev.summaries.get(appearance.playerId);
+    const before = prev2Summaries?.get(appearance.playerId);
+    const key = `${appearance.teamId}|${position}`;
+    const list = roomBy.get(key) ?? [];
+    list.push({
+      playerId: appearance.playerId,
+      capital:
+        appearance.draftOverall === undefined
+          ? 0.05
+          : (257 - Math.min(appearance.draftOverall, 257)) / 256,
+      recentPpg:
+        last && before
+          ? 0.75 * last.pointsPerGame + 0.25 * before.pointsPerGame
+          : (last?.pointsPerGame ?? 0),
+      rookie: appearance.draftYear === target,
+    });
+    roomBy.set(key, list);
+  }
+
   const coaches = await loadCoaches();
   const tendencies = await loadTendencies();
   const coachOf = (team: string, season: number, role: string) =>
@@ -433,6 +488,7 @@ async function draftContext(
     weekOneTeam,
     projectedQb: projectedQbByTeam(rosterWeekOne, prev.summaries),
     prevQb: primaryQbByTeam(prev.stats),
+    roomBy,
     olRetention,
     ocChanged,
     hcChanged,
@@ -448,7 +504,7 @@ export async function examplesForTransition(
   const prev = data.get(target - 1)!;
   const current = data.get(target)!;
   const prev2 = data.get(target - 2);
-  const context = await draftContext(target, prev);
+  const context = await draftContext(target, prev, prev2?.summaries);
   const adp = await loadAdp(target).catch(() => new Map());
   const examples: SeasonExample[] = [];
 
@@ -501,6 +557,7 @@ export async function examplesForTransition(
       compromised: prev.compromised.get(playerId) ?? 0,
       clearPpg: prev.clearPpg.get(playerId),
       softShadow: prev.softShadow.get(playerId) ?? 0,
+      ...roomFeatures(context, playerId, targetTeam, was.position, was.pointsPerGame),
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     });
@@ -535,6 +592,33 @@ function reunion(
   }
 
   return false;
+}
+
+
+function roomFeatures(
+  context: DraftContext,
+  playerId: string,
+  team: string,
+  position: string,
+  ownPpg: number,
+): {
+  ownCapital: number;
+  rivalPpg: number;
+  rivalCapital: number;
+  ownShare: number;
+} {
+  const room = context.roomBy.get(`${team}|${position}`) ?? [];
+  const me = room.find((r) => r.playerId === playerId);
+  const rivals = room.filter((r) => r.playerId !== playerId);
+  const totalPpg =
+    rivals.reduce((s, r) => s + r.recentPpg, 0) + Math.max(ownPpg, 0);
+
+  return {
+    ownCapital: me?.capital ?? 0.05,
+    rivalPpg: rivals.reduce((best, r) => Math.max(best, r.recentPpg), 0),
+    rivalCapital: rivals.reduce((best, r) => Math.max(best, r.capital), 0),
+    ownShare: totalPpg > 0 ? Math.max(ownPpg, 0) / totalPpg : 0.5,
+  };
 }
 
 function ageOf(
@@ -659,6 +743,8 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
       ? (e.clearPpg - e.prevPpg) / Math.max(4, e.prevPpg)
       : 0,
     e.softShadow,
+    e.ownShare,
+    e.prevPpg > 0 ? Math.min(2, e.rivalPpg / Math.max(4, e.prevPpg)) : 0,
   ];
 }
 
@@ -708,6 +794,8 @@ export function seasonGbmRow(e: SeasonExample): number[] {
       ? (e.clearPpg - e.prevPpg) / Math.max(4, e.prevPpg)
       : 0,
     e.softShadow,
+    e.ownShare,
+    e.prevPpg > 0 ? Math.min(2, e.rivalPpg / Math.max(4, e.prevPpg)) : 0,
   ];
 }
 
@@ -763,7 +851,7 @@ export async function projectDraftExamples(
 ): Promise<SeasonExample[]> {
   const prev = data.get(target - 1)!;
   const prev2 = data.get(target - 2);
-  const context = await draftContext(target, prev);
+  const context = await draftContext(target, prev, prev2?.summaries);
   const adp = await loadAdp(target).catch(() => new Map());
   const examples: SeasonExample[] = [];
 
@@ -808,6 +896,7 @@ export async function projectDraftExamples(
       compromised: prev.compromised.get(playerId) ?? 0,
       clearPpg: prev.clearPpg.get(playerId),
       softShadow: prev.softShadow.get(playerId) ?? 0,
+      ...roomFeatures(context, playerId, targetTeam, was.position, was.pointsPerGame),
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     };
