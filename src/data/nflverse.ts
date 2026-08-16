@@ -65,6 +65,19 @@ export async function loadGames(): Promise<GameRow[]> {
     }));
 }
 
+/** roster files spell a few teams differently from the schedule file */
+const TEAM_ALIASES: Record<string, string> = {
+  AZ: "ARI",
+  LAR: "LA",
+  JAC: "JAX",
+  WSH: "WAS",
+  SL: "LA",
+};
+
+export function canonicalTeam(team: string): string {
+  return TEAM_ALIASES[team] ?? team;
+}
+
 export async function loadWeeklyRosters(
   season: number,
 ): Promise<RosterAppearance[]> {
@@ -76,7 +89,7 @@ export async function loadWeeklyRosters(
       playerId: row["gsis_id"] ?? "",
       name: row["full_name"] ?? "",
       rawPosition: row["position"] ?? "",
-      teamId: row["team"] ?? "",
+      teamId: canonicalTeam(row["team"] ?? ""),
       season: toNumber(row["season"]) ?? season,
       week: toNumber(row["week"]) ?? 0,
       college: row["college"] || undefined,
@@ -102,7 +115,7 @@ export async function loadSnapCounts(season: number): Promise<SnapCountWeek[]> {
     .filter((row) => row["game_type"] === "REG" && row["player"])
     .map((row) => ({
       playerName: row["player"] ?? "",
-      teamId: row["team"] ?? "",
+      teamId: canonicalTeam(row["team"] ?? ""),
       season: toNumber(row["season"]) ?? season,
       week: toNumber(row["week"]) ?? 0,
       offensePct: toNumber(row["offense_pct"]) ?? 0,
@@ -148,7 +161,7 @@ export async function loadPlayerStats(
         position: row["position"] ?? "",
         season: toNumber(row["season"]) ?? season,
         week: toNumber(row["week"]) ?? 0,
-        teamId: row["recent_team"] ?? row["team"] ?? "",
+        teamId: canonicalTeam(row["recent_team"] ?? row["team"] ?? ""),
         statLine,
         targets: n("targets"),
         carries: n("carries"),

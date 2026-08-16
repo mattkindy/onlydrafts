@@ -228,7 +228,9 @@ function logHistory(note) {
 }
 
 async function boot() {
-  meta = await (await fetch("data/index.json")).json();
+  const bust = "?v=" + Math.floor(Date.now() / 60000);
+  meta = await (await fetch("data/index.json" + bust)).json();
+  window.__bust = bust;
   for (const entry of meta.weeks) {
     const option = document.createElement("option");
     option.value = entry.season + "|" + entry.week;
@@ -242,6 +244,7 @@ async function boot() {
     $("manual").value = saved.manual ?? "";
     $("keepn").value = saved.keepn ?? 2;
     if (saved.week && [...$("week").options].some((o) => o.value === saved.week)) $("week").value = saved.week;
+    if (!meta.weeks.length) $("weekwrap").hidden = true;
   }
   const fallbackView = meta.weeks.length ? "start" : "draft";
   setView(active ? (saved && saved.view ? saved.view : fallbackView) : "leagues");
@@ -458,7 +461,7 @@ function card(p, opts = {}) {
 async function slateFor(key) {
   if (!slates[key]) {
     const parts = key.split("|");
-    slates[key] = await (await fetch("data/slate-" + parts[0] + "-" + parts[1] + ".json")).json();
+    slates[key] = await (await fetch("data/slate-" + parts[0] + "-" + parts[1] + ".json" + (window.__bust ?? ""))).json();
   }
   return slates[key];
 }
@@ -486,7 +489,7 @@ function seasonNotStarted() {
 
 async function renderRoster() {
   if (!board) {
-    board = await (await fetch("data/board-" + meta.boardSeason + ".json")).json();
+    board = await (await fetch("data/board-" + meta.boardSeason + ".json" + (window.__bust ?? ""))).json();
     boardByKey = new Map(board.players.map((p) => [p.key, p]));
   }
 
@@ -860,7 +863,7 @@ function renderDraft(staleAt) {
 
 async function renderDraftView() {
   if (!board) {
-    board = await (await fetch("data/board-" + meta.boardSeason + ".json")).json();
+    board = await (await fetch("data/board-" + meta.boardSeason + ".json" + (window.__bust ?? ""))).json();
     boardByKey = new Map(board.players.map((p) => [p.key, p]));
   }
 

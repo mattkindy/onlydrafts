@@ -18,6 +18,8 @@ import {
 } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
 import { buildPreseasonWorld } from "../src/features/preseason.js";
+import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
+import { seededRng } from "../src/sim/rng.js";
 import { loadAdp } from "../src/data/adp.js";
 
 const DOCS = join(import.meta.dirname, "..", "docs", "weekly");
@@ -189,9 +191,24 @@ async function main(): Promise<void> {
   }
 
   const adp = await loadAdp(season).catch(() => new Map());
+  console.log("simulating seasons for the board...");
+  const sims = simulatePlayerSeasons(
+    world.players,
+    season,
+    world.games,
+    world.residuals,
+    world.oppAdjust,
+    world.catcherLoading,
+    2000,
+    seededRng(17),
+    world.seasonNoise,
+  );
+  const simById = new Map(sims.map((s) => [s.playerId, s]));
+
   const board = world.players
     .map((p) => {
       const f = factors(p.playerId, p.projectedPpg);
+      const sim = simById.get(p.playerId);
       return {
         name: p.name,
         key: normalizeName(p.name),
@@ -203,6 +220,15 @@ async function main(): Promise<void> {
         ),
         adp: adp.get(`${normalizeName(p.name)}|${p.position}`)?.adp ?? null,
         bye: world.byeWeek.get(p.teamId) ?? null,
+        sim: sim
+          ? {
+              mean: Math.round(sim.meanTotal),
+              low: Math.round(sim.p10),
+              mid: Math.round(sim.p50),
+              high: Math.round(sim.p90),
+              games: Number(sim.meanGames.toFixed(1)),
+            }
+          : null,
         plus: f.plus,
         minus: f.minus,
         weeks: (weekOpp.get(p.teamId) ?? [])
