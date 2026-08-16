@@ -18,6 +18,8 @@
     }
   }
   * { box-sizing: border-box; }
+  /* .controls sets display:flex, which would otherwise beat the attribute */
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--ink);
     font-family: system-ui, sans-serif; line-height: 1.45; }
   .wrap { max-width: 64rem; margin: 0 auto; padding: 1rem 1rem 4rem; }
@@ -169,19 +171,16 @@
   <div class="controls" id="ctl">
     <label id="userwrap">sleeper user <input id="username" size="12"></label>
     <label id="weekwrap">week <select id="week"></select></label>
-    <label id="teamwrap" hidden>team <select id="team"></select></label>
-    <label id="keepwrap" hidden>keepers/team <input id="keepn" type="number" value="2" min="0" max="6" style="width:3.2rem"></label>
+    <label id="keepwrap">keepers per team
+      <input id="keepn" type="number" value="3" min="0" max="6" style="width:3.2rem"></label>
+    <span id="posfilter"></span>
+    <label id="searchwrap">find <input id="search" size="12" placeholder="a name"></label>
     <button class="act" id="go">load</button>
     <span id="status"></span>
     <progress id="prog" max="100" value="0" hidden></progress>
   </div>
 
-  <div class="controls" id="filterwrap" hidden>
-    <span id="posfilter"></span>
-    <input id="search" size="12" placeholder="search a name">
-  </div>
-
-  <div class="controls" id="manualwrap" style="display:block">
+  <div class="controls" id="manualwrap">
     <label class="hint" id="manualhint"></label>
     <textarea id="manual"></textarea>
   </div>
@@ -282,19 +281,7 @@ function setView(next) {
   }
 
   for (const b of document.querySelectorAll("#subnav button")) b.classList.toggle("on", b.dataset.view === next);
-  const needsWeek = (next === "start" || next === "waivers") && meta.weeks.length > 0;
-  $("userwrap").hidden = next !== "leagues";
-  $("weekwrap").hidden = !needsWeek;
-  $("teamwrap").hidden = true;
-  $("keepwrap").hidden = next !== "draft";
-  $("ctl").hidden = (next === "roster" && !!active) ||
-    ((next === "start" || next === "waivers") && !meta.weeks.length);
-  $("filterwrap").hidden = next !== "draft";
-  $("manualwrap").style.display = next === "start" || next === "waivers" || next === "draft" ? "block" : "none";
-  if (next === "roster") $("manualwrap").style.display = "none";
-  $("manualhint").textContent = next === "draft"
-    ? "extra names to mark taken, one per line"
-    : "no sleeper league? paste your roster, one name per line";
+  applyToolbar(next);
   const copy = {
     leagues: ["My leagues",
       "Type your Sleeper username, then tap a league to open it. Draft help, lineups, and waivers all live inside a league.",
@@ -321,10 +308,63 @@ function setView(next) {
   if (next === "leagues" && leagues.length) renderLeagues();
 }
 
+/*
+ * Each section needs different controls, so each declares its own
+ * instead of sharing one bar and hiding pieces of it. `action` is what
+ * the button does here, said in the section's own words.
+ */
+const TOOLBARS = {
+  leagues: {
+    fields: ["userwrap"],
+    action: "find my leagues",
+  },
+  roster: {
+    fields: [],
+    action: "reload from sleeper",
+  },
+  draft: {
+    fields: ["keepwrap", "posfilter", "searchwrap"],
+    action: null,
+    manual: "extra names to mark as taken, one per line",
+  },
+  start: {
+    fields: ["weekwrap"],
+    action: "load this week",
+    manual: "no sleeper league? paste your roster, one name per line",
+  },
+  waivers: {
+    fields: ["weekwrap"],
+    action: "load this week",
+    manual: "no sleeper league? paste your roster, one name per line",
+  },
+};
+
+const TOOLBAR_FIELDS = ["userwrap", "weekwrap", "keepwrap", "posfilter", "searchwrap"];
+
+function applyToolbar(next) {
+  const bar = TOOLBARS[next] ?? { fields: [], action: null };
+  const weekMissing = bar.fields.includes("weekwrap") && !meta.weeks.length;
+
+  for (const field of TOOLBAR_FIELDS) {
+    $(field).hidden = !bar.fields.includes(field) || (field === "weekwrap" && weekMissing);
+  }
+
+  $("go").hidden = !bar.action && next !== "draft";
+  $("ctl").hidden = weekMissing ||
+    (!bar.fields.length && !bar.action && next !== "draft");
+  $("manualwrap").hidden = !bar.manual;
+  $("manualhint").textContent = bar.manual ?? "";
+}
+
 function refreshGoLabel() {
-  if (view === "leagues") { $("go").textContent = "find my leagues"; return; }
-  if (view !== "draft") { $("go").textContent = "refresh"; return; }
-  $("go").textContent = draftPoll ? "pause" : store_get("draftState", null) ? "resume draft" : "start draft";
+  if (view !== "draft") {
+    $("go").textContent = TOOLBARS[view]?.action ?? "refresh";
+    return;
+  }
+
+  $("go").textContent = draftPoll
+    ? "pause watching"
+    : store_get("draftState", null) ? "resume draft" : "start watching the draft";
 }
 
 async function loadLeagues() {
