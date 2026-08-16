@@ -46,6 +46,7 @@ export function drawWeekOutcomes(
   week: PlayerWeek[],
   residuals: ResidualModel,
   rng: () => number,
+  catcherLoadingByTeam?: Map<string, number>,
 ): Map<string, number> {
   const gameShock = new Map<string, number>();
   const teamShock = new Map<string, number>();
@@ -70,8 +71,15 @@ export function drawWeekOutcomes(
     if (player.position === "QB") {
       z = GAME_LOADING * zGame + Math.sqrt(1 - 0.028) * zTeam;
     } else if (CATCHERS.has(player.position)) {
-      const own = Math.sqrt(1 - 0.028 - QB_TO_CATCHER * QB_TO_CATCHER);
-      z = GAME_LOADING * zGame + QB_TO_CATCHER * zTeam + own * normalDraw(rng);
+      const loading = Math.min(
+        0.4,
+        Math.max(
+          0.1,
+          catcherLoadingByTeam?.get(player.teamId) ?? QB_TO_CATCHER,
+        ),
+      );
+      const own = Math.sqrt(1 - 0.028 - loading * loading);
+      z = GAME_LOADING * zGame + loading * zTeam + own * normalDraw(rng);
     } else {
       z = GAME_LOADING * zGame + Math.sqrt(1 - 0.028) * normalDraw(rng);
     }

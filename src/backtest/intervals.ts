@@ -105,3 +105,83 @@ export function sampleOutcome(
 ): number {
   return outcomeQuantile(model, position, predicted, rng());
 }
+
+export interface SeasonNoise {
+  /** per position: sorted per-season mean residuals across players */
+  biasByPosition: Map<string, number[]>;
+  /** weekly residuals with each player-season's mean removed */
+  within: ResidualModel;
+}
+
+export interface SeasonTrainingPoint extends TrainingPoint {
+  playerId: string;
+  season: number;
+}
+
+/**
+ * Season totals need two noise scales: how wrong the model is about a
+ * player all season (drawn once per simulated season) and how much his
+ * weeks vary around that (drawn every week). Building them separately
+ * keeps simulated season totals from being too certain.
+ */
+export function buildSeasonNoise(
+  points: SeasonTrainingPoint[],
+  buckets: number,
+): SeasonNoise {
+  const byPlayerSeason = new Map<string, SeasonTrainingPoint[]>();
+
+  for (const point of points) {
+    const key = `${point.playerId}|${point.season}`;
+    const list = byPlayerSeason.get(key) ?? [];
+    list.push(point);
+    byPlayerSeason.set(key, list);
+  }
+
+  const biasByPosition = new Map<string, number[]>();
+  const demeaned: TrainingPoint[] = [];
+
+  for (const list of byPlayerSeason.values()) {
+    if (list.length < 6) {
+      continue;
+    }
+
+    const mean =
+      list.reduce((s, p) => s + (p.actual - p.predicted), 0) / list.length;
+    const position = list[0]!.position;
+    const biases = biasByPosition.get(position) ?? [];
+    biases.push(mean);
+    biasByPosition.set(position, biases);
+
+    for (const p of list) {
+      demeaned.push({
+        position: p.position,
+        predicted: p.predicted,
+        actual: p.actual - mean,
+      });
+    }
+  }
+
+  for (const biases of biasByPosition.values()) {
+    biases.sort((a, b) => a - b);
+  }
+
+  return {
+    biasByPosition,
+    within: buildResidualModel(demeaned, buckets),
+  };
+}
+
+/** one per-season bias draw for a player at this position */
+export function sampleSeasonBias(
+  noise: SeasonNoise,
+  position: string,
+  rng: () => number,
+): number {
+  const biases = noise.biasByPosition.get(position);
+
+  if (!biases || biases.length === 0) {
+    return 0;
+  }
+
+  return biases[Math.min(biases.length - 1, Math.floor(rng() * biases.length))]!;
+}
