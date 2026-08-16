@@ -17,6 +17,8 @@ import {
   outcomeQuantile,
 } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
+import { buildPreseasonWorld } from "../src/features/preseason.js";
+import { loadAdp } from "../src/data/adp.js";
 
 const DOCS = join(import.meta.dirname, "..", "docs", "weekly");
 
@@ -87,7 +89,45 @@ async function main(): Promise<void> {
     console.log(`week ${week}: ${rows.length} players`);
   }
 
-  await writeFile(join(DOCS, "data", "index.json"), JSON.stringify(index));
+  // season draft board with replacement value, for the draft view
+  const world = await buildPreseasonWorld(season);
+  const REPLACEMENT_RANK: Record<string, number> = { QB: 20, RB: 40, WR: 40, TE: 16 };
+  const replacement = new Map<string, number>();
+
+  for (const position of Object.keys(REPLACEMENT_RANK)) {
+    const list = world.players
+      .filter((p) => p.position === position)
+      .sort((a, b) => b.projectedPpg - a.projectedPpg);
+    const at = list[Math.min(REPLACEMENT_RANK[position]!, list.length) - 1];
+    replacement.set(position, at?.projectedPpg ?? 0);
+  }
+
+  const adp = await loadAdp(season).catch(() => new Map());
+  const board = world.players
+    .map((p) => ({
+      name: p.name,
+      key: normalizeName(p.name),
+      position: p.position,
+      team: p.teamId,
+      ppg: Number(p.projectedPpg.toFixed(1)),
+      vor: Number(
+        (p.projectedPpg - (replacement.get(p.position) ?? 0)).toFixed(1),
+      ),
+      adp: adp.get(`${normalizeName(p.name)}|${p.position}`)?.adp ?? null,
+      bye: world.byeWeek.get(p.teamId) ?? null,
+    }))
+    .sort((a, b) => b.vor - a.vor);
+
+  await writeFile(
+    join(DOCS, "data", `board-${season}.json`),
+    JSON.stringify({ season, players: board }),
+  );
+  console.log(`board: ${board.length} players`);
+
+  await writeFile(
+    join(DOCS, "data", "index.json"),
+    JSON.stringify({ weeks: index, boardSeason: season }),
+  );
   await writeFile(
     join(DOCS, "index.html"),
     await readFile(join(import.meta.dirname, "..", "tools", "ui", "index.html"), "utf8"),
