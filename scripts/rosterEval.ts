@@ -267,9 +267,11 @@ async function main(): Promise<void> {
     let challengerSum = 0;
     let fieldSum = 0;
     let count = 0;
+    const byProfile = new Map<number, { wins: number; teams: number }>();
 
     for (let slot = 0; slot < TEAMS; slot++) {
       for (let d = 0; d < REALIZED_DRAFTS; d++) {
+      const manageRng = seededRng(slot * 1000 + d + 500);
       const rosters = draft(
         adpOrdered,
         fieldFor(slot, picker, projectionPick),
@@ -278,12 +280,47 @@ async function main(): Promise<void> {
       const wins = new Array<number>(TEAMS).fill(0);
       const rostered = new Set(rosters.flat());
 
+      // manager profiles: challenger and the sharp rival stay active,
+      // the rest split into active, casual, and asleep
+      const profiles: { threshold: number; act: number }[] = [];
+      const others = [
+        ...Array(3).fill({ threshold: 3, act: 1 }),
+        ...Array(4).fill({ threshold: 6, act: 0.5 }),
+        ...Array(3).fill({ threshold: Infinity, act: 0 }),
+      ];
+
+      for (let i = others.length - 1; i > 0; i--) {
+        const j = Math.floor(manageRng() * (i + 1));
+        [others[i], others[j]] = [others[j], others[i]];
+      }
+
+      let cursor = 0;
+
+      for (let team = 0; team < TEAMS; team++) {
+        if (team === slot || team === (slot + 6) % TEAMS) {
+          profiles.push({ threshold: 3, act: 1 });
+        } else {
+          profiles.push(others[cursor++]!);
+        }
+      }
+
       for (let w = 0; w < 14; w++) {
         const week = w + 1;
 
-        // one waiver move per team per week from week 3 on
+        // waiver claims from week 3, processed worst record first
         if (week >= 3) {
-          for (const roster of rosters) {
+          const priority = Array.from({ length: TEAMS }, (_, t) => t).sort(
+            (a, b) => wins[a]! - wins[b]!,
+          );
+
+          for (const team of priority) {
+            const profile = profiles[team]!;
+
+            if (manageRng() >= profile.act) {
+              continue;
+            }
+
+            const roster = rosters[team]!;
             const freeAgents = world.players.filter(
               (p) => !rostered.has(p.playerId),
             );
@@ -300,7 +337,7 @@ async function main(): Promise<void> {
 
                 const gain = recentForm(fa.playerId, week) - own;
 
-                if (gain > 3 && (!best || gain > best.gain)) {
+                if (gain > profile.threshold && (!best || gain > best.gain)) {
                   best = { drop: p, add: fa.playerId, gain };
                 }
               }
@@ -355,16 +392,36 @@ async function main(): Promise<void> {
       fieldSum +=
         wins.reduce((s, x, team) => (team === slot ? s : s + x), 0) / (TEAMS - 1);
       count++;
+
+      for (let team = 0; team < TEAMS; team++) {
+        if (team === slot || team === (slot + 6) % TEAMS) {
+          continue;
+        }
+
+        const key = profiles[team]!.threshold;
+        const entry = byProfile.get(key) ?? { wins: 0, teams: 0 };
+        entry.wins += wins[team]!;
+        entry.teams++;
+        byProfile.set(key, entry);
+      }
       }
     }
 
+    const profileLabel = new Map([[3, "active"], [6, "casual"], [Infinity, "asleep"]]);
+    const profileText = [...byProfile.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(
+        ([key, { wins, teams }]) =>
+          `${profileLabel.get(key)} ${(wins / teams).toFixed(2)}`,
+      )
+      .join(", ");
     console.log(
-      `${label.padEnd(24)} ${(challengerSum / count).toFixed(2)} wins vs field ${(fieldSum / count).toFixed(2)}`,
+      `${label.padEnd(24)} ${(challengerSum / count).toFixed(2)} wins vs field ${(fieldSum / count).toFixed(2)}  (field by manager: ${profileText})`,
     );
   };
 
   console.log(
-    `\nsame drafts against the ${season} season that happened, with weekly management:`,
+    `\nsame drafts against the ${season} season that happened, mixed managers and waiver priority:`,
   );
   realized("adp order (control)", (available) => available[0]);
   realized("model + replacement", projectionPick);
