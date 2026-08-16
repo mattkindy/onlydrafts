@@ -10,6 +10,11 @@ import { loadAdp } from "../src/data/adp.js";
 import { normalizeName } from "../src/data/names.js";
 import type { SeasonPlayer } from "../src/sim/playerSeason.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
+import {
+  weeklyExamplesForSeason,
+  weeklyRow,
+} from "../src/features/weeklyModel.js";
+import { predictRidge } from "../src/backtest/ridge.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { pickLineup } from "../src/sim/lineup.js";
 
@@ -263,7 +268,17 @@ async function main(): Promise<void> {
     return games === 0 ? 0 : sum / games;
   };
 
-  const realized = (label: string, picker: Picker) => {
+  const seasonWeekly = await weeklyExamplesForSeason(season, world.games);
+  const modelPred = new Map<string, number>();
+
+  for (const e of seasonWeekly) {
+    modelPred.set(
+      `${e.playerId}|${e.week}`,
+      predictRidge(world.weeklyWeights, weeklyRow(e)),
+    );
+  }
+
+  const realized = (label: string, picker: Picker, modelManaged = false) => {
     let challengerSum = 0;
     let fieldSum = 0;
     let count = 0;
@@ -326,16 +341,21 @@ async function main(): Promise<void> {
             );
             let best: { drop: string; add: string; gain: number } | undefined;
 
+            const valueOf = (id: string): number =>
+              modelManaged && team === slot
+                ? modelPred.get(`${id}|${week}`) ?? recentForm(id, week)
+                : recentForm(id, week);
+
             for (const p of roster) {
               const player = world.playersById.get(p)!;
-              const own = recentForm(p, week);
+              const own = valueOf(p);
 
               for (const fa of freeAgents) {
                 if (fa.position !== player.position) {
                   continue;
                 }
 
-                const gain = recentForm(fa.playerId, week) - own;
+                const gain = valueOf(fa.playerId) - own;
 
                 if (gain > profile.threshold && (!best || gain > best.gain)) {
                   best = { drop: p, add: fa.playerId, gain };
@@ -351,16 +371,25 @@ async function main(): Promise<void> {
           }
         }
 
-        const teamPoints = rosters.map((roster) => {
+        const teamPoints = rosters.map((roster, team) => {
+          const scoreOf = (id: string): number => {
+            if (week <= 2) {
+              return world.playersById.get(id)!.projectedPpg;
+            }
+
+            if (modelManaged && team === slot) {
+              return modelPred.get(`${id}|${week}`) ?? recentForm(id, week);
+            }
+
+            return recentForm(id, week);
+          };
+
           const candidates = roster
             .filter((id) => actualWeekly.has(`${id}|${week}`))
             .map((id) => ({
               playerId: id,
               position: world.playersById.get(id)!.position,
-              score:
-                week <= 2
-                  ? world.playersById.get(id)!.projectedPpg
-                  : recentForm(id, week),
+              score: scoreOf(id),
             }));
 
           let points = 0;
@@ -426,6 +455,7 @@ async function main(): Promise<void> {
   realized("adp order (control)", (available) => available[0]);
   realized("model + replacement", projectionPick);
   realized("model + repl + risk", riskAwarePick);
+  realized("risk board, model-managed", riskAwarePick, true);
 }
 
 main().catch((error) => {

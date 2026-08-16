@@ -38,6 +38,8 @@ export interface PreseasonWorld {
   catcherLoading: Map<string, number>;
   /** bye week per NFL team, for roster construction logic */
   byeWeek: Map<string, number>;
+  /** the weekly kernel's weights, trained on seasons before this one */
+  weeklyWeights: number[];
 }
 
 export async function buildPreseasonWorld(
@@ -258,5 +260,6 @@ export async function buildPreseasonWorld(
     oppAdjust,
     catcherLoading,
     byeWeek,
+    weeklyWeights,
   };
 }
