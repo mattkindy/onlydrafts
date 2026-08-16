@@ -3,87 +3,94 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>depth-chart</title>
+<title>depthchart</title>
 <style>
   :root {
-    --bg: #FBFCFD; --grid: #E7EEF5; --ink: #1C2430; --muted: #5B6470;
-    --faint: #8E96A2; --draft: #4A78B0; --draft-soft: rgba(74,120,176,0.35);
-    --accent: #C43C2C; --surface: #FFFFFF; --ok: #2E7D5B;
+    --bg: #10141C; --panel: #1A2029; --edge: #2A3342; --ink: #E8ECF2;
+    --muted: #8B95A5; --faint: #5B6575; --go: #35C06F; --mark: #F5B841;
+    --chip: #232B38;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #1D2126; --grid: #272D35; --ink: #E6E8EB; --muted: #A2A9B2;
-      --faint: #6F7680; --draft: #7FA5D4; --draft-soft: rgba(127,165,212,0.35);
-      --accent: #E07060; --surface: #232830; --ok: #6FBF9A;
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #EFF1F4; --panel: #FFFFFF; --edge: #D8DCE3; --ink: #171B22;
+      --muted: #5A6270; --faint: #98A0AD; --go: #1E8A4C; --mark: #D99A16;
+      --chip: #E7EAEF;
     }
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--bg);
-    background-image: linear-gradient(var(--grid) 1px, transparent 1px),
-      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-    background-size: 28px 28px;
-    color: var(--ink); font-family: system-ui, sans-serif; line-height: 1.45;
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, sans-serif; line-height: 1.45;
   }
   .wrap { max-width: 64rem; margin: 0 auto; padding: 1rem 1rem 4rem; }
   .mono { font-family: ui-monospace, Menlo, monospace; font-size: .7rem;
     letter-spacing: .1em; text-transform: uppercase; }
-  nav { display: flex; gap: .5rem; align-items: center; margin: .5rem 0 1rem; }
-  nav .brand { color: var(--draft); margin-right: auto; }
+  nav { display: flex; gap: .4rem; align-items: center; margin: .5rem 0 1rem; }
+  nav .brand { margin-right: auto; font-weight: 800; font-size: 1.05rem;
+    letter-spacing: -0.02em; }
+  nav .brand b { color: var(--go); }
   nav button {
-    font: inherit; font-size: .8rem; background: var(--surface);
-    color: var(--muted); border: 1px solid var(--draft-soft);
-    padding: .35rem .9rem; border-radius: 2px; cursor: pointer;
+    font: inherit; font-size: .8rem; font-weight: 600;
+    background: transparent; color: var(--muted);
+    border: none; border-bottom: 2px solid transparent;
+    padding: .35rem .7rem; cursor: pointer;
   }
-  nav button.on { background: var(--draft); color: var(--surface);
-    border-color: var(--draft); }
-  .controls { border: 1px solid var(--draft); background: var(--surface);
-    padding: .7rem 1rem; margin: 0 0 1rem; display: flex; gap: .8rem;
-    flex-wrap: wrap; align-items: center; }
+  nav button.on { color: var(--ink); border-bottom-color: var(--go); }
+  .controls { background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 10px; padding: .7rem 1rem; margin: 0 0 1rem;
+    display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
   .controls label { color: var(--muted); font-size: .82rem; }
   input, select {
     font: inherit; font-size: .85rem; color: var(--ink); background: var(--bg);
-    border: 1px solid var(--draft-soft); padding: .3rem .5rem; border-radius: 2px;
+    border: 1px solid var(--edge); padding: .3rem .5rem; border-radius: 7px;
   }
   button.act {
-    font: inherit; font-size: .85rem; background: var(--draft);
-    color: var(--surface); border: none; padding: .35rem .9rem;
-    border-radius: 2px; cursor: pointer;
+    font: inherit; font-size: .85rem; font-weight: 700;
+    background: var(--go); color: #0C1117; border: none;
+    padding: .4rem 1.1rem; border-radius: 999px; cursor: pointer;
   }
-  button.act:hover { background: var(--accent); }
+  button.act:hover { filter: brightness(1.12); }
   #status { color: var(--faint); font-size: .82rem; }
-  progress { width: 9rem; accent-color: var(--draft); }
+  progress { width: 9rem; accent-color: var(--go); }
   textarea { width: 100%; height: 3.2rem; font: inherit; font-size: .85rem;
     color: var(--ink); background: var(--bg);
-    border: 1px solid var(--draft-soft); padding: .4rem; }
-  h2 { font-size: .85rem; margin: 1.2rem 0 .5rem; color: var(--draft); }
+    border: 1px solid var(--edge); padding: .4rem; border-radius: 7px; }
+  h2 { font-size: .78rem; margin: 1.3rem 0 .5rem; color: var(--faint);
+    font-family: ui-monospace, Menlo, monospace; letter-spacing: .12em;
+    text-transform: uppercase; }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
     gap: .7rem; }
-  .card { background: var(--surface); border: 1px solid var(--draft-soft);
-    border-radius: 2px; padding: .7rem .9rem; position: relative; }
-  .card.mine { border-color: var(--draft); box-shadow: inset 0 0 0 1px var(--draft); }
+  .card { background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 12px; padding: .75rem .95rem; }
+  .card.mine { border-color: var(--go); }
   .card .top { display: flex; justify-content: space-between; align-items: baseline; }
-  .card .nm { font-weight: 600; font-size: .92rem; white-space: nowrap;
+  .card .nm { font-weight: 700; font-size: .92rem; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
-  .card .big { font-size: 1.3rem; font-weight: 700; }
+  .card .big { font-size: 1.35rem; font-weight: 800;
+    font-variant-numeric: tabular-nums; }
   .card .sub { color: var(--faint); font-size: .74rem;
     display: flex; justify-content: space-between; margin-top: .1rem; }
-  .range { position: relative; height: 8px; background: var(--grid);
-    border-radius: 2px; margin-top: .55rem; }
+  .range { position: relative; height: 8px; background: var(--chip);
+    border-radius: 999px; margin-top: .6rem; }
   .range .span { position: absolute; top: 0; bottom: 0;
-    background: var(--draft-soft); border-radius: 2px; }
-  .range .mark { position: absolute; top: -2px; width: 3px; height: 12px;
-    background: var(--accent); }
-  .tag { font-size: .72rem; color: var(--ok); margin-top: .4rem; }
-  .tag.warn { color: var(--accent); }
+    background: var(--edge); border-radius: 999px; }
+  .card.mine .range .span { background: color-mix(in srgb, var(--go) 45%, var(--chip)); }
+  .range .mark { position: absolute; top: -3px; width: 3px; height: 14px;
+    background: var(--mark); border-radius: 2px; }
+  .tag { font-size: .72rem; font-weight: 700; color: var(--go); margin-top: .45rem; }
+  .tag.warn { color: var(--mark); }
   .hint { color: var(--faint); font-size: .78rem; }
-  .gone { opacity: .35; }
+  .gone { opacity: .3; }
+  @media (max-width: 640px) {
+    nav { flex-wrap: wrap; }
+    nav .brand { width: 100%; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <nav>
-    <span class="brand mono">depth-chart</span>
+    <span class="brand">depth<b>chart</b></span>
     <button data-view="draft">draft</button>
     <button data-view="start" class="on">start</button>
     <button data-view="waivers">waivers</button>
