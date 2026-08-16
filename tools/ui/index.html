@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>depth-chart weekly</title>
+<style>
+  :root {
+    --bg: #FBFCFD; --grid: #E7EEF5; --ink: #1C2430; --muted: #5B6470;
+    --faint: #8E96A2; --draft: #4A78B0; --draft-soft: rgba(74,120,176,0.35);
+    --accent: #C43C2C; --surface: #FFFFFF; --ok: #2E7D5B;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1D2126; --grid: #272D35; --ink: #E6E8EB; --muted: #A2A9B2;
+      --faint: #6F7680; --draft: #7FA5D4; --draft-soft: rgba(127,165,212,0.35);
+      --accent: #E07060; --surface: #232830; --ok: #6FBF9A;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+    color: var(--ink);
+    font-family: system-ui, sans-serif; line-height: 1.5;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 1rem 1rem 4rem; }
+  .mono { font-family: ui-monospace, Menlo, monospace; font-size: .7rem;
+    letter-spacing: .1em; text-transform: uppercase; }
+  .bar-frame { border: 1px solid var(--draft); background: var(--surface);
+    padding: .8rem 1.2rem; margin: 1rem 0; display: flex; gap: 1rem;
+    flex-wrap: wrap; align-items: center; }
+  .bar-frame label { color: var(--muted); font-size: .85rem; }
+  input, select {
+    font: inherit; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--draft-soft); padding: .3rem .5rem; border-radius: 2px;
+  }
+  input#league { width: 16rem; }
+  button {
+    font: inherit; background: var(--draft); color: var(--surface);
+    border: none; padding: .35rem .9rem; border-radius: 2px; cursor: pointer;
+  }
+  button:hover { background: var(--accent); }
+  #status { color: var(--faint); font-size: .85rem; }
+  progress { width: 10rem; accent-color: var(--draft); }
+  h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; }
+  .player { display: grid; grid-template-columns: 11rem 3rem 1fr 9rem;
+    gap: .8rem; align-items: center; padding: .25rem 0; font-size: .85rem; }
+  .player .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player.mine .nm { font-weight: 600; }
+  .range { position: relative; height: 10px; background: var(--grid);
+    border-radius: 2px; }
+  .range .span { position: absolute; top: 0; bottom: 0;
+    background: var(--draft-soft); border-radius: 2px; }
+  .player.mine .range .span { background: var(--draft); opacity: .55; }
+  .range .mark { position: absolute; top: -2px; width: 3px; height: 14px;
+    background: var(--accent); }
+  .meta { color: var(--faint); font-size: .75rem; text-align: right; }
+  .beats { color: var(--ok); font-size: .75rem; text-align: right; }
+  textarea { width: 100%; height: 3.5rem; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--draft-soft); padding: .4rem; }
+  .hint { color: var(--faint); font-size: .78rem; }
+  @media (max-width: 640px) {
+    .player { grid-template-columns: 8rem 2.5rem 1fr; }
+    .player .meta:last-child, .player .beats { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="mono" style="color:var(--draft)">depth-chart weekly sheet</p>
+
+  <div class="bar-frame">
+    <label>week <select id="week"></select></label>
+    <label>sleeper league <input id="league" placeholder="league id (optional)"></label>
+    <label id="teamwrap" hidden>team <select id="team"></select></label>
+    <button id="load">load</button>
+    <span id="status"></span>
+    <progress id="prog" max="100" value="0" hidden></progress>
+  </div>
+
+  <div class="bar-frame" style="display:block">
+    <label class="hint">or paste your roster, one name per line</label>
+    <textarea id="manual" placeholder="Puka Nacua&#10;Jahmyr Gibbs"></textarea>
+  </div>
+
+  <div id="out"></div>
+  <p class="hint">bar spans floor to ceiling (10th to 90th percentile); the red mark is the projection. Your players are solid; the rest are the best outside your roster.</p>
+</div>
+
+<script>
+const POSITIONS = ["QB", "RB", "WR", "TE"];
+let slates = {};
+let index = [];
+
+function norm(name) {
+  return name.toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b\.?$/, "").replace(/[^a-z]/g, "");
+}
+
+async function boot() {
+  index = await (await fetch("data/index.json")).json();
+  const week = document.getElementById("week");
+
+  for (const entry of index) {
+    const option = document.createElement("option");
+    option.value = `${entry.season}|${entry.week}`;
+    option.textContent = `${entry.season} week ${entry.week}`;
+    week.appendChild(option);
+  }
+
+  week.value = `${index[index.length - 1].season}|${index[index.length - 1].week}`;
+}
+
+async function slateFor(key) {
+  if (!slates[key]) {
+    const parts = key.split("|");
+    slates[key] = await (await fetch(`data/slate-${parts[0]}-${parts[1]}.json`)).json();
+  }
+
+  return slates[key];
+}
+
+let leagueRosters = null;
+
+async function loadLeague(id, status, prog) {
+  status.textContent = "fetching league...";
+  const [rosters, users] = await Promise.all([
+    fetch(`https://api.sleeper.app/v1/league/${id}/rosters`).then((r) => r.json()),
+    fetch(`https://api.sleeper.app/v1/league/${id}/users`).then((r) => r.json()),
+  ]);
+
+  status.textContent = "fetching player list (5MB, once)...";
+  prog.hidden = false;
+  prog.value = 30;
+  const players = await fetch("https://api.sleeper.app/v1/players/nfl").then((r) => r.json());
+  prog.value = 90;
+
+  const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
+  leagueRosters = rosters.map((r) => ({
+    owner: nameOf.get(r.owner_id) ?? r.owner_id,
+    keys: (r.players ?? [])
+      .map((pid) => players[pid])
+      .filter((p) => p && p.full_name)
+      .map((p) => norm(p.full_name)),
+  }));
+
+  const team = document.getElementById("team");
+  team.innerHTML = "";
+
+  for (const r of leagueRosters) {
+    const option = document.createElement("option");
+    option.value = r.owner;
+    option.textContent = r.owner;
+    team.appendChild(option);
+  }
+
+  document.getElementById("teamwrap").hidden = false;
+  prog.hidden = true;
+  status.textContent = "pick your team, then load again";
+}
+
+function myKeys() {
+  const manual = document.getElementById("manual").value.trim();
+
+  if (manual) {
+    return new Set(manual.split("\n").map((line) => norm(line)).filter(Boolean));
+  }
+
+  if (leagueRosters) {
+    const owner = document.getElementById("team").value;
+    const roster = leagueRosters.find((r) => r.owner === owner);
+    return new Set(roster ? roster.keys : []);
+  }
+
+  return new Set();
+}
+
+function render(slate, mine) {
+  const out = document.getElementById("out");
+  out.innerHTML = "";
+  const max = Math.max(...slate.players.map((p) => p.ceiling));
+
+  for (const position of POSITIONS) {
+    const rows = slate.players.filter((p) => p.position === position);
+    const owned = rows.filter((p) => [...mine].some((k) => p.key.includes(k) || k.includes(p.key)));
+    const rest = rows.filter((p) => !owned.includes(p)).slice(0, 6);
+    const worst = owned[owned.length - 1];
+
+    const h = document.createElement("h2");
+    h.className = "mono";
+    h.textContent = position;
+    out.appendChild(h);
+
+    for (const p of [...owned, ...rest]) {
+      const div = document.createElement("div");
+      div.className = "player" + (owned.includes(p) ? " mine" : "");
+      const tail = !owned.includes(p) && worst && p.predicted > worst.predicted + 2
+        ? `<span class="beats">+${(p.predicted - worst.predicted).toFixed(1)} over ${worst.name}</span>`
+        : `<span class="meta">${p.opponent} &middot; ${p.snaps}% snaps</span>`;
+      div.innerHTML = `
+        <span class="nm">${p.name}</span>
+        <span class="meta">${p.predicted.toFixed(1)}</span>
+        <span class="range">
+          <span class="span" style="left:${(p.floor / max) * 100}%; width:${((p.ceiling - p.floor) / max) * 100}%"></span>
+          <span class="mark" style="left:${(p.predicted / max) * 100}%"></span>
+        </span>
+        ${tail}`;
+      out.appendChild(div);
+    }
+  }
+}
+
+document.getElementById("load").addEventListener("click", async () => {
+  const status = document.getElementById("status");
+  const prog = document.getElementById("prog");
+  const league = document.getElementById("league").value.trim();
+
+  try {
+    if (league && !leagueRosters) {
+      await loadLeague(league, status, prog);
+      return;
+    }
+
+    status.textContent = "loading predictions...";
+    const slate = await slateFor(document.getElementById("week").value);
+    render(slate, myKeys());
+    status.textContent = "";
+  } catch (error) {
+    status.textContent = String(error);
+    prog.hidden = true;
+  }
+});
+
+boot();
+</script>
+</body>
+</html>
