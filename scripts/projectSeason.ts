@@ -30,6 +30,9 @@ import {
   type SeasonPlayer,
 } from "../src/sim/playerSeason.js";
 import { presets, fantasyPoints } from "../src/scoring/fantasyPoints.js";
+import { loadAdp } from "../src/data/adp.js";
+import { normalizeName } from "../src/data/names.js";
+import { spearman } from "../src/backtest/metrics.js";
 
 const SIMS = 1000;
 
@@ -285,6 +288,41 @@ async function main(): Promise<void> {
     console.log(
       `\nagainst what happened: correlation ${(cov / Math.sqrt(vp * va)).toFixed(3)} over ${pairs.length} players, ${((inside / pairs.length) * 100).toFixed(0)}% of totals inside the 80% band`,
     );
+
+    const adp = await loadAdp(season).catch(() => undefined);
+
+    if (adp) {
+      const ppgOf = new Map(players.map((p) => [p.playerId, p.projectedPpg]));
+      const matched = projections
+        .map((p) => {
+          const actual = actuals.get(p.playerId);
+          const entry = adp.get(`${normalizeName(p.name)}|${p.position}`);
+          return actual && entry
+            ? {
+                simTotal: p.meanTotal,
+                ppg: ppgOf.get(p.playerId) ?? 0,
+                adp: entry.adp,
+                actualTotal: actual.pointsPerGame * actual.games,
+              }
+            : undefined;
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== undefined);
+
+      const score = (subset: typeof matched, label: string) => {
+        const actual = subset.map((r) => r.actualTotal);
+        console.log(`${label} (${subset.length} players):`);
+        console.log(
+          `  simulated total ${spearman(subset.map((r) => r.simTotal), actual).toFixed(3)}  projected ppg ${spearman(subset.map((r) => r.ppg), actual).toFixed(3)}  adp ${spearman(subset.map((r) => -r.adp), actual).toFixed(3)}`,
+        );
+      };
+
+      console.log("\nranking actual season totals:");
+      score(matched, "all matched to adp");
+      score(
+        [...matched].sort((a, b) => a.adp - b.adp).slice(0, 60),
+        "top 60 by adp",
+      );
+    }
   }
 }
 
