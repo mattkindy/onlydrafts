@@ -933,6 +933,8 @@ $("search").addEventListener("input", () => { if (view === "draft") renderDraft(
 
 document.querySelectorAll("#subnav button").forEach((b) =>
   b.addEventListener("click", async () => {
+    await ready;
+    if (!meta) return;
     setView(b.dataset.view);
 
     try {
@@ -970,7 +972,9 @@ $("go").addEventListener("click", async () => {
   }
 });
 
-boot();
+const ready = boot().catch((error) => {
+  $("status").textContent = "could not load projections: " + error;
+});
 </script>
 </body>
 </html>
