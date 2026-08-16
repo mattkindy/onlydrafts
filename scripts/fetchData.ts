@@ -1,6 +1,6 @@
-// Downloads nflverse flat files (games, weekly player stats) into
-// data/raw/, skipping files already on disk. Run with:
-//   npx tsx scripts/fetchData.ts --seasons 2021-2025
+// Downloads nflverse flat files into data/raw/, skipping files
+// already on disk unless --force. In-season refresh:
+//   npx tsx scripts/fetchData.ts --seasons 2026 --force
 
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
@@ -47,10 +47,12 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+const force = process.argv.includes("--force");
+
 async function download(url: string, fileName: string): Promise<void> {
   const path = join(RAW_DIR, fileName);
 
-  if (await exists(path)) {
+  if (!force && (await exists(path))) {
     console.log(`skip ${fileName} (already downloaded)`);
     return;
   }
