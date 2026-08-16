@@ -26,7 +26,15 @@
   nav .brand { margin-right: auto; font-weight: 800; font-size: 1.05rem;
     letter-spacing: -0.02em; cursor: pointer; }
   nav .brand b { color: var(--go); }
-  nav button { font: inherit; font-size: .8rem; font-weight: 600;
+  #crumb { display: flex; gap: .5rem; align-items: center; font-size: .85rem;
+    color: var(--muted); }
+  #crumb b { color: var(--ink); }
+  #crumb button { font: inherit; font-size: .78rem; background: var(--chip);
+    color: var(--muted); border: none; border-radius: 999px;
+    padding: .25rem .7rem; cursor: pointer; }
+  #subnav { display: flex; gap: .3rem; flex-wrap: wrap; margin-bottom: .8rem;
+    border-bottom: 1px solid var(--edge); }
+  #subnav button, nav button { font: inherit; font-size: .8rem; font-weight: 600;
     background: transparent; color: var(--muted); border: none;
     border-bottom: 2px solid transparent; padding: .35rem .7rem; cursor: pointer; }
   nav button.on { color: var(--ink); border-bottom-color: var(--go); }
@@ -114,12 +122,15 @@
 <div class="wrap">
   <nav>
     <span class="brand" id="home">depth<b>chart</b></span>
-    <button data-view="leagues">my leagues</button>
+    <span id="crumb"></span>
+  </nav>
+
+  <div id="subnav" hidden>
     <button data-view="draft">draft help</button>
     <button data-view="start">who to start</button>
     <button data-view="waivers">who to add</button>
     <button data-view="history">past advice</button>
-  </nav>
+  </div>
 
   <div id="explain">
     <h1 id="title"></h1>
@@ -226,8 +237,18 @@ function saveSettings() {
 }
 
 function setView(next) {
+  if (next !== "leagues" && !active) next = "leagues";
   view = next;
-  for (const b of document.querySelectorAll("nav button")) b.classList.toggle("on", b.dataset.view === next);
+  $("subnav").hidden = next === "leagues";
+  $("crumb").innerHTML = active && next !== "leagues"
+    ? '<button id="back">all leagues</button><b>' + active.name + "</b><span>you: " + active.team + "</span>"
+    : "";
+
+  if ($("back")) {
+    $("back").addEventListener("click", () => { setView("leagues"); renderLeagues(); });
+  }
+
+  for (const b of document.querySelectorAll("#subnav button")) b.classList.toggle("on", b.dataset.view === next);
   $("userwrap").hidden = next !== "leagues";
   $("weekwrap").hidden = next === "draft" || next === "history" || next === "leagues";
   $("teamwrap").hidden = true;
@@ -238,7 +259,7 @@ function setView(next) {
     : "no sleeper league? paste your roster, one name per line";
   const copy = {
     leagues: ["My leagues",
-      "Type your Sleeper username to pull your leagues, then tap one to work with it. Everything else on this page uses whichever league is selected.",
+      "Type your Sleeper username, then tap a league to open it. Draft help, lineups, and waivers all live inside a league.",
       ""],
     draft: ["Draft help",
       "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
@@ -326,10 +347,12 @@ function renderLeagues() {
     div.className = "card league-card" + (active && active.leagueId === lg.leagueId ? " mine" : "");
     div.innerHTML = '<div class="nm">' + lg.name + '</div><div class="sub"><span>' +
       lg.size + ' teams</span><span>you: ' + lg.team + "</span></div>";
-    div.addEventListener("click", () => {
+    div.addEventListener("click", async () => {
       active = lg;
       store_set("active", active);
-      setView("draft");
+      setView("start");
+      await renderStart();
+      refreshGoLabel();
     });
     grid.appendChild(div);
   }
@@ -694,7 +717,22 @@ function renderHistory() {
   }
 }
 
-document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
+document.querySelectorAll("#subnav button").forEach((b) =>
+  b.addEventListener("click", async () => {
+    setView(b.dataset.view);
+
+    try {
+      if (view === "start") await renderStart();
+      else if (view === "waivers") await renderWaivers();
+      else if (view === "history") renderHistory();
+      else if (view === "draft") await renderDraftView();
+    } catch (error) {
+      $("status").textContent = String(error);
+    }
+
+    refreshGoLabel();
+  }),
+);
 $("home").addEventListener("click", () => setView("leagues"));
 $("overlay").addEventListener("click", (e) => { if (e.target === $("overlay")) $("overlay").classList.remove("open"); });
 
