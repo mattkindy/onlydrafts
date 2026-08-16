@@ -56,6 +56,31 @@ work is in the commit history and the README.
   features separated so one can slot in later.
 - Injury prediction; evaluation scores per game played instead.
 
+## Negatives measured by substitution, to be rerun
+
+Everything under the headings below was scored by asking whether one
+piece beat another on rank correlation of the mean. That framing makes
+each part of a distribution look marginal on its own, because each one
+explains a slice of the variance while together they would define the
+shape. None of these should be treated as settled until they are rerun
+inside a joint model and scored on the whole distribution.
+
+The clearest case is commit 299a723, which dropped a two-stage
+opportunity-then-points predictor because it scored .522 against .529.
+Its own message says the generative structure earns its place in
+correlation and simulation rather than point prediction, and it was
+dropped anyway. A touchdown is six points and a team throws about 35
+passes a game; neither fact can be recovered by adding a smooth
+residual to a mean, however well that mean ranks.
+
+Also to rerun on the same grounds:
+- The two-stage predictor itself (299a723).
+- The preseason weekly kernel, whose rescaled form landed at .5464
+  against .5467 and was recorded as no help. Rescaling is composition,
+  and it came out level on a measure that cannot see shape.
+- Role-shaped intervals, which replaced the pooled bands rather than
+  entering a model alongside level.
+
 ## Measured negative: weekly kernel over the preseason schedule
 
 Running the weekly model across all 17 games before kickoff, with last
