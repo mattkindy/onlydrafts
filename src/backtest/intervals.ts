@@ -185,3 +185,92 @@ export function sampleSeasonBias(
 
   return biases[Math.min(biases.length - 1, Math.floor(rng() * biases.length))]!;
 }
+
+/**
+ * The same idea, split by how lumpy the player's role is as well as by
+ * how much he scores. Two receivers projected at nine points a game
+ * miss in different ways when one of them is a deep threat, and
+ * pooling them hands both the average of the two.
+ */
+export interface ShapedTrainingPoint extends TrainingPoint {
+  /** predicted share of his season coming in his best weeks */
+  concentration: number;
+}
+
+export interface ShapedResidualModel {
+  /** cut points between concentration bands, per position */
+  bands: Map<string, number[]>;
+  /** one plain model per position and band */
+  byBand: Map<string, ResidualModel[]>;
+  /** what to fall back on when a band is thin */
+  pooled: ResidualModel;
+}
+
+function quantile(sorted: number[], p: number): number {
+  return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))]!;
+}
+
+export function buildShapedResidualModel(
+  points: ShapedTrainingPoint[],
+  buckets: number,
+  bandCount: number,
+): ShapedResidualModel {
+  const byPosition = new Map<string, ShapedTrainingPoint[]>();
+
+  for (const point of points) {
+    byPosition.set(point.position, [...(byPosition.get(point.position) ?? []), point]);
+  }
+
+  const bands = new Map<string, number[]>();
+  const byBand = new Map<string, ResidualModel[]>();
+
+  for (const [position, list] of byPosition) {
+    const sorted = list.map((p) => p.concentration).sort((a, b) => a - b);
+    const cuts: number[] = [];
+
+    for (let i = 1; i < bandCount; i++) {
+      cuts.push(quantile(sorted, i / bandCount));
+    }
+
+    bands.set(position, cuts);
+    byBand.set(
+      position,
+      Array.from({ length: bandCount }, (_, band) =>
+        buildResidualModel(
+          list.filter((p) => bandOf(cuts, p.concentration) === band),
+          buckets,
+        ),
+      ),
+    );
+  }
+
+  return { bands, byBand, pooled: buildResidualModel(points, buckets) };
+}
+
+function bandOf(cuts: number[], concentration: number): number {
+  for (let i = 0; i < cuts.length; i++) {
+    if (concentration <= cuts[i]!) {
+      return i;
+    }
+  }
+
+  return cuts.length;
+}
+
+/** the p quantile for this prediction, given how lumpy his role is */
+export function shapedQuantile(
+  model: ShapedResidualModel,
+  position: string,
+  predicted: number,
+  concentration: number,
+  p: number,
+): number {
+  const cuts = model.bands.get(position);
+  const band = cuts ? model.byBand.get(position)?.[bandOf(cuts, concentration)] : undefined;
+
+  if (!band || !band.positions.get(position)) {
+    return outcomeQuantile(model.pooled, position, predicted, p);
+  }
+
+  return outcomeQuantile(band, position, predicted, p);
+}

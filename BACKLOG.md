@@ -75,3 +75,36 @@ What is wrong is the band around each week rather than the week itself.
 Every player draws his spread from one of five buckets per position, so
 A.J. Brown and CeeDee Lamb get the same range at the same average when
 their actual seasons look nothing alike. See scripts/preseasonWeeklyEval.ts.
+
+## Measured negative: shaping the bands by a player's role
+
+Concentration, the share of a season that lands in a player's best
+quarter of weeks, really is predictable from his role. Trained on
+earlier seasons and scored on the next one, a ridge on targets,
+carries, target depth, touchdown rate and scoring level ranks it at
+.364 for 2024 and .517 for 2025, against .324 and .463 for his own
+past concentration and .224 and .182 for a flat position average.
+
+It does not carry into better weekly bands. Splitting the residual
+model into three concentration bands per position made every quantile
+worse on 2025, and blending it back toward the pooled model made
+things worse in proportion to how much weight it got, with no minimum
+in between. By edge: floor -1.6%, median -1.2%, ceiling -2.4%,
+95th -2.6%. The role bands do spread players further apart, and the
+extra confidence is wrong more often than right.
+
+The likely reason is that concentration's own split-half reliability
+inside a single season is only about .24 for receivers, so predicting
+it well in rank terms still means predicting a narrow slice of a
+mostly random quantity. Predicted concentration spans .45 to .56 where
+observed spans .37 to .58.
+
+The untested lead is participation data, which we do not yet download.
+The nflverse pbp_participation release covers 2022 to 2025 and carries
+offense_formation, offense_personnel, route, defenders_in_box,
+defense_man_zone_type and defense_coverage_type. Alignment and route
+are information none of the current features contain.
+
+See scripts/concentrationEval.ts and scripts/shapedIntervalEval.ts.
+The shaped residual model in src/backtest/intervals.ts stays as the
+harness for that test. Nothing on the board uses it.
