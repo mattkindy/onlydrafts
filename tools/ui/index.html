@@ -87,6 +87,11 @@
   .card.mine .range .span { background: color-mix(in srgb, var(--go) 45%, var(--chip)); }
   .range .mark { position: absolute; top: -3px; width: 3px; height: 14px;
     background: var(--mark); border-radius: 2px; }
+  .pickline { grid-column: 1 / -1; display: flex; align-items: center;
+    gap: .6rem; margin: .3rem 0; color: var(--mark); font-size: .72rem;
+    font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .pickline::after { content: ""; flex: 1;
+    border-top: 1px dashed var(--mark); opacity: .5; }
   .tag { font-size: .72rem; font-weight: 700; color: var(--go); margin-top: .45rem; }
   .tag.warn { color: var(--mark); }
   .hint { color: var(--faint); font-size: .78rem; }
@@ -116,10 +121,17 @@
   .wk { display: grid; grid-template-columns: 2.4rem 3.4rem 1fr 2.4rem;
     gap: .5rem; align-items: center; font-size: .75rem; color: var(--muted);
     padding: .1rem 0; }
-  .wk .bar { height: 7px; background: var(--chip); border-radius: 999px;
-    position: relative; }
-  .wk .bar i { position: absolute; left: 0; top: 0; bottom: 0;
-    background: var(--go); border-radius: 999px; opacity: .7; }
+  .wk .bar { height: 11px; position: relative; }
+  .wk .bar u, .wk .bar i, .wk .bar b { position: absolute; }
+  /* whisker: a bad week to a big one */
+  .wk .bar u { top: 5px; height: 1px; background: var(--chip); }
+  /* box: the middle half of outcomes */
+  .wk .bar i { top: 2px; height: 7px; background: var(--go);
+    opacity: .35; border-radius: 3px; }
+  /* tick: the projection */
+  .wk .bar b { top: 0; width: 2px; height: 11px; background: var(--go); }
+  .wk .scale { grid-column: 3; display: flex; justify-content: space-between;
+    color: var(--faint); font-size: .65rem; padding-top: .2rem; }
   .fact { font-size: .8rem; margin: .15rem 0; }
   .fact.p::before { content: "+ "; color: var(--go); font-weight: 700; }
   .fact.m::before { content: "- "; color: var(--mark); font-weight: 700; }
@@ -396,15 +408,51 @@ function boardLookup(key) {
   return boardByKey.get(key) ?? [...boardByKey.entries()].find(([k]) => k.includes(key) || key.includes(k))?.[1] ?? null;
 }
 
+/*
+ * One row per week, drawn as a box and whisker rather than a filled bar.
+ * The season's per-game quantiles give the shape of a single week; each
+ * week stretches that shape by its own projection, so a soft matchup
+ * shows a lower box and a shorter tail, not only a shorter bar.
+ */
+function weeklyRows(b) {
+  const games = b.weeks ?? [];
+
+  if (!games.length) {
+    return "";
+  }
+
+  const g = b.game;
+  const spread = g && g.ev > 0
+    ? { low: g.low / g.ev, q1: g.q1 / g.ev, q3: g.q3 / g.ev, high: g.high / g.ev }
+    : { low: 1, q1: 1, q3: 1, high: 1 };
+  const max = Math.max(...games.map((w) => w.pts * spread.high)) || 1;
+  const pct = (v) => (v / max) * 100;
+
+  const rows = games.map((w) => {
+    const low = pct(w.pts * spread.low);
+    const q1 = pct(w.pts * spread.q1);
+    const q3 = pct(w.pts * spread.q3);
+    const high = pct(w.pts * spread.high);
+    return '<div class="wk"><span>w' + w.w + "</span><span>" + w.opp +
+      '</span><span class="bar">' +
+      '<u style="left:' + low + "%;right:" + (100 - high) + '%"></u>' +
+      '<i style="left:' + q1 + "%;right:" + (100 - q3) + '%"></i>' +
+      '<b style="left:' + pct(w.pts) + '%"></b>' +
+      "</span><span>" + w.pts.toFixed(1) + "</span></div>";
+  }).join("");
+
+  return rows +
+    '<div class="wk"><span></span><span></span><div class="scale"><span>0</span><span>' +
+    (max / 2).toFixed(0) + "</span><span>" + max.toFixed(0) +
+    "</span></div><span></span></div>";
+}
+
 function openDetail(p, slatePlayer) {
   const b = boardLookup(p.key) ?? p;
   const sheet = $("sheet");
   const marked = markedKeepers();
   const isKept = !!marked[p.key];
-  const weeks = (b.weeks ?? []).map((g) =>
-    '<div class="wk"><span>w' + g.w + "</span><span>" + g.opp +
-    '</span><span class="bar"><i style="width:' + Math.min(100, (g.pts / 30) * 100) + '%"></i></span><span>' +
-    g.pts.toFixed(1) + "</span></div>").join("");
+  const weeks = weeklyRows(b);
   const plus = (b.plus ?? []).map((f) => '<div class="fact p">' + f + "</div>").join("");
   const minus = (b.minus ?? []).map((f) => '<div class="fact m">' + f + "</div>").join("");
   sheet.innerHTML =
@@ -413,12 +461,6 @@ function openDetail(p, slatePlayer) {
     (b.ppg ? " &middot; " + b.ppg.toFixed(1) + " a game projected" : "") +
     (b.adp ? " &middot; usually goes at pick " + b.adp.toFixed(0) +
       (b.adpLow ? ", as early as " + b.adpHigh + " and as late as " + b.adpLow : "") : " &middot; undrafted in mocks") + "</div>" +
-    (b.game
-      ? "<h2>per game</h2>" +
-        '<div class="fact">expected ' + b.game.ev + " points</div>" +
-        '<div class="fact">middle half of games ' + b.game.q1 + " to " + b.game.q3 + "</div>" +
-        '<div class="fact">a bad week ' + b.game.low + ", a big week " + b.game.high + "</div>"
-      : "") +
     (b.sim
       ? "<h2>season total, 2000 simulations</h2>" +
         '<div class="fact">expected ' + b.sim.ev + " points</div>" +
@@ -650,6 +692,27 @@ function picksUntil(mySlot, overall, teams, rounds) {
   return null;
 }
 
+/** your remaining picks in a snake draft, earliest first */
+function myUpcomingPicks(grid, fromOverall) {
+  if (!grid || !grid.mySlot) {
+    return [];
+  }
+
+  const picks = [];
+
+  for (let n = fromOverall; n <= grid.teams * grid.rounds; n++) {
+    const round = Math.ceil(n / grid.teams);
+    const inRound = n - (round - 1) * grid.teams;
+    const slot = round % 2 === 1 ? inRound : grid.teams - inRound + 1;
+
+    if (slot === grid.mySlot) {
+      picks.push({ overall: n, round, label: round + "." + String(grid.mySlot).padStart(2, "0") });
+    }
+  }
+
+  return picks;
+}
+
 function needFactor(position, count) {
   const starters = STARTERS[position] ?? 0;
   if (count < starters) return 1;
@@ -778,9 +841,23 @@ function renderDraft(staleAt) {
   const grid = document.createElement("div");
   grid.className = "cards";
   let shown = 0;
+  // Where your own picks fall in this list. Everyone above a line is
+  // expected to be gone by the time that pick comes around.
+  const upcoming = myUpcomingPicks(s.grid, s.clock ? s.clock.overall : 1);
+  let nextPick = 0;
 
   for (const { p, score } of scored) {
     if (shown >= 20) break;
+
+    while (nextPick < upcoming.length && p.adp && p.adp > upcoming[nextPick].overall) {
+      const line = document.createElement("div");
+      line.className = "pickline";
+      line.innerHTML = "<span>your " + upcoming[nextPick].label +
+        ", pick " + upcoming[nextPick].overall + "</span>";
+      grid.appendChild(line);
+      nextPick++;
+    }
+
     shown++;
     const lastYear = s.rosteredBy[p.key];
     grid.appendChild(card(p, {

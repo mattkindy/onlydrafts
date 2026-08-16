@@ -462,8 +462,10 @@ async function draftContext(
     const prevOc = coachOf(teamId, target - 1, "OC");
     const hc = coachOf(teamId, target, "HC");
     const prevHc = coachOf(teamId, target - 1, "HC");
-    ocChanged.set(teamId, oc === undefined || oc !== prevOc);
-    hcChanged.set(teamId, hc === undefined || hc !== prevHc);
+    // an unknown staff is not a changed staff; without both seasons the
+    // honest answer is no evidence of a change
+    ocChanged.set(teamId, oc !== undefined && prevOc !== undefined && oc !== prevOc);
+    hcChanged.set(teamId, hc !== undefined && prevHc !== undefined && hc !== prevHc);
 
     const teamPrev = tendencies.get(`${teamId}|${target - 1}`)?.neutralPassRate;
 
