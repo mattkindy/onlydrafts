@@ -19,9 +19,12 @@ export interface SeasonProjection {
   playerId: string;
   name: string;
   position: string;
+  /** expected season total across every simulated season */
   meanTotal: number;
   p10: number;
+  p25: number;
   p50: number;
+  p75: number;
   p90: number;
   meanGames: number;
 }
@@ -135,7 +138,9 @@ export function simulatePlayerSeasons(
       position: player.position,
       meanTotal: list.reduce((s, x) => s + x, 0) / list.length,
       p10: q(0.1),
+      p25: q(0.25),
       p50: q(0.5),
+      p75: q(0.75),
       p90: q(0.9),
       meanGames: gamesPlayed.get(player.playerId)! / sims,
     };

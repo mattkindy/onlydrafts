@@ -222,9 +222,11 @@ async function main(): Promise<void> {
         bye: world.byeWeek.get(p.teamId) ?? null,
         sim: sim
           ? {
-              mean: Math.round(sim.meanTotal),
-              low: Math.round(sim.p10),
+              ev: Math.round(sim.meanTotal),
+              q1: Math.round(sim.p25),
               mid: Math.round(sim.p50),
+              q3: Math.round(sim.p75),
+              low: Math.round(sim.p10),
               high: Math.round(sim.p90),
               games: Number(sim.meanGames.toFixed(1)),
             }
