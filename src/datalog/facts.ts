@@ -179,6 +179,40 @@ async function loadPlayByPlay(db: Database, seasons: number[]): Promise<void> {
     ]);
   }
 
+  // The situations where who gets the ball is its own decision rather
+  // than a slice of the usual one. Measured over 2021 to 2025, a man's
+  // share on third down carries over at .423 where his overall share
+  // predicts it at .241, and at the goal line .340 against .138. In the
+  // red zone at large his overall share does better, so that split
+  // stays out.
+  const situations = await readFile(join(CURATED, "situations.csv"), "utf8")
+    .catch(() => "");
+  const WORTH_SPLITTING = new Set([
+    "third and long", "third and short", "goal line",
+  ]);
+
+  for (const row of situations ? parseCsv(situations) : []) {
+    const season = Number(row["season"]);
+    const situation = row["situation"] ?? "";
+
+    if (!seasons.includes(season) || !WORTH_SPLITTING.has(situation)) {
+      continue;
+    }
+
+    const touches = Number(row["touches"]);
+    const player = row["player"] ?? "";
+    db.add("usedIn", [
+      player, season, situation,
+      band(touches / Math.max(1, Number(row["teamPlays"]))),
+    ]);
+    // near the line, how often he finishes is his own trait: it comes
+    // back next season at .383 where third-down conversion does not
+    db.add("finishesIn", [
+      player, season, situation,
+      band(Number(row["scores"]) / Math.max(1, touches)),
+    ]);
+  }
+
   const pressure = await readFile(join(CURATED, "pressureMatchups.csv"), "utf8")
     .catch(() => "");
 

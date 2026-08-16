@@ -189,3 +189,39 @@ export const CHANCE_RULES: Rule[] = [
     notLit("wellProtected", v("p"), v("s"), v("w")),
   ]),
 ];
+
+/**
+ * Who a play-caller turns to when the situation is its own decision.
+ * Third down and the goal line are the two where a man's share says
+ * something his season usage does not.
+ */
+export const SITUATION_RULES: Rule[] = [
+  rule("trustedOnThirdDown", [v("p"), v("s")], [
+    lit("usedIn", v("p"), v("s"), constant("third and short"), constant("some")),
+  ]),
+
+  rule("trustedOnThirdDown", [v("p"), v("s")], [
+    lit("usedIn", v("p"), v("s"), constant("third and short"), constant("most")),
+  ]),
+
+  rule("trustedAtTheLine", [v("p"), v("s")], [
+    lit("usedIn", v("p"), v("s"), constant("goal line"), constant("most")),
+  ]),
+
+  // he gets the ball there and he finishes when he does
+  rule("finisher", [v("p"), v("s")], [
+    lit("trustedAtTheLine", v("p"), v("s")),
+    lit("finishesIn", v("p"), v("s"), constant("goal line"), constant("some")),
+  ]),
+
+  rule("finisher", [v("p"), v("s")], [
+    lit("trustedAtTheLine", v("p"), v("s")),
+    lit("finishesIn", v("p"), v("s"), constant("goal line"), constant("most")),
+  ]),
+
+  // a back they lean on when it matters, both ways
+  rule("closer", [v("p"), v("s")], [
+    lit("trustedAtTheLine", v("p"), v("s")),
+    lit("trustedOnThirdDown", v("p"), v("s")),
+  ]),
+];
