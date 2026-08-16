@@ -168,13 +168,15 @@ function store_set(key, value) {
 }
 
 const $ = (id) => document.getElementById(id);
-const norm = (n) => n.toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b\.?$/, "").replace(/[^a-z]/g, "");
+const norm = (n) => (n ?? "").toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b\.?$/, "").replace(/[^a-z]/g, "");
 const api = (path) => fetch("https://api.sleeper.app/v1" + path).then((r) => r.json());
 
 async function sleeperPlayers() {
   if (players) return players;
-  const cached = store_get("players", null);
+  // v2 keys the trimmed shape; an older cache used different field names
+  const cached = store_get("players.v2", null);
   if (cached) { players = cached; return cached; }
+  try { localStorage.removeItem("dc.players"); } catch {}
   $("status").textContent = "fetching player list (5MB, once ever)...";
   $("prog").hidden = false; $("prog").value = 40;
   const raw = await api("/players/nfl");
@@ -183,7 +185,7 @@ async function sleeperPlayers() {
   for (const [id, p] of Object.entries(raw)) {
     if (p.full_name && p.position) trimmed[id] = { n: p.full_name, p: p.position };
   }
-  store_set("players", trimmed);
+  store_set("players.v2", trimmed);
   players = trimmed;
   return trimmed;
 }
@@ -288,10 +290,10 @@ async function loadLeagues() {
       leagueId: lg.league_id, name: lg.name, size: lg.total_rosters,
       userId: user.user_id, team: nameOf.get(user.user_id) ?? username,
       myRoster: (mine && mine.players ? mine.players : [])
-        .map((id) => playerMap[id]).filter(Boolean).map((p) => ({ name: p.n, key: norm(p.n) })),
+        .map((id) => playerMap[id]).filter((p) => p && p.n).map((p) => ({ name: p.n, key: norm(p.n) })),
       allRosters: rosters.map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
-        keys: (r.players ?? []).map((id) => playerMap[id]).filter(Boolean)
+        keys: (r.players ?? []).map((id) => playerMap[id]).filter((p) => p && p.n)
           .map((p) => ({ name: p.n, key: norm(p.n), pos: p.p })),
       })),
     });
@@ -524,7 +526,7 @@ async function pollDraft() {
 
   for (const pick of picks) {
     const p = playerMap[pick.player_id];
-    if (!p) continue;
+    if (!p || !p.n) continue;
     const key = norm(p.n);
     state.taken.add(key);
     const owner = pick.picked_by && active && pick.picked_by === active.userId ? active.team
