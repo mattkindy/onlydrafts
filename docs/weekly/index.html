@@ -478,6 +478,75 @@ function seasonNotStarted() {
     "Until then, use <b>draft help</b>.</div>";
 }
 
+function seasonNotStarted() {
+  $("out").innerHTML = '<div class="empty"><b>The season has not kicked off yet.</b> ' +
+    "Weekly projections need a few games of this year's snaps and targets, so they turn on about a month in. " +
+    "Until then use <b>draft help</b> and <b>my roster</b>.</div>";
+}
+
+async function renderRoster() {
+  if (!board) {
+    board = await (await fetch("data/board-" + meta.boardSeason + ".json")).json();
+    boardByKey = new Map(board.players.map((p) => [p.key, p]));
+  }
+
+  const out = $("out");
+  out.innerHTML = "";
+
+  if (!active) {
+    out.innerHTML = '<div class="empty"><b>No league selected.</b> Open <b>all leagues</b> and tap one.</div>';
+    return;
+  }
+
+  const marked = markedKeepers();
+  const mine = active.myRoster
+    .map((r) => ({ r, p: boardLookup(r.key) }))
+    .sort((a, b) => (b.p?.vor ?? -99) - (a.p?.vor ?? -99));
+  const keeperCount = Object.keys(marked).filter((k) => marked[k] === active.team).length;
+
+  const head = document.createElement("div");
+  head.className = "empty";
+  head.innerHTML = "<b>" + mine.length + " players</b> on " + active.team + " in " + active.name +
+    (keeperCount ? ", " + keeperCount + " marked as keepers" : ", none marked as keepers yet");
+  out.appendChild(head);
+
+  const byPosition = new Map();
+
+  for (const entry of mine) {
+    const position = entry.p?.position ?? "other";
+    byPosition.set(position, [...(byPosition.get(position) ?? []), entry]);
+  }
+
+  for (const position of [...POSITIONS, "other"]) {
+    const rows = byPosition.get(position);
+    if (!rows) continue;
+    const h = document.createElement("h2");
+    h.textContent = position;
+    out.appendChild(h);
+    const grid = document.createElement("div");
+    grid.className = "cards";
+
+    for (const { r, p } of rows) {
+      if (!p) {
+        const div = document.createElement("div");
+        div.className = "card plain";
+        div.innerHTML = '<div class="nm">' + r.name + '</div><div class="sub"><span>no projection</span></div>';
+        grid.appendChild(div);
+        continue;
+      }
+
+      grid.appendChild(card(p, {
+        mine: true,
+        big: p.ppg,
+        sub: (p.bye ? "bye " + p.bye : "") + (p.adp ? " &middot; adp " + p.adp.toFixed(0) : ""),
+        tag: marked[p.key] ? "marked as your keeper" : "tap to mark as a keeper",
+      }));
+    }
+
+    out.appendChild(grid);
+  }
+}
+
 async function renderStart() {
   if (!meta.weeks.length) return seasonNotStarted();
   const slate = await slateFor($("week").value);
