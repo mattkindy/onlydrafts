@@ -269,10 +269,13 @@ function setView(next) {
   }
 
   for (const b of document.querySelectorAll("#subnav button")) b.classList.toggle("on", b.dataset.view === next);
+  const needsWeek = (next === "start" || next === "waivers") && meta.weeks.length > 0;
   $("userwrap").hidden = next !== "leagues";
-  $("weekwrap").hidden = !meta.weeks.length || next === "draft" || next === "history" || next === "leagues";
+  $("weekwrap").hidden = !needsWeek;
   $("teamwrap").hidden = true;
-  $("keepwrap").hidden = next !== "draft" && next !== "roster";
+  $("keepwrap").hidden = next !== "draft";
+  $("ctl").hidden = next === "history" || (next === "roster" && !!active) ||
+    ((next === "start" || next === "waivers") && !meta.weeks.length);
   $("filterwrap").hidden = next !== "draft";
   $("manualwrap").style.display = next === "start" || next === "waivers" || next === "draft" ? "block" : "none";
   if (next === "roster") $("manualwrap").style.display = "none";
@@ -288,7 +291,7 @@ function setView(next) {
       "Before a keeper draft this is last season's roster until the league clears it. Tap a player to see his season and mark him as a keeper."],
     draft: ["Draft help",
       "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
-      "The big number is value over a replacement starter, weighted by the slots your draft roster still needs. Your draft roster starts with the keepers you mark and grows with your picks. Players stay on the board until they are actually kept or drafted."],
+      "The big number is value over a replacement starter, weighted by the slots your draft roster still needs. The smaller line is the season range from two thousand simulations, including the seasons where he gets hurt. Players stay on the board until they are actually kept or drafted."],
     start: ["Who to start",
       "Your roster for one week, ranked by projected points, so you can set a lineup.",
       "The bar shows the range from a bad week to a great one; the gold mark is the projection. Tap a card for the week-by-week season and what is helping or hurting."],
@@ -310,7 +313,8 @@ function setView(next) {
 }
 
 function refreshGoLabel() {
-  if (view !== "draft") { $("go").textContent = "load"; return; }
+  if (view === "leagues") { $("go").textContent = "find my leagues"; return; }
+  if (view !== "draft") { $("go").textContent = "refresh"; return; }
   $("go").textContent = draftPoll ? "pause" : store_get("draftState", null) ? "resume draft" : "start draft";
 }
 
@@ -408,6 +412,11 @@ function openDetail(p, slatePlayer) {
     " &middot; " + (b.team ?? p.team ?? "") +
     (b.ppg ? " &middot; " + b.ppg.toFixed(1) + " a game projected" : "") +
     (b.adp ? " &middot; adp " + b.adp.toFixed(0) : "") + "</div>" +
+    (b.sim
+      ? "<h2>season total, 2000 simulations</h2><div class=\"fact\">middle season " + b.sim.mid +
+        " points, typical range " + b.sim.low + " to " + b.sim.high +
+        ", about " + b.sim.games + " games played</div>"
+      : "") +
     (plus || minus ? "<h2>factors vs past years</h2>" + plus + minus : "") +
     (weeks ? "<h2>week by week</h2>" + weeks : "") +
     '<div class="row"><button class="act" id="keepbtn">' +
@@ -541,7 +550,8 @@ async function renderRoster() {
       grid.appendChild(card(p, {
         mine: true,
         big: p.ppg,
-        sub: (p.bye ? "bye " + p.bye : "") + (p.adp ? " &middot; adp " + p.adp.toFixed(0) : ""),
+        sub: (p.sim ? p.sim.low + " to " + p.sim.high + " on the season" : "") +
+          (p.bye ? " &middot; bye " + p.bye : ""),
         tag: marked[p.key] ? "marked as your keeper" : "tap to mark as a keeper",
       }));
     }
@@ -766,7 +776,8 @@ function renderDraft(staleAt) {
     const lastYear = s.rosteredBy[p.key];
     grid.appendChild(card(p, {
       big: score,
-      sub: p.ppg.toFixed(1) + " a game" + (p.adp ? " &middot; adp " + p.adp.toFixed(0) : "") + (p.bye ? " &middot; bye " + p.bye : ""),
+      sub: (p.sim ? p.sim.low + " to " + p.sim.high + " season" : p.ppg.toFixed(1) + " a game") +
+        (p.bye ? " &middot; bye " + p.bye : ""),
       tag: shown <= 3
         ? "fills " + p.position
         : lastYear ? "was on " + lastYear + " last season" : "",
