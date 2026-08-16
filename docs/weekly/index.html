@@ -75,7 +75,14 @@
     border-radius: 12px; padding: .75rem .95rem; cursor: pointer; }
   .card.plain { cursor: default; }
   .card.mine { border-color: var(--go); }
-  .card.kept { opacity: .55; }
+  .card.kept { border-color: var(--go);
+    background: color-mix(in srgb, var(--go) 9%, var(--panel));
+    box-shadow: inset 4px 0 0 var(--go); }
+  .card.gone { opacity: .45; }
+  .badge { font-size: .6rem; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; color: #0C1117; background: var(--go);
+    border-radius: 999px; padding: .1rem .45rem; margin-left: .4rem;
+    vertical-align: .1em; }
   .card .top { display: flex; justify-content: space-between; align-items: baseline; }
   .card .nm { font-weight: 700; font-size: .92rem; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
@@ -105,6 +112,7 @@
     border-top: 1px dashed var(--mark); opacity: .5; }
   .tag { font-size: .72rem; font-weight: 700; color: var(--go); margin-top: .45rem; }
   .tag.warn { color: var(--mark); }
+  .tag.hint { color: var(--faint); font-weight: 500; }
   .hint { color: var(--faint); font-size: .78rem; }
   #explain h1 { font-size: 1.25rem; margin: .2rem 0 .15rem; }
   #explain p { color: var(--muted); font-size: .85rem; margin: 0 0 .9rem; }
@@ -556,7 +564,8 @@ function seasonScale(players) {
 
 function card(p, opts) {
   const div = document.createElement("div");
-  div.className = "card" + (opts.mine ? " mine" : "") + (opts.kept ? " kept" : "");
+  div.className = "card" + (opts.mine ? " mine" : "") +
+    (opts.kept ? " kept" : "") + (opts.gone ? " gone" : "");
   const r = opts.range;
   const span = (v) => Math.max(0, Math.min(100, (v / opts.max) * 100));
   const range = r
@@ -571,9 +580,12 @@ function card(p, opts) {
     : "";
   const tag = opts.tag
     ? '<div class="tag' + (opts.warn ? " warn" : "") + '">' + opts.tag + "</div>"
-    : "";
+    : opts.hint
+      ? '<div class="tag hint">' + opts.hint + "</div>"
+      : "";
+  const badge = opts.badge ? '<span class="badge">' + opts.badge + "</span>" : "";
   div.innerHTML =
-    '<div class="top"><span class="nm">' + p.name + '</span>' +
+    '<div class="top"><span class="nm">' + p.name + badge + '</span>' +
     '<span class="big">' + opts.value.toFixed(1) +
     '<em class="unit">' + opts.unit + "</em></span></div>" +
     '<div class="sub"><span>' + p.position + " &middot; " + (p.team ?? "") +
@@ -581,6 +593,13 @@ function card(p, opts) {
     range + (opts.note ? '<div class="note">' + opts.note + "</div>" : "") + tag;
   div.addEventListener("click", () => openDetail(p));
   return div;
+}
+
+/** pick 44 in a 12-team draft is how everyone says it: 4.08 */
+function asRound(pick, teams = 12) {
+  const overall = Math.max(1, Math.round(pick));
+  const round = Math.ceil(overall / teams);
+  return round + "." + String(overall - (round - 1) * teams).padStart(2, "0");
 }
 
 /** one game: what he scores this week, and how wrong that could be */
@@ -605,7 +624,10 @@ function seasonCard(p, opts = {}) {
       ? { low: g.q1, mid: g.ev, high: g.q3, label: "middle half of games" }
       : undefined,
     note: [
-      p.adp ? "usually drafted at pick " + p.adp.toFixed(0) : "undrafted in mocks",
+      p.adp
+        ? "goes " + asRound(p.adp) +
+          (p.adpHigh ? " in PPR mocks, " + asRound(p.adpHigh) + " to " + asRound(p.adpLow) : " in PPR mocks")
+        : "undrafted in mocks",
       p.bye ? "bye " + p.bye : "",
     ].filter(Boolean).join(" &middot; "),
   });
@@ -695,10 +717,13 @@ async function renderRoster() {
         continue;
       }
 
+      const isKept = !!marked[p.key];
       grid.appendChild(seasonCard(p, {
-        mine: true,
         max: seasonMax,
-        tag: marked[p.key] ? "marked as your keeper" : "tap to mark as a keeper",
+        kept: isKept,
+        badge: isKept ? "keeper" : "",
+        tag: isKept ? "counts against your " + $("keepn").value + " keeper slots" : "",
+        hint: isKept ? "" : "tap to mark as a keeper",
       }));
     }
 
@@ -1020,11 +1045,13 @@ function renderDraft(staleAt) {
     rGrid.className = "cards";
 
     for (const p of rosterNow) {
+      const isKept = !!markedKeepers()[p.key];
       rGrid.appendChild(seasonCard(p, {
-        mine: true,
         max: seasonMax,
+        kept: isKept,
+        badge: isKept ? "keeper" : "",
         aside: { label: "over replacement", value: p.vor },
-        tag: "tap to mark as a keeper",
+        hint: isKept ? "" : "tap to mark as a keeper",
       }));
     }
 
