@@ -61,6 +61,7 @@
     padding: .4rem 1.1rem; border-radius: 999px; cursor: pointer; }
   button.act:hover { filter: brightness(1.12); }
   #status { color: var(--faint); font-size: .82rem; }
+  #status.bad { color: var(--mark); font-weight: 600; }
   progress { width: 9rem; accent-color: var(--go); }
   textarea { width: 100%; height: 3rem; font: inherit; font-size: .85rem;
     color: var(--ink); background: var(--bg); border: 1px solid var(--edge);
@@ -170,17 +171,17 @@
 
   <div class="controls" id="ctl">
     <label id="userwrap">sleeper user <input id="username" size="12"></label>
-    <label id="weekwrap">week <select id="week"></select></label>
-    <label id="keepwrap">keepers per team
+    <label id="weekwrap" hidden>week <select id="week"></select></label>
+    <label id="keepwrap" hidden>keepers per team
       <input id="keepn" type="number" value="3" min="0" max="6" style="width:3.2rem"></label>
-    <span id="posfilter"></span>
-    <label id="searchwrap">find <input id="search" size="12" placeholder="a name"></label>
-    <button class="act" id="go">load</button>
+    <span id="posfilter" hidden></span>
+    <label id="searchwrap" hidden>find <input id="search" size="12" placeholder="a name"></label>
+    <button class="act" id="go">find my leagues</button>
     <span id="status"></span>
     <progress id="prog" max="100" value="0" hidden></progress>
   </div>
 
-  <div class="controls" id="manualwrap">
+  <div class="controls" id="manualwrap" hidden>
     <label class="hint" id="manualhint"></label>
     <textarea id="manual"></textarea>
   </div>
@@ -249,14 +250,19 @@ async function boot() {
     option.textContent = entry.season + " week " + entry.week;
     $("week").appendChild(option);
   }
-  $("week").value = meta.weeks.at(-1).season + "|" + meta.weeks.at(-1).week;
+  const latest = meta.weeks.at(-1);
+
+  if (latest) {
+    $("week").value = latest.season + "|" + latest.week;
+  }
+
   const saved = store_get("settings", null);
+
   if (saved) {
     $("username").value = saved.username ?? "";
     $("manual").value = saved.manual ?? "";
-    $("keepn").value = saved.keepn ?? 2;
+    $("keepn").value = saved.keepn ?? 3;
     if (saved.week && [...$("week").options].some((o) => o.value === saved.week)) $("week").value = saved.week;
-    if (!meta.weeks.length) $("weekwrap").hidden = true;
   }
   const fallbackView = meta.weeks.length ? "start" : "draft";
   setView(active ? (saved && saved.view ? saved.view : fallbackView) : "leagues");
@@ -1105,6 +1111,7 @@ $("overlay").addEventListener("click", (e) => { if (e.target === $("overlay")) $
 $("go").addEventListener("click", async () => {
   const status = $("status");
   try {
+    status.className = "";
     status.textContent = "";
     if (view === "leagues") await loadLeagues();
     else if (view === "roster") await renderRoster();
@@ -1115,12 +1122,16 @@ $("go").addEventListener("click", async () => {
     refreshGoLabel();
     saveSettings();
   } catch (error) {
+    status.className = "bad";
     status.textContent = String(error);
     $("prog").hidden = true;
   }
 });
 
 const ready = boot().catch((error) => {
+  // a broken index should still leave a usable leagues page behind
+  setView("leagues");
+  $("status").className = "bad";
   $("status").textContent = "could not load projections: " + error;
 });
 </script>
