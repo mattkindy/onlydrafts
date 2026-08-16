@@ -411,7 +411,8 @@ function openDetail(p, slatePlayer) {
     "<h3>" + (b.name ?? p.name) + '</h3><div class="sub">' + (b.position ?? p.position) +
     " &middot; " + (b.team ?? p.team ?? "") +
     (b.ppg ? " &middot; " + b.ppg.toFixed(1) + " a game projected" : "") +
-    (b.adp ? " &middot; adp " + b.adp.toFixed(0) : "") + "</div>" +
+    (b.adp ? " &middot; usually goes at pick " + b.adp.toFixed(0) +
+      (b.adpLow ? ", as early as " + b.adpHigh + " and as late as " + b.adpLow : "") : " &middot; undrafted in mocks") + "</div>" +
     (b.game
       ? "<h2>per game</h2>" +
         '<div class="fact">expected ' + b.game.ev + " points</div>" +
@@ -785,6 +786,7 @@ function renderDraft(staleAt) {
     grid.appendChild(card(p, {
       big: score,
       sub: (p.game ? p.game.ev + " a game &middot; " + p.game.q1 + " to " + p.game.q3 : p.ppg.toFixed(1) + " a game") +
+        (p.adp ? " &middot; goes " + p.adp.toFixed(0) + (p.adpLow ? " (" + p.adpHigh + " to " + p.adpLow + ")" : "") : " &middot; undrafted") +
         (p.bye ? " &middot; bye " + p.bye : ""),
       tag: shown <= 3
         ? "fills " + p.position

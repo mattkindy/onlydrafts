@@ -235,6 +235,8 @@ async function main(): Promise<void> {
           (p.projectedPpg - (replacement.get(p.position) ?? 0)).toFixed(1),
         ),
         adp: adp.get(`${normalizeName(p.name)}|${p.position}`)?.adp ?? null,
+        adpLow: adp.get(`${normalizeName(p.name)}|${p.position}`)?.low ?? null,
+        adpHigh: adp.get(`${normalizeName(p.name)}|${p.position}`)?.high ?? null,
         bye: world.byeWeek.get(p.teamId) ?? null,
         game: {
           ev: Number(p.projectedPpg.toFixed(1)),

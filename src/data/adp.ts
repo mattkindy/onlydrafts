@@ -8,6 +8,9 @@ export interface AdpEntry {
   position: string;
   /** average draft position; lower gets drafted earlier */
   adp: number;
+  /** earliest and latest he actually went across the sampled drafts */
+  high: number;
+  low: number;
 }
 
 /**
@@ -21,7 +24,13 @@ export async function loadAdp(season: number): Promise<Map<string, AdpEntry>> {
     "utf8",
   );
   const parsed = JSON.parse(text) as {
-    players: { name: string; position: string; adp: number }[];
+    players: {
+      name: string;
+      position: string;
+      adp: number;
+      high?: number;
+      low?: number;
+    }[];
   };
 
   const result = new Map<string, AdpEntry>();
@@ -31,6 +40,8 @@ export async function loadAdp(season: number): Promise<Map<string, AdpEntry>> {
       name: player.name,
       position: player.position,
       adp: player.adp,
+      high: player.high ?? player.adp,
+      low: player.low ?? player.adp,
     });
   }
 
