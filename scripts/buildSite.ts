@@ -91,6 +91,90 @@ async function main(): Promise<void> {
 
   // season draft board with replacement value, for the draft view
   const world = await buildPreseasonWorld(season);
+  const { projectDraftExamples } = await import("../src/features/seasonModel.js");
+  const draftExamples = await projectDraftExamples(season, world.data);
+  const exampleById = new Map(draftExamples.map((e) => [e.playerId, e]));
+
+  const weekOpp = new Map<string, { week: number; opponent: string; home: boolean }[]>();
+
+  for (const game of world.games) {
+    if (game.season !== season || game.week > 17) {
+      continue;
+    }
+
+    for (const [team, opponent, home] of [
+      [game.homeTeamId, game.awayTeamId, true],
+      [game.awayTeamId, game.homeTeamId, false],
+    ] as [string, string, boolean][]) {
+      const list = weekOpp.get(team) ?? [];
+      list.push({ week: game.week, opponent, home });
+      weekOpp.set(team, list);
+    }
+  }
+
+  const factors = (playerId: string, ppg: number) => {
+    const e = exampleById.get(playerId);
+    const plus: string[] = [];
+    const minus: string[] = [];
+
+    if (!e) {
+      return { plus, minus };
+    }
+
+    if (e.moved) {
+      minus.push("changed teams; movers keep about 89% of production");
+    }
+
+    if (e.group === "skill-stayer-new-qb") {
+      minus.push("new starting quarterback");
+    }
+
+    if (e.hcChanged) {
+      minus.push("new coaching regime; stayers under one keep about 96%");
+    } else if (e.ocChanged) {
+      plus.push("coordinator change under the same head coach, historically harmless");
+    }
+
+    if (e.ocReunion) {
+      plus.push("reunited with a former coordinator");
+    }
+
+    if (e.age !== undefined && e.age >= 29) {
+      minus.push(e.position === "RB" ? `age ${e.age}, past the RB cliff` : `age ${e.age}`);
+    }
+
+    if (e.expYears !== undefined && e.expYears <= 3) {
+      plus.push("years one to three, when players typically improve");
+    }
+
+    if (e.gamesPrev <= 12) {
+      minus.push(`only ${e.gamesPrev} games last season`);
+    }
+
+    if (e.tdPointShare >= 0.45) {
+      minus.push("touchdown-heavy scoring, which regresses");
+    }
+
+    if (e.rookieCapital >= 0.5) {
+      minus.push("team drafted a high pick at his position");
+    }
+
+    if (e.targetsPerGame >= 7) {
+      plus.push(`${e.targetsPerGame.toFixed(1)} targets a game, and volume repeats`);
+    }
+
+    if (e.carriesPerGame >= 14) {
+      plus.push(`${e.carriesPerGame.toFixed(1)} carries a game, a workhorse role`);
+    }
+
+    if (e.prevPpg > 0 && ppg > e.prevPpg + 1) {
+      plus.push(`model projects ${ppg.toFixed(1)}, above last season's ${e.prevPpg.toFixed(1)}`);
+    } else if (e.prevPpg > 0 && ppg < e.prevPpg - 1.5) {
+      minus.push(`model projects ${ppg.toFixed(1)}, below last season's ${e.prevPpg.toFixed(1)}`);
+    }
+
+    return { plus, minus };
+  };
   const REPLACEMENT_RANK: Record<string, number> = { QB: 20, RB: 40, WR: 40, TE: 16 };
   const replacement = new Map<string, number>();
 
@@ -104,18 +188,30 @@ async function main(): Promise<void> {
 
   const adp = await loadAdp(season).catch(() => new Map());
   const board = world.players
-    .map((p) => ({
-      name: p.name,
-      key: normalizeName(p.name),
-      position: p.position,
-      team: p.teamId,
-      ppg: Number(p.projectedPpg.toFixed(1)),
-      vor: Number(
-        (p.projectedPpg - (replacement.get(p.position) ?? 0)).toFixed(1),
-      ),
-      adp: adp.get(`${normalizeName(p.name)}|${p.position}`)?.adp ?? null,
-      bye: world.byeWeek.get(p.teamId) ?? null,
-    }))
+    .map((p) => {
+      const f = factors(p.playerId, p.projectedPpg);
+      return {
+        name: p.name,
+        key: normalizeName(p.name),
+        position: p.position,
+        team: p.teamId,
+        ppg: Number(p.projectedPpg.toFixed(1)),
+        vor: Number(
+          (p.projectedPpg - (replacement.get(p.position) ?? 0)).toFixed(1),
+        ),
+        adp: adp.get(`${normalizeName(p.name)}|${p.position}`)?.adp ?? null,
+        bye: world.byeWeek.get(p.teamId) ?? null,
+        plus: f.plus,
+        minus: f.minus,
+        weeks: (weekOpp.get(p.teamId) ?? [])
+          .sort((a, b) => a.week - b.week)
+          .map((g) => ({
+            w: g.week,
+            opp: (g.home ? "v " : "@ ") + g.opponent,
+            pts: Number((p.projectedPpg * world.oppAdjust(p.position, g.opponent)).toFixed(1)),
+          })),
+      };
+    })
     .sort((a, b) => b.vor - a.vor);
 
   await writeFile(

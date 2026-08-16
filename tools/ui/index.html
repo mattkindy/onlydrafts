@@ -18,58 +18,51 @@
     }
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font-family: system-ui, sans-serif; line-height: 1.45;
-  }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, sans-serif; line-height: 1.45; }
   .wrap { max-width: 64rem; margin: 0 auto; padding: 1rem 1rem 4rem; }
-  .mono { font-family: ui-monospace, Menlo, monospace; font-size: .7rem;
-    letter-spacing: .1em; text-transform: uppercase; }
-  nav { display: flex; gap: .4rem; align-items: center; margin: .5rem 0 1rem; }
+  nav { display: flex; gap: .4rem; align-items: center; margin: .5rem 0 1rem;
+    flex-wrap: wrap; }
   nav .brand { margin-right: auto; font-weight: 800; font-size: 1.05rem;
-    letter-spacing: -0.02em; }
+    letter-spacing: -0.02em; cursor: pointer; }
   nav .brand b { color: var(--go); }
-  nav button {
-    font: inherit; font-size: .8rem; font-weight: 600;
-    background: transparent; color: var(--muted);
-    border: none; border-bottom: 2px solid transparent;
-    padding: .35rem .7rem; cursor: pointer;
-  }
+  nav button { font: inherit; font-size: .8rem; font-weight: 600;
+    background: transparent; color: var(--muted); border: none;
+    border-bottom: 2px solid transparent; padding: .35rem .7rem; cursor: pointer; }
   nav button.on { color: var(--ink); border-bottom-color: var(--go); }
   .controls { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 10px; padding: .7rem 1rem; margin: 0 0 1rem;
     display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
   .controls label { color: var(--muted); font-size: .82rem; }
-  input, select {
-    font: inherit; font-size: .85rem; color: var(--ink); background: var(--bg);
-    border: 1px solid var(--edge); padding: .3rem .5rem; border-radius: 7px;
-  }
-  button.act {
-    font: inherit; font-size: .85rem; font-weight: 700;
+  input, select { font: inherit; font-size: .85rem; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--edge);
+    padding: .3rem .5rem; border-radius: 7px; }
+  button.act { font: inherit; font-size: .85rem; font-weight: 700;
     background: var(--go); color: #0C1117; border: none;
-    padding: .4rem 1.1rem; border-radius: 999px; cursor: pointer;
-  }
+    padding: .4rem 1.1rem; border-radius: 999px; cursor: pointer; }
   button.act:hover { filter: brightness(1.12); }
   #status { color: var(--faint); font-size: .82rem; }
   progress { width: 9rem; accent-color: var(--go); }
-  textarea { width: 100%; height: 3.2rem; font: inherit; font-size: .85rem;
-    color: var(--ink); background: var(--bg);
-    border: 1px solid var(--edge); padding: .4rem; border-radius: 7px; }
+  textarea { width: 100%; height: 3rem; font: inherit; font-size: .85rem;
+    color: var(--ink); background: var(--bg); border: 1px solid var(--edge);
+    padding: .4rem; border-radius: 7px; }
   h2 { font-size: .78rem; margin: 1.3rem 0 .5rem; color: var(--faint);
     font-family: ui-monospace, Menlo, monospace; letter-spacing: .12em;
     text-transform: uppercase; }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
     gap: .7rem; }
   .card { background: var(--panel); border: 1px solid var(--edge);
-    border-radius: 12px; padding: .75rem .95rem; }
+    border-radius: 12px; padding: .75rem .95rem; cursor: pointer; }
+  .card.plain { cursor: default; }
   .card.mine { border-color: var(--go); }
+  .card.kept { opacity: .55; }
   .card .top { display: flex; justify-content: space-between; align-items: baseline; }
   .card .nm { font-weight: 700; font-size: .92rem; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
   .card .big { font-size: 1.35rem; font-weight: 800;
     font-variant-numeric: tabular-nums; }
   .card .sub { color: var(--faint); font-size: .74rem;
-    display: flex; justify-content: space-between; margin-top: .1rem; }
+    display: flex; justify-content: space-between; margin-top: .1rem; gap: .5rem; }
   .range { position: relative; height: 8px; background: var(--chip);
     border-radius: 999px; margin-top: .6rem; }
   .range .span { position: absolute; top: 0; bottom: 0;
@@ -80,35 +73,59 @@
   .tag { font-size: .72rem; font-weight: 700; color: var(--go); margin-top: .45rem; }
   .tag.warn { color: var(--mark); }
   .hint { color: var(--faint); font-size: .78rem; }
-  .gone { opacity: .3; }
-  @media (max-width: 640px) {
-    nav { flex-wrap: wrap; }
-    nav .brand { width: 100%; }
-  }
+  table.grid { border-collapse: collapse; font-size: .68rem; width: 100%;
+    overflow-x: auto; display: block; background: var(--panel);
+    border: 1px solid var(--edge); border-radius: 10px; }
+  table.grid td, table.grid th { border: 1px solid var(--edge);
+    padding: .25rem .4rem; white-space: nowrap; color: var(--muted); }
+  table.grid th { color: var(--faint); font-weight: 600; }
+  table.grid td.me { background: color-mix(in srgb, var(--go) 18%, var(--panel));
+    color: var(--ink); }
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: none; align-items: flex-start; justify-content: center;
+    padding: 2rem 1rem; overflow-y: auto; z-index: 10; }
+  #overlay.open { display: flex; }
+  .sheet { background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 14px; padding: 1.2rem 1.4rem; max-width: 34rem; width: 100%; }
+  .sheet h3 { margin: 0; font-size: 1.15rem; }
+  .sheet .sub { color: var(--faint); font-size: .8rem; margin-bottom: .8rem; }
+  .wk { display: grid; grid-template-columns: 2.4rem 3.4rem 1fr 2.4rem;
+    gap: .5rem; align-items: center; font-size: .75rem; color: var(--muted);
+    padding: .1rem 0; }
+  .wk .bar { height: 7px; background: var(--chip); border-radius: 999px;
+    position: relative; }
+  .wk .bar i { position: absolute; left: 0; top: 0; bottom: 0;
+    background: var(--go); border-radius: 999px; opacity: .7; }
+  .fact { font-size: .8rem; margin: .15rem 0; }
+  .fact.p::before { content: "+ "; color: var(--go); font-weight: 700; }
+  .fact.m::before { content: "- "; color: var(--mark); font-weight: 700; }
+  .sheet .row { display: flex; gap: .6rem; margin-top: 1rem; }
+  .league-card .nm { font-size: 1rem; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <nav>
-    <span class="brand">depth<b>chart</b></span>
+    <span class="brand" id="home">depth<b>chart</b></span>
+    <button data-view="leagues">leagues</button>
     <button data-view="draft">draft</button>
-    <button data-view="start" class="on">start</button>
+    <button data-view="start">start</button>
     <button data-view="waivers">waivers</button>
     <button data-view="history">history</button>
   </nav>
 
-  <div class="controls">
+  <div class="controls" id="ctl">
+    <label id="userwrap">sleeper user <input id="username" size="12"></label>
     <label id="weekwrap">week <select id="week"></select></label>
-    <label>sleeper league <input id="league" size="14" placeholder="league id"></label>
     <label id="teamwrap" hidden>team <select id="team"></select></label>
-    <label id="draftwrap" hidden>draft <input id="draftid" size="14" placeholder="draft id (auto)"></label>
+    <label id="keepwrap" hidden>keepers/team <input id="keepn" type="number" value="2" min="0" max="6" style="width:3.2rem"></label>
     <button class="act" id="go">load</button>
     <span id="status"></span>
     <progress id="prog" max="100" value="0" hidden></progress>
   </div>
 
   <div class="controls" id="manualwrap" style="display:block">
-    <label class="hint">no sleeper? paste your roster, one name per line</label>
+    <label class="hint" id="manualhint"></label>
     <textarea id="manual"></textarea>
   </div>
 
@@ -116,205 +133,262 @@
   <p class="hint" id="legend"></p>
 </div>
 
+<div id="overlay"><div class="sheet" id="sheet"></div></div>
+
 <script>
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 const STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1 };
-let view = "start";
-let meta = null;
-let board = null;
+let view = "leagues";
+let meta = null, board = null, boardByKey = null;
 const slates = {};
-let sleeper = { players: null, rosters: null };
+let players = null;
+let leagues = store_get("leagues", []);
+let active = store_get("active", null); // {leagueId, name, team, userId}
 let draftPoll = null;
-let taken = new Set();
-let draftTeams = {};
-let myDraftKeys = new Set();
-let draftUsers = [];
+let draftState = { taken: new Set(), teams: {}, mine: new Set(), likely: {}, grid: null, pickCount: undefined };
+
+function store_get(key, fallback) {
+  try { const raw = localStorage.getItem("dc." + key); return raw ? JSON.parse(raw) : fallback; }
+  catch { return fallback; }
+}
+function store_set(key, value) {
+  try { localStorage.setItem("dc." + key, JSON.stringify(value)); } catch {}
+}
 
 const $ = (id) => document.getElementById(id);
 const norm = (n) => n.toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b\.?$/, "").replace(/[^a-z]/g, "");
-
-const store = {
-  get(key, fallback) {
-    try {
-      const raw = localStorage.getItem("dc." + key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch { return fallback; }
-  },
-  set(key, value) {
-    try { localStorage.setItem("dc." + key, JSON.stringify(value)); } catch {}
-  },
-};
-
-function saveSettings() {
-  store.set("settings", {
-    league: $("league").value, draftId: $("draftid").value,
-    team: $("team").value, manual: $("manual").value,
-    week: $("week").value, view,
-  });
-}
-
-function logHistory(note) {
-  const history = store.get("history", []);
-  history.unshift({ at: new Date().toISOString().slice(0, 16).replace("T", " "), view, week: $("week").value, note });
-  store.set("history", history.slice(0, 50));
-}
+const api = (path) => fetch("https://api.sleeper.app/v1" + path).then((r) => r.json());
 
 async function sleeperPlayers() {
-  if (sleeper.players) return sleeper.players;
-  const cached = store.get("players", null);
-  if (cached) { sleeper.players = cached; return cached; }
-
+  if (players) return players;
+  const cached = store_get("players", null);
+  if (cached) { players = cached; return cached; }
   $("status").textContent = "fetching player list (5MB, once ever)...";
-  $("prog").hidden = false;
-  $("prog").value = 40;
-  const raw = await fetch("https://api.sleeper.app/v1/players/nfl").then((r) => r.json());
+  $("prog").hidden = false; $("prog").value = 40;
+  const raw = await api("/players/nfl");
   $("prog").hidden = true;
   const trimmed = {};
-
   for (const [id, p] of Object.entries(raw)) {
-    if (p.full_name && p.position) trimmed[id] = { full_name: p.full_name, position: p.position };
+    if (p.full_name && p.position) trimmed[id] = { n: p.full_name, p: p.position };
   }
-
-  store.set("players", trimmed);
-  sleeper.players = trimmed;
+  store_set("players", trimmed);
+  players = trimmed;
   return trimmed;
+}
+
+function keeperKeyFor(league) { return "keepers." + league; }
+function markedKeepers() { return active ? store_get(keeperKeyFor(active.leagueId), {}) : {}; }
+function saveMarkedKeepers(map) { if (active) store_set(keeperKeyFor(active.leagueId), map); }
+
+function logHistory(note) {
+  const history = store_get("history", []);
+  history.unshift({ at: new Date().toISOString().slice(0, 16).replace("T", " "), view, week: $("week").value, note });
+  store_set("history", history.slice(0, 50));
 }
 
 async function boot() {
   meta = await (await fetch("data/index.json")).json();
-
   for (const entry of meta.weeks) {
     const option = document.createElement("option");
-    option.value = `${entry.season}|${entry.week}`;
-    option.textContent = `${entry.season} week ${entry.week}`;
+    option.value = entry.season + "|" + entry.week;
+    option.textContent = entry.season + " week " + entry.week;
     $("week").appendChild(option);
   }
-
-  $("week").value = `${meta.weeks.at(-1).season}|${meta.weeks.at(-1).week}`;
-  const saved = store.get("settings", null);
-
+  $("week").value = meta.weeks.at(-1).season + "|" + meta.weeks.at(-1).week;
+  const saved = store_get("settings", null);
   if (saved) {
-    $("league").value = saved.league ?? "";
-    $("draftid").value = saved.draftId ?? "";
+    $("username").value = saved.username ?? "";
     $("manual").value = saved.manual ?? "";
+    $("keepn").value = saved.keepn ?? 2;
     if (saved.week && [...$("week").options].some((o) => o.value === saved.week)) $("week").value = saved.week;
   }
+  setView(active ? (saved && saved.view ? saved.view : "start") : "leagues");
+  if (view === "leagues" && leagues.length) renderLeagues();
+}
 
-  setView(saved && saved.view && saved.view !== "history" ? saved.view : "start");
+function saveSettings() {
+  store_set("settings", { username: $("username").value, manual: $("manual").value,
+    keepn: $("keepn").value, week: $("week").value, view });
 }
 
 function setView(next) {
   view = next;
-
-  for (const button of document.querySelectorAll("nav button")) {
-    button.classList.toggle("on", button.dataset.view === next);
-  }
-
-  $("weekwrap").hidden = next === "draft" || next === "history";
-  $("draftwrap").hidden = next !== "draft";
-  document.querySelector("#manualwrap .hint").textContent =
-    next === "draft"
-      ? "extra keepers to mark taken, one name per line (league keepers load automatically)"
-      : "no sleeper? paste your roster, one name per line";
-  $("legend").textContent =
-    next === "draft"
-      ? "cards rank by value over a replacement starter, weighted by what your roster still needs"
-      : "bar spans floor to ceiling; the mark is the projection";
+  for (const b of document.querySelectorAll("nav button")) b.classList.toggle("on", b.dataset.view === next);
+  $("userwrap").hidden = next !== "leagues";
+  $("weekwrap").hidden = next === "draft" || next === "history" || next === "leagues";
+  $("teamwrap").hidden = true;
+  $("keepwrap").hidden = next !== "draft";
+  $("manualwrap").style.display = next === "start" || next === "waivers" || next === "draft" ? "block" : "none";
+  $("manualhint").textContent = next === "draft"
+    ? "extra names to mark taken, one per line"
+    : "no sleeper league? paste your roster, one name per line";
+  $("legend").textContent = {
+    leagues: "type your sleeper username and load; pick a league",
+    draft: "big number weighs a player's value over replacement by the starting slots you still need; click a card for details and keeper marking",
+    start: "bar spans floor to ceiling; the mark is the projection; click a card for details",
+    waivers: "your players next to the best outside your roster; click a card for details",
+    history: "",
+  }[next] ?? "";
   $("out").innerHTML = "";
-
   if (draftPoll && next !== "draft") { clearInterval(draftPoll); draftPoll = null; }
   refreshGoLabel();
   if (next === "history") renderHistory();
+  if (next === "leagues" && leagues.length) renderLeagues();
 }
 
 function refreshGoLabel() {
-  if (view !== "draft") {
-    $("go").textContent = "load";
-    return;
-  }
-
-  if (draftPoll) {
-    $("go").textContent = "pause";
-  } else if (store.get("draft", null)) {
-    $("go").textContent = "resume draft";
-  } else {
-    $("go").textContent = "start draft";
-  }
+  if (view !== "draft") { $("go").textContent = "load"; return; }
+  $("go").textContent = draftPoll ? "pause" : store_get("draftState", null) ? "resume draft" : "start draft";
 }
 
-async function loadSleeper(leagueId) {
-  $("status").textContent = "fetching league...";
-  const [rosters, users] = await Promise.all([
-    fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`).then((r) => r.json()),
-    fetch(`https://api.sleeper.app/v1/league/${leagueId}/users`).then((r) => r.json()),
-  ]);
-  const players = await sleeperPlayers();
-  const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
-  draftUsers = users.map((u) => u.display_name);
-  sleeper.rosters = rosters.map((r) => ({
-    owner: nameOf.get(r.owner_id) ?? r.owner_id,
-    keys: (r.players ?? [])
-      .map((id) => players[id])
-      .filter((p) => p && p.full_name)
-      .map((p) => norm(p.full_name)),
-  }));
+async function loadLeagues() {
+  const username = $("username").value.trim();
+  if (!username) { $("status").textContent = "type your sleeper username"; return; }
+  $("status").textContent = "finding leagues...";
+  const user = await api("/user/" + username);
+  if (!user || !user.user_id) { $("status").textContent = "no such user"; return; }
+  const state = await api("/state/nfl");
+  const found = await api("/user/" + user.user_id + "/leagues/nfl/" + state.season);
+  const playerMap = await sleeperPlayers();
+  leagues = [];
 
-  $("team").innerHTML = "";
-
-  for (const r of sleeper.rosters) {
-    const option = document.createElement("option");
-    option.value = r.owner;
-    option.textContent = r.owner;
-    $("team").appendChild(option);
+  for (const lg of found ?? []) {
+    const [rosters, users] = await Promise.all([
+      api("/league/" + lg.league_id + "/rosters"),
+      api("/league/" + lg.league_id + "/users"),
+    ]);
+    const mine = rosters.find((r) => r.owner_id === user.user_id);
+    const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
+    leagues.push({
+      leagueId: lg.league_id, name: lg.name, size: lg.total_rosters,
+      userId: user.user_id, team: nameOf.get(user.user_id) ?? username,
+      myRoster: (mine && mine.players ? mine.players : [])
+        .map((id) => playerMap[id]).filter(Boolean).map((p) => ({ name: p.n, key: norm(p.n) })),
+      allRosters: rosters.map((r) => ({
+        owner: nameOf.get(r.owner_id) ?? r.owner_id,
+        keys: (r.players ?? []).map((id) => playerMap[id]).filter(Boolean)
+          .map((p) => ({ name: p.n, key: norm(p.n), pos: p.p })),
+      })),
+    });
   }
 
-  $("teamwrap").hidden = false;
-  const saved = store.get("settings", null);
-  if (saved && saved.team && sleeper.rosters.some((r) => r.owner === saved.team)) $("team").value = saved.team;
-  $("status").textContent = "pick your team, then load again";
+  store_set("leagues", leagues);
+  $("status").textContent = "";
+  renderLeagues();
 }
 
-function myKeys() {
-  const manual = $("manual").value.trim();
-  if (manual) return new Set(manual.split("\n").map(norm).filter(Boolean));
+function renderLeagues() {
+  const out = $("out");
+  out.innerHTML = "";
+  const h = document.createElement("h2");
+  h.textContent = "your leagues";
+  out.appendChild(h);
+  const grid = document.createElement("div");
+  grid.className = "cards";
 
-  if (sleeper.rosters) {
-    const roster = sleeper.rosters.find((r) => r.owner === $("team").value);
-    return new Set(roster ? roster.keys : []);
+  for (const lg of leagues) {
+    const div = document.createElement("div");
+    div.className = "card league-card" + (active && active.leagueId === lg.leagueId ? " mine" : "");
+    div.innerHTML = '<div class="nm">' + lg.name + '</div><div class="sub"><span>' +
+      lg.size + ' teams</span><span>you: ' + lg.team + "</span></div>";
+    div.addEventListener("click", () => {
+      active = lg;
+      store_set("active", active);
+      setView("draft");
+    });
+    grid.appendChild(div);
   }
 
-  return new Set();
+  out.appendChild(grid);
 }
 
-const isMine = (mine, key) => [...mine].some((k) => key.includes(k) || k.includes(key));
+function boardLookup(key) {
+  if (!boardByKey) return null;
+  return boardByKey.get(key) ?? [...boardByKey.entries()].find(([k]) => k.includes(key) || key.includes(k))?.[1] ?? null;
+}
+
+function openDetail(p, slatePlayer) {
+  const b = boardLookup(p.key) ?? p;
+  const sheet = $("sheet");
+  const marked = markedKeepers();
+  const isKept = !!marked[p.key];
+  const weeks = (b.weeks ?? []).map((g) =>
+    '<div class="wk"><span>w' + g.w + "</span><span>" + g.opp +
+    '</span><span class="bar"><i style="width:' + Math.min(100, (g.pts / 30) * 100) + '%"></i></span><span>' +
+    g.pts.toFixed(1) + "</span></div>").join("");
+  const plus = (b.plus ?? []).map((f) => '<div class="fact p">' + f + "</div>").join("");
+  const minus = (b.minus ?? []).map((f) => '<div class="fact m">' + f + "</div>").join("");
+  sheet.innerHTML =
+    "<h3>" + (b.name ?? p.name) + '</h3><div class="sub">' + (b.position ?? p.position) +
+    " &middot; " + (b.team ?? p.team ?? "") +
+    (b.ppg ? " &middot; " + b.ppg.toFixed(1) + " a game projected" : "") +
+    (b.adp ? " &middot; adp " + b.adp.toFixed(0) : "") + "</div>" +
+    (plus || minus ? "<h2>factors vs past years</h2>" + plus + minus : "") +
+    (weeks ? "<h2>week by week</h2>" + weeks : "") +
+    '<div class="row"><button class="act" id="keepbtn">' +
+    (isKept ? "unmark keeper" : "mark as keeper") + "</button>" +
+    '<button class="act" id="closebtn" style="background:var(--chip); color:var(--ink)">close</button></div>';
+  $("overlay").classList.add("open");
+  $("keepbtn").addEventListener("click", () => {
+    const map = markedKeepers();
+    if (map[p.key]) delete map[p.key];
+    else {
+      const owner = ownerOf(p.key);
+      const already = Object.entries(map).filter(([k, o]) => o === owner).length;
+      if (owner && already >= Number($("keepn").value)) {
+        $("status").textContent = owner + " already has " + already + " keepers marked";
+        return;
+      }
+      map[p.key] = owner ?? "unknown";
+    }
+    saveMarkedKeepers(map);
+    $("overlay").classList.remove("open");
+    if (view === "draft") renderDraft();
+  });
+  $("closebtn").addEventListener("click", () => $("overlay").classList.remove("open"));
+}
+
+function ownerOf(key) {
+  if (!active) return null;
+  for (const r of active.allRosters) if (r.keys.some((k) => k.key === key)) return r.owner;
+  return null;
+}
 
 function card(p, opts = {}) {
   const div = document.createElement("div");
-  div.className = "card" + (opts.mine ? " mine" : "");
+  div.className = "card" + (opts.mine ? " mine" : "") + (opts.kept ? " kept" : "");
   const max = opts.max ?? 40;
-  const range =
-    p.floor !== undefined
-      ? `<div class="range">
-          <span class="span" style="left:${(p.floor / max) * 100}%; width:${((p.ceiling - p.floor) / max) * 100}%"></span>
-          <span class="mark" style="left:${(p.predicted / max) * 100}%"></span>
-        </div>`
-      : "";
-  const tag = opts.tag ? `<div class="tag${opts.warn ? " warn" : ""}">${opts.tag}</div>` : "";
-  div.innerHTML = `
-    <div class="top"><span class="nm">${p.name}</span><span class="big">${(p.predicted ?? p.vor).toFixed(1)}</span></div>
-    <div class="sub"><span>${p.position} &middot; ${p.team}${p.opponent ? " &middot; " + p.opponent : ""}</span><span>${opts.sub ?? ""}</span></div>
-    ${range}${tag}`;
+  const big = opts.big !== undefined ? opts.big : (p.predicted ?? p.vor);
+  const range = p.floor !== undefined
+    ? '<div class="range"><span class="span" style="left:' + (p.floor / max) * 100 +
+      "%; width:" + ((p.ceiling - p.floor) / max) * 100 + '%"></span><span class="mark" style="left:' +
+      (p.predicted / max) * 100 + '%"></span></div>'
+    : "";
+  const tag = opts.tag ? '<div class="tag' + (opts.warn ? " warn" : "") + '">' + opts.tag + "</div>" : "";
+  div.innerHTML = '<div class="top"><span class="nm">' + p.name + '</span><span class="big">' +
+    big.toFixed(1) + '</span></div><div class="sub"><span>' + p.position + " &middot; " +
+    (p.team ?? "") + (p.opponent ? " &middot; " + p.opponent : "") + "</span><span>" +
+    (opts.sub ?? "") + "</span></div>" + range + tag;
+  div.addEventListener("click", () => openDetail(p));
   return div;
 }
 
 async function slateFor(key) {
   if (!slates[key]) {
     const parts = key.split("|");
-    slates[key] = await (await fetch(`data/slate-${parts[0]}-${parts[1]}.json`)).json();
+    slates[key] = await (await fetch("data/slate-" + parts[0] + "-" + parts[1] + ".json")).json();
   }
-
   return slates[key];
 }
+
+function myKeys() {
+  const manual = $("manual").value.trim();
+  if (manual && view !== "draft") return new Set(manual.split("\n").map(norm).filter(Boolean));
+  if (active) return new Set(active.myRoster.map((p) => p.key));
+  return new Set();
+}
+
+const isMine = (mine, key) => [...mine].some((k) => key.includes(k) || k.includes(key));
 
 async function renderStart() {
   const slate = await slateFor($("week").value);
@@ -333,14 +407,12 @@ async function renderStart() {
     out.appendChild(h);
     const grid = document.createElement("div");
     grid.className = "cards";
-
-    for (const p of shown) grid.appendChild(card(p, { mine: mine.size > 0, max, sub: `${p.snaps}% snaps` }));
-
+    for (const p of shown) grid.appendChild(card(p, { mine: mine.size > 0, max, sub: p.snaps + "% snaps" }));
     out.appendChild(grid);
-    if (mine.size > 0 && owned[0]) starts.push(`${position}: ${owned[0].name} ${owned[0].predicted.toFixed(1)}`);
+    if (mine.size > 0 && owned[0]) starts.push(position + ": " + owned[0].name + " " + owned[0].predicted.toFixed(1));
   }
 
-  if (starts.length > 0) logHistory(`starts: ${starts.join("; ")}`);
+  if (starts.length > 0) logHistory("starts: " + starts.join("; "));
 }
 
 async function renderWaivers() {
@@ -352,7 +424,7 @@ async function renderWaivers() {
   const suggestions = [];
 
   if (mine.size === 0) {
-    out.innerHTML = '<p class="hint">connect a league or paste a roster to compare against free agents</p>';
+    out.innerHTML = '<p class="hint">pick a league on the leagues tab, or paste a roster</p>';
     return;
   }
 
@@ -366,29 +438,16 @@ async function renderWaivers() {
     out.appendChild(h);
     const grid = document.createElement("div");
     grid.className = "cards";
-
-    for (const p of owned) grid.appendChild(card(p, { mine: true, max, sub: `${p.snaps}% snaps` }));
-
+    for (const p of owned) grid.appendChild(card(p, { mine: true, max, sub: p.snaps + "% snaps" }));
     for (const p of outside) {
       const gain = worst ? p.predicted - worst.predicted : 0;
-      if (worst && gain > 2) suggestions.push(`${p.name} +${gain.toFixed(1)} over ${worst.name}`);
-      grid.appendChild(card(p, { max, sub: `${p.snaps}% snaps`, tag: worst && gain > 2 ? `+${gain.toFixed(1)} over ${worst.name}` : "" }));
+      if (worst && gain > 2) suggestions.push(p.name + " +" + gain.toFixed(1) + " over " + worst.name);
+      grid.appendChild(card(p, { max, sub: p.snaps + "% snaps", tag: worst && gain > 2 ? "+" + gain.toFixed(1) + " over " + worst.name : "" }));
     }
-
     out.appendChild(grid);
   }
 
-  logHistory(suggestions.length > 0 ? `waiver ideas: ${suggestions.slice(0, 3).join("; ")}` : "no waiver moves clear the bar");
-}
-
-async function findDraftId(leagueId) {
-  const drafts = await fetch(`https://api.sleeper.app/v1/league/${leagueId}/drafts`).then((r) => r.json());
-  return drafts && drafts[0] ? drafts[0].draft_id : null;
-}
-
-function manualTaken() {
-  const manual = $("manual").value.trim();
-  return manual ? manual.split("\n").map(norm).filter(Boolean) : [];
+  logHistory(suggestions.length ? "waiver ideas: " + suggestions.slice(0, 3).join("; ") : "no waiver moves clear the bar");
 }
 
 function needFactor(position, count) {
@@ -398,181 +457,182 @@ function needFactor(position, count) {
   return 0.2;
 }
 
-async function pollPicks(draftId, leagueId) {
-  taken = new Set(manualTaken());
-  draftTeams = {};
-  myDraftKeys = new Set();
-  const players = await sleeperPlayers();
-  const me = $("team").value;
+async function pollDraft() {
+  const playerMap = await sleeperPlayers();
+  const marked = markedKeepers();
+  const state = { taken: new Set(Object.keys(marked)), teams: {}, mine: new Set(), likely: {}, grid: null, pickCount: undefined };
+  const manual = $("manual").value.trim();
+  for (const line of manual ? manual.split("\n") : []) if (line.trim()) state.taken.add(norm(line));
 
-  if (leagueId) {
-    const [rosters, users] = await Promise.all([
-      fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`).then((r) => r.json()),
-      fetch(`https://api.sleeper.app/v1/league/${leagueId}/users`).then((r) => r.json()),
-    ]);
-    const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
+  for (const [key, owner] of Object.entries(marked)) {
+    (state.teams[owner] = state.teams[owner] ?? []).push((boardLookup(key)?.name ?? key) + " (keeper)");
+    if (active && owner === active.team) state.mine.add(key);
+  }
 
-    if ($("team").options.length === 0) {
-      for (const u of users) {
-        const option = document.createElement("option");
-        option.value = option.textContent = u.display_name;
-        $("team").appendChild(option);
-      }
+  let draft = null, picks = [];
 
-      const saved = store.get("settings", null);
-      if (saved && saved.team) $("team").value = saved.team;
-      $("teamwrap").hidden = false;
+  if (active) {
+    const drafts = await api("/league/" + active.leagueId + "/drafts");
+    if (drafts && drafts[0]) {
+      draft = await api("/draft/" + drafts[0].draft_id);
+      picks = await api("/draft/" + drafts[0].draft_id + "/picks");
     }
+  }
 
-    for (const r of rosters) {
-      const owner = nameOf.get(r.owner_id) ?? r.owner_id;
+  const keeperPicksExist = picks.some((p) => p.is_keeper);
 
-      for (const id of r.players ?? []) {
-        const p = players[id];
+  for (const pick of picks) {
+    const p = playerMap[pick.player_id];
+    if (!p) continue;
+    const key = norm(p.n);
+    state.taken.add(key);
+    const owner = pick.picked_by && active && pick.picked_by === active.userId ? active.team
+      : "slot " + pick.draft_slot;
+    (state.teams[owner] = state.teams[owner] ?? []).push(p.n + (pick.is_keeper ? " (keeper)" : ""));
+    if (active && pick.picked_by === active.userId) state.mine.add(key);
+  }
 
-        if (p && p.full_name) {
-          const key = norm(p.full_name);
-          taken.add(key);
-          (draftTeams[owner] = draftTeams[owner] ?? []).push(p.full_name + " (kept)");
-          if (owner === me) myDraftKeys.add(key);
-        }
+  // theoretical keepers for teams with no actual keeper information
+  if (active && !keeperPicksExist) {
+    const n = Number($("keepn").value);
+    for (const r of active.allRosters) {
+      const hasActual = Object.values(marked).includes(r.owner);
+      if (hasActual || n === 0) continue;
+      const valued = r.keys
+        .map((k) => ({ ...k, vor: boardLookup(k.key)?.vor ?? -99 }))
+        .sort((a, b) => b.vor - a.vor)
+        .slice(0, n);
+      state.likely[r.owner] = valued.map((v) => v.key);
+      for (const v of valued) {
+        state.taken.add(v.key);
+        if (r.owner === active.team) state.mine.add(v.key);
       }
     }
   }
 
-  let pickCount;
-
-  if (draftId) {
-    const picks = await fetch(`https://api.sleeper.app/v1/draft/${draftId}/picks`).then((r) => r.json());
-    const users = await fetch(`https://api.sleeper.app/v1/draft/${draftId}`).then((r) => r.json()).catch(() => null);
-    pickCount = picks.length;
-
+  if (draft && picks.length) {
+    state.grid = { rounds: draft.settings?.rounds ?? 15, teams: draft.settings?.teams ?? 12, cells: {} , mySlot: draft.draft_order ? draft.draft_order[active.userId] : null };
     for (const pick of picks) {
-      const p = players[pick.player_id];
-      if (!p || !p.full_name) continue;
-      const key = norm(p.full_name);
-      taken.add(key);
-      const owner = (pick.metadata && pick.metadata.team) || `slot ${pick.draft_slot}`;
-      const label = draftUsers.length && pick.picked_by
-        ? (sleeper.rosters?.find(() => false), owner)
-        : owner;
-      (draftTeams[label] = draftTeams[label] ?? []).push(p.full_name);
-      if ($("team").value && pick.metadata && norm(pick.metadata.team ?? "") === norm(me)) myDraftKeys.add(key);
+      const p = playerMap[pick.player_id];
+      state.grid.cells[pick.round + "|" + pick.draft_slot] = p ? p.n.split(" ").at(-1) : "?";
     }
+    state.pickCount = picks.length;
   }
 
-  store.set("draft", {
-    draftId, leagueId, taken: [...taken], teams: draftTeams,
-    mine: [...myDraftKeys], pickCount,
-    at: new Date().toISOString().slice(0, 16).replace("T", " "),
-  });
-  renderDraft(pickCount);
+  draftState = state;
+  store_set("draftState", { ...state, taken: [...state.taken], mine: [...state.mine], at: new Date().toISOString().slice(0, 16).replace("T", " ") });
+  renderDraft();
 }
 
-function renderDraft(pickCount, staleAt) {
+function renderDraft(staleAt) {
   if (!board) return;
   const out = $("out");
   out.innerHTML = "";
-
+  const s = draftState;
   const counts = { QB: 0, RB: 0, WR: 0, TE: 0 };
   const mineList = [];
 
   for (const p of board.players) {
-    if (myDraftKeys.has(p.key)) {
-      counts[p.position] = (counts[p.position] ?? 0) + 1;
-      mineList.push(p);
-    }
+    if (s.mine.has(p.key)) { counts[p.position] = (counts[p.position] ?? 0) + 1; mineList.push(p); }
   }
 
   const h = document.createElement("h2");
-  h.textContent = (pickCount !== undefined ? `pick ${pickCount + 1}, ` : "") +
-    "recommended for your roster" + (staleAt ? ` as of ${staleAt}` : "");
+  h.textContent = (s.pickCount !== undefined ? "pick " + (s.pickCount + 1) + ", " : "") +
+    "best for your roster" + (staleAt ? " as of " + staleAt : "");
   out.appendChild(h);
 
+  const likelyKeys = new Set(Object.values(s.likely).flat());
   const scored = board.players
-    .filter((p) => !taken.has(p.key))
-    .map((p) => ({ p, score: p.vor * needFactor(p.position, counts[p.position] ?? 0) }))
+    .filter((p) => !s.taken.has(p.key) || likelyKeys.has(p.key))
+    .map((p) => ({ p, score: p.vor * needFactor(p.position, counts[p.position] ?? 0), likely: likelyKeys.has(p.key) }))
     .sort((a, b) => b.score - a.score);
 
   const grid = document.createElement("div");
   grid.className = "cards";
+  let shown = 0;
 
-  scored.slice(0, 18).forEach(({ p, score }, i) => {
-    grid.appendChild(card(
-      { ...p, predicted: undefined },
-      {
-        sub: `${p.ppg.toFixed(1)} a game${p.adp ? " &middot; adp " + p.adp.toFixed(0) : ""}${p.bye ? " &middot; bye " + p.bye : ""}`,
-        tag: i < 3 ? `pick this: fills ${p.position}, need-adjusted ${score.toFixed(1)}` : "",
-      },
-    ));
-  });
+  for (const { p, score, likely } of scored) {
+    if (shown >= 20) break;
+    shown++;
+    grid.appendChild(card(p, {
+      big: likely ? p.vor : score,
+      kept: likely,
+      sub: p.ppg.toFixed(1) + " a game" + (p.adp ? " &middot; adp " + p.adp.toFixed(0) : "") + (p.bye ? " &middot; bye " + p.bye : ""),
+      tag: likely ? "likely keeper for " + Object.entries(s.likely).find(([, keys]) => keys.includes(p.key))?.[0] : (shown <= 3 ? "fills " + p.position : ""),
+      warn: likely,
+    }));
+  }
 
   out.appendChild(grid);
 
+  if (s.grid) {
+    const gh = document.createElement("h2");
+    gh.textContent = "pick grid";
+    out.appendChild(gh);
+    const table = document.createElement("table");
+    table.className = "grid";
+    let header = "<tr><th></th>";
+    for (let slot = 1; slot <= s.grid.teams; slot++) header += "<th>" + (slot === s.grid.mySlot ? "you" : slot) + "</th>";
+    let body = header + "</tr>";
+    for (let round = 1; round <= s.grid.rounds; round++) {
+      body += "<tr><th>r" + round + "</th>";
+      for (let slot = 1; slot <= s.grid.teams; slot++) {
+        const cell = s.grid.cells[round + "|" + slot] ?? "";
+        body += '<td class="' + (slot === s.grid.mySlot ? "me" : "") + '">' + cell + "</td>";
+      }
+      body += "</tr>";
+    }
+    table.innerHTML = body;
+    out.appendChild(table);
+  }
+
   if (mineList.length > 0) {
     const mh = document.createElement("h2");
-    mh.textContent = `your team (${Object.entries(counts).filter(([, c]) => c > 0).map(([pos, c]) => `${c} ${pos}`).join(", ")})`;
+    mh.textContent = "your team (" + Object.entries(counts).filter(([, c]) => c > 0).map(([pos, c]) => c + " " + pos).join(", ") + ")";
     out.appendChild(mh);
     const myGrid = document.createElement("div");
     myGrid.className = "cards";
-
-    for (const p of mineList) {
-      myGrid.appendChild(card({ ...p, predicted: undefined }, { mine: true, sub: `${p.ppg.toFixed(1)} a game` }));
-    }
-
+    for (const p of mineList) myGrid.appendChild(card(p, { mine: true, big: p.vor, sub: p.ppg.toFixed(1) + " a game" }));
     out.appendChild(myGrid);
   }
 
-  const owners = Object.keys(draftTeams);
+  const owners = Object.keys(s.teams);
 
   if (owners.length > 0) {
     const th = document.createElement("h2");
-    th.textContent = "all teams";
+    th.textContent = "keepers and picks so far";
     out.appendChild(th);
     const teamGrid = document.createElement("div");
     teamGrid.className = "cards";
-
     for (const owner of owners) {
       const div = document.createElement("div");
-      div.className = "card" + (owner === $("team").value ? " mine" : "");
-      div.innerHTML = `<div class="nm">${owner}</div><div class="sub" style="display:block; margin-top:.3rem">${draftTeams[owner].join("<br>")}</div>`;
+      div.className = "card plain" + (active && owner === active.team ? " mine" : "");
+      div.innerHTML = '<div class="nm">' + owner + '</div><div class="sub" style="display:block; margin-top:.3rem">' + s.teams[owner].join("<br>") + "</div>";
       teamGrid.appendChild(div);
     }
-
     out.appendChild(teamGrid);
   }
 }
 
 async function renderDraftView() {
-  if (!board) board = await (await fetch(`data/board-${meta.boardSeason}.json`)).json();
-  let draftId = $("draftid").value.trim();
-  const leagueId = $("league").value.trim();
-
-  if (!draftId && leagueId) {
-    $("status").textContent = "finding the league's draft...";
-    draftId = (await findDraftId(leagueId)) ?? "";
-    if (draftId) $("draftid").value = draftId;
+  if (!board) {
+    board = await (await fetch("data/board-" + meta.boardSeason + ".json")).json();
+    boardByKey = new Map(board.players.map((p) => [p.key, p]));
   }
 
-  if (draftId || leagueId) {
-    $("status").textContent = draftId
-      ? "watching the draft, refreshing every 5s; close and load later to catch up"
-      : "keepers loaded from league rosters";
-    await pollPicks(draftId, leagueId);
-    if (draftId) draftPoll = setInterval(() => pollPicks(draftId, leagueId), 5000);
+  if (active) {
+    $("status").textContent = "watching the draft, refreshing every 5s; pause anytime";
+    await pollDraft();
+    draftPoll = setInterval(pollDraft, 5000);
   } else {
-    const saved = store.get("draft", null);
-
-    if (saved && saved.taken) {
-      taken = new Set([...saved.taken, ...manualTaken()]);
-      draftTeams = saved.teams ?? {};
-      myDraftKeys = new Set(saved.mine ?? []);
-      renderDraft(saved.pickCount, saved.at);
-      $("status").textContent = "saved draft state; enter the league to refresh";
+    const saved = store_get("draftState", null);
+    if (saved) {
+      draftState = { ...saved, taken: new Set(saved.taken), mine: new Set(saved.mine) };
+      renderDraft(saved.at);
+      $("status").textContent = "saved state; pick a league on the leagues tab to refresh";
     } else {
-      taken = new Set(manualTaken());
-      draftTeams = {};
-      myDraftKeys = new Set();
+      $("status").textContent = "pick a league on the leagues tab, or use the extra names box";
+      draftState = { taken: new Set(), teams: {}, mine: new Set(), likely: {}, grid: null };
       renderDraft();
     }
   }
@@ -581,50 +641,30 @@ async function renderDraftView() {
 function renderHistory() {
   const out = $("out");
   out.innerHTML = "";
-  const history = store.get("history", []);
-
-  if (history.length === 0) {
-    out.innerHTML = '<p class="hint">nothing yet; loads from the other tabs land here</p>';
-    return;
-  }
-
+  const history = store_get("history", []);
+  if (!history.length) { out.innerHTML = '<p class="hint">nothing yet</p>'; return; }
   for (const entry of history) {
     const div = document.createElement("div");
-    div.className = "card";
-    div.innerHTML = `<div class="sub"><span>${entry.at}</span><span>${entry.view} &middot; ${entry.week ?? ""}</span></div><div style="font-size:.85rem; margin-top:.3rem">${entry.note}</div>`;
+    div.className = "card plain";
+    div.innerHTML = '<div class="sub"><span>' + entry.at + "</span><span>" + entry.view + " &middot; " + (entry.week ?? "") + '</span></div><div style="font-size:.85rem; margin-top:.3rem">' + entry.note + "</div>";
     out.appendChild(div);
   }
 }
 
-document.querySelectorAll("nav button").forEach((button) =>
-  button.addEventListener("click", () => setView(button.dataset.view)),
-);
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
+$("home").addEventListener("click", () => setView("leagues"));
+$("overlay").addEventListener("click", (e) => { if (e.target === $("overlay")) $("overlay").classList.remove("open"); });
 
 $("go").addEventListener("click", async () => {
   const status = $("status");
-
   try {
-    const leagueId = $("league").value.trim();
-
-    if (view !== "draft" && leagueId && !sleeper.rosters) {
-      await loadSleeper(leagueId);
-      saveSettings();
-      return;
-    }
-
     status.textContent = "";
-
-    if (view === "start") await renderStart();
+    if (view === "leagues") await loadLeagues();
+    else if (view === "start") await renderStart();
     else if (view === "waivers") await renderWaivers();
     else if (view === "history") renderHistory();
-    else if (draftPoll) {
-      clearInterval(draftPoll);
-      draftPoll = null;
-      status.textContent = "paused; the board keeps its last state";
-    } else {
-      await renderDraftView();
-    }
-
+    else if (draftPoll) { clearInterval(draftPoll); draftPoll = null; status.textContent = "paused"; }
+    else await renderDraftView();
     refreshGoLabel();
     saveSettings();
   } catch (error) {
