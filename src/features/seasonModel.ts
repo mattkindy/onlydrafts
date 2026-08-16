@@ -13,7 +13,7 @@ import { fitGbm, predictGbm, type GbmModel } from "../backtest/gbm.js";
 import { loadCoaches } from "../data/coaches.js";
 import { loadAdp } from "../data/adp.js";
 import { loadTendencies } from "../data/tendencies.js";
-import { loadCompromisedWeeks } from "../data/injuries.js";
+import { loadCompromisedWeeks, loadInjuryDetail } from "../data/injuries.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { spearman } from "../backtest/metrics.js";
 
@@ -64,6 +64,10 @@ export interface SeasonExample {
   healthyPpg?: number;
   /** share of last season's games he played while listed */
   compromised: number;
+  /** scoring clear of the report and its shadow */
+  clearPpg?: number;
+  /** share of last season's games inside a soft tissue shadow */
+  softShadow: number;
   /** preseason market rank for the target season, undefined when unlisted */
   adp?: number;
   /**
@@ -82,6 +86,10 @@ export interface SeasonData {
   healthyPpg: Map<string, number>;
   /** share of his games played while listed */
   compromised: Map<string, number>;
+  /** scoring in games clear of the report and its three week shadow */
+  clearPpg: Map<string, number>;
+  /** share of his games inside the shadow of a soft tissue injury */
+  softShadow: Map<string, number>;
 }
 
 export interface SeasonModelFit {
@@ -117,6 +125,8 @@ export const SEASON_RIDGE_FEATURES = [
   "finishedStrong",
   "healthyBoost",
   "playedHurtShare",
+  "clearBoost",
+  "softShadowShare",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -151,6 +161,12 @@ export async function buildSeasonData(
     // snaps are missing until week 1
     const stats = await loadPlayerStats(season).catch(() => []);
     const hurt = await loadCompromisedWeeks(season).catch(() => new Set<string>());
+    const detail = await loadInjuryDetail(season).catch(
+      () => new Map<string, { week: number; kind: string; softTissue: boolean }[]>(),
+    );
+    const SHADOW_WEEKS = 3;
+    const clear = new Map<string, { points: number; games: number }>();
+    const shadowed = new Map<string, { soft: number; games: number }>();
     const healthy = new Map<string, { points: number; games: number }>();
     const listed = new Map<string, { hurt: number; games: number }>();
 
@@ -168,6 +184,28 @@ export async function buildSeasonData(
       }
 
       listed.set(row.playerId, tally);
+
+      const history = detail.get(row.playerId) ?? [];
+      const recent = history.filter(
+        (i) => i.week < row.week && row.week - i.week <= SHADOW_WEEKS,
+      );
+      const inShadow = recent.length > 0 || hurt.has(`${row.playerId}|${row.week}`);
+      const softly = recent.some((i) => i.softTissue);
+      const shade = shadowed.get(row.playerId) ?? { soft: 0, games: 0 };
+      shade.games++;
+
+      if (softly) {
+        shade.soft++;
+      }
+
+      shadowed.set(row.playerId, shade);
+
+      if (!inShadow) {
+        const entry = clear.get(row.playerId) ?? { points: 0, games: 0 };
+        entry.points += fantasyPoints(row.statLine, scoring());
+        entry.games++;
+        clear.set(row.playerId, entry);
+      }
     }
 
     data.set(season, {
@@ -181,6 +219,14 @@ export async function buildSeasonData(
       ),
       compromised: new Map(
         [...listed.entries()].map(([id, v]) => [id, v.games ? v.hurt / v.games : 0]),
+      ),
+      clearPpg: new Map(
+        [...clear.entries()]
+          .filter(([, v]) => v.games >= 3)
+          .map(([id, v]) => [id, v.points / v.games]),
+      ),
+      softShadow: new Map(
+        [...shadowed.entries()].map(([id, v]) => [id, v.games ? v.soft / v.games : 0]),
       ),
     });
   }
@@ -453,6 +499,8 @@ export async function examplesForTransition(
       latePpg: was.latePpg,
       healthyPpg: prev.healthyPpg.get(playerId),
       compromised: prev.compromised.get(playerId) ?? 0,
+      clearPpg: prev.clearPpg.get(playerId),
+      softShadow: prev.softShadow.get(playerId) ?? 0,
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     });
@@ -607,6 +655,10 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
       ? (e.healthyPpg - e.prevPpg) / Math.max(4, e.prevPpg)
       : 0,
     e.compromised,
+    e.clearPpg !== undefined && e.prevPpg > 0
+      ? (e.clearPpg - e.prevPpg) / Math.max(4, e.prevPpg)
+      : 0,
+    e.softShadow,
   ];
 }
 
@@ -652,6 +704,10 @@ export function seasonGbmRow(e: SeasonExample): number[] {
     e.latePpg,
     e.healthyPpg ?? e.prevPpg,
     e.compromised,
+    e.clearPpg !== undefined && e.prevPpg > 0
+      ? (e.clearPpg - e.prevPpg) / Math.max(4, e.prevPpg)
+      : 0,
+    e.softShadow,
   ];
 }
 
@@ -750,6 +806,8 @@ export async function projectDraftExamples(
       latePpg: was.latePpg,
       healthyPpg: prev.healthyPpg.get(playerId),
       compromised: prev.compromised.get(playerId) ?? 0,
+      clearPpg: prev.clearPpg.get(playerId),
+      softShadow: prev.softShadow.get(playerId) ?? 0,
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     };
