@@ -7,11 +7,19 @@ import { join } from "node:path";
 
 const RAW_DIR = join(import.meta.dirname, "..", "data", "raw");
 
+/** the participation release starts here; earlier seasons have none */
+const FIRST_PARTICIPATION_SEASON = 2022;
+
 const GAMES_URL =
   "https://github.com/nflverse/nfldata/raw/master/data/games.csv";
 
 function playerStatsUrl(season: number): string {
   return `https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats_${season}.csv`;
+}
+
+/** nflverse renamed the weekly stats release after the 2024 season */
+function renamedStatsUrl(season: number): string {
+  return `https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_${season}.csv`;
 }
 
 function weeklyRosterUrl(season: number): string {
@@ -20,6 +28,15 @@ function weeklyRosterUrl(season: number): string {
 
 function snapCountsUrl(season: number): string {
   return `https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_${season}.csv`;
+}
+
+/**
+ * Formation, personnel, route and coverage, one row per play. A
+ * separate release from the play-by-play, and it only goes back to
+ * 2022, so callers have to cope with older seasons missing it.
+ */
+function participationUrl(season: number): string {
+  return `https://github.com/nflverse/nflverse-data/releases/download/pbp_participation/pbp_participation_${season}.csv`;
 }
 
 function parseSeasons(arg: string | undefined): number[] {
@@ -76,10 +93,32 @@ async function main(): Promise<void> {
   await mkdir(RAW_DIR, { recursive: true });
   await download(GAMES_URL, "games.csv");
 
+  // nflverse renames and retires releases, so one missing file should
+  // not stop the rest of the download
+  const missing: string[] = [];
+
+  const tryDownload = async (url: string, fileName: string) => {
+    try {
+      await download(url, fileName);
+    } catch (error) {
+      missing.push(`${fileName}: ${error instanceof Error ? error.message : error}`);
+    }
+  };
+
   for (const season of seasons) {
-    await download(playerStatsUrl(season), `player_stats_${season}.csv`);
-    await download(weeklyRosterUrl(season), `roster_weekly_${season}.csv`);
-    await download(snapCountsUrl(season), `snap_counts_${season}.csv`);
+    await tryDownload(playerStatsUrl(season), `player_stats_${season}.csv`);
+    await tryDownload(renamedStatsUrl(season), `stats_player_week_${season}.csv`);
+    await tryDownload(weeklyRosterUrl(season), `roster_weekly_${season}.csv`);
+    await tryDownload(snapCountsUrl(season), `snap_counts_${season}.csv`);
+
+    if (season >= FIRST_PARTICIPATION_SEASON) {
+      await tryDownload(participationUrl(season), `participation_${season}.csv`);
+    }
+  }
+
+  if (missing.length > 0) {
+    console.warn(`\n${missing.length} files were not available:`);
+    for (const line of missing) console.warn("  " + line);
   }
 }
 
