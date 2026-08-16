@@ -246,6 +246,23 @@ async function main(): Promise<void> {
 
   const REALIZED_DRAFTS = 12;
 
+  // recent actual form, the signal an owner manages by
+  const recentForm = (playerId: string, week: number): number => {
+    let sum = 0;
+    let games = 0;
+
+    for (let w = Math.max(1, week - 3); w < week; w++) {
+      const points = actualWeekly.get(`${playerId}|${w}`);
+
+      if (points !== undefined) {
+        sum += points;
+        games++;
+      }
+    }
+
+    return games === 0 ? 0 : sum / games;
+  };
+
   const realized = (label: string, picker: Picker) => {
     let challengerSum = 0;
     let fieldSum = 0;
@@ -257,18 +274,56 @@ async function main(): Promise<void> {
         adpOrdered,
         fieldFor(slot, picker, projectionPick),
         seededRng(slot * 1000 + d + 1),
-      );
+      ).map((r) => [...r]);
       const wins = new Array<number>(TEAMS).fill(0);
+      const rostered = new Set(rosters.flat());
 
       for (let w = 0; w < 14; w++) {
         const week = w + 1;
+
+        // one waiver move per team per week from week 3 on
+        if (week >= 3) {
+          for (const roster of rosters) {
+            const freeAgents = world.players.filter(
+              (p) => !rostered.has(p.playerId),
+            );
+            let best: { drop: string; add: string; gain: number } | undefined;
+
+            for (const p of roster) {
+              const player = world.playersById.get(p)!;
+              const own = recentForm(p, week);
+
+              for (const fa of freeAgents) {
+                if (fa.position !== player.position) {
+                  continue;
+                }
+
+                const gain = recentForm(fa.playerId, week) - own;
+
+                if (gain > 3 && (!best || gain > best.gain)) {
+                  best = { drop: p, add: fa.playerId, gain };
+                }
+              }
+            }
+
+            if (best) {
+              roster[roster.indexOf(best.drop)] = best.add;
+              rostered.delete(best.drop);
+              rostered.add(best.add);
+            }
+          }
+        }
+
         const teamPoints = rosters.map((roster) => {
           const candidates = roster
             .filter((id) => actualWeekly.has(`${id}|${week}`))
             .map((id) => ({
               playerId: id,
               position: world.playersById.get(id)!.position,
-              score: world.playersById.get(id)!.projectedPpg,
+              score:
+                week <= 2
+                  ? world.playersById.get(id)!.projectedPpg
+                  : recentForm(id, week),
             }));
 
           let points = 0;
@@ -308,7 +363,9 @@ async function main(): Promise<void> {
     );
   };
 
-  console.log(`\nsame drafts against the ${season} season that happened:`);
+  console.log(
+    `\nsame drafts against the ${season} season that happened, with weekly management:`,
+  );
   realized("adp order (control)", (available) => available[0]);
   realized("model + replacement", projectionPick);
   realized("model + repl + risk", riskAwarePick);
