@@ -223,7 +223,23 @@ function setView(next) {
   $("out").innerHTML = "";
 
   if (draftPoll && next !== "draft") { clearInterval(draftPoll); draftPoll = null; }
+  refreshGoLabel();
   if (next === "history") renderHistory();
+}
+
+function refreshGoLabel() {
+  if (view !== "draft") {
+    $("go").textContent = "load";
+    return;
+  }
+
+  if (draftPoll) {
+    $("go").textContent = "pause";
+  } else if (store.get("draft", null)) {
+    $("go").textContent = "resume draft";
+  } else {
+    $("go").textContent = "start draft";
+  }
 }
 
 async function loadSleeper(leagueId) {
