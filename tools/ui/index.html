@@ -168,7 +168,7 @@ let players = null;
 let leagues = store_get("leagues", []);
 let active = store_get("active", null); // {leagueId, name, team, userId}
 let draftPoll = null;
-let draftState = { taken: new Set(), teams: {}, mine: new Set(), likely: {}, grid: null, pickCount: undefined };
+let draftState = { taken: new Set(), teams: {}, mine: new Set(), rosteredBy: {}, grid: null, pickCount: undefined };
 
 function store_get(key, fallback) {
   try { const raw = localStorage.getItem("dc." + key); return raw ? JSON.parse(raw) : fallback; }
@@ -263,7 +263,7 @@ function setView(next) {
       ""],
     draft: ["Draft help",
       "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
-      "The big number is value over a replacement starter, weighted by the slots you still have open. Dimmed cards are players another team will probably keep. Tap any card for details."],
+      "The big number is value over a replacement starter, weighted by the slots you still have open. Players stay on the board until they are actually kept or drafted; mark a keeper yourself from a player's card. A gold note means that player was on someone's roster last season."],
     start: ["Who to start",
       "Your roster for one week, ranked by projected points, so you can set a lineup.",
       "The bar shows the range from a bad week to a great one; the gold mark is the projection. Tap a card for the week-by-week season and what is helping or hurting."],
@@ -526,7 +526,7 @@ function needFactor(position, count) {
 async function pollDraft() {
   const playerMap = await sleeperPlayers();
   const marked = markedKeepers();
-  const state = { taken: new Set(Object.keys(marked)), teams: {}, mine: new Set(), likely: {}, grid: null, pickCount: undefined };
+  const state = { taken: new Set(Object.keys(marked)), teams: {}, mine: new Set(), rosteredBy: {}, grid: null, pickCount: undefined };
   const manual = $("manual").value.trim();
   for (const line of manual ? manual.split("\n") : []) if (line.trim()) state.taken.add(norm(line));
 
@@ -558,21 +558,11 @@ async function pollDraft() {
     if (active && pick.picked_by === active.userId) state.mine.add(key);
   }
 
-  // theoretical keepers for teams with no actual keeper information
-  if (active && !keeperPicksExist) {
-    const n = Number($("keepn").value);
+  // who each player sat with last season, shown as a note only; nobody
+  // leaves the board without an actual keeper pick or a manual mark
+  if (active) {
     for (const r of active.allRosters) {
-      const hasActual = Object.values(marked).includes(r.owner);
-      if (hasActual || n === 0) continue;
-      const valued = r.keys
-        .map((k) => ({ ...k, vor: boardLookup(k.key)?.vor ?? -99 }))
-        .sort((a, b) => b.vor - a.vor)
-        .slice(0, n);
-      state.likely[r.owner] = valued.map((v) => v.key);
-      for (const v of valued) {
-        state.taken.add(v.key);
-        if (r.owner === active.team) state.mine.add(v.key);
-      }
+      for (const k of r.keys) state.rosteredBy[k.key] = r.owner;
     }
   }
 
@@ -607,25 +597,26 @@ function renderDraft(staleAt) {
     "best for your roster" + (staleAt ? " as of " + staleAt : "");
   out.appendChild(h);
 
-  const likelyKeys = new Set(Object.values(s.likely).flat());
   const scored = board.players
-    .filter((p) => !s.taken.has(p.key) || likelyKeys.has(p.key))
-    .map((p) => ({ p, score: p.vor * needFactor(p.position, counts[p.position] ?? 0), likely: likelyKeys.has(p.key) }))
+    .filter((p) => !s.taken.has(p.key))
+    .map((p) => ({ p, score: p.vor * needFactor(p.position, counts[p.position] ?? 0) }))
     .sort((a, b) => b.score - a.score);
 
   const grid = document.createElement("div");
   grid.className = "cards";
   let shown = 0;
 
-  for (const { p, score, likely } of scored) {
+  for (const { p, score } of scored) {
     if (shown >= 20) break;
     shown++;
+    const lastYear = s.rosteredBy[p.key];
     grid.appendChild(card(p, {
-      big: likely ? p.vor : score,
-      kept: likely,
+      big: score,
       sub: p.ppg.toFixed(1) + " a game" + (p.adp ? " &middot; adp " + p.adp.toFixed(0) : "") + (p.bye ? " &middot; bye " + p.bye : ""),
-      tag: likely ? "likely keeper for " + Object.entries(s.likely).find(([, keys]) => keys.includes(p.key))?.[0] : (shown <= 3 ? "fills " + p.position : ""),
-      warn: likely,
+      tag: shown <= 3
+        ? "fills " + p.position
+        : lastYear ? "was on " + lastYear + " last season" : "",
+      warn: shown > 3 && !!lastYear,
     }));
   }
 
@@ -698,7 +689,7 @@ async function renderDraftView() {
       $("status").textContent = "saved state; pick a league on the leagues tab to refresh";
     } else {
       $("status").textContent = "pick a league on the leagues tab, or use the extra names box";
-      draftState = { taken: new Set(), teams: {}, mine: new Set(), likely: {}, grid: null };
+      draftState = { taken: new Set(), teams: {}, mine: new Set(), rosteredBy: {}, grid: null };
       renderDraft();
     }
   }
