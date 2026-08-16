@@ -32,7 +32,8 @@ export const BASE_RELATIONS = [
   "blocked", "rushed", "pressured", "coached", "position",
 ] as const;
 
-export const RULES: Rule[] = [
+/** who was missing, and when they came back */
+export const ABSENCE_RULES: Rule[] = [
   // he was on the roster for a week that counts and did not take a snap
   rule("missed", [v("p"), v("s"), v("w")], [
     lit("rostered", v("p"), v("t"), v("s"), v("w")),
@@ -54,6 +55,10 @@ export const RULES: Rule[] = [
     lit("missed", v("p"), v("s"), v("before")),
   ]),
 
+];
+
+/** the shape of a receiving room and the defence it met */
+export const ROOM_RULES: Rule[] = [
   // two men on the same side of the same snap
   rule("blockedWith", [v("a"), v("b"), v("snap")], [
     lit("blocked", v("snap"), v("a")),
@@ -92,5 +97,42 @@ export const RULES: Rule[] = [
     lit("previousSeason", v("s"), v("before")),
     lit("rostered", v("p"), v("from"), v("before"), v("earlier")),
     notLit("sameName", v("from"), v("to")),
+  ]),
+
+  // the man his room threw to most, and the men behind him
+  rule("roomLeader", [v("p"), v("team"), v("s")], [
+    lit("targetRank", v("p"), v("team"), v("s"), constant(1)),
+  ]),
+
+  rule("roomSecond", [v("p"), v("team"), v("s")], [
+    lit("targetRank", v("p"), v("team"), v("s"), constant(2)),
+  ]),
+
+  rule("roomThird", [v("p"), v("team"), v("s")], [
+    lit("targetRank", v("p"), v("team"), v("s"), constant(3)),
+  ]),
+
+  // he played, and this is the defence he played against
+  rule("facedDefence", [v("p"), v("d"), v("s"), v("w")], [
+    lit("played", v("p"), v("s"), v("w")),
+    lit("rostered", v("p"), v("team"), v("s"), v("w")),
+    lit("met", v("s"), v("w"), v("team"), v("d")),
+  ]),
+
+  // the week a room's best receiver met a secondary
+  rule("leaderMet", [v("p"), v("d"), v("s"), v("w")], [
+    lit("roomLeader", v("p"), v("team"), v("s")),
+    lit("facedDefence", v("p"), v("d"), v("s"), v("w")),
+  ]),
+
+  // and the same for whoever plays behind him, as the comparison
+  rule("supportMet", [v("p"), v("d"), v("s"), v("w")], [
+    lit("roomSecond", v("p"), v("team"), v("s")),
+    lit("facedDefence", v("p"), v("d"), v("s"), v("w")),
+  ]),
+
+  rule("supportMet", [v("p"), v("d"), v("s"), v("w")], [
+    lit("roomThird", v("p"), v("team"), v("s")),
+    lit("facedDefence", v("p"), v("d"), v("s"), v("w")),
   ]),
 ];

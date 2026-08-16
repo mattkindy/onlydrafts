@@ -14,7 +14,7 @@ import {
 } from "@suss/datalog";
 import { loadWeeklyRosters, loadPlayerStats } from "../src/data/nflverse.js";
 import { loadCoaches } from "../src/data/coaches.js";
-import { RULES } from "../src/datalog/football.js";
+import { ABSENCE_RULES } from "../src/datalog/football.js";
 
 const SEASONS = [2023, 2024, 2025];
 const LAST_COUNTING_WEEK = 18;
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
 
   console.log(`${names.size} names, ${db.facts("coached").length} coach facts`);
   console.time("fixpoint");
-  evaluate(db, RULES);
+  evaluate(db, ABSENCE_RULES);
   console.timeEnd("fixpoint");
 
   console.log("\nderived:");
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
 
   // a question I never wrote a script for, now three lines of rule
   evaluate(db, [
-    ...RULES,
+    ...ABSENCE_RULES,
     rule("qbMissed", [v("p"), v("s"), v("w")], [
       lit("missed", v("p"), v("s"), v("w")),
       lit("position", v("p"), v("s"), constant("QB")),
