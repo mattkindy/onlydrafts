@@ -11,16 +11,23 @@ const drawsFrom = (seed: number): Draws => {
   return { uniform: rng, normal: () => normalDraw(rng) };
 };
 
-const TEAM = { plays: LEAGUE_PLAYS, passShare: 0.54 };
+const TEAM = { plays: LEAGUE_PLAYS };
 const SETTINGS = { ...DEFAULT_SEASON, runs: 300, scoring: presets.standard };
+
+const each = (n: number) =>
+  ({ openField: n, thirdAndShort: n, thirdAndLong: n, nearGoal: n });
 
 function back(id: string, over: Partial<SituationalRole> = {}): SituationalRole {
   return {
     playerId: id, position: "RB",
-    shareIn: { openField: 0.28, thirdAndShort: 0.35, thirdAndLong: 0.08, nearGoal: 0.3 },
-    finishIn: { openField: 0.01, thirdAndShort: 0.04, thirdAndLong: 0.02, nearGoal: 0.12 },
-    yardsPerTouch: { openField: 4.4, thirdAndShort: 3.0, thirdAndLong: 6.5, nearGoal: 2.2 },
-    catchRate: 0.72, availability: 1,
+    targetShare: each(0.04),
+    carryShare: { openField: 0.28, thirdAndShort: 0.35, thirdAndLong: 0.08, nearGoal: 0.3 },
+    catchRate: each(0.72),
+    yardsPerCatch: each(7.2),
+    yardsPerCarry: { openField: 4.4, thirdAndShort: 3.0, thirdAndLong: 6.5, nearGoal: 2.2 },
+    scoresPerCatch: each(0.03),
+    scoresPerCarry: { openField: 0.01, thirdAndShort: 0.04, thirdAndLong: 0.02, nearGoal: 0.12 },
+    yardSwing: 0.35, availability: 1,
     ...over,
   };
 }
@@ -54,10 +61,10 @@ describe("simulateSeason", () => {
 
   it("gives a goal-line back more big weeks than a committee back", () => {
     const lead = back("lead", {
-      shareIn: { openField: 0.3, thirdAndShort: 0.5, thirdAndLong: 0.1, nearGoal: 0.6 },
+      carryShare: { openField: 0.3, thirdAndShort: 0.5, thirdAndLong: 0.1, nearGoal: 0.6 },
     });
     const shared = back("shared", {
-      shareIn: { openField: 0.2, thirdAndShort: 0.15, thirdAndLong: 0.1, nearGoal: 0.1 },
+      carryShare: { openField: 0.2, thirdAndShort: 0.15, thirdAndLong: 0.1, nearGoal: 0.1 },
     });
     const [a, b] = run([lead, shared]);
 

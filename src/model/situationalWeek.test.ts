@@ -13,15 +13,22 @@ const drawsFrom = (seed: number): Draws => {
   return { uniform: rng, normal: () => normalDraw(rng) };
 };
 
-const TEAM: SituationalTeam = { plays: LEAGUE_PLAYS, passShare: 0.54 };
+const TEAM: SituationalTeam = { plays: LEAGUE_PLAYS };
+
+const each = (n: number) =>
+  ({ openField: n, thirdAndShort: n, thirdAndLong: n, nearGoal: n });
 
 function back(id: string, over: Partial<SituationalRole> = {}): SituationalRole {
   return {
     playerId: id, position: "RB",
-    shareIn: { openField: 0.3, thirdAndShort: 0.4, thirdAndLong: 0.1, nearGoal: 0.35 },
-    finishIn: { openField: 0.01, thirdAndShort: 0.05, thirdAndLong: 0.02, nearGoal: 0.14 },
-    yardsPerTouch: { openField: 4.4, thirdAndShort: 3.2, thirdAndLong: 6.0, nearGoal: 2.4 },
-    catchRate: 0.75, availability: 1,
+    targetShare: each(0.04),
+    carryShare: { openField: 0.3, thirdAndShort: 0.4, thirdAndLong: 0.1, nearGoal: 0.35 },
+    catchRate: each(0.75),
+    yardsPerCatch: each(7.5),
+    yardsPerCarry: { openField: 4.4, thirdAndShort: 3.2, thirdAndLong: 6.0, nearGoal: 2.4 },
+    scoresPerCatch: each(0.03),
+    scoresPerCarry: { openField: 0.01, thirdAndShort: 0.05, thirdAndLong: 0.02, nearGoal: 0.14 },
+    yardSwing: 0.35, availability: 1,
     ...over,
   };
 }
@@ -41,10 +48,10 @@ const runWeeks = (roster: SituationalRole[], n: number, seed = 8) => {
 describe("drawing a week situation by situation", () => {
   it("scores a goal-line back more than a between-the-twenties one", () => {
     const atTheLine = back("line", {
-      shareIn: { openField: 0.15, thirdAndShort: 0.4, thirdAndLong: 0.05, nearGoal: 0.6 },
+      carryShare: { openField: 0.15, thirdAndShort: 0.4, thirdAndLong: 0.05, nearGoal: 0.6 },
     });
     const elsewhere = back("field", {
-      shareIn: { openField: 0.35, thirdAndShort: 0.1, thirdAndLong: 0.15, nearGoal: 0.05 },
+      carryShare: { openField: 0.35, thirdAndShort: 0.1, thirdAndLong: 0.15, nearGoal: 0.05 },
     });
     const [lineWeeks, fieldWeeks] = runWeeks([atTheLine, elsewhere], 2000);
     const scoresPer = (weeks: number[]) => weeks.filter((p) => p > 12).length / weeks.length;
@@ -53,8 +60,7 @@ describe("drawing a week situation by situation", () => {
   });
 
   it("makes touchdowns arrive in lumps rather than smoothly", () => {
-    const [weeks] = runWeeks([back("a"), back("b", { shareIn: {
-      openField: 0.2, thirdAndShort: 0.2, thirdAndLong: 0.2, nearGoal: 0.2 } })], 3000);
+    const [weeks] = runWeeks([back("a"), back("b", { carryShare: each(0.2) })], 3000);
     const sorted = [...weeks!].sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)]!;
     const ninth = sorted[Math.floor(sorted.length * 0.9)]!;

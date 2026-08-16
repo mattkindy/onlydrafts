@@ -42,16 +42,24 @@ function splitLine(line: string): string[] {
 }
 
 
+/**
+ * Kept apart on purpose. Yards per catch and yards per hand-off are
+ * different numbers, and a single yards-per-touch applied after a
+ * catch rate loses a third of a receiver's yardage.
+ */
 interface Tally {
-  plays: number;
-  touches: number;
+  targets: number;
+  receptions: number;
+  recYds: number;
+  carries: number;
+  rushYds: number;
   scores: number;
-  yards: number;
 }
 
 async function main(): Promise<void> {
   const rows: string[] = [
-    "season,player,team,situation,touches,scores,yards,teamPlays",
+    "season,player,team,situation,targets,receptions,recYds," +
+      "carries,rushYds,scores,teamPlays",
   ];
 
   for (const season of SEASONS) {
@@ -60,6 +68,9 @@ async function main(): Promise<void> {
     if (!existsSync(path)) continue;
 
     const byPlayer = new Map<string, Tally & { team: string }>();
+    const blank = (team: string): Tally & { team: string } => ({
+      team, targets: 0, receptions: 0, recYds: 0, carries: 0, rushYds: 0, scores: 0,
+    });
     const byTeamSituation = new Map<string, number>();
     const reader = createInterface({ input: createReadStream(path) });
     let header: string[] | undefined;
@@ -72,6 +83,7 @@ async function main(): Promise<void> {
           "posteam", "down", "ydstogo", "yardline_100", "score_differential",
           "game_seconds_remaining", "receiver_player_id", "rusher_player_id",
           "touchdown", "td_player_id", "yards_gained", "play_type",
+          "complete_pass", "receiving_yards", "rushing_yards",
         ]) {
           at[field] = header.indexOf(field);
         }
@@ -107,14 +119,29 @@ async function main(): Promise<void> {
       const scorer = c[at["td_player_id"]!] ?? "";
       const gained = Number(c[at["yards_gained"]!]) || 0;
 
-      for (const player of [receiver, rusher]) {
-        if (!player || player === "NA") continue;
-        const key = `${player}|${situation}`;
-        const tally = byPlayer.get(key) ??
-          { team, plays: 0, touches: 0, scores: 0, yards: 0 };
-        tally.touches++;
-        tally.yards += gained;
-        if (c[at["touchdown"]!] === "1" && scorer === player) tally.scores++;
+      const scoredHere = c[at["touchdown"]!] === "1";
+      const complete = c[at["complete_pass"]!] === "1";
+
+      if (receiver && receiver !== "NA") {
+        const key = `${receiver}|${situation}`;
+        const tally = byPlayer.get(key) ?? blank(team);
+        tally.targets++;
+
+        if (complete) {
+          tally.receptions++;
+          tally.recYds += Number(c[at["receiving_yards"]!]) || gained;
+        }
+
+        if (scoredHere && scorer === receiver) tally.scores++;
+        byPlayer.set(key, tally);
+      }
+
+      if (rusher && rusher !== "NA") {
+        const key = `${rusher}|${situation}`;
+        const tally = byPlayer.get(key) ?? blank(team);
+        tally.carries++;
+        tally.rushYds += Number(c[at["rushing_yards"]!]) || gained;
+        if (scoredHere && scorer === rusher) tally.scores++;
         byPlayer.set(key, tally);
       }
     }
@@ -122,11 +149,12 @@ async function main(): Promise<void> {
     for (const [key, tally] of byPlayer) {
       const [player, situation] = key.split("|");
 
-      if (tally.touches < 3) continue;
+      if (tally.targets + tally.carries < 3) continue;
 
       rows.push([
-        season, player, tally.team, situation, tally.touches, tally.scores,
-        tally.yards.toFixed(0),
+        season, player, tally.team, situation,
+        tally.targets, tally.receptions, tally.recYds.toFixed(0),
+        tally.carries, tally.rushYds.toFixed(0), tally.scores,
         byTeamSituation.get(`${tally.team}|${situation}`) ?? 0,
       ].join(","));
     }

@@ -2,15 +2,15 @@
  * A week built situation by situation rather than as one pool of
  * touches split up.
  *
- * The difference shows in touchdowns. Dividing a team's expected
- * scores by a season share treats a score as a fraction of a total.
- * Here a team gets so many snaps at the goal line, someone is handed
- * the ball on each, and he scores or he does not, which is how they
- * happen and why they arrive in lumps.
+ * A man's targets and his hand-offs are drawn separately, because the
+ * data says how many of each he got and guessing between them from his
+ * position was throwing two fifths of a receiver's work on the ground.
+ * Yards per catch and yards per carry are likewise his own numbers in
+ * that situation, so a goal-line hand-off is short and a third-and-long
+ * target is not.
  *
- * It also lets the model answer questions a pooled draw cannot: who
- * gets the ball on third and one, and what changes when the man who
- * usually does is out.
+ * Scores are drawn per touch. A team gets so many snaps near the line,
+ * somebody is given the ball, and he finishes or he does not.
  */
 
 import type { Draws, PlayerLine } from "./playerWeek.js";
@@ -22,9 +22,9 @@ export { SITUATIONS, type Situation } from "./situations.js";
 
 /** plays a game an average offence gets in each, from 2021 to 2025 */
 export const LEAGUE_PLAYS: Record<Situation, number> = {
-  openField: 39.9,
-  thirdAndShort: 2.7,
-  thirdAndLong: 9.5,
+  openField: 42.7,
+  thirdAndShort: 3.4,
+  thirdAndLong: 8.9,
   nearGoal: 10.0,
 };
 
@@ -36,23 +36,28 @@ const FIRMNESS: Record<Situation, number> = {
   nearGoal: 6,
 };
 
+type BySituation = Record<Situation, number>;
+
 export interface SituationalRole {
   playerId: string;
   position: string;
-  /** share of his team's plays in each situation that come to him */
-  shareIn: Record<Situation, number>;
-  /** how often a touch there ends in the end zone */
-  finishIn: Record<Situation, number>;
-  yardsPerTouch: Record<Situation, number>;
-  catchRate: number;
+  /** share of his team's plays there that are thrown his way */
+  targetShare: BySituation;
+  /** share that are handed to him */
+  carryShare: BySituation;
+  catchRate: BySituation;
+  yardsPerCatch: BySituation;
+  yardsPerCarry: BySituation;
+  /** how often a catch, or a hand-off, ends in the end zone */
+  scoresPerCatch: BySituation;
+  scoresPerCarry: BySituation;
+  /** how much his yardage swings from one touch to the next */
+  yardSwing: number;
   availability: number;
 }
 
 export interface SituationalTeam {
-  /** plays this offence gets in each situation this week */
-  plays: Record<Situation, number>;
-  /** share of its plays that are passes, from the line and the weather */
-  passShare: number;
+  plays: BySituation;
 }
 
 const BLANK: StatLine = {
@@ -63,8 +68,7 @@ const BLANK: StatLine = {
 /**
  * One week for a whole offence. Every situation is drawn on its own,
  * so a back who only appears at the goal line and a receiver who only
- * appears on third and long both come out right, and neither has to be
- * described by a season average that mixes the two.
+ * appears on third and long both come out right.
  */
 export function simulateSituationalWeek(
   team: SituationalTeam,
@@ -72,14 +76,11 @@ export function simulateSituationalWeek(
   draws: Draws,
 ): PlayerLine[] {
   const active = roster.map((player) => draws.uniform() < player.availability);
-  const lines = roster.map((player) => ({
-    ...BLANK, playerId: player.playerId, played: active[roster.indexOf(player)] ?? false,
-  })) as PlayerLine[];
-
-  roster.forEach((_, i) => { lines[i]!.played = active[i]!; });
+  const lines: PlayerLine[] = roster.map((player, i) => ({
+    ...BLANK, playerId: player.playerId, played: active[i]!,
+  }));
 
   for (const situation of SITUATIONS) {
-    // the offence has a good or bad day at getting there at all
     const plays = Math.max(
       0,
       Math.round(team.plays[situation] * Math.max(0.3, 1 + draws.normal() * 0.3)),
@@ -89,49 +90,43 @@ export function simulateSituationalWeek(
       continue;
     }
 
-    const wanted = roster.map((p, i) => (active[i] ? p.shareIn[situation] : 0));
-    const rest = Math.max(0, 1 - roster.reduce((sum, p) => sum + p.shareIn[situation], 0));
-    const shares = shareDraw([...wanted, rest], FIRMNESS[situation], draws);
+    // the throwing and the running are separate pools, and the men in
+    // each compete only with the others in that one
+    for (const kind of ["target", "carry"] as const) {
+      const own = (p: SituationalRole) =>
+        kind === "target" ? p.targetShare[situation] : p.carryShare[situation];
+      const wanted = roster.map((p, i) => (active[i] ? own(p) : 0));
+      const rest = Math.max(0, 1 - roster.reduce((sum, p) => sum + own(p), 0));
+      const shares = shareDraw([...wanted, rest], FIRMNESS[situation], draws);
 
-    for (let i = 0; i < roster.length; i++) {
-      if (!active[i]) {
-        continue;
-      }
-
-      const player = roster[i]!;
-      const touches = Math.round(plays * shares[i]!);
-
-      // A receiver's touch is a target; a back's is mostly a hand-off.
-      // Routing them by a coin weighted on the team's pass share sent
-      // two fifths of every receiver's work to the ground.
-      const airShare = player.position === "RB" ? 0.22 : 0.97;
-
-      for (let touch = 0; touch < touches; touch++) {
-        const throughAir = draws.uniform() < airShare;
-
-        if (throughAir && draws.uniform() >= player.catchRate) {
+      for (let i = 0; i < roster.length; i++) {
+        if (!active[i]) {
           continue;
         }
 
-        // yards per touch swing far more than the count of them does
-        const yards = Math.max(
-          0,
-          player.yardsPerTouch[situation] * Math.max(0, 1 + draws.normal() * 0.8),
-        );
+        const player = roster[i]!;
+        const count = Math.round(plays * shares[i]!);
 
-        if (throughAir) {
-          lines[i]!.receptions++;
-          lines[i]!.recYds += yards;
-        } else {
-          lines[i]!.rushYds += yards;
-        }
+        for (let n = 0; n < count; n++) {
+          const swing = () => Math.max(0, 1 + draws.normal() * player.yardSwing);
 
-        // a score is this touch finishing, not a slice of a team total
-        if (draws.uniform() < player.finishIn[situation]) {
-          if (throughAir) {
-            lines[i]!.recTd++;
+          if (kind === "target") {
+            if (draws.uniform() >= player.catchRate[situation]) {
+              continue;
+            }
+
+            lines[i]!.receptions++;
+            lines[i]!.recYds += player.yardsPerCatch[situation] * swing();
+
+            if (draws.uniform() < player.scoresPerCatch[situation]) {
+              lines[i]!.recTd++;
+            }
           } else {
-            lines[i]!.rushTd++;
+            lines[i]!.rushYds += player.yardsPerCarry[situation] * swing();
+
+            if (draws.uniform() < player.scoresPerCarry[situation]) {
+              lines[i]!.rushTd++;
+            }
           }
         }
       }

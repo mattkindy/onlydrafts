@@ -57,21 +57,26 @@ export interface PlayerSeason {
 
 /** one draw of what his role might turn out to be this year */
 function drawRole(role: SituationalRole, drift: number, draws: Draws): SituationalRole {
-  const shareIn = { ...role.shareIn };
-  const finishIn = { ...role.finishIn };
+  const targetShare = { ...role.targetShare };
+  const carryShare = { ...role.carryShare };
+  const scoresPerCatch = { ...role.scoresPerCatch };
+  const scoresPerCarry = { ...role.scoresPerCarry };
   // one shock for the man, so a back who loses the job loses it in
   // every situation rather than only at the goal line
   const his = Math.exp(draws.normal() * drift);
 
   for (const situation of SITUATIONS) {
-    const own = Math.exp(draws.normal() * drift * 0.5);
-    shareIn[situation] = Math.min(0.9, role.shareIn[situation] * his * own);
-    finishIn[situation] = Math.min(
-      0.9, role.finishIn[situation] * Math.exp(draws.normal() * 0.2),
-    );
+    const bySituation = Math.exp(draws.normal() * drift * 0.5);
+    const move = his * bySituation;
+    targetShare[situation] = Math.min(0.6, role.targetShare[situation] * move);
+    carryShare[situation] = Math.min(0.9, role.carryShare[situation] * move);
+    // how often he finishes wanders far less than how often he is used
+    const finish = Math.exp(draws.normal() * 0.2);
+    scoresPerCatch[situation] = Math.min(0.9, role.scoresPerCatch[situation] * finish);
+    scoresPerCarry[situation] = Math.min(0.9, role.scoresPerCarry[situation] * finish);
   }
 
-  return { ...role, shareIn, finishIn };
+  return { ...role, targetShare, carryShare, scoresPerCatch, scoresPerCarry };
 }
 
 const quantile = (sorted: number[], p: number) =>
