@@ -87,6 +87,7 @@
     <button data-view="draft">draft</button>
     <button data-view="start" class="on">start</button>
     <button data-view="waivers">waivers</button>
+    <button data-view="history">history</button>
   </nav>
 
   <div class="controls">
@@ -119,6 +120,69 @@ let draftPoll = null;
 let taken = new Set();
 
 const $ = (id) => document.getElementById(id);
+
+const store = {
+  get(key, fallback) {
+    try {
+      const raw = localStorage.getItem("dc." + key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem("dc." + key, JSON.stringify(value));
+    } catch {}
+  },
+};
+
+function saveSettings() {
+  store.set("settings", {
+    league: $("league").value,
+    draftId: $("draftid").value,
+    team: $("team").value,
+    manual: $("manual").value,
+    week: $("week").value,
+    view,
+  });
+}
+
+function logHistory(note) {
+  const history = store.get("history", []);
+  history.unshift({ at: new Date().toISOString().slice(0, 16).replace("T", " "), view, week: $("week").value, note });
+  store.set("history", history.slice(0, 50));
+}
+
+async function sleeperPlayers() {
+  if (sleeper.players) {
+    return sleeper.players;
+  }
+
+  const cached = store.get("players", null);
+
+  if (cached) {
+    sleeper.players = cached;
+    return cached;
+  }
+
+  $("status").textContent = "fetching player list (5MB, once ever)...";
+  $("prog").hidden = false;
+  $("prog").value = 40;
+  const raw = await fetch("https://api.sleeper.app/v1/players/nfl").then((r) => r.json());
+  $("prog").hidden = true;
+  const trimmed = {};
+
+  for (const [id, p] of Object.entries(raw)) {
+    if (p.full_name && p.position) {
+      trimmed[id] = { full_name: p.full_name, position: p.position };
+    }
+  }
+
+  store.set("players", trimmed);
+  sleeper.players = trimmed;
+  return trimmed;
+}
 const norm = (n) => n.toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b\.?$/, "").replace(/[^a-z]/g, "");
 
 async function boot() {
@@ -132,7 +196,20 @@ async function boot() {
   }
 
   $("week").value = `${meta.weeks.at(-1).season}|${meta.weeks.at(-1).week}`;
-  setView("start");
+
+  const saved = store.get("settings", null);
+
+  if (saved) {
+    $("league").value = saved.league ?? "";
+    $("draftid").value = saved.draftId ?? "";
+    $("manual").value = saved.manual ?? "";
+
+    if (saved.week && [...$("week").options].some((o) => o.value === saved.week)) {
+      $("week").value = saved.week;
+    }
+  }
+
+  setView(saved && saved.view && saved.view !== "history" ? saved.view : "start");
 }
 
 function setView(next) {
@@ -163,13 +240,7 @@ async function loadSleeper(leagueId, status, prog) {
     fetch(`https://api.sleeper.app/v1/league/${leagueId}/users`).then((r) => r.json()),
   ]);
 
-  if (!sleeper.players) {
-    status.textContent = "fetching player list (5MB, once)...";
-    prog.hidden = false;
-    prog.value = 40;
-    sleeper.players = await fetch("https://api.sleeper.app/v1/players/nfl").then((r) => r.json());
-    prog.hidden = true;
-  }
+  await sleeperPlayers();
 
   const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
   sleeper.rosters = rosters.map((r) => ({
@@ -191,6 +262,12 @@ async function loadSleeper(leagueId, status, prog) {
   }
 
   $("teamwrap").hidden = false;
+  const saved = store.get("settings", null);
+
+  if (saved && saved.team && sleeper.rosters.some((r) => r.owner === saved.team)) {
+    $("team").value = saved.team;
+  }
+
   status.textContent = "pick your team, then load again";
 }
 
@@ -243,6 +320,7 @@ async function renderStart() {
   const out = $("out");
   out.innerHTML = "";
   const max = Math.max(...slate.players.map((p) => p.ceiling));
+  const starts = [];
 
   for (const position of POSITIONS) {
     const rows = slate.players.filter((p) => p.position === position);
@@ -260,6 +338,14 @@ async function renderStart() {
     }
 
     out.appendChild(grid);
+
+    if (mine.size > 0 && owned[0]) {
+      starts.push(`${position}: ${owned[0].name} ${owned[0].predicted.toFixed(1)}`);
+    }
+  }
+
+  if (starts.length > 0) {
+    logHistory(`starts: ${starts.join("; ")}`);
   }
 }
 
@@ -276,6 +362,7 @@ async function renderWaivers() {
   const out = $("out");
   out.innerHTML = "";
   const max = Math.max(...slate.players.map((p) => p.ceiling));
+  const suggestions = [];
 
   if (mine.size === 0) {
     out.innerHTML = '<p class="hint">connect a league or paste a roster to compare against free agents</p>';
@@ -300,6 +387,11 @@ async function renderWaivers() {
 
     for (const p of outside) {
       const gain = worst ? p.predicted - worst.predicted : 0;
+
+      if (worst && gain > 2) {
+        suggestions.push(`${p.name} +${gain.toFixed(1)} over ${worst.name}`);
+      }
+
       grid.appendChild(
         card(p, {
           max,
@@ -311,6 +403,12 @@ async function renderWaivers() {
 
     out.appendChild(grid);
   }
+
+  logHistory(
+    suggestions.length > 0
+      ? `waiver ideas: ${suggestions.slice(0, 3).join("; ")}`
+      : "no waiver moves clear the bar",
+  );
 }
 
 async function findDraftId(leagueId) {
@@ -385,10 +483,7 @@ async function renderDraftView() {
   }
 
   if (draftId) {
-    if (!sleeper.players) {
-      $("status").textContent = "fetching player list (5MB, once)...";
-      sleeper.players = await fetch("https://api.sleeper.app/v1/players/nfl").then((r) => r.json());
-    }
+    await sleeperPlayers();
 
     $("status").textContent = "watching the draft, refreshing every 5s";
     await pollPicks(draftId);
@@ -398,8 +493,32 @@ async function renderDraftView() {
   }
 }
 
+function renderHistory() {
+  const out = $("out");
+  out.innerHTML = "";
+  const history = store.get("history", []);
+
+  if (history.length === 0) {
+    out.innerHTML = '<p class="hint">nothing yet; loads from the other tabs land here</p>';
+    return;
+  }
+
+  for (const entry of history) {
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `<div class="sub"><span>${entry.at}</span><span>${entry.view} · ${entry.week ?? ""}</span></div><div style="font-size:.85rem; margin-top:.3rem">${entry.note}</div>`;
+    out.appendChild(div);
+  }
+}
+
 document.querySelectorAll("nav button").forEach((button) =>
-  button.addEventListener("click", () => setView(button.dataset.view)),
+  button.addEventListener("click", () => {
+    setView(button.dataset.view);
+
+    if (button.dataset.view === "history") {
+      renderHistory();
+    }
+  }),
 );
 
 $("go").addEventListener("click", async () => {
@@ -419,9 +538,13 @@ $("go").addEventListener("click", async () => {
       await renderStart();
     } else if (view === "waivers") {
       await renderWaivers();
+    } else if (view === "history") {
+      renderHistory();
     } else {
       await renderDraftView();
     }
+
+    saveSettings();
   } catch (error) {
     status.textContent = String(error);
     $("prog").hidden = true;
