@@ -136,3 +136,56 @@ export const ROOM_RULES: Rule[] = [
     lit("facedDefence", v("p"), v("d"), v("s"), v("w")),
   ]),
 ];
+
+/**
+ * What the play-by-play says about a role, composed with who was
+ * there. Shares arrive as bands because the engine compares values
+ * rather than dividing them.
+ */
+export const CHANCE_RULES: Rule[] = [
+  // he takes most of what his team runs near the goal line
+  rule("goalLineBack", [v("p"), v("s")], [
+    lit("goalLineRole", v("p"), v("s"), constant("most")),
+    lit("position", v("p"), v("s"), constant("RB")),
+  ]),
+
+  // his quarterback looks for him inside the twenty
+  rule("redZoneOption", [v("p"), v("s")], [
+    lit("redZoneTargetRole", v("p"), v("s"), constant("some")),
+  ]),
+
+  rule("redZoneOption", [v("p"), v("s")], [
+    lit("redZoneTargetRole", v("p"), v("s"), constant("most")),
+  ]),
+
+  // a back they hand it to near the line and rarely throw to there
+  rule("scoringSpecialist", [v("p"), v("s")], [
+    lit("goalLineBack", v("p"), v("s")),
+    lit("redZoneTargetRole", v("p"), v("s"), constant("little")),
+  ]),
+
+  // and one they use both ways, who is worth more
+  rule("completeBack", [v("p"), v("s")], [
+    lit("goalLineBack", v("p"), v("s")),
+    notLit("scoringSpecialist", v("p"), v("s")),
+  ]),
+
+  // the leader of a receiving room who also gets the ball near the line
+  rule("completeReceiver", [v("p"), v("team"), v("s")], [
+    lit("roomLeader", v("p"), v("team"), v("s")),
+    lit("redZoneOption", v("p"), v("s")),
+  ]),
+
+  // a week his line kept the pocket together
+  rule("wellProtected", [v("p"), v("s"), v("w")], [
+    lit("played", v("p"), v("s"), v("w")),
+    lit("rostered", v("p"), v("team"), v("s"), v("w")),
+    lit("protectedIn", v("team"), v("d"), v("s"), v("w"), constant("most")),
+  ]),
+
+  // the room leader met a secondary while his line was leaking
+  rule("leaderUnderPressure", [v("p"), v("d"), v("s"), v("w")], [
+    lit("leaderMet", v("p"), v("d"), v("s"), v("w")),
+    notLit("wellProtected", v("p"), v("s"), v("w")),
+  ]),
+];

@@ -8,9 +8,12 @@
  * that is the part that kept drifting between scripts.
  */
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Database, evaluate, type Rule } from "@suss/datalog";
 import { loadGames, loadPlayerStats, loadWeeklyRosters } from "../data/nflverse.js";
 import { loadCoaches } from "../data/coaches.js";
+import { parseCsv } from "../data/csv.js";
 import { ABSENCE_RULES, ROOM_RULES } from "./football.js";
 
 export { ABSENCE_RULES, ROOM_RULES };
@@ -120,7 +123,77 @@ export async function loadFacts(
     }
   }
 
+  await loadPlayByPlay(db, seasons);
   assertNames(db, names);
   evaluate(db, rules);
   return { db, seasons };
+}
+
+const CURATED = join(import.meta.dirname, "..", "..", "data", "curated");
+
+/**
+ * What the play-by-play adds, at the grain the engine suits.
+ *
+ * Shares and rates are worked out here and asserted as bands, because
+ * Datalog compares values but does not divide them. A rule can then
+ * say "a back who takes most of the goal-line work" without anyone
+ * rewriting the arithmetic that decides what most means.
+ */
+async function loadPlayByPlay(db: Database, seasons: number[]): Promise<void> {
+  const band = (share: number): string =>
+    share >= 0.5 ? "most" : share >= 0.25 ? "some" : "little";
+
+  const redZone = await readFile(join(CURATED, "redZone.csv"), "utf8").catch(() => "");
+
+  for (const row of redZone ? parseCsv(redZone) : []) {
+    const season = Number(row["season"]);
+
+    if (!seasons.includes(season)) {
+      continue;
+    }
+
+    const player = row["player"] ?? "";
+    const team = row["team"] ?? "";
+    const chances = Number(row["redTargets"]) + Number(row["redCarries"]);
+    const teamChances =
+      Number(row["teamRedTargets"]) + Number(row["teamRedCarries"]);
+
+    db.add("redZoneChances", [player, season, team, chances]);
+    // band a man against his own kind of work: near the goal line
+    // hand-offs outnumber throws, so measuring a receiver against the
+    // combined total puts every one of them in the bottom band
+    db.add("redZoneTargetRole", [
+      player, season,
+      band(Number(row["redTargets"]) / Math.max(1, Number(row["teamRedTargets"]))),
+    ]);
+    db.add("redZoneCarryRole", [
+      player, season,
+      band(Number(row["redCarries"]) / Math.max(1, Number(row["teamRedCarries"]))),
+    ]);
+    db.add("goalLineRole", [
+      player, season,
+      band(Number(row["goalCarries"]) / Math.max(1, Number(row["teamGoalCarries"]))),
+    ]);
+    db.add("redZoneShareOfAll", [
+      player, season, band(chances / Math.max(1, teamChances)),
+    ]);
+  }
+
+  const pressure = await readFile(join(CURATED, "pressureMatchups.csv"), "utf8")
+    .catch(() => "");
+
+  for (const row of pressure ? parseCsv(pressure) : []) {
+    const season = Number(row["season"]);
+    const week = Number(row["week"]);
+
+    if (!seasons.includes(season) || week > LAST_COUNTING_WEEK) {
+      continue;
+    }
+
+    const dropbacks = Number(row["dropbacks"]);
+    db.add("protectedIn", [
+      row["offense"] ?? "", row["defense"] ?? "", season, week,
+      band(1 - Number(row["pressures"]) / Math.max(1, dropbacks)),
+    ]);
+  }
 }
