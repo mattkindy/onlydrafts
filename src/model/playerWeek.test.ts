@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { seededRng } from "../sim/rng.js";
 import { normalDraw } from "../sim/normal.js";
-import { shareDraw, simulateTeamWeek, type Draws, type PlayerRole } from "./playerWeek.js";
+import {
+  FIRMNESS, shareDraw, simulateTeamWeek, type Draws, type PlayerRole,
+} from "./playerWeek.js";
 
 function drawsFrom(seed: number): Draws {
   const rng = seededRng(seed);
@@ -123,5 +125,27 @@ describe("simulateTeamWeek", () => {
     expect(share(0)).toBeGreaterThan(0.5);
     expect(share(1)).toBeGreaterThan(0.1);
     expect(share(2)).toBeGreaterThan(0.005);
+  });
+});
+
+describe("how firmly a depth chart holds", () => {
+  it("lets a backfield wander further than a receiving room", () => {
+    expect(FIRMNESS.carries).toBeLessThan(FIRMNESS.targets);
+  });
+
+  it("shows that as wider weekly swings for the backs", () => {
+    const spread = (firmness: number) => {
+      const draws = drawsFrom(13);
+      const shares: number[] = [];
+
+      for (let i = 0; i < 600; i++) {
+        shares.push(shareDraw([0.45, 0.35, 0.2], firmness, draws)[0]!);
+      }
+
+      const mean = shares.reduce((a, b) => a + b, 0) / shares.length;
+      return Math.sqrt(shares.reduce((a, b) => a + (b - mean) ** 2, 0) / shares.length) / mean;
+    };
+
+    expect(spread(FIRMNESS.carries)).toBeGreaterThan(spread(FIRMNESS.targets));
   });
 });

@@ -118,6 +118,16 @@ export function shareDraw(
 }
 
 /**
+ * How firmly each depth chart holds, fitted by matching how far a
+ * man's weekly share wanders from his season share. Over 160
+ * team-seasons a backfield wanders at .859 and a receiving room at
+ * .708, which comes out as 6 and 16. A committee rotates; a target
+ * order does not. Whether the play-caller changed makes no difference
+ * to either.
+ */
+export const FIRMNESS = { carries: 6, targets: 16 };
+
+/**
  * One simulated week for a whole offence. Taking the team as the unit
  * is the point: the same pass total is divided among its receivers, so
  * their weeks move against each other the way the real ones do.
@@ -126,7 +136,7 @@ export function simulateTeamWeek(
   team: TeamWeek,
   roster: PlayerRole[],
   draws: Draws,
-  firmness = 12,
+  firmness = FIRMNESS,
 ): PlayerLine[] {
   const active = roster.map((player) => draws.uniform() < player.availability);
 
@@ -134,15 +144,16 @@ export function simulateTeamWeek(
   // one extra mouth. Without it three receivers would split every pass
   // the team throws, and whoever is missing would hand his targets
   // only to the players we happen to be modelling.
-  const withRest = (get: (p: PlayerRole) => number) => {
+  const withRest = (get: (p: PlayerRole) => number, holds: number) => {
     const shares = roster.map((p, i) => (active[i] ? get(p) : 0));
     const rest = Math.max(0, 1 - roster.reduce((sum, p) => sum + get(p), 0));
-    return shareDraw([...shares, rest], firmness, draws).slice(0, roster.length);
+    return shareDraw([...shares, rest], holds, draws).slice(0, roster.length);
   };
 
-  const targetShares = withRest((p) => p.targetShare);
-  const carryShares = withRest((p) => p.carryShare);
-  const scoreShares = withRest((p) => p.touchdownShare);
+  const targetShares = withRest((p) => p.targetShare, firmness.targets);
+  const carryShares = withRest((p) => p.carryShare, firmness.carries);
+  // scoring follows whichever way he is used
+  const scoreShares = withRest((p) => p.touchdownShare, firmness.targets);
 
   // the offence has a good or bad day before anyone divides it up
   const form = Math.max(0.4, 1 + draws.normal() * 0.22);
