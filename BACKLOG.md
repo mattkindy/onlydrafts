@@ -133,3 +133,25 @@ are information none of the current features contain.
 See scripts/concentrationEval.ts and scripts/shapedIntervalEval.ts.
 The shaped residual model in src/backtest/intervals.ts stays as the
 harness for that test. Nothing on the board uses it.
+
+## Measured negative: resetting a player's role when the staff changes
+
+An earlier note said a backfield split resets with a new play-caller,
+carrying over at .264 under the same staff and -.054 under a new one.
+That measured a team's lead-back share, meaning how concentrated the
+backfield is, and it does not survive being asked in a form a decision
+can use.
+
+A player's own carry share carries over at slope .671 under the same
+staff and .653 under a new one, which is the same. Fitting the two
+groups separately and predicting 2025 out of sample was worse than one
+fit for everyone: rmse .1461 against .1453, rank .676 against .685.
+And the man who led a backfield leads it again 50% of the time when
+the staff stays and 47% when it changes.
+
+So a new coordinator does not tell you to fade a back. The one place
+it shows is tight ends, whose target share carries at slope .737 under
+the same staff and .484 under a new one.
+
+I gave draft advice on the strength of the team-level number before
+checking it in this form. See scripts/roleCarryoverEval.ts.
