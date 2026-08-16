@@ -34,6 +34,15 @@
     padding: .25rem .7rem; cursor: pointer; }
   #subnav { display: flex; gap: .3rem; flex-wrap: wrap; margin-bottom: .8rem;
     border-bottom: 1px solid var(--edge); }
+  #posfilter button { font: inherit; font-size: .78rem; font-weight: 600;
+    background: var(--chip); color: var(--muted); border: none;
+    border-radius: 999px; padding: .25rem .75rem; margin-right: .3rem;
+    cursor: pointer; }
+  #posfilter button.on { background: var(--go); color: #0C1117; }
+  .clock { background: var(--panel); border: 1px solid var(--go);
+    border-radius: 12px; padding: .7rem 1rem; margin-bottom: .9rem; }
+  .clock .big { font-size: 1.05rem; font-weight: 700; }
+  .clock .sub { color: var(--muted); font-size: .82rem; }
   #subnav button, nav button { font: inherit; font-size: .8rem; font-weight: 600;
     background: transparent; color: var(--muted); border: none;
     border-bottom: 2px solid transparent; padding: .35rem .7rem; cursor: pointer; }
@@ -148,6 +157,11 @@
     <progress id="prog" max="100" value="0" hidden></progress>
   </div>
 
+  <div class="controls" id="filterwrap" hidden>
+    <span id="posfilter"></span>
+    <input id="search" size="12" placeholder="search a name">
+  </div>
+
   <div class="controls" id="manualwrap" style="display:block">
     <label class="hint" id="manualhint"></label>
     <textarea id="manual"></textarea>
@@ -169,6 +183,7 @@ let players = null;
 let leagues = store_get("leagues", []);
 let active = store_get("active", null); // {leagueId, name, team, userId}
 let draftPoll = null;
+let posFilter = "ALL";
 let draftState = { taken: new Set(), teams: {}, mine: new Set(), rosteredBy: {}, grid: null, pickCount: undefined };
 
 function store_get(key, fallback) {
@@ -255,6 +270,7 @@ function setView(next) {
   $("weekwrap").hidden = !meta.weeks.length || next === "draft" || next === "history" || next === "leagues";
   $("teamwrap").hidden = true;
   $("keepwrap").hidden = next !== "draft" && next !== "roster";
+  $("filterwrap").hidden = next !== "draft";
   $("manualwrap").style.display = next === "start" || next === "waivers" || next === "draft" ? "block" : "none";
   if (next === "roster") $("manualwrap").style.display = "none";
   $("manualhint").textContent = next === "draft"
@@ -314,6 +330,7 @@ async function loadLeagues() {
     const mine = rosters.find((r) => r.owner_id === user.user_id);
     const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
     leagues.push({
+      members: Object.fromEntries(users.map((u) => [u.user_id, u.display_name])),
       leagueId: lg.league_id, name: lg.name, size: lg.total_rosters,
       userId: user.user_id, team: nameOf.get(user.user_id) ?? username,
       myRoster: (mine && mine.players ? mine.players : [])
@@ -531,6 +548,17 @@ async function renderWaivers() {
   logHistory(suggestions.length ? "waiver ideas: " + suggestions.slice(0, 3).join("; ") : "no waiver moves clear the bar");
 }
 
+function picksUntil(mySlot, overall, teams, rounds) {
+  for (let n = overall; n <= teams * rounds; n++) {
+    const round = Math.ceil(n / teams);
+    const inRound = n - (round - 1) * teams;
+    const slot = round % 2 === 1 ? inRound : teams - inRound + 1;
+    if (slot === mySlot) return n - overall;
+  }
+
+  return null;
+}
+
 function needFactor(position, count) {
   const starters = STARTERS[position] ?? 0;
   if (count < starters) return 1;
@@ -581,13 +609,34 @@ async function pollDraft() {
     }
   }
 
-  if (draft && picks.length) {
-    state.grid = { rounds: draft.settings?.rounds ?? 15, teams: draft.settings?.teams ?? 12, cells: {} , mySlot: draft.draft_order ? draft.draft_order[active.userId] : null };
+  if (draft) {
+    const teams = draft.settings?.teams ?? active?.size ?? 12;
+    const rounds = draft.settings?.rounds ?? 15;
+    const mySlot = draft.draft_order ? draft.draft_order[active.userId] : null;
+    state.grid = { rounds, teams, cells: {}, mySlot };
+
     for (const pick of picks) {
       const p = playerMap[pick.player_id];
       state.grid.cells[pick.round + "|" + pick.draft_slot] = p ? p.n.split(" ").at(-1) : "?";
     }
+
     state.pickCount = picks.length;
+    state.status = draft.status;
+
+    const overall = picks.length + 1;
+    const round = Math.ceil(overall / teams);
+    const inRound = overall - (round - 1) * teams;
+    const slot = round % 2 === 1 ? inRound : teams - inRound + 1;
+    const slotToUser = {};
+
+    for (const [userId, s] of Object.entries(draft.draft_order ?? {})) slotToUser[s] = userId;
+
+    state.clock = {
+      round, slot, overall,
+      who: active.members?.[slotToUser[slot]] ?? "slot " + slot,
+      mine: mySlot === slot,
+      untilMine: mySlot ? picksUntil(mySlot, overall, teams, rounds) : null,
+    };
   }
 
   draftState = state;
@@ -607,13 +656,31 @@ function renderDraft(staleAt) {
     if (s.mine.has(p.key)) { counts[p.position] = (counts[p.position] ?? 0) + 1; mineList.push(p); }
   }
 
+  if (s.status || s.clock) {
+    const banner = document.createElement("div");
+    banner.className = "clock";
+    const started = s.status === "drafting";
+    const done = s.status === "complete";
+    banner.innerHTML = done
+      ? '<div class="big">Draft complete</div>'
+      : started
+        ? '<div class="big">' + (s.clock.mine ? "You are on the clock" : s.clock.who + " is picking") +
+          '</div><div class="sub">round ' + s.clock.round + ", pick " + s.clock.overall +
+          (s.clock.untilMine !== null && !s.clock.mine ? " &middot; " + s.clock.untilMine + " until your turn" : "") + "</div>"
+        : '<div class="big">Draft has not started</div><div class="sub">' +
+          (s.clock && s.clock.mine !== undefined && s.grid && s.grid.mySlot ? "you pick from slot " + s.grid.mySlot : "waiting for the commissioner") + "</div>";
+    out.appendChild(banner);
+  }
+
   const h = document.createElement("h2");
-  h.textContent = (s.pickCount !== undefined ? "pick " + (s.pickCount + 1) + ", " : "") +
-    "best for your roster" + (staleAt ? " as of " + staleAt : "");
+  h.textContent = "best available for your draft roster" + (staleAt ? " as of " + staleAt : "");
   out.appendChild(h);
 
+  const query = norm($("search").value ?? "");
   const scored = board.players
     .filter((p) => !s.taken.has(p.key))
+    .filter((p) => posFilter === "ALL" || p.position === posFilter)
+    .filter((p) => !query || p.key.includes(query))
     .map((p) => ({ p, score: p.vor * needFactor(p.position, counts[p.position] ?? 0) }))
     .sort((a, b) => b.score - a.score);
 
@@ -758,6 +825,20 @@ function renderHistory() {
     out.appendChild(div);
   }
 }
+
+for (const label of ["ALL", ...POSITIONS]) {
+  const button = document.createElement("button");
+  button.textContent = label.toLowerCase();
+  button.className = label === "ALL" ? "on" : "";
+  button.addEventListener("click", () => {
+    posFilter = label;
+    for (const b of $("posfilter").children) b.classList.toggle("on", b.textContent === label.toLowerCase());
+    renderDraft();
+  });
+  $("posfilter").appendChild(button);
+}
+
+$("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 
 document.querySelectorAll("#subnav button").forEach((b) =>
   b.addEventListener("click", async () => {
