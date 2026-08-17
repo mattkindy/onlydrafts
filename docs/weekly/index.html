@@ -631,6 +631,7 @@ function weekCard(p, opts = {}) {
     value: p.predicted,
     unit: "this week",
     range: { low: p.floor, mid: p.predicted, high: p.ceiling, label: "floor to ceiling" },
+    aside: opts.aside ?? { label: "at best", value: p.ceiling },
     note: p.snaps + "% of snaps recently",
   });
 }
@@ -729,9 +730,23 @@ const CLOSE_ENOUGH = 1;
 function marginAt(player, round, teams, taken) {
   const pick = (round - 1) * teams + Math.ceil(teams / 2);
   const instead = bestLeftAt(pick, taken, player.key);
+  /**
+   * His good week measured against the man who would start at his
+   * position anyway, the same baseline the expectation uses. Comparing
+   * raw ceilings across positions had a quarterback beating a tight end
+   * by nine, which says nothing except that quarterbacks score more.
+   */
+  const overReplacement = (p) => {
+    const high = (p.game ? p.game.high : p.ppg) ?? p.ppg;
+    return high - (p.ppg - p.vor);
+  };
+
   return {
     instead,
     margin: instead ? player.vor - instead.vor : player.vor,
+    upside: instead
+      ? overReplacement(player) - overReplacement(instead)
+      : overReplacement(player),
     thin: pick > 130,
   };
 }
@@ -798,24 +813,30 @@ async function renderKeepers() {
   for (const { p, round, instead, thin } of mine) {
     const cost = Number(costs[p.key]) || 0;
     const at = cost ? marginAt(p, cost, teams, taken) : null;
+    const who = at && at.instead ? at.instead.name : "what is left";
     const verdict = !at ? ""
       : at.margin > CLOSE_ENOUGH
-        ? "keep him, " + at.margin.toFixed(1) + " a game better than " +
-          (at.instead ? at.instead.name : "anyone left")
+        ? "keep him, " + at.margin.toFixed(1) + " a game better than " + who
       : at.margin < -CLOSE_ENOUGH
-        ? "let him go, " + (-at.margin).toFixed(1) + " a game behind " +
-          (at.instead ? at.instead.name : "the field")
-      : "level with " + (at.instead ? at.instead.name : "what is left") +
-        ", take the pick";
+        ? "let him go, " + (-at.margin).toFixed(1) + " a game behind " + who
+      : "level with " + who + ", take the pick";
+    // when the two disagree, say so rather than picking one
+    const onUpside = !at ? ""
+      : at.upside > 2 && at.margin <= CLOSE_ENOUGH
+        ? "but his good week beats " + who + " by " + at.upside.toFixed(1)
+      : at.upside < -2 && at.margin >= -CLOSE_ENOUGH
+        ? "and " + who + " has the better week in him by " + (-at.upside).toFixed(1)
+      : "";
 
     const card = seasonCard(p, {
       max: seasonMax,
       aside: { label: "worth a", value: round },
       tag: at && at.margin > CLOSE_ENOUGH ? verdict : "",
       hint: at && at.margin <= CLOSE_ENOUGH ? verdict : "",
-      note: (instead
-        ? "at a " + ordinal(round) + " the other choice is " + instead.name
-        : "nobody left worth the pick") +
+      note: (onUpside ? onUpside + " &middot; " : "") +
+        (instead
+          ? "at a " + ordinal(round) + " the other choice is " + instead.name
+          : "nobody left worth the pick") +
         (thin ? ", who is a flier" : "") +
         (p.adp ? " &middot; goes " + asRound(p.adp) + " in PPR mocks" : ""),
     });
@@ -927,7 +948,21 @@ async function renderStart() {
     out.appendChild(h);
     const grid = document.createElement("div");
     grid.className = "cards";
-    for (const p of shown) grid.appendChild(weekCard(p, { mine: mine.size > 0, max }));
+    // the best week in the group, so a lineup call that needs points
+    // rather than safety has something to go on
+    const biggest = shown.reduce(
+      (best, p) => (!best || p.ceiling > best.ceiling ? p : best), null,
+    );
+
+    for (const p of shown) {
+      grid.appendChild(weekCard(p, {
+        mine: mine.size > 0,
+        max,
+        hint: biggest && p.key === biggest.key && shown.length > 1
+          ? "the biggest week in this group, if you need one"
+          : "",
+      }));
+    }
     out.appendChild(grid);
     if (mine.size > 0 && owned[0]) starts.push(position + ": " + owned[0].name + " " + owned[0].predicted.toFixed(1));
   }
@@ -963,8 +998,24 @@ async function renderWaivers() {
     for (const p of owned) grid.appendChild(weekCard(p, { mine: true, max, tag: "already yours" }));
     for (const p of outside) {
       const gain = worst ? p.predicted - worst.predicted : 0;
-      if (worst && gain > 2) suggestions.push(p.name + " +" + gain.toFixed(1) + " over " + worst.name);
-      grid.appendChild(weekCard(p, { max, tag: worst && gain > 2 ? "+" + gain.toFixed(1) + " a week over " + worst.name : "" }));
+      // a man can be behind on an average week and ahead on a good one,
+      // which is the pickup to make when you need points rather than
+      // when you need not to lose them
+      const onCeiling = worst ? p.ceiling - worst.ceiling : 0;
+
+      if (worst && gain > 2) {
+        suggestions.push(p.name + " +" + gain.toFixed(1) + " over " + worst.name);
+      }
+
+      grid.appendChild(weekCard(p, {
+        max,
+        tag: worst && gain > 2
+          ? "+" + gain.toFixed(1) + " a week over " + worst.name : "",
+        hint: worst && gain <= 2 && onCeiling > 3
+          ? "behind " + worst.name + " on an average week, " +
+            onCeiling.toFixed(1) + " ahead on a good one"
+          : "",
+      }));
     }
     out.appendChild(grid);
   }
