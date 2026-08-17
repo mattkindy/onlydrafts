@@ -14,7 +14,11 @@ import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
 import { rmse, spearman } from "../src/backtest/metrics.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
-import { expectedFrom, type Shown } from "../src/features/attributePriors.js";
+import {
+  expectedFrom, fitLeanings, leaning, RATES,
+  type Expected, type Shown,
+} from "../src/features/attributePriors.js";
+import { loadAfterContact } from "../src/data/advancedStats.js";
 
 const middle = (values: number[]) =>
   values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
@@ -62,17 +66,20 @@ async function seasonOf(season: number): Promise<Map<string, Own>> {
   return tally;
 }
 
-const shownFrom = (tally: Map<string, Own>): Shown[] =>
+const shownFrom = (
+  tally: Map<string, Own>, deeper: Map<string, { afterContact: number }>,
+): Shown[] =>
   [...tally].map(([playerId, own]) => {
     const mean = middle(own.gains);
     return {
       playerId, touches: own.touches,
       catchRate: own.targets > 0 ? own.catches / own.targets : 0.64,
       yardsPerCatch: own.catches > 0 ? own.recYards / own.catches : 10.4,
-      yardsPerCarry: own.carries > 0 ? own.rushYards / own.carries : 4.3,
+      // what he makes once he is hit, since a whole carry is the line
+      afterContact: deeper.get(playerId)?.afterContact ?? 1.88,
       swing: mean > 0
         ? Math.sqrt(middle(own.gains.map((g) => (g - mean) ** 2))) / mean
-        : 0.35,
+        : 1.3,
     };
   });
 
@@ -80,9 +87,14 @@ async function main(): Promise<void> {
   const older = await seasonOf(2023);
   const before = await seasonOf(2024);
   const now = await seasonOf(2025);
+  const deeper = {
+    2023: await loadAfterContact(2023),
+    2024: await loadAfterContact(2024),
+    2025: await loadAfterContact(2025),
+  };
   // what men described in 2023 went on to do in 2024, applied to how
   // men were described in 2024, to guess 2025
-  const wentOnToDo = shownFrom(before).filter((m) => older.has(m.playerId));
+  const wentOnToDo = shownFrom(before, deeper[2024]).filter((m) => older.has(m.playerId));
   const priors = await expectedFrom(2023, wentOnToDo, 2024);
   const position = new Map<string, string>();
 
@@ -90,8 +102,18 @@ async function main(): Promise<void> {
     position.set(s.playerId, s.position);
   }
 
-  const league = { catchRate: 0.64, yardsPerCatch: 10.4, yardsPerCarry: 4.3, swing: 0.35 };
-  const shownNow = new Map(shownFrom(now).map((m) => [m.playerId, m]));
+  const league: Expected = {
+    catchRate: 0.64, yardsPerCatch: 10.4, afterContact: 1.88, swing: 1.3,
+  };
+  const shownNow = new Map(shownFrom(now, deeper[2025]).map((m) => [m.playerId, m]));
+
+  // how far to lean on the attributes for each, fitted on the season
+  // before the one being scored so nothing chooses on its own answers
+  const leanings = fitLeanings(priors, wentOnToDo, league);
+  console.log(
+    "how far the attributes are leaned on, fitted on the season before\n  " +
+      RATES.map((r) => `${r} ${(100 * leanings[r]).toFixed(0)}%`).join(", ") + "\n",
+  );
 
   // the men the shrinking matters for: little behind them, enough after
   const thin = [...shownNow.values()].filter((m) =>
@@ -102,15 +124,15 @@ async function main(): Promise<void> {
     `${thin.length} men with under forty touches before and thirty after\n`,
   );
   console.log("guessing what he did, for a man with little behind him");
-  console.log("  rate              league   his attributes   spread");
+  console.log("  rate              league   attributes    leaned    order");
 
   for (const [label, of, low, high] of [
     ["catch rate", (m: Shown) => m.catchRate, 0.3, 0.95],
     ["yards a catch", (m: Shown) => m.yardsPerCatch, 3, 25],
-    ["yards a carry", (m: Shown) => m.yardsPerCarry, 1, 9],
+    ["after contact", (m: Shown) => m.afterContact, 0.5, 5],
     ["how much he swings", (m: Shown) => m.swing, 0.1, 3],
   ] as [string, (m: Shown) => number, number, number][]) {
-    const at = thin.filter((m) => {
+    const at = thin.filter((m) => priors.has(m.playerId)).filter((m) => {
       const value = of(m);
       return value > low && value < high;
     });
@@ -122,9 +144,12 @@ async function main(): Promise<void> {
     const truth = at.map(of);
     const fromLeague = at.map(() => of(league as unknown as Shown));
     const fromAttributes = at.map((m) => of(priors.get(m.playerId)! as unknown as Shown));
+    const leaned = at.map((m) =>
+      of(leaning(priors.get(m.playerId), league, leanings) as unknown as Shown));
     console.log(
       "  " + label.padEnd(18) + rmse(fromLeague, truth).toFixed(3).padStart(6) +
-      rmse(fromAttributes, truth).toFixed(3).padStart(17) +
+      rmse(fromAttributes, truth).toFixed(3).padStart(14) +
+      rmse(leaned, truth).toFixed(3).padStart(11) +
       spearman(fromAttributes, truth).toFixed(3).padStart(9),
     );
   }

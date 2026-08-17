@@ -18,23 +18,89 @@ import { buildPlayerVectors, type PlayerVector } from "./playerVector.js";
 export interface Expected {
   catchRate: number;
   yardsPerCatch: number;
-  yardsPerCarry: number;
+  /** what he makes once he is hit, which is his where a whole carry is not */
+  afterContact: number;
   /** how far his yards swing about their own average */
   swing: number;
 }
 
 export interface PriorSettings {
-  /** how hard to hold a guess to what the position usually does */
+  /** how hard to keep a guess near what the position usually does */
   penalty: number;
 }
 
 export const PRIOR_DEFAULTS: PriorSettings = { penalty: 3 };
+
+/** how far to lean on the attributes for each rate, against the league */
+export type Leanings = Record<keyof Expected, number>;
 
 /** what a man actually did, to fit the guesses against */
 export interface Shown extends Expected {
   playerId: string;
   touches: number;
 }
+
+export const RATES: (keyof Expected)[] = [
+  "catchRate", "yardsPerCatch", "afterContact", "swing",
+];
+
+/**
+ * How far to lean on the attributes for each rate, worked out rather
+ * than chosen.
+ *
+ * Saying attributes for these and the league for those is picking
+ * whichever won on the men being scored. One rule instead: guess from
+ * the attributes, pull toward the league, and fit how far by trying it
+ * on a season nobody is being judged on. A guess with nothing behind it
+ * takes a lean of nothing by itself.
+ */
+export function fitLeanings(
+  guessed: Map<string, Expected>,
+  wentOnToDo: Shown[],
+  league: Expected,
+): Leanings {
+  const out = {} as Leanings;
+
+  for (const rate of RATES) {
+    const men = wentOnToDo.filter((m) => guessed.has(m.playerId));
+    let best = 0;
+    let bestMiss = Infinity;
+
+    for (let lean = 0; lean <= 1.001; lean += 0.05) {
+      let miss = 0;
+
+      for (const man of men) {
+        const said = lean * guessed.get(man.playerId)![rate] +
+          (1 - lean) * league[rate];
+        miss += (said - man[rate]) ** 2;
+      }
+
+      if (miss < bestMiss) {
+        bestMiss = miss;
+        best = lean;
+      }
+    }
+
+    out[rate] = men.length >= 25 ? best : 0;
+  }
+
+  return out;
+}
+
+/** the two put together, at whatever lean was fitted */
+export const leaning = (
+  guessed: Expected | undefined, league: Expected, leanings: Leanings,
+): Expected => {
+  const out = {} as Expected;
+
+  for (const rate of RATES) {
+    out[rate] = guessed
+      ? leanings[rate] * guessed[rate] + (1 - leanings[rate]) * league[rate]
+      : league[rate];
+  }
+
+  return out;
+};
 
 const bounded = (value: number, low: number, high: number) =>
   Math.max(low, Math.min(high, value));
@@ -89,12 +155,12 @@ export async function expectedFrom(
       fitRidge(rows, men.map(of), settings.penalty);
     const forCatch = weightsFor((m) => m.catchRate);
     const forCatchYards = weightsFor((m) => m.yardsPerCatch);
-    const forCarryYards = weightsFor((m) => m.yardsPerCarry);
+    const forAfterContact = weightsFor((m) => m.afterContact);
     const forSwing = weightsFor((m) => m.swing);
     const average = {
       catchRate: men.reduce((a, m) => a + m.catchRate, 0) / men.length,
       yardsPerCatch: men.reduce((a, m) => a + m.yardsPerCatch, 0) / men.length,
-      yardsPerCarry: men.reduce((a, m) => a + m.yardsPerCarry, 0) / men.length,
+      afterContact: men.reduce((a, m) => a + m.afterContact, 0) / men.length,
       swing: men.reduce((a, m) => a + m.swing, 0) / men.length,
     };
 
@@ -112,9 +178,9 @@ export async function expectedFrom(
           predictRidge(forCatchYards, at), average.yardsPerCatch * 0.55,
           average.yardsPerCatch * 1.8,
         ),
-        yardsPerCarry: bounded(
-          predictRidge(forCarryYards, at), average.yardsPerCarry * 0.6,
-          average.yardsPerCarry * 1.6,
+        afterContact: bounded(
+          predictRidge(forAfterContact, at), average.afterContact * 0.55,
+          average.afterContact * 1.8,
         ),
         swing: bounded(predictRidge(forSwing, at), 0.15, 0.9),
       });
