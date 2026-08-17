@@ -93,6 +93,45 @@ async function main(): Promise<void> {
     );
   }
 
+  // How many points, and how close is anyone allowed to get? The
+  // oracle knows each man's actual 2025 average, which no model could,
+  // and it still has to guess every week the same. Whatever error it
+  // has left is the part of a week nobody predicts.
+  const seasonAverage = new Map<string, { points: number; games: number }>();
+
+  for (const row of rows) {
+    const own = seasonAverage.get(row.playerId) ?? { points: 0, games: 0 };
+    own.points += row.actual;
+    own.games++;
+    seasonAverage.set(row.playerId, own);
+  }
+
+  console.log("\nhow many points, in points\n");
+  console.log("model                        average miss   typical miss   within 5   within 10");
+
+  const mean = actual.reduce((a, b) => a + b, 0) / actual.length;
+  console.log("  the average week is " + mean.toFixed(1) + " points\n");
+
+  for (const [label, get] of [
+    ["last season's average", (r: (typeof rows)[number]) => r.lastSeason],
+    ["the simulation", (r: (typeof rows)[number]) => r.simulated],
+    ["the weekly model", (r: (typeof rows)[number]) => r.weekly],
+    ["knowing his 2025 average", (r: (typeof rows)[number]) => {
+      const own = seasonAverage.get(r.playerId)!;
+      return own.points / own.games;
+    }],
+  ] as [string, (r: (typeof rows)[number]) => number][]) {
+    const guess = rows.map(get);
+    const misses = guess.map((g, i) => Math.abs(g - actual[i]!));
+    console.log(
+      label.padEnd(28) +
+      (misses.reduce((a, b) => a + b, 0) / misses.length).toFixed(2).padStart(11) +
+      rmse(guess, actual).toFixed(2).padStart(15) +
+      ((misses.filter((m) => m <= 5).length / misses.length) * 100).toFixed(0).padStart(10) + "%" +
+      ((misses.filter((m) => m <= 10).length / misses.length) * 100).toFixed(0).padStart(11) + "%",
+    );
+  }
+
   // and the harder one: within a single player, which weeks are good
   const byPlayer = new Map<string, typeof rows>();
 
