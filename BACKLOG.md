@@ -182,3 +182,39 @@ drawn on its own.
 That correlation is the next thing to model, and it is the same
 missing piece in both numbers: it would thin the tails and fill in the
 middle at once. See scripts/fitWeekSettings.ts for the sweeps.
+
+## Week to week, and the part nobody predicts
+
+2789 player-weeks in 2025, standard scoring.
+
+Across players, who outscores whom this Sunday:
+
+  the weekly model        .624
+  the simulation          .515
+  last season's average   .504
+
+The weekly model wins clearly, and the simulation barely beats carrying
+last season forward, which is what it should do since it gives a man
+the same number every week.
+
+Within one player, which of his own weeks are the good ones, over 165
+men with ten or more games:
+
+  the weekly model       -.023
+  the simulation           0
+
+The weekly model cannot tell. Its opponent index, its implied total,
+its recent form and its snap share all move from week to week, and
+together they carry no information about which of a man's afternoons
+will be the big one. Its .624 comes from ranking players against each
+other, not from reading a matchup.
+
+That matters most where the tool is used most. Choosing which of two
+of your own players to start is exactly the within-player question,
+and nothing here answers it. The honest advice is to start the better
+player. Anything the page says about a soft matchup is decoration.
+
+Worth trying against this: the opponent index is a season aggregate,
+and the one matchup measure that did carry over year to year was a
+defence's extra suppression of the opposing room leader, at .204
+against .100 for its general suppression.
