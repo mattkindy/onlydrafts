@@ -330,3 +330,35 @@ shrinks them away. Adding them by hand is injecting a prior the data
 alone will not support. Which also means my hand-found interactions
 may be fitted to the hypothesis I happened to pick, and the honest
 next step is more seasons rather than a cleverer model.
+
+## Opaque descriptions, trained on several questions at once
+
+src/model/entityNet.ts pools each entity's vector and pushes it
+through a hidden layer, so a coach with this personnel in this
+situation is representable rather than being the sum of three pairs.
+The factorized model could not do that; a test with a three way
+interaction that no pair explains passes here and would fail there.
+
+Several heads share one set of vectors, which was the point. Fitting
+yards alone gave each entity one question's worth of evidence and lost
+to a ridge. Four questions give the same twelve numbers four times as
+much.
+
+It comes out level, not ahead:
+
+  question                        adding up        shared
+                                rmse   rank    rmse   rank
+  the yards it gains            8.316  .113   8.360  .119
+  whether it is a run            .469  .319    .469  .321
+  whether it is a tight end set  .464  .197    .466  .186
+  whether it moves the chains    .430  .295    .431  .296
+
+Level on four questions from one shared description of twelve numbers
+per entity, against four separate fits of about a hundred and fifty
+coefficients each. That is the thing worth having: not a better
+answer, a reusable one. A new question is a new head rather than a new
+fit, and an entity's description travels when it changes team.
+
+It also cannot run away. The squashed hidden layer and the clipped
+error hold it finite on targets that sent the factorized fit to
+infinity, which is why the guard that model needed is untestable here.
