@@ -110,6 +110,9 @@
   .range .mark { position: absolute; top: -4px; width: 4px; height: 22px;
     background: var(--mark); border-radius: 2px;
     box-shadow: 0 0 0 2px var(--panel); }
+  .costrow { display: flex; align-items: center; gap: .4rem; margin-top: .5rem;
+    color: var(--faint); font-size: .74rem; }
+  .costrow input { width: 3.2rem; font-size: .8rem; padding: .2rem .35rem; }
   .pickline { grid-column: 1 / -1; display: flex; align-items: center;
     gap: .6rem; margin: .3rem 0; color: var(--mark); font-size: .72rem;
     font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
@@ -172,6 +175,7 @@
 
   <div id="subnav" hidden>
     <button data-view="roster">my roster</button>
+    <button data-view="keepers">keeper value</button>
     <button data-view="draft">draft help</button>
     <button data-view="start">who to start</button>
     <button data-view="waivers">who to add</button>
@@ -313,6 +317,9 @@ function setView(next) {
     roster: ["My roster",
       "Everyone Sleeper currently has on your team, with this season's projection for each.",
       "Before a keeper draft this is last season's roster until the league clears it. Each card shows points in a typical game and the middle half of his weeks. Tap a player for the season distribution and to mark a keeper."],
+    keepers: ["Keeper value",
+      "The most a player is worth keeping for. Paying a round for him means giving up that pick, so he is worth it only while he beats whoever you could take with it.",
+      "Type what your league charges and each card says whether to keep him. A player worth a 5th and costing a 9th is a bargain; one costing a 2nd is not."],
     draft: ["Draft help",
       "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
       "The big number is value over a replacement starter, weighted by the slots your draft roster still needs. Underneath is what he scores in a typical game and the middle half of his weeks. Players stay on the board until they are actually kept or drafted."],
@@ -330,6 +337,7 @@ function setView(next) {
   if (draftPoll && next !== "draft") { clearInterval(draftPoll); draftPoll = null; }
   refreshGoLabel();
   if (next === "leagues" && leagues.length) renderLeagues();
+  if (next === "keepers") renderKeepers();
 }
 
 /*
@@ -345,6 +353,10 @@ const TOOLBARS = {
   roster: {
     fields: [],
     action: "reload from sleeper",
+  },
+  keepers: {
+    fields: [],
+    action: "work it out again",
   },
   draft: {
     fields: ["keepwrap", "posfilter", "searchwrap"],
@@ -670,6 +682,130 @@ function seasonNotStarted() {
   $("out").innerHTML = '<div class="empty"><b>The season has not kicked off yet.</b> ' +
     "Weekly projections need a few games of this year's snaps and targets, so they turn on about a month in. " +
     "Until then use <b>draft help</b> and <b>my roster</b>.</div>";
+}
+
+
+/** 1st, 2nd, 3rd, 4th, and the teens which all take th */
+function ordinal(n) {
+  if (n % 100 >= 11 && n % 100 <= 13) return n + "th";
+  return n + (["th", "st", "nd", "rd"][n % 10] ?? "th");
+}
+
+/**
+ * What you could still take with a given pick.
+ *
+ * Best available falls as the rounds pass, so a player is worth
+ * keeping for round R only while he beats whoever is left at that
+ * pick. Reading the market's own draft order is the closest thing to
+ * knowing who will be there.
+ */
+function bestLeftAt(pick, taken, exclude) {
+  let best = null;
+
+  for (const p of board.players) {
+    // he cannot be his own alternative, and a man already kept is not
+    // in the draft at all
+    if (p.key === exclude || taken.has(p.key) || !p.adp) continue;
+    // the market expects him around his own draft position, so anyone
+    // going later than this pick should still be there
+    if (p.adp < pick) continue;
+    if (!best || p.vor > best.vor) best = p;
+  }
+
+  return best;
+}
+
+/** the earliest round he still beats what that pick would buy */
+function worthUpTo(player, teams, taken) {
+  for (let round = 1; round <= 15; round++) {
+    const pick = (round - 1) * teams + Math.ceil(teams / 2);
+    const instead = bestLeftAt(pick, taken, player.key);
+    if (!instead || player.vor >= instead.vor) return { round, instead };
+  }
+
+  return { round: 16, instead: null };
+}
+
+function keeperCosts() {
+  return store_get("keeperCost." + (active ? active.leagueId : "none"), {});
+}
+
+function saveKeeperCost(key, round) {
+  const all = keeperCosts();
+  if (round) all[key] = round;
+  else delete all[key];
+  store_set("keeperCost." + (active ? active.leagueId : "none"), all);
+}
+
+async function renderKeepers() {
+  if (!board) {
+    board = await (await fetch("data/board-" + meta.boardSeason + ".json" + (window.__bust ?? ""))).json();
+    boardByKey = new Map(board.players.map((p) => [p.key, p]));
+  }
+
+  const out = $("out");
+  out.innerHTML = "";
+
+  if (!active) {
+    out.innerHTML = '<div class="empty"><b>No league selected.</b> Open <b>all leagues</b> and tap one.</div>';
+    return;
+  }
+
+  const teams = active.size || 12;
+  // Only men actually kept are out of the pool. In a keeper league
+  // everyone else on a roster goes back into the draft, so treating a
+  // whole roster as unavailable would empty the board.
+  const taken = new Set(Object.keys(markedKeepers()));
+
+  const costs = keeperCosts();
+  const mine = active.myRoster
+    .map((r) => boardLookup(r.key))
+    .filter(Boolean)
+    .map((p) => ({ p, ...worthUpTo(p, teams, taken) }))
+    .sort((a, b) => a.round - b.round);
+
+  const head = document.createElement("div");
+  head.className = "empty";
+  head.innerHTML = "<b>What each man is worth keeping for.</b> Round shown is the " +
+    "earliest pick he still beats. Type what your league charges and the card says " +
+    "whether to keep him.";
+  out.appendChild(head);
+
+  const grid = document.createElement("div");
+  grid.className = "cards";
+  const seasonMax = seasonScale(mine.map((m) => m.p));
+
+  for (const { p, round, instead } of mine) {
+    const cost = Number(costs[p.key]) || 0;
+    const verdict = !cost ? ""
+      : cost > round ? "keep him, he is worth a " + ordinal(round)
+      : cost === round ? "line ball at a " + ordinal(cost)
+      : "let him go, he is only worth a " + ordinal(round);
+
+    const card = seasonCard(p, {
+      max: seasonMax,
+      aside: { label: "worth a", value: round },
+      tag: cost && cost > round ? verdict : "",
+      hint: cost ? (cost > round ? "" : verdict) : "",
+      note: (instead
+        ? "at a " + ordinal(round) + " you would otherwise get " + instead.name
+        : "worth keeping at any price") +
+        (p.adp ? " &middot; goes " + asRound(p.adp) + " in mocks" : ""),
+    });
+
+    const row = document.createElement("label");
+    row.className = "costrow";
+    row.innerHTML = "costs a <input type=\"number\" min=\"1\" max=\"15\" " +
+      "value=\"" + (cost || "") + "\" placeholder=\"?\"> round";
+    row.querySelector("input").addEventListener("change", (e) => {
+      saveKeeperCost(p.key, Number(e.target.value));
+      renderKeepers();
+    });
+    card.appendChild(row);
+    grid.appendChild(card);
+  }
+
+  out.appendChild(grid);
 }
 
 async function renderRoster() {
@@ -1134,6 +1270,7 @@ document.querySelectorAll("#subnav button").forEach((b) =>
       if (view === "start") await renderStart();
       else if (view === "roster") await renderRoster();
       else if (view === "waivers") await renderWaivers();
+      else if (view === "keepers") await renderKeepers();
       else if (view === "draft") await renderDraftView();
     } catch (error) {
       $("status").textContent = String(error);
@@ -1154,6 +1291,7 @@ $("go").addEventListener("click", async () => {
     else if (view === "roster") await renderRoster();
     else if (view === "start") await renderStart();
     else if (view === "waivers") await renderWaivers();
+    else if (view === "keepers") await renderKeepers();
     else if (draftPoll) { clearInterval(draftPoll); draftPoll = null; status.textContent = "paused"; }
     else await renderDraftView();
     refreshGoLabel();
