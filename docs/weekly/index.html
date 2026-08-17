@@ -355,7 +355,7 @@ const TOOLBARS = {
     action: "reload from sleeper",
   },
   keepers: {
-    fields: [],
+    fields: ["keepwrap"],
     action: "work it out again",
   },
   draft: {
@@ -415,10 +415,34 @@ async function loadLeagues() {
   leagues = [];
 
   for (const lg of found ?? []) {
-    const [rosters, users] = await Promise.all([
+    const [rosters, users, traded] = await Promise.all([
       api("/league/" + lg.league_id + "/rosters"),
       api("/league/" + lg.league_id + "/users"),
+      api("/league/" + lg.league_id + "/traded_picks").catch(() => []),
     ]);
+    // Keeping a man costs the pick he is priced at, so a team without
+    // that round cannot keep him at any price. Everyone starts with one
+    // of each of their own; a traded pick leaves the roster it came
+    // from and joins whoever owns it now. A pick dealt away and later
+    // bought back reads as both, so it stays put, and a team can end up
+    // holding two of a round.
+    const ROUNDS = 15;
+    const picksOf = new Map(rosters.map((r) => [
+      r.roster_id,
+      new Map(Array.from({ length: ROUNDS }, (_, i) => [i + 1, 1])),
+    ]));
+
+    for (const pick of (traded ?? []).filter((t) => String(t.season) === String(lg.season))) {
+      if (pick.roster_id === pick.owner_id) continue;
+      const from = picksOf.get(pick.roster_id);
+      const to = picksOf.get(pick.owner_id);
+      if (from) from.set(pick.round, (from.get(pick.round) ?? 0) - 1);
+      if (to) to.set(pick.round, (to.get(pick.round) ?? 0) + 1);
+    }
+
+    const roundsHeld = (id) =>
+      [...(picksOf.get(id) ?? new Map())]
+        .filter(([, n]) => n > 0).map(([round]) => round).sort((a, b) => a - b);
     const mine = rosters.find((r) => r.owner_id === user.user_id);
     const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
     leagues.push({
@@ -427,8 +451,10 @@ async function loadLeagues() {
       userId: user.user_id, team: nameOf.get(user.user_id) ?? username,
       myRoster: (mine && mine.players ? mine.players : [])
         .map((id) => playerMap[id]).filter((p) => p && p.n).map((p) => ({ name: p.n, key: norm(p.n) })),
+      myPicks: roundsHeld(mine ? mine.roster_id : -1),
       allRosters: rosters.map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
+        picks: roundsHeld(r.roster_id),
         keys: (r.players ?? []).map((id) => playerMap[id]).filter((p) => p && p.n)
           .map((p) => ({ name: p.n, key: norm(p.n), pos: p.p })),
       })),
@@ -700,8 +726,20 @@ function ordinal(n) {
  * pick. Reading the market's own draft order is the closest thing to
  * knowing who will be there.
  */
-function bestLeftAt(pick, taken, exclude) {
+/**
+ * What you could still take with a given pick, worth what he would be
+ * worth to you.
+ *
+ * Value over replacement asks what a man is worth to a team that needs
+ * one at his position. You start one quarterback, so the best
+ * quarterback left is worth his full number to somebody who has none
+ * and almost nothing to you if you are keeping two. Counting what you
+ * already have stops a third quarterback being the reason to let a
+ * back go.
+ */
+function bestLeftAt(pick, taken, exclude, have) {
   let best = null;
+  let bestWorth = -Infinity;
 
   for (const p of board.players) {
     // he cannot be his own alternative, and a man already kept is not
@@ -710,10 +748,11 @@ function bestLeftAt(pick, taken, exclude) {
     // the market expects him around his own draft position, so anyone
     // going later than this pick should still be there
     if (p.adp < pick) continue;
-    if (!best || p.vor > best.vor) best = p;
+    const worth = p.vor * (have ? needFactor(p.position, have[p.position] ?? 0) : 1);
+    if (worth > bestWorth) { bestWorth = worth; best = p; }
   }
 
-  return best;
+  return best ? { ...best, worth: bestWorth } : null;
 }
 
 /**
@@ -727,9 +766,9 @@ function bestLeftAt(pick, taken, exclude) {
  */
 const CLOSE_ENOUGH = 1;
 
-function marginAt(player, round, teams, taken) {
+function marginAt(player, round, teams, taken, have) {
   const pick = (round - 1) * teams + Math.ceil(teams / 2);
-  const instead = bestLeftAt(pick, taken, player.key);
+  const instead = bestLeftAt(pick, taken, player.key, have);
   /**
    * His good week measured against the man who would start at his
    * position anyway, the same baseline the expectation uses. Comparing
@@ -743,7 +782,7 @@ function marginAt(player, round, teams, taken) {
 
   return {
     instead,
-    margin: instead ? player.vor - instead.vor : player.vor,
+    margin: instead ? player.vor - instead.worth : player.vor,
     upside: instead
       ? overReplacement(player) - overReplacement(instead)
       : overReplacement(player),
@@ -752,13 +791,45 @@ function marginAt(player, round, teams, taken) {
 }
 
 /** the earliest round he is not clearly worse than the alternative */
-function worthUpTo(player, teams, taken) {
+function worthUpTo(player, teams, taken, have) {
   for (let round = 1; round <= 15; round++) {
-    const at = marginAt(player, round, teams, taken);
+    const at = marginAt(player, round, teams, taken, have);
     if (at.margin > -CLOSE_ENOUGH) return { round, ...at };
   }
 
   return { round: 16, instead: null, margin: 0, thin: true };
+}
+
+/**
+ * Who the other teams will hold on to.
+ *
+ * Their costs are not in here, but the main effect does not need them:
+ * a team keeps its best players, so the men at the top of every roster
+ * come off the board before the draft starts. That changes who is left
+ * at your own pick, which is the whole basis for what your keepers are
+ * worth.
+ *
+ * The count comes from the keepers-per-team box, so it can be set to
+ * whatever the league allows.
+ */
+function likelyKept(perTeam) {
+  const gone = new Set();
+
+  for (const roster of active.allRosters ?? []) {
+    if (roster.owner === active.team) continue;
+
+    // it cannot keep more men than it has picks left to pay with
+    const canAfford = Math.min(perTeam, (roster.picks ?? []).length);
+    const rated = (roster.keys ?? [])
+      .map((r) => boardLookup(r.key))
+      .filter(Boolean)
+      .sort((a, b) => b.vor - a.vor)
+      .slice(0, canAfford);
+
+    for (const p of rated) gone.add(p.key);
+  }
+
+  return gone;
 }
 
 function keeperCosts() {
@@ -787,23 +858,35 @@ async function renderKeepers() {
   }
 
   const teams = active.size || 12;
-  // Only men actually kept are out of the pool. In a keeper league
-  // everyone else on a roster goes back into the draft, so treating a
+  const perTeam = Number($("keepn").value) || 3;
+  // Your own marks, plus the men every other team is likely to hold.
+  // Everyone else on a roster goes back into the draft, so treating a
   // whole roster as unavailable would empty the board.
-  const taken = new Set(Object.keys(markedKeepers()));
+  const taken = new Set([...Object.keys(markedKeepers()), ...likelyKept(perTeam)]);
 
   const costs = keeperCosts();
-  const mine = active.myRoster
-    .map((r) => boardLookup(r.key))
-    .filter(Boolean)
-    .map((p) => ({ p, ...worthUpTo(p, teams, taken) }))
+  const onRoster = active.myRoster.map((r) => boardLookup(r.key)).filter(Boolean);
+  // what you already have at each spot, so the alternative is judged
+  // as it would be worth to you rather than to a team with nobody
+  const have = {};
+
+  for (const p of onRoster) {
+    have[p.position] = (have[p.position] ?? 0) + 1;
+  }
+
+  const mine = onRoster
+    .map((p) => ({ p, ...worthUpTo(p, teams, taken, have) }))
     .sort((a, b) => a.round - b.round);
 
   const head = document.createElement("div");
   head.className = "empty";
   head.innerHTML = "<b>What each man is worth keeping for.</b> Round shown is the " +
     "earliest pick he still beats. Type what your league charges and the card says " +
-    "whether to keep him.";
+    "whether to keep him.<br>Assuming every other team holds its " + perTeam +
+    " best, which takes " + taken.size + " players out of the draft." +
+    (active.myPicks
+      ? "<br>You hold rounds " + active.myPicks.join(", ") + "."
+      : "");
   out.appendChild(head);
 
   const grid = document.createElement("div");
@@ -812,7 +895,7 @@ async function renderKeepers() {
 
   for (const { p, round, instead, thin } of mine) {
     const cost = Number(costs[p.key]) || 0;
-    const at = cost ? marginAt(p, cost, teams, taken) : null;
+    const at = cost ? marginAt(p, cost, teams, taken, have) : null;
     const who = at && at.instead ? at.instead.name : "what is left";
     const verdict = !at ? ""
       : at.margin > CLOSE_ENOUGH
@@ -828,11 +911,15 @@ async function renderKeepers() {
         ? "and " + who + " has the better week in him by " + (-at.upside).toFixed(1)
       : "";
 
+    const holdsIt = !cost || !active.myPicks || active.myPicks.includes(cost);
     const card = seasonCard(p, {
       max: seasonMax,
       aside: { label: "worth a", value: round },
-      tag: at && at.margin > CLOSE_ENOUGH ? verdict : "",
-      hint: at && at.margin <= CLOSE_ENOUGH ? verdict : "",
+      tag: !holdsIt
+        ? "you traded your " + ordinal(cost) + ", so you cannot keep him"
+        : at && at.margin > CLOSE_ENOUGH ? verdict : "",
+      warn: !holdsIt,
+      hint: holdsIt && at && at.margin <= CLOSE_ENOUGH ? verdict : "",
       note: (onUpside ? onUpside + " &middot; " : "") +
         (instead
           ? "at a " + ordinal(round) + " the other choice is " + instead.name
