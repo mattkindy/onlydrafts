@@ -23,6 +23,8 @@ export interface GameRow extends Game {
   temp?: number;
   /** a closed roof or a dome takes the weather out of it */
   indoors: boolean;
+  /** grass or one of the several turfs, as the release writes it */
+  surface?: string;
   /** days since each side last played, 7 on a normal week */
   homeRest?: number;
   awayRest?: number;
@@ -110,6 +112,7 @@ export async function loadGames(): Promise<GameRow[]> {
       wind: toNumber(row["wind"]),
       temp: toNumber(row["temp"]),
       indoors: /dome|closed/i.test(row["roof"] ?? ""),
+      surface: (row["surface"] ?? "").replace(/"/g, "") || undefined,
       homeRest: toNumber(row["home_rest"]),
       awayRest: toNumber(row["away_rest"]),
       divisional: row["div_game"] === "1" || row["div_game"] === "TRUE",

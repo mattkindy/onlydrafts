@@ -452,6 +452,53 @@ async function main(): Promise<void> {
     `  the model had ${better} of those ${sleepers.length} higher than the room did`,
   );
 
+  // which men the model is worst on
+  console.log("\nby position   model   room   together   men");
+
+  for (const position of ["RB", "WR", "TE"]) {
+    const at = withPrice.map((_, i) => i)
+      .filter((i) => withPrice[i]!.row.man.position === position);
+
+    if (at.length < 12) {
+      continue;
+    }
+
+    const truthHere = at.map((i) => pricedTruth[i]!);
+    console.log(
+      "  " + position.padEnd(12) +
+      spearman(at.map((i) => -modelPlace[i]!), truthHere).toFixed(3).padStart(6) +
+      spearman(at.map((i) => -roomPlace[i]!), truthHere).toFixed(3).padStart(7) +
+      spearman(at.map((i) => together[i]!), truthHere).toFixed(3).padStart(10) +
+      String(at.length).padStart(6),
+    );
+  }
+
+  // a man who changed teams has no history where he now plays, so the
+  // model is working from what he did somewhere else
+  const movedOn = withPrice.map((_, i) => i).filter((i) => {
+    const was = wasLike.get(withPrice[i]!.row.man.playerId);
+    return was && was.team !== withPrice[i]!.row.man.team;
+  });
+  const stayedPut = withPrice.map((_, i) => i).filter((i) => {
+    const was = wasLike.get(withPrice[i]!.row.man.playerId);
+    return was && was.team === withPrice[i]!.row.man.team;
+  });
+
+  console.log("\nby whether he moved   model   room   men");
+
+  for (const [label, at] of [
+    ["stayed where he was", stayedPut], ["changed teams", movedOn],
+  ] as [string, number[]][]) {
+    if (at.length < 10) continue;
+    const truthHere = at.map((i) => pricedTruth[i]!);
+    console.log(
+      "  " + label.padEnd(22) +
+      spearman(at.map((i) => -modelPlace[i]!), truthHere).toFixed(3).padStart(6) +
+      spearman(at.map((i) => -roomPlace[i]!), truthHere).toFixed(3).padStart(7) +
+      String(at.length).padStart(6),
+    );
+  }
+
   // and where the two disagree most, with what happened
   const gaps = withPrice.map((p, i) => ({
     name: names.get(p.row.man.playerId) ?? "",
