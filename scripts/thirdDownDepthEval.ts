@@ -158,19 +158,59 @@ async function main(): Promise<void> {
   console.log("\nwhat comes back next season, by what stayed and what left\n");
   console.log("  group                            n   past the marker   short of it");
 
+  const samePasser = (p: (typeof pairs)[number]) => p.before.passer === p.after.passer;
+
   for (const [label, sub] of [
     ["kept the play-caller", pairs.filter((p) => p.kept)],
     ["changed the play-caller", pairs.filter((p) => !p.kept)],
-    ["kept the passer", pairs.filter((p) => p.before.passer === p.after.passer)],
-    ["changed the passer", pairs.filter((p) => p.before.passer !== p.after.passer)],
-    ["kept both", pairs.filter((p) => p.kept && p.before.passer === p.after.passer)],
-    ["changed both", pairs.filter((p) => !p.kept && p.before.passer !== p.after.passer)],
+    ["kept the passer", pairs.filter(samePasser)],
+    ["changed the passer", pairs.filter((p) => !samePasser(p))],
   ] as [string, typeof pairs][]) {
     console.log(
       "  " + label.padEnd(28) + String(sub.length).padStart(4) +
       score(sub, (r) => r.pastTheSticks) + score(sub, (r) => r.shortOfIt),
     );
   }
+
+  // Is the play-caller split confounded by who was throwing? If teams
+  // that change a coordinator are likelier to keep a quarterback, the
+  // caller split is measuring the passer through a fog.
+  console.log("\nhow the two changes overlap\n");
+  console.log("                        kept the passer   changed him");
+
+  for (const [label, sub] of [
+    ["kept the play-caller", pairs.filter((p) => p.kept)],
+    ["changed the play-caller", pairs.filter((p) => !p.kept)],
+  ] as [string, typeof pairs][]) {
+    console.log(
+      "  " + label.padEnd(24) +
+      String(sub.filter(samePasser).length).padStart(13) +
+      String(sub.filter((p) => !samePasser(p)).length).padStart(14),
+    );
+  }
+
+  // and with the passer held still, does the caller matter at all?
+  console.log("\nholding the passer still\n");
+  console.log("  group                            n   past the marker");
+
+  for (const [label, sub] of [
+    ["same passer, same caller",
+      pairs.filter((p) => samePasser(p) && p.kept)],
+    ["same passer, new caller",
+      pairs.filter((p) => samePasser(p) && !p.kept)],
+    ["new passer, same caller",
+      pairs.filter((p) => !samePasser(p) && p.kept)],
+    ["new passer, new caller",
+      pairs.filter((p) => !samePasser(p) && !p.kept)],
+  ] as [string, typeof pairs][]) {
+    console.log(
+      "  " + label.padEnd(28) + String(sub.length).padStart(4) +
+      score(sub, (r) => r.pastTheSticks),
+    );
+  }
+
+  console.log("\na rank correlation on sixty pairs carries a standard error");
+  console.log("of about " + (1 / Math.sqrt(60 - 1)).toFixed(2) + ", so gaps smaller than that mean little");
 }
 
 main().catch((error) => {
