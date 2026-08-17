@@ -60,15 +60,18 @@ async function main(): Promise<void> {
         continue;
       }
 
-      // the man the ball was meant for, whether or not he caught it
-      const player = type === "run"
+      // The man the ball was meant for, whether or not he caught it,
+      // and empty on a sack or a throwaway. Those have to stay: they
+      // are 8% of passes and they lose ground, so leaving them out
+      // makes every drive gain more than it should.
+      const named = type === "run"
         ? c[at["rusher_player_id"]!] ?? ""
         : c[at["receiver_player_id"]!] ?? "";
+      const player = named.startsWith("00-") ? named : "";
       const down = Number(c[at["down"]!]);
       const yardline = Number(c[at["yardline_100"]!]);
 
-      if (!player.startsWith("00-") || !Number.isFinite(down) ||
-          !Number.isFinite(yardline)) {
+      if (!Number.isFinite(down) || !Number.isFinite(yardline)) {
         continue;
       }
 
