@@ -16,6 +16,8 @@ import { parseCsv } from "../src/data/csv.js";
 import { spearman } from "../src/backtest/metrics.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
+import { loadAdp } from "../src/data/adp.js";
+import { normalizeName } from "../src/data/names.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 
 const RULES = presets.standard;
@@ -264,19 +266,87 @@ async function main(): Promise<void> {
   const asPoints = (share: number, team: string) =>
     share * (playsNow.get(team) ?? 1000);
 
+  // the room's own answer, on the men it had a price for, so the two
+  // are judged on the same players
+  const adp = await loadAdp(SCORE_ON, "ppr").catch(() => new Map());
+  const names = new Map<string, string>();
+
+  for (const s of await loadPlayerStats(SCORE_ON)) {
+    names.set(s.playerId, s.playerName);
+  }
+
+  const priced = forBoard.map((r) => ({
+    row: r,
+    adp: adp.get(
+      `${normalizeName(names.get(r.man.playerId) ?? "")}|${r.man.position}`,
+    )?.adp ?? null,
+  }));
+  const withPrice = priced.filter((p) => p.adp !== null);
+
+  const ways: [string, (r: (typeof rows)[number]) => number][] = [
+    ["carrying his old share", (r) => asPoints(r.carried, r.man.team)],
+    ["his own history and his spot", (r) => asPoints(r.blended, r.man.team)],
+  ];
+
   console.log(`\nranking a season of points, ${forBoard.length} men   spearman`);
 
-  for (const [label, of] of [
-    ["carrying his old share", (r: (typeof rows)[number]) => r.carried],
-    ["his own history and his spot", (r: (typeof rows)[number]) => r.blended],
-  ] as [string, (r: (typeof rows)[number]) => number][]) {
+  for (const [label, of] of ways) {
     console.log(
       "  " + label.padEnd(32) +
-      spearman(
-        forBoard.map((r) => asPoints(of(r), r.man.team)), truth,
-      ).toFixed(4).padStart(7),
+      spearman(forBoard.map(of), truth).toFixed(4).padStart(7),
     );
   }
+
+  const pricedTruth = withPrice.map((p) => scored.get(p.row.man.playerId)!);
+  console.log(
+    `\nand against the room, on the ${withPrice.length} men it priced   spearman`,
+  );
+
+  for (const [label, of] of ways) {
+    console.log(
+      "  " + label.padEnd(32) +
+      spearman(withPrice.map((p) => of(p.row)), pricedTruth).toFixed(4).padStart(7),
+    );
+  }
+
+  console.log(
+    "  where the room drafted him      " +
+    spearman(withPrice.map((p) => -p.adp!), pricedTruth).toFixed(4).padStart(7),
+  );
+
+  // who the two disagree about most
+  const ranked = (values: number[]) => {
+    const order = values.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
+    const place = new Array<number>(values.length);
+    order.forEach((o, rank) => { place[o.i] = rank + 1; });
+    return place;
+  };
+
+  const oldPlace = ranked(forBoard.map(ways[0]![1]));
+  const newPlace = ranked(forBoard.map(ways[1]![1]));
+  const realPlace = ranked(truth);
+  const moves = forBoard.map((r, i) => ({
+    name: names.get(r.man.playerId) ?? r.man.playerId,
+    position: r.man.position, team: r.man.team,
+    old: oldPlace[i]!, fresh: newPlace[i]!, was: realPlace[i]!,
+    better: Math.abs(oldPlace[i]! - realPlace[i]!) - Math.abs(newPlace[i]! - realPlace[i]!),
+  })).filter((m) => m.was <= 120 || m.old <= 120 || m.fresh <= 120);
+
+  const show = (list: typeof moves, title: string) => {
+    console.log(`\n${title}`);
+    console.log("  player                pos  old  new  really");
+
+    for (const m of list) {
+      console.log(
+        "  " + m.name.padEnd(21) + m.position.padEnd(4) +
+        String(m.old).padStart(4) + String(m.fresh).padStart(5) +
+        String(m.was).padStart(7),
+      );
+    }
+  };
+
+  show([...moves].sort((a, b) => b.better - a.better).slice(0, 8), "where the new one helps");
+  show([...moves].sort((a, b) => a.better - b.better).slice(0, 5), "where it hurts");
 }
 
 main().catch((error) => {
