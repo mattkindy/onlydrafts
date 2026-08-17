@@ -17,12 +17,13 @@ import { spearman } from "../src/backtest/metrics.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import { loadAdp } from "../src/data/adp.js";
+import { divideAmong, COMPETITION_DEFAULTS } from "../src/features/shareCompetition.js";
 import { normalizeName } from "../src/data/names.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 
 const RULES = presets.standard;
 
-const SCORE_ON = 2025;
+const SCORE_ON = Number(process.env["SEASON"] ?? 2025);
 
 const middle = (values: number[]) =>
   values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
@@ -67,6 +68,11 @@ async function seasonOf(season: number): Promise<Man[]> {
 
   return [...tally.values()];
 }
+
+// How hard the better man is favoured, chosen on an earlier pair of
+// seasons so this one is not asked to pick it and then judge it.
+const sharpness = Number(process.env["SHARPNESS"] ?? COMPETITION_DEFAULTS.sharpness);
+const quiet = process.env["QUIET"] === "1";
 
 async function main(): Promise<void> {
   const before = await seasonOf(SCORE_ON - 1);
@@ -117,6 +123,7 @@ async function main(): Promise<void> {
     return 0.02;
   };
 
+  if (!quiet) {
   console.log("what a rookie takes in his first season, by round");
 
   for (const position of ["RB", "WR", "TE"]) {
@@ -127,6 +134,7 @@ async function main(): Promise<void> {
     );
   }
 
+  }
   console.log();
 
   // what a man in each spot usually gets, measured last season
@@ -169,9 +177,45 @@ async function main(): Promise<void> {
     teamsNow.set(man.team, [...(teamsNow.get(man.team) ?? []), man]);
   }
 
+  /**
+   * What a position group takes of an offence, and what each man has
+   * shown, so the group's work can be divided between them.
+   */
+  const standingOf = (man: Man, position: string) => {
+    const was = wasLike.get(man.playerId);
+
+    if (was) {
+      return was.share;
+    }
+
+    const pick = picks.get(man.playerId);
+    return pick ? rookieShare(position, pick.round) : 0;
+  };
+
+  const groupTotal = new Map<string, number>();
+
+  for (const roster of teamsBefore.values()) {
+    for (const position of ["RB", "WR", "TE"]) {
+      const key = position;
+      const total = roster.filter((m) => m.position === position)
+        .reduce((a, m) => a + m.share, 0);
+      groupTotal.set(key, (groupTotal.get(key) ?? 0) + total);
+    }
+  }
+
+  for (const [key, total] of groupTotal) {
+    groupTotal.set(key, total / teamsBefore.size);
+  }
+
+  console.log(
+    "a position group's share of an offence: " +
+    ["RB", "WR", "TE"].map((p) =>
+      `${p} ${(100 * (groupTotal.get(p) ?? 0)).toFixed(0)}%`).join(", ") + "\n",
+  );
+
   const rows: {
     man: Man; carried: number; byPlace: number; withDraft: number;
-    blended: number;
+    blended: number; won: number;
   }[] = [];
 
   for (const roster of teamsNow.values()) {
@@ -198,6 +242,16 @@ async function main(): Promise<void> {
       const placed = [...group].sort((a, b) => standing(b.playerId) - standing(a.playerId));
       const spotOf = new Map(placed.map((man, rank) => [man.playerId, rank]));
 
+      // the group's work divided between whoever is here, by how they
+      // compare rather than by the queue they form
+      const won = divideAmong(
+        group.map((man) => ({
+          playerId: man.playerId, standing: standingOf(man, position),
+        })),
+        groupTotal.get(position) ?? 0.2,
+        { ...COMPETITION_DEFAULTS, sharpness },
+      );
+
       blind.forEach((man, rank) => {
         const carried = wasLike.get(man.playerId)?.share ?? 0;
         const slot = usualFor(position, spotOf.get(man.playerId)!);
@@ -209,6 +263,7 @@ async function main(): Promise<void> {
           // spot he is now in, since a man who moves behind somebody
           // better does not keep what he used to take
           blended: wasLike.has(man.playerId) ? (carried + slot) / 2 : slot,
+          won: won.get(man.playerId) ?? 0,
         });
       });
     }
@@ -234,7 +289,9 @@ async function main(): Promise<void> {
       "\n    with rookies placed by their round   " +
       spearman(set.map((r) => r.withDraft), set.map((r) => r.man.share)).toFixed(4) +
       "\n    his own history and his spot, halved  " +
-      spearman(set.map((r) => r.blended), set.map((r) => r.man.share)).toFixed(4),
+      spearman(set.map((r) => r.blended), set.map((r) => r.man.share)).toFixed(4) +
+      "\n    won against who he plays with        " +
+      spearman(set.map((r) => r.won), set.map((r) => r.man.share)).toFixed(4),
     );
   }
 
@@ -286,6 +343,7 @@ async function main(): Promise<void> {
   const ways: [string, (r: (typeof rows)[number]) => number][] = [
     ["carrying his old share", (r) => asPoints(r.carried, r.man.team)],
     ["his own history and his spot", (r) => asPoints(r.blended, r.man.team)],
+    ["won against who he plays with", (r) => asPoints(r.won, r.man.team)],
   ];
 
   console.log(`\nranking a season of points, ${forBoard.length} men   spearman`);
@@ -323,7 +381,7 @@ async function main(): Promise<void> {
   };
 
   const oldPlace = ranked(forBoard.map(ways[0]![1]));
-  const newPlace = ranked(forBoard.map(ways[1]![1]));
+  const newPlace = ranked(forBoard.map(ways[2]![1]));
   const realPlace = ranked(truth);
   const moves = forBoard.map((r, i) => ({
     name: names.get(r.man.playerId) ?? r.man.playerId,
