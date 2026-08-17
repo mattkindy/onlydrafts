@@ -21,6 +21,7 @@ import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js"
 import { walkDrive, CLOCK_DEFAULTS } from "../src/model/driveFromFactors.js";
 import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
+import { fitTurnovers, type TurnoverRow } from "../src/features/fitTurnovers.js";
 import { divideAmong } from "../src/features/shareCompetition.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import type { Call } from "../src/model/playFactors.js";
@@ -64,6 +65,16 @@ async function main(): Promise<void> {
   const rules = await fitDriveRules([2021, 2022, 2023, 2024]);
   const fourth = await fourthDowns(SCORE_ON);
   const starts = await loadDriveStarts([2022, 2023, 2024]);
+  const turnovers = fitTurnovers(parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+  )).filter((r) =>
+    Number(r["season"]) < SCORE_ON && ["run", "pass"].includes(r["playType"] ?? ""),
+  ).map((r) => ({
+    down: Number(r["down"]), toGo: Number(r["togo"]),
+    yardline: Number(r["yardline"]), margin: Number(r["margin"]) || 0,
+    secondsLeft: Number(r["seconds"]) || 1800,
+    call: r["playType"] as "run" | "pass", lost: Number(r["turnover"]) || 0,
+  })) as TurnoverRow[]);
 
   // each team's men, from the season before the one being guessed at
   const roster = new Map<string, Set<string>>();

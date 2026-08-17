@@ -49,10 +49,17 @@ export const FACTOR_DEFAULTS: FactorSettings = {
 /** everything counted at one state, plus who touched it there */
 interface Counted extends StateCell {
   byPlayer: Map<string, { touches: number; yards: number; scores: number }>;
+  /**
+   * Where each gain came from, since a gain is cut off by the goal
+   * line. A play from the forty one cannot make more than forty one
+   * yards, so pooling it in with the forty five caps what a draw there
+   * can produce and halves the long scores.
+   */
+  from: number[];
 }
 
 const emptyCounted = (): Counted =>
-  ({ ...emptyCell(), byPlayer: new Map() });
+  ({ ...emptyCell(), byPlayer: new Map(), from: [] });
 
 /**
  * What share of his offence's work each man is expected to take.
@@ -96,6 +103,7 @@ export function fitPlayFactors(
     cell.plays++;
     if (row.call === "run") cell.runs++;
     cell.yards.push(row.yards);
+    cell.from.push(row.yardline);
     cell.scores += row.touchdown;
 
     if (row.player) {
@@ -113,6 +121,7 @@ export function fitPlayFactors(
     anyTime.plays++;
     if (row.call === "run") anyTime.runs++;
     anyTime.yards.push(row.yards);
+    anyTime.from.push(row.yardline);
     anyTime.scores += row.touchdown;
 
     if (row.player) {
@@ -158,6 +167,7 @@ export function fitPlayFactors(
       pooled.runs += cell.runs;
       pooled.scores += cell.scores;
       pooled.yards = pooled.yards.concat(cell.yards);
+      pooled.from = pooled.from.concat(cell.from);
 
       for (const [player, own] of cell.byPlayer) {
         const already = pooled.byPlayer.get(player) ??

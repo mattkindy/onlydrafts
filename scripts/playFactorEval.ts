@@ -18,6 +18,7 @@ import type { Call, PlayState } from "../src/model/playFactors.js";
 import { walkDrive } from "../src/model/driveFromFactors.js";
 import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
+import { fitTurnovers, type TurnoverRow } from "../src/features/fitTurnovers.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { normalDraw } from "../src/sim/normal.js";
 
@@ -197,25 +198,49 @@ async function composed(
       choice: ["run", "pass"].includes(r["playType"] ?? "") ? "go" : "other",
     }));
   const starts = await loadDriveStarts([2022, 2023, 2024]);
-  const rng = seededRng(9);
-  const normal = () => normalDraw(rng);
+  const turnovers = fitTurnovers(parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+  )).filter((r) =>
+    Number(r["season"]) < SCORE_ON && ["run", "pass"].includes(r["playType"] ?? ""),
+  ).map((r) => ({
+    down: Number(r["down"]), toGo: Number(r["togo"]),
+    yardline: Number(r["yardline"]), margin: Number(r["margin"]) || 0,
+    secondsLeft: Number(r["seconds"]) || 1800,
+    call: r["playType"] as "run" | "pass", lost: Number(r["turnover"]) || 0,
+  })) as TurnoverRow[]);
+  // Over several starts, because changing anything shifts the whole
+  // stream of draws and a single run moves by more than most of the
+  // things being measured.
   const endings = new Map<string, number>();
   const lengths: number[] = [];
-  let points = 0;
-  const games = 3000;
+  const perSeed: number[] = [];
+  const games = 1200;
+  const seeds = [9, 19, 29, 39, 59];
 
-  for (let game = 0; game < games; game++) {
-    for (let i = 0; i < 11; i++) {
-      const startAt = startFrom(starts, rng);
-      const drive = walkDrive(startAt, factors, rules, fourth, [""], rng);
-      endings.set(drive.ending, (endings.get(drive.ending) ?? 0) + 1);
-      lengths.push(drive.plays.length);
-      points += drive.ending === "touchdown" ? 7
-        : drive.ending === "fieldGoal" ? 3 : 0;
+  for (const seed of seeds) {
+    const rng = seededRng(seed);
+    let points = 0;
+
+    for (let game = 0; game < games; game++) {
+      for (let i = 0; i < 11; i++) {
+        const startAt = startFrom(starts, rng);
+        const drive = walkDrive(startAt, factors, rules, fourth, [""], rng);
+        endings.set(drive.ending, (endings.get(drive.ending) ?? 0) + 1);
+        lengths.push(drive.plays.length);
+        points += drive.ending === "touchdown" ? 7
+          : drive.ending === "fieldGoal" ? 3 : 0;
+      }
     }
+
+    perSeed.push(points / games);
   }
 
+  const rng = seededRng(9);
+  const normal = () => normalDraw(rng);
+  const points = perSeed.reduce((a, b) => a + b, 0) / perSeed.length * games;
+
   const seen = lengths.length;
+  void points;
   console.log("\ndrives, with nothing about drives fitted");
   console.log("                        built   really");
   console.log(
@@ -236,8 +261,12 @@ async function composed(
       `${(100 * (endings.get("fieldGoal") ?? 0) / seen).toFixed(1)}%`.padStart(7) +
       "    14.0%",
   );
+  const spread = Math.sqrt(
+    perSeed.reduce((a, b) => a + (b - middle(perSeed)) ** 2, 0) / perSeed.length,
+  );
   console.log(
-    "  points a team         " + (points / games).toFixed(1).padStart(6) + "     23.0",
+    "  points a team         " + middle(perSeed).toFixed(1).padStart(6) + "     23.0" +
+    `   (moves ${spread.toFixed(2)} between starts)`,
   );
 
   // A drive that should have scored ended some other way, so count
@@ -361,6 +390,71 @@ async function composed(
       `${(100 * near.filter((r) => r.yards >= r.toGo).length / near.length).toFixed(1)}%`
         .padStart(9) +
       String(near.length).padStart(8),
+    );
+  }
+
+  /**
+   * Scoring from distance on one play, which is a quarter of all
+   * touchdowns and almost none of ours. A play only reaches the end
+   * zone here if what it gains covers the whole distance, so this is a
+   * question about the far tail at each spot.
+   */
+  console.log("\n  scoring from here on one play");
+  console.log("    from the      built   really   plays");
+
+  for (const yardline of [25, 35, 45, 60, 75]) {
+    const near = test.filter((r) => Math.abs(r.yardline - yardline) <= 4);
+
+    if (near.length < 200) {
+      continue;
+    }
+
+    let got = 0;
+    const tries = 40000;
+
+    for (let i = 0; i < tries; i++) {
+      const from = near[Math.floor(rng() * near.length)]!;
+      const state = {
+        down: from.down, toGo: from.toGo, yardline: from.yardline,
+        margin: from.margin, secondsLeft: from.secondsLeft,
+      };
+      const call = rng() < factors.runs(state) ? "run" as const : "pass" as const;
+      if (factors.gains(state, call, "", rng) >= from.yardline) got++;
+    }
+
+    console.log(
+      "    " + yardline.toString().padEnd(14) +
+      `${(100 * got / tries).toFixed(2)}%`.padStart(6) +
+      `${(100 * near.filter((r) => r.touchdown === 1).length / near.length).toFixed(2)}%`
+        .padStart(9) +
+      String(near.length).padStart(8),
+    );
+  }
+
+  // the whole far tail at one spot, to see where ours stops
+  {
+    const state = { down: 1, toGo: 10, yardline: 45, margin: 0, secondsLeft: 1800 };
+    const drawn = Array.from({ length: 60000 }, () =>
+      factors.gains(state, "run", "", rng));
+    const near = test.filter((r) =>
+      r.down === 1 && Math.abs(r.toGo - 10) <= 1 && Math.abs(r.yardline - 45) <= 3);
+
+    console.log("\n  first and ten at the 45, the far tail");
+    console.log("    gain      built   really");
+
+    for (const low of [20, 30, 40, 45, 50, 60]) {
+      console.log(
+        "    " + `${low}+`.padEnd(10) +
+        `${(100 * drawn.filter((y) => y >= low).length / drawn.length).toFixed(2)}%`
+          .padStart(6) +
+        `${(100 * near.filter((r) => r.yards >= low).length / near.length).toFixed(2)}%`
+          .padStart(9),
+      );
+    }
+
+    console.log(
+      `    longest built ${Math.max(...drawn)}, longest really ` +
+        `${Math.max(...near.map((r) => r.yards))}, on ${near.length} plays`,
     );
   }
 
