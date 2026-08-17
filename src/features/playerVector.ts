@@ -33,6 +33,8 @@ export const ATTRIBUTES = [
   "passAttempts", "completionRate", "yardsPerAttempt", "passDepth", "sackRate",
   // or when the other team has it
   "tackles", "sacks", "quarterbackHits", "ballsDefended", "takeaways",
+  // and what he does with a foot, or on a return
+  "kickAccuracy", "legStrength", "longRange", "returnYards",
 ] as const;
 
 export type Attribute = (typeof ATTRIBUTES)[number];
@@ -57,6 +59,7 @@ const MIDDLE: Record<Attribute, number> = {
   passDepth: 7.6, sackRate: 0.065,
   tackles: 3.5, sacks: 0.25, quarterbackHits: 0.35,
   ballsDefended: 0.35, takeaways: 0.06,
+  kickAccuracy: 0.84, legStrength: 52, longRange: 0.66, returnYards: 18,
 };
 
 /** and roughly how far apart players are on it */
@@ -71,6 +74,7 @@ const SPREAD: Record<Attribute, number> = {
   passDepth: 1.2, sackRate: 0.025,
   tackles: 2.2, sacks: 0.3, quarterbackHits: 0.4,
   ballsDefended: 0.35, takeaways: 0.07,
+  kickAccuracy: 0.07, legStrength: 5, longRange: 0.2, returnYards: 14,
 };
 
 const ageIn = (birth: string, season: number) => {
@@ -100,6 +104,8 @@ interface Played {
   scores: number; targetShare: number; airYardsShare: number;
   attempts: number; completions: number; passYds: number;
   passAir: number; sacked: number;
+  kicks: number; kicksMade: number; longest: number;
+  longKicks: number; longMade: number; returnYards: number;
   tackles: number; sacks: number; hits: number; defended: number; takeaways: number;
 }
 
@@ -121,6 +127,8 @@ export async function buildPlayerVectors(
       recYds: 0, rushYds: 0, airYards: 0, afterCatch: 0, scores: 0,
       targetShare: 0, airYardsShare: 0,
       attempts: 0, completions: 0, passYds: 0, passAir: 0, sacked: 0,
+      kicks: 0, kicksMade: 0, longest: 0, longKicks: 0, longMade: 0,
+      returnYards: 0,
       tackles: 0, sacks: 0, hits: 0, defended: 0, takeaways: 0,
     };
     own.games++;
@@ -139,6 +147,12 @@ export async function buildPlayerVectors(
     own.passYds += row.statLine.passYds ?? 0;
     own.passAir += row.passing.airYards;
     own.sacked += row.passing.sacksTaken;
+    own.kicks += row.kicking.attempts;
+    own.kicksMade += row.kicking.made;
+    own.longest = Math.max(own.longest, row.kicking.longest);
+    own.longKicks += row.kicking.longAttempts;
+    own.longMade += row.kicking.longMade;
+    own.returnYards += row.returns.yards;
     own.tackles += row.defence.tackles;
     own.sacks += row.defence.sacks;
     own.hits += row.defence.quarterbackHits;
@@ -199,6 +213,12 @@ export async function buildPlayerVectors(
       quarterbackHits: own && own.tackles > 0 ? per((s) => s.hits) : undefined,
       ballsDefended: own && own.tackles > 0 ? per((s) => s.defended) : undefined,
       takeaways: own && own.tackles > 0 ? per((s) => s.takeaways) : undefined,
+      kickAccuracy: own && own.kicks >= 5 ? own.kicksMade / own.kicks : undefined,
+      legStrength: own && own.longest > 0 ? own.longest : undefined,
+      longRange:
+        own && own.longKicks >= 3 ? own.longMade / own.longKicks : undefined,
+      returnYards:
+        own && own.returnYards > 0 ? per((s) => s.returnYards) : undefined,
     };
 
     const values = new Float64Array(ATTRIBUTES.length);

@@ -52,6 +52,20 @@ export interface PlayerWeekStats {
     airYards: number;
     sacksTaken: number;
   };
+  /** what a kicker and a return man did, which was also being dropped */
+  kicking: {
+    attempts: number;
+    made: number;
+    longest: number;
+    /** from fifty and beyond, where legs separate */
+    longAttempts: number;
+    longMade: number;
+    extraPoints: number;
+  };
+  returns: {
+    yards: number;
+    touchdowns: number;
+  };
   /** and what a defender did, which was being thrown away entirely */
   defence: {
     tackles: number;
@@ -179,6 +193,11 @@ export function blankPlayerWeek(): Omit<PlayerWeekStats,
     targetShare: 0,
     airYardsShare: 0,
     passing: { attempts: 0, completions: 0, airYards: 0, sacksTaken: 0 },
+    kicking: {
+      attempts: 0, made: 0, longest: 0, longAttempts: 0, longMade: 0,
+      extraPoints: 0,
+    },
+    returns: { yards: 0, touchdowns: 0 },
     defence: {
       tackles: 0, tacklesForLoss: 0, sacks: 0, quarterbackHits: 0,
       interceptions: 0, passesDefended: 0, forcedFumbles: 0,
@@ -189,10 +208,13 @@ export function blankPlayerWeek(): Omit<PlayerWeekStats,
 export async function loadPlayerStats(
   season: number,
 ): Promise<PlayerWeekStats[]> {
-  // nflverse renamed this release after 2024; both schemas parse below
-  const legacy = `player_stats_${season}.csv`;
+  // nflverse renamed this release and widened it at the same time: the
+  // new file has 150 columns where the old one has 53, and the kicking,
+  // defensive and after-catch numbers are only in the new one. Read
+  // that first and keep the old one as a fallback.
   const renamed = `stats_player_week_${season}.csv`;
-  const rows = await readRows(legacy).catch(() => readRows(renamed));
+  const legacy = `player_stats_${season}.csv`;
+  const rows = await readRows(renamed).catch(() => readRows(legacy));
 
   return rows
     .filter((row) => row["season_type"] === "REG" && row["player_id"])
@@ -238,6 +260,20 @@ export async function loadPlayerStats(
           completions: n("completions"),
           airYards: n("passing_air_yards"),
           sacksTaken: n("sacks_suffered"),
+        },
+        kicking: {
+          attempts: n("fg_att"),
+          made: n("fg_made"),
+          longest: n("fg_long"),
+          longAttempts:
+            n("fg_made_50_59") + n("fg_missed_50_59") +
+            n("fg_made_60_") + n("fg_missed_60_"),
+          longMade: n("fg_made_50_59") + n("fg_made_60_"),
+          extraPoints: n("pat_made"),
+        },
+        returns: {
+          yards: n("punt_return_yards") + n("kickoff_return_yards"),
+          touchdowns: n("special_teams_tds"),
         },
         defence: {
           tackles: n("def_tackles_solo") + n("def_tackle_assists") * 0.5,
