@@ -27,8 +27,19 @@ const LEAGUE = {
   scoresPerCarry: { openField: 0.01, thirdAndShort: 0.05, thirdAndLong: 0.02, nearGoal: 0.13 },
 };
 
-/** how many touches it takes before we believe a man's own rate */
-const TRUST_AFTER = 12;
+/**
+ * How many touches it takes before a man's own rate is believed over
+ * the league's, fitted against how often the real weeks were big,
+ * quiet, or ended in the end zone.
+ *
+ * The two numbers pull opposite ways. Shrinking his yards harder
+ * brings the average and the 100 yard games into line, .25 taking
+ * yardage from +6% to +2% and big games from +27% to +16%, but it
+ * flattens his ordinary weeks and adds to the quiet ones. Shrinking
+ * his scoring at all costs the men who genuinely finish, so it barely
+ * shrinks.
+ */
+export const TRUST_AFTER = { usage: 25, scoring: 2 };
 
 export interface FittedSeason {
   /** the roster of each team, ready to simulate */
@@ -38,14 +49,15 @@ export interface FittedSeason {
   teamOf: Map<string, string>;
 }
 
-const shrink = (own: number, count: number, league: number) =>
-  (own * count + league * TRUST_AFTER) / (count + TRUST_AFTER);
+const shrink = (own: number, count: number, league: number, trust: number) =>
+  (own * count + league * trust) / (count + trust);
 
 export async function fitRoles(
   season: number,
   positions: Map<string, string>,
   gamesPlayed: Map<string, number>,
   weeks = 17,
+  trust?: { usage: number; scoring: number },
 ): Promise<FittedSeason> {
   const rows = parseCsv(
     await readFile(
@@ -138,14 +150,19 @@ export async function fitRoles(
       const seasonPlays = Math.max(1, plays[s] * weeks);
       role.targetShare[s] = raw.targets[s] / seasonPlays;
       role.carryShare[s] = raw.carries[s] / seasonPlays;
+      const usage = trust?.usage ?? TRUST_AFTER.usage;
+      const scoring = trust?.scoring ?? TRUST_AFTER.scoring;
       role.catchRate[s] = shrink(
-        raw.receptions[s] / Math.max(1, raw.targets[s]), raw.targets[s], LEAGUE.catchRate,
+        raw.receptions[s] / Math.max(1, raw.targets[s]), raw.targets[s],
+        LEAGUE.catchRate, usage,
       );
       role.yardsPerCatch[s] = shrink(
-        raw.recYds[s] / Math.max(1, raw.receptions[s]), raw.receptions[s], LEAGUE.yardsPerCatch,
+        raw.recYds[s] / Math.max(1, raw.receptions[s]), raw.receptions[s],
+        LEAGUE.yardsPerCatch, usage,
       );
       role.yardsPerCarry[s] = shrink(
-        raw.rushYds[s] / Math.max(1, raw.carries[s]), raw.carries[s], LEAGUE.yardsPerCarry,
+        raw.rushYds[s] / Math.max(1, raw.carries[s]), raw.carries[s],
+        LEAGUE.yardsPerCarry, usage,
       );
 
       // the file gives one score count, so split it the way he was used
@@ -153,11 +170,11 @@ export async function fitRoles(
       const throughAir = touches > 0 ? raw.receptions[s] / touches : 0;
       role.scoresPerCatch[s] = shrink(
         (raw.scores[s] * throughAir) / Math.max(1, raw.receptions[s]),
-        raw.receptions[s], LEAGUE.scoresPerCatch[s],
+        raw.receptions[s], LEAGUE.scoresPerCatch[s], scoring,
       );
       role.scoresPerCarry[s] = shrink(
         (raw.scores[s] * (1 - throughAir)) / Math.max(1, raw.carries[s]),
-        raw.carries[s], LEAGUE.scoresPerCarry[s],
+        raw.carries[s], LEAGUE.scoresPerCarry[s], scoring,
       );
     }
 

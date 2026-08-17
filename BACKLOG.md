@@ -155,3 +155,30 @@ the same staff and .484 under a new one.
 
 I gave draft advice on the strength of the team-level number before
 checking it in this form. See scripts/roleCarryoverEval.ts.
+
+## What the situational simulation still gets wrong
+
+Roles from 2024, weeks from 2025, 222 players. Catches +4%, yards
+through the air +3%, on the ground +6%, scores -3%. The averages are
+close. Two shapes are not.
+
+Big weeks come too often: 100 yard games +24%, two-score games +19%.
+Sweeping every knob showed where this does not come from. The
+per-touch yardage spread stops moving the number below .5, and the
+week-to-week swing in how many snaps a situation gets barely touches
+it between .1 and .3. What does move it is the average: shrinking a
+man's yards harder takes yardage from +6% to -1% and big games from
++27% to +9% together. So the tail is a mean that is slightly high,
+amplified, rather than a spread that is too wide.
+
+Quiet weeks also come too often, +12%, and shrinking harder makes that
+worse rather than better, because it flattens a good player's ordinary
+weeks. Something keeps real players productive that the model does not
+carry. The likely candidate is that touches inside one game are not
+independent: a man who gets an early target gets the next one, and a
+team that is behind throws to him all afternoon. Every touch here is
+drawn on its own.
+
+That correlation is the next thing to model, and it is the same
+missing piece in both numbers: it would thin the tails and fill in the
+middle at once. See scripts/fitWeekSettings.ts for the sweeps.

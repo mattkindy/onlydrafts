@@ -29,11 +29,24 @@ export const LEAGUE_PLAYS: Record<Situation, number> = {
 };
 
 /** how firmly each depth chart stays put, fitted per situation */
-const FIRMNESS: Record<Situation, number> = {
+export const FIRMNESS: Record<Situation, number> = {
   openField: 10,
   thirdAndShort: 6,
   thirdAndLong: 12,
   nearGoal: 6,
+};
+
+/** how much the count of snaps in a situation swings week to week */
+export const PLAY_SWING = 0.3;
+
+export interface WeekSettings {
+  firmness: Record<Situation, number>;
+  playSwing: number;
+}
+
+export const DEFAULT_WEEK: WeekSettings = {
+  firmness: FIRMNESS,
+  playSwing: PLAY_SWING,
 };
 
 type BySituation = Record<Situation, number>;
@@ -74,6 +87,7 @@ export function simulateSituationalWeek(
   team: SituationalTeam,
   roster: SituationalRole[],
   draws: Draws,
+  settings: WeekSettings = DEFAULT_WEEK,
 ): PlayerLine[] {
   const active = roster.map((player) => draws.uniform() < player.availability);
   const lines: PlayerLine[] = roster.map((player, i) => ({
@@ -83,7 +97,10 @@ export function simulateSituationalWeek(
   for (const situation of SITUATIONS) {
     const plays = Math.max(
       0,
-      Math.round(team.plays[situation] * Math.max(0.3, 1 + draws.normal() * 0.3)),
+      Math.round(
+        team.plays[situation] *
+          Math.max(0.3, 1 + draws.normal() * settings.playSwing),
+      ),
     );
 
     if (plays === 0) {
@@ -97,7 +114,7 @@ export function simulateSituationalWeek(
         kind === "target" ? p.targetShare[situation] : p.carryShare[situation];
       const wanted = roster.map((p, i) => (active[i] ? own(p) : 0));
       const rest = Math.max(0, 1 - roster.reduce((sum, p) => sum + own(p), 0));
-      const shares = shareDraw([...wanted, rest], FIRMNESS[situation], draws);
+      const shares = shareDraw([...wanted, rest], settings.firmness[situation], draws);
 
       for (let i = 0; i < roster.length; i++) {
         if (!active[i]) {
