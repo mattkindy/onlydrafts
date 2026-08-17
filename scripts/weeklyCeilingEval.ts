@@ -65,13 +65,14 @@ async function main(): Promise<void> {
    * Each guess is built from a man's own season rates and whatever this
    * particular row is allowed to know about the week.
    */
+  // No points per touch in the rows about workload. Within one man,
+  // multiplying every week of his by the same number leaves his order
+  // alone, so a rate cannot help. Working one out from his other weeks
+  // does change the answer and wrongly, since a week that scored well
+  // drags those others down and comes back multiplied by less.
   const ways: [string, (week: Week, own: Week[]) => number][] = [
     ["his own average, every week", (_week, own) => middle(own.map((w) => w.points))],
-    ["knowing how often he touched it", (week, own) => {
-      const perTouch = middle(own.map((w) => w.points)) /
-        Math.max(0.1, middle(own.map((w) => w.touches)));
-      return week.touches * perTouch;
-    }],
+    ["knowing how often he touched it", (week) => week.touches],
     ["knowing his yards", (week, own) => {
       const perYard = middle(own.map((w) => w.points)) /
         Math.max(0.1, middle(own.map((w) => w.yards)));
@@ -85,20 +86,16 @@ async function main(): Promise<void> {
     // handed the season average, which would both leak and pin their
     // deviation to nothing.
     ["guessing touches from his last three", (week, own) => {
-      const perTouch = middle(own.map((w) => w.points)) /
-        Math.max(0.1, middle(own.map((w) => w.touches)));
       const before = own.filter((w) => w.week < week.week).slice(-3);
-      return before.length < 3 ? NaN : middle(before.map((w) => w.touches)) * perTouch;
+      return before.length < 3 ? NaN : middle(before.map((w) => w.touches));
     }],
     ["guessing touches from his last one", (week, own) => {
-      const perTouch = middle(own.map((w) => w.points)) /
-        Math.max(0.1, middle(own.map((w) => w.touches)));
       const before = own.filter((w) => w.week < week.week).slice(-1);
-      return before.length < 1 ? NaN : before[0]!.touches * perTouch;
+      return before.length < 1 ? NaN : before[0]!.touches;
     }],
   ];
 
-  console.log("within one player                          spearman   how far we move him");
+  console.log("within one player                          spearman");
 
   for (const [label, say] of ways) {
     const said: number[] = [];
@@ -126,8 +123,7 @@ async function main(): Promise<void> {
     }
 
     console.log(
-      "  " + label.padEnd(40) + spearman(said, was).toFixed(4).padStart(8) +
-      spreadOf(said).toFixed(2).padStart(14),
+      "  " + label.padEnd(40) + spearman(said, was).toFixed(4).padStart(8),
     );
   }
 
