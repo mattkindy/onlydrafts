@@ -9,7 +9,7 @@
  */
 
 import {
-  emptyCell, stateKey, widening,
+  emptyCell, keysAt, stateKey, widening,
   type Call, type PlayFactors, type PlayState, type StateCell,
 } from "../model/playFactors.js";
 
@@ -89,7 +89,9 @@ export function fitPlayFactors(
     );
     // and the same play again under any clock and any score, so a thin
     // state can fall back to the spot itself
-    const loose = stateKey(row.down, row.toGo, row.yardline);
+    const loose =
+      `${Math.min(4, row.down)}|${Math.min(40, row.toGo)}` +
+      `|${Math.min(99, row.yardline)}|any`;
     const cell = cells.get(at) ?? emptyCounted();
     cell.plays++;
     if (row.call === "run") cell.runs++;
@@ -134,22 +136,19 @@ export function fitPlayFactors(
    * any-time cells on top of them, and those contain the tight ones, so
    * the game situation would be swamped every time.
    */
-  const gather = (state: PlayState, least: number, loose: boolean) => {
+  const gather = (state: PlayState, least: number, looseness: number) => {
     const pooled = emptyCounted();
 
     for (const spot of widening(state)) {
-      if (spot.loose !== loose) {
+      if (spot.looseness !== looseness) {
         continue;
       }
 
-      const cell = cells.get(
-        loose
-          ? stateKey(state.down, spot.toGo, spot.yardline)
-          : stateKey(
-              state.down, spot.toGo, spot.yardline,
-              state.secondsLeft, state.margin,
-            ),
-      );
+      for (const at of keysAt(
+        state.down, spot.toGo, spot.yardline,
+        state.secondsLeft, state.margin, looseness,
+      )) {
+      const cell = cells.get(at);
 
       if (!cell) {
         continue;
@@ -167,6 +166,8 @@ export function fitPlayFactors(
         already.yards += own.yards;
         already.scores += own.scores;
         pooled.byPlayer.set(player, already);
+      }
+
       }
 
       if (pooled.plays >= least) {
@@ -188,8 +189,15 @@ export function fitPlayFactors(
       return already;
     }
 
-    const tight = gather(state, least, false);
-    const found = tight.plays >= least ? tight : gather(state, least, true);
+    let found = gather(state, least, 0);
+
+    for (const looseness of [1, 2]) {
+      if (found.plays >= least) {
+        break;
+      }
+
+      found = gather(state, least, looseness);
+    }
     remembered.set(key, found);
     return found;
   };

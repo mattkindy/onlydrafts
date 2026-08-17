@@ -89,7 +89,8 @@ async function main(): Promise<void> {
 
   const clocks: [string, number, number][] = [
     ["early, level", 2400, 0],
-    ["late, a score behind", 240, -7],
+    ["late, three behind", 240, -3],
+    ["late, seven behind", 240, -7],
     ["late, a score ahead", 240, 7],
     ["late, two scores behind", 240, -14],
   ];
@@ -100,7 +101,7 @@ async function main(): Promise<void> {
       r.down === 1 && Math.abs(r.toGo - 10) <= 1 &&
       Math.abs(r.yardline - 40) <= 6 &&
       Math.abs(r.secondsLeft - secondsLeft) <= 400 &&
-      Math.abs(r.margin - margin) <= 4);
+      Math.abs(r.margin - margin) <= 2);
 
     console.log(
       "  " + label.padEnd(32) +

@@ -19,6 +19,8 @@ import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js";
 import { walkDrive, CLOCK_DEFAULTS } from "../src/model/driveFromFactors.js";
+import { divideAmong } from "../src/features/shareCompetition.js";
+import { loadDraftPicks } from "../src/data/draftPicks.js";
 import type { Call } from "../src/model/playFactors.js";
 
 const RULES = presets.standard;
@@ -42,7 +44,6 @@ async function main(): Promise<void> {
   }));
 
   const learn = rows.filter((r) => r.season < SCORE_ON);
-  const factors = fitPlayFactors(learn as PlayRow[]);
   const rules = await fitDriveRules([2021, 2022, 2023, 2024]);
 
   // each team's men, from the season before the one being guessed at
@@ -66,50 +67,111 @@ async function main(): Promise<void> {
     );
   }
 
+  /**
+   * Each man's expected share of his offence, from the competition
+   * model: a position group's work divided among whoever is there, by
+   * what each has shown, with a rookie counting for what his round
+   * usually brings.
+   */
+  const lastSeason = new Map<string, number>();
+  const teamPlays = new Map<string, number>();
+
+  for (const row of rows.filter((r) => r.season === SCORE_ON - 1)) {
+    teamPlays.set(row.team, (teamPlays.get(row.team) ?? 0) + 1);
+    if (row.player) {
+      lastSeason.set(row.player, (lastSeason.get(row.player) ?? 0) + 1);
+    }
+  }
+
+  const picks = await loadDraftPicks();
+  const rookieShare: Record<string, number> = { RB: 0.09, WR: 0.06, TE: 0.03 };
+  const groupTotal: Record<string, number> = { RB: 0.31, WR: 0.33, TE: 0.11 };
+  const projected = new Map<string, number>();
+
+  for (const [team, men] of roster) {
+    for (const spot of ["RB", "WR", "TE"]) {
+      const group = [...men].filter((p) => position.get(p) === spot);
+
+      if (!group.length) {
+        continue;
+      }
+
+      const shares = divideAmong(
+        group.map((player) => {
+          const had = lastSeason.get(player) ?? 0;
+          const standing = had > 0
+            ? had / Math.max(1, teamPlays.get(team) ?? 1000)
+            : picks.has(player) ? rookieShare[spot]! : 0.005;
+          return { playerId: player, standing };
+        }),
+        groupTotal[spot]!,
+      );
+
+      for (const [player, share] of shares) projected.set(player, share);
+    }
+  }
+
   const rng = seededRng(13);
   const normal = () => normalDraw(rng);
   const said = new Map<string, number>();
+  const both: Record<string, Map<string, number>> = {
+    "who touched it before": new Map(),
+    "the competition model": new Map(),
+  };
 
-  for (const [team, men] of roster) {
-    const among = [...men].filter((p) => position.has(p));
+  for (const [label, into] of Object.entries(both)) {
+    const factors = fitPlayFactors(
+      learn as PlayRow[], undefined,
+      label === "the competition model" ? projected : undefined,
+    );
 
-    if (among.length < 4) {
-      continue;
-    }
+    for (const [team, men] of roster) {
+      const among = [...men].filter((p) => position.has(p));
 
-    const got = new Map<string, number>();
+      if (among.length < 4) {
+        continue;
+      }
 
-    for (let game = 0; game < GAMES; game++) {
-      for (let i = 0; i < DRIVES_A_GAME; i++) {
-        const startAt = Math.max(35, Math.min(99, Math.round(75 + normal() * 13)));
-        const drive = walkDrive(
-          startAt, factors, rules, among, rng, CLOCK_DEFAULTS,
-        );
+      const got = new Map<string, number>();
 
-        for (const play of drive.plays) {
-          if (!play.player) continue;
-          const points = play.yards * RULES.rushYds +
-            (play.scored ? RULES.rushTd : 0);
-          got.set(play.player, (got.get(play.player) ?? 0) + points);
+      for (let game = 0; game < GAMES; game++) {
+        for (let i = 0; i < DRIVES_A_GAME; i++) {
+          const startAt = Math.max(35, Math.min(99, Math.round(75 + normal() * 13)));
+          const drive = walkDrive(
+            startAt, factors, rules, among, rng, CLOCK_DEFAULTS,
+          );
+
+          for (const play of drive.plays) {
+            if (!play.player) continue;
+            const points = play.yards * RULES.rushYds +
+              (play.scored ? RULES.rushTd : 0);
+            got.set(play.player, (got.get(play.player) ?? 0) + points);
+          }
         }
       }
-    }
 
-    for (const [player, points] of got) said.set(player, points / GAMES);
+      for (const [player, points] of got) into.set(player, points / GAMES);
+    }
+  }
+
+  for (const [player, points] of both["who touched it before"]!) {
+    said.set(player, points);
   }
 
   const men = [...said].filter(([player]) => scored.has(player));
-  console.log(`${men.length} men projected\n`);
-
   const truth = men.map(([player]) => scored.get(player)! / 17);
-  const guess = men.map(([, points]) => points);
-  console.log(
-    "a man's points a game, from the factors" +
-      `\n  rank ${spearman(guess, truth).toFixed(4)}` +
-      `   error ${rmse(guess, truth).toFixed(2)}` +
-      `\n  it says ${middle(guess).toFixed(2)} a game where they scored ` +
-      `${middle(truth).toFixed(2)}`,
-  );
+  console.log(`${men.length} men projected\n`);
+  console.log("who the work goes to        rank    error   says   really");
+
+  for (const [label, from] of Object.entries(both)) {
+    const guess = men.map(([player]) => from.get(player) ?? 0);
+    console.log(
+      "  " + label.padEnd(26) + spearman(guess, truth).toFixed(4).padStart(6) +
+      rmse(guess, truth).toFixed(2).padStart(8) +
+      middle(guess).toFixed(2).padStart(7) +
+      middle(truth).toFixed(2).padStart(9),
+    );
+  }
 }
 
 main().catch((error) => {
