@@ -77,7 +77,16 @@ function* ring(state: PlayState, looseness: number): Generator<Spot> {
         continue;
       }
 
-      const near = Math.ceil(reach / 2);
+      /**
+       * The field opens up far faster than the distance does.
+       *
+       * How often a side runs turns on the distance and hardly on where
+       * it is: 72% on third and one and 19% on third and eight, against
+       * next to nothing between the seventy five and the forty. Letting
+       * the two out together reached third and four to fill a thin
+       * third and one, and said 46% where sides run 72%.
+       */
+      const near = reach < 12 ? 0 : reach < 35 ? 1 : 2;
 
       for (let toGo = state.toGo - near; toGo <= state.toGo + near; toGo++) {
         if (toGo < 1 || toGo > 40) {

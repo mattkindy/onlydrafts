@@ -81,6 +81,15 @@ async function main(): Promise<void> {
     ["second and goal at the 1", { down: 2, toGo: 1, yardline: 1, margin: 0, secondsLeft: 1800 }],
   ];
 
+  /**
+   * Asked of the same plays the model is asked about.
+   *
+   * Taking every play within a couple of yards of the spot and calling
+   * that what really happens averages the neighbours in, which pulls
+   * the answer toward the middle and makes the model look more extreme
+   * than it is. The model is asked about each play's own state instead,
+   * and the two are compared over the same set.
+   */
   for (const [label, state] of spots) {
     const near = test.filter((r) =>
       r.down === state.down &&
@@ -91,9 +100,14 @@ async function main(): Promise<void> {
       continue;
     }
 
+    const said = middle(near.map((r) => factors.runs({
+      down: r.down, toGo: r.toGo, yardline: r.yardline,
+      margin: r.margin, secondsLeft: r.secondsLeft,
+    })));
+
     console.log(
       "  " + label.padEnd(30) +
-      `${(100 * factors.runs(state)).toFixed(0)}%`.padStart(6) +
+      `${(100 * said).toFixed(0)}%`.padStart(6) +
       `${(100 * near.filter((r) => r.call === "run").length / near.length).toFixed(0)}%`
         .padStart(8) +
       String(near.length).padStart(8),
