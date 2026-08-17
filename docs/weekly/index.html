@@ -738,16 +738,22 @@ function ordinal(n) {
  * back go.
  */
 function bestLeftAt(pick, taken, exclude, have) {
+  // Anyone the market expects to last this long. Ordered by the blend
+  // the board carries, which mixes the room's view with the model's;
+  // on its own the model had J.K. Dobbins as the best man at pick 30
+  // on a draft position of 96, disagreeing with the room about sixty
+  // five players.
+  const left = board.players
+    .filter((p) => p.key !== exclude && !taken.has(p.key) && p.adp && p.adp >= pick)
+    .sort((a, b) => (a.blend ?? a.adp) - (b.blend ?? b.adp))
+    .slice(0, 12);
+
+  // then the best of that shortlist for this roster, since the best
+  // quarterback left is worth little to a team already holding two
   let best = null;
   let bestWorth = -Infinity;
 
-  for (const p of board.players) {
-    // he cannot be his own alternative, and a man already kept is not
-    // in the draft at all
-    if (p.key === exclude || taken.has(p.key) || !p.adp) continue;
-    // the market expects him around his own draft position, so anyone
-    // going later than this pick should still be there
-    if (p.adp < pick) continue;
+  for (const p of left) {
     const worth = p.vor * (have ? needFactor(p.position, have[p.position] ?? 0) : 1);
     if (worth > bestWorth) { bestWorth = worth; best = p; }
   }
