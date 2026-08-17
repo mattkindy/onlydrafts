@@ -47,7 +47,14 @@ export interface PlayerVector {
   values: Float64Array;
 }
 
-/** the middle of each attribute, so a missing one sits at nothing */
+/**
+ * Starting points only. The real middle and spread of each attribute
+ * are measured from the players in front of us, per position group,
+ * because a receiver's share of his team's targets and a back's are
+ * different distributions and comparing them on one scale flatters
+ * whichever has the wider one. These are what a group too small to
+ * measure falls back to.
+ */
 const MIDDLE: Record<Attribute, number> = {
   height: 73, weight: 210, age: 26, experience: 4,
   draftPick: 130, wentUndrafted: 0,
@@ -109,6 +116,52 @@ interface Played {
   tackles: number; sacks: number; hits: number; defended: number; takeaways: number;
 }
 
+/** which players share a scale, since their attributes have one shape */
+function scaleGroup(position: string): string {
+  if (position === "QB") return "QB";
+  if (["K", "P"].includes(position)) return "kicking";
+  if (["DB", "DL", "LB"].includes(position)) return "defence";
+  if (["RB", "WR", "TE"].includes(position)) return "skill";
+  return "other";
+}
+
+/** the middle and the spread of what was actually seen */
+function measureScale(
+  found: { group: string; values: (number | undefined)[] }[],
+): Map<string, { middle: number[]; spread: number[] }> {
+  const out = new Map<string, { middle: number[]; spread: number[] }>();
+
+  for (const group of new Set(found.map((f) => f.group))) {
+    const middle = new Array(ATTRIBUTES.length).fill(0);
+    const spread = new Array(ATTRIBUTES.length).fill(1);
+
+    ATTRIBUTES.forEach((attribute, i) => {
+      const seen = found
+        .filter((f) => f.group === group)
+        .map((f) => f.values[i])
+        .filter((v): v is number => v !== undefined && Number.isFinite(v));
+
+      // too few to measure, so fall back to what was typed
+      if (seen.length < 30) {
+        middle[i] = MIDDLE[attribute];
+        spread[i] = SPREAD[attribute];
+        return;
+      }
+
+      const centre = seen.reduce((a, b) => a + b, 0) / seen.length;
+      const width = Math.sqrt(
+        seen.reduce((a, b) => a + (b - centre) ** 2, 0) / seen.length,
+      );
+      middle[i] = centre;
+      spread[i] = width > 1e-6 ? width : SPREAD[attribute];
+    });
+
+    out.set(group, { middle, spread });
+  }
+
+  return out;
+}
+
 export async function buildPlayerVectors(
   season: number,
   weeks = 18,
@@ -161,14 +214,22 @@ export async function buildPlayerVectors(
     played.set(row.playerId, own);
   }
 
-  const out = new Map<string, PlayerVector>();
+  // gather every player's raw attributes first, so the scaling can be
+  // measured from them rather than assumed
+  const gathered: {
+    id: string; name: string; position: string; group: string;
+    values: (number | undefined)[];
+  }[] = [];
+  const seenIds = new Set<string>();
 
   for (const row of rosters) {
     const id = row.playerId;
 
-    if (!id || out.has(id)) {
+    if (!id || seenIds.has(id)) {
       continue;
     }
+
+    seenIds.add(id);
 
     const own = played.get(id);
     const measured = combine.get(
@@ -177,6 +238,13 @@ export async function buildPlayerVectors(
     const pick = row.draftOverall;
     const per = (get: (s: Played) => number) =>
       own && own.games > 0 ? get(own) / own.games : undefined;
+    /**
+     * A rate needs enough tries behind it. A backup with three throws
+     * completes one of them or all three, and those wild values set
+     * the spread for every quarterback in the league.
+     */
+    const rate = (top: number, bottom: number, enough: number) =>
+      bottom >= enough ? top / bottom : undefined;
 
     const found: Record<Attribute, number | undefined> = {
       height: row.heightInches,
@@ -190,50 +258,57 @@ export async function buildPlayerVectors(
       agility: Number(measured?.["cone"]) || undefined,
       power: Number(measured?.["bench"]) || undefined,
       burst: Number(measured?.["broad_jump"]) || undefined,
-      targetShare: per((s) => s.targetShare),
-      airYardsShare: per((s) => s.airYardsShare),
-      carriesPerGame: per((s) => s.carries),
-      catchRate: own && own.targets > 0 ? own.receptions / own.targets : undefined,
-      yardsPerCatch: own && own.receptions > 0 ? own.recYds / own.receptions : undefined,
-      airYardsPerTarget: own && own.targets > 0 ? own.airYards / own.targets : undefined,
-      yardsAfterCatch:
-        own && own.receptions > 0 ? own.afterCatch / own.receptions : undefined,
-      yardsPerCarry: own && own.carries > 0 ? own.rushYds / own.carries : undefined,
-      scoresPerGame: per((s) => s.scores),
-      passAttempts: own && own.attempts > 0 ? per((s) => s.attempts) : undefined,
-      completionRate:
-        own && own.attempts > 0 ? own.completions / own.attempts : undefined,
-      yardsPerAttempt:
-        own && own.attempts > 0 ? own.passYds / own.attempts : undefined,
-      passDepth: own && own.attempts > 0 ? own.passAir / own.attempts : undefined,
-      sackRate:
-        own && own.attempts > 0 ? own.sacked / (own.attempts + own.sacked) : undefined,
-      tackles: own && own.tackles > 0 ? per((s) => s.tackles) : undefined,
-      sacks: own && own.tackles > 0 ? per((s) => s.sacks) : undefined,
-      quarterbackHits: own && own.tackles > 0 ? per((s) => s.hits) : undefined,
-      ballsDefended: own && own.tackles > 0 ? per((s) => s.defended) : undefined,
-      takeaways: own && own.tackles > 0 ? per((s) => s.takeaways) : undefined,
-      kickAccuracy: own && own.kicks >= 5 ? own.kicksMade / own.kicks : undefined,
+      targetShare: own && own.games >= 4 ? per((s) => s.targetShare) : undefined,
+      airYardsShare: own && own.games >= 4 ? per((s) => s.airYardsShare) : undefined,
+      carriesPerGame: own && own.games >= 4 ? per((s) => s.carries) : undefined,
+      catchRate: own && rate(own.receptions, own.targets, 15),
+      yardsPerCatch: own && rate(own.recYds, own.receptions, 10),
+      airYardsPerTarget: own && rate(own.airYards, own.targets, 15),
+      yardsAfterCatch: own && rate(own.afterCatch, own.receptions, 10),
+      yardsPerCarry: own && rate(own.rushYds, own.carries, 25),
+      scoresPerGame: own && own.games >= 4 ? per((s) => s.scores) : undefined,
+      passAttempts: own && own.attempts >= 60 ? per((s) => s.attempts) : undefined,
+      completionRate: own && rate(own.completions, own.attempts, 60),
+      yardsPerAttempt: own && rate(own.passYds, own.attempts, 60),
+      passDepth: own && rate(own.passAir, own.attempts, 60),
+      sackRate: own && rate(own.sacked, own.attempts + own.sacked, 60),
+      tackles: own && own.games >= 4 ? per((s) => s.tackles) : undefined,
+      sacks: own && own.games >= 4 ? per((s) => s.sacks) : undefined,
+      quarterbackHits: own && own.games >= 4 ? per((s) => s.hits) : undefined,
+      ballsDefended: own && own.games >= 4 ? per((s) => s.defended) : undefined,
+      takeaways: own && own.games >= 4 ? per((s) => s.takeaways) : undefined,
+      kickAccuracy: own && rate(own.kicksMade, own.kicks, 10),
       legStrength: own && own.longest > 0 ? own.longest : undefined,
-      longRange:
-        own && own.longKicks >= 3 ? own.longMade / own.longKicks : undefined,
+      longRange: own && rate(own.longMade, own.longKicks, 4),
       returnYards:
         own && own.returnYards > 0 ? per((s) => s.returnYards) : undefined,
     };
 
+    gathered.push({
+      id, name: row.name, position: row.rawPosition,
+      group: scaleGroup(row.rawPosition),
+      values: ATTRIBUTES.map((attribute) => found[attribute]),
+    });
+  }
+
+  const scales = measureScale(gathered);
+  const out = new Map<string, PlayerVector>();
+
+  for (const player of gathered) {
+    const scale = scales.get(player.group)!;
     const values = new Float64Array(ATTRIBUTES.length);
 
-    ATTRIBUTES.forEach((attribute, i) => {
-      const value = found[attribute];
-      // a missing attribute sits where the middle of the league sits,
-      // which is nothing once everything is centred
+    ATTRIBUTES.forEach((_, i) => {
+      const value = player.values[i];
+      // a missing attribute sits where its group's middle sits, which
+      // is nothing once everything is centred
       values[i] = value === undefined || !Number.isFinite(value)
         ? 0
-        : (value - MIDDLE[attribute]) / SPREAD[attribute];
+        : (value - scale.middle[i]!) / scale.spread[i]!;
     });
 
-    out.set(id, {
-      playerId: id, name: row.name, position: row.rawPosition, values,
+    out.set(player.id, {
+      playerId: player.id, name: player.name, position: player.position, values,
     });
   }
 
