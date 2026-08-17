@@ -1709,6 +1709,27 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 
+/**
+ * What draws each view. The nav and the go button both used to carry
+ * their own copy of this, which is how the two drifted apart.
+ */
+const RENDER = {
+  leagues: renderLeagues,
+  roster: renderRoster,
+  keepers: renderKeepers,
+  draft: renderDraftView,
+  start: renderStart,
+  waivers: renderWaivers,
+};
+
+async function renderView() {
+  const draw = RENDER[view];
+
+  if (draw) {
+    await draw();
+  }
+}
+
 document.querySelectorAll("#subnav button").forEach((b) =>
   b.addEventListener("click", async () => {
     await ready;
@@ -1716,11 +1737,7 @@ document.querySelectorAll("#subnav button").forEach((b) =>
     setView(b.dataset.view);
 
     try {
-      if (view === "start") await renderStart();
-      else if (view === "roster") await renderRoster();
-      else if (view === "waivers") await renderWaivers();
-      else if (view === "keepers") await renderKeepers();
-      else if (view === "draft") await renderDraftView();
+      await renderView();
     } catch (error) {
       $("status").textContent = String(error);
     }
@@ -1736,13 +1753,14 @@ $("go").addEventListener("click", async () => {
   try {
     status.className = "";
     status.textContent = "";
+    // the leagues page goes back to Sleeper rather than redrawing, and
+    // the draft page is a toggle once it is already following along
     if (view === "leagues") await loadLeagues();
-    else if (view === "roster") await renderRoster();
-    else if (view === "start") await renderStart();
-    else if (view === "waivers") await renderWaivers();
-    else if (view === "keepers") await renderKeepers();
-    else if (draftPoll) { clearInterval(draftPoll); draftPoll = null; status.textContent = "paused"; }
-    else await renderDraftView();
+    else if (view === "draft" && draftPoll) {
+      clearInterval(draftPoll);
+      draftPoll = null;
+      status.textContent = "paused";
+    } else await renderView();
     refreshGoLabel();
     saveSettings();
   } catch (error) {

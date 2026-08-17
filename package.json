@@ -10,7 +10,9 @@
     "fetch": "tsx scripts/fetchData.ts"
   },
   "devDependencies": {
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^26.2.0",
+    "jsdom": "^29.1.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

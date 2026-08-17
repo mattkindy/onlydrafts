@@ -103,6 +103,9 @@
   .range { position: relative; height: 14px; background: var(--chip);
     border-radius: 999px; margin-top: .7rem; }
   /* the middle half, which is where he lands most weeks */
+  .range .tail { position: absolute; top: 4px; bottom: 4px;
+    background: color-mix(in srgb, var(--go) 22%, var(--chip)); border-radius: 2px; }
+  .card.mine .range .tail { background: color-mix(in srgb, var(--go) 34%, var(--chip)); }
   .range .span { position: absolute; top: 0; bottom: 0;
     background: color-mix(in srgb, var(--go) 55%, var(--chip));
     border-radius: 999px; }
@@ -614,7 +617,7 @@ function ownerOf(key) {
  */
 /** one scale for every season card on screen, so the bars compare */
 function seasonScale(players) {
-  return Math.max(12, ...players.map((p) => (p.game ? p.game.q3 : p.ppg) ?? 0)) * 1.05;
+  return Math.max(12, ...players.map((p) => (p.game ? p.game.high : p.ppg) ?? 0)) * 1.02;
 }
 
 function card(p, opts) {
@@ -623,12 +626,22 @@ function card(p, opts) {
     (opts.kept ? " kept" : "") + (opts.gone ? " gone" : "");
   const r = opts.range;
   const span = (v) => Math.max(0, Math.min(100, (v / opts.max) * 100));
+  // The middle half sits inside the tenth to ninetieth, because the
+  // middle half on its own reads as a steady player: it covers 0.72 of
+  // a man's own average where his weeks actually run 1.27 across.
+  const tail = r && r.tailLow !== undefined
+    ? '<span class="tail" style="left:' + span(r.tailLow) +
+      "%; width:" + (span(r.tailHigh) - span(r.tailLow)) + '%"></span>'
+    : "";
   const range = r
-    ? '<div class="range"><span class="span" style="left:' + span(r.low) +
+    ? '<div class="range">' + tail + '<span class="span" style="left:' + span(r.low) +
       "%; width:" + (span(r.high) - span(r.low)) + '%"></span>' +
       '<span class="mark" style="left:' + span(r.mid) + '%"></span></div>' +
-      '<div class="rangenum"><span>' + r.low.toFixed(1) + "</span><span>" +
-      r.label + "</span><span>" + r.high.toFixed(1) + "</span></div>"
+      '<div class="rangenum"><span>' +
+      (r.tailLow !== undefined ? r.tailLow.toFixed(1) : r.low.toFixed(1)) +
+      "</span><span>" + r.label + "</span><span>" +
+      (r.tailHigh !== undefined ? r.tailHigh.toFixed(1) : r.high.toFixed(1)) +
+      "</span></div>"
     : "";
   const aside = opts.aside
     ? '<span class="val">' + opts.aside.label + " " + opts.aside.value.toFixed(1) + "</span>"
@@ -677,7 +690,11 @@ function seasonCard(p, opts = {}) {
     value: g ? g.ev : p.ppg,
     unit: "a game",
     range: g
-      ? { low: g.q1, mid: g.ev, high: g.q3, label: "middle half of games" }
+      ? {
+          low: g.q1, mid: g.ev, high: g.q3,
+          tailLow: g.low, tailHigh: g.high,
+          label: "middle half, and a bad to a good week",
+        }
       : undefined,
     note: [
       p.adp
@@ -795,14 +812,34 @@ function bestLeftAt(pick, taken, exclude, position, byRanking) {
  * so keeping him for a third round pick when the room takes him in the
  * third is worth nothing at all.
  */
-function costOf(entry, player) {
+function costOf(entry, player, teams = 12) {
   if (!entry.marketPriced) {
     return entry.cost;
   }
 
-  return player && player.adp
-    ? Math.max(1, Math.ceil(player.adp / 12))
-    : entry.cost;
+  const goesAt = adpOverrides()[entry.key] ?? (player ? player.adp : null);
+
+  return goesAt ? Math.max(1, Math.ceil(goesAt / teams)) : entry.cost;
+}
+
+/**
+ * Where you have seen a man going, when that beats our board.
+ *
+ * Our draft positions come from public mock drafts and the league
+ * drafts on Sleeper, whose own number is a little different and is the
+ * one the room will follow. It only changes anything for a man kept a
+ * second year running, since his price is wherever he goes, so it is
+ * worth typing in for those few rather than chasing the whole board.
+ */
+function adpOverrides() {
+  return store_get("adpAt." + (active ? active.leagueId : "none"), {});
+}
+
+function saveAdpAt(key, pick) {
+  const all = adpOverrides();
+  if (pick) all[key] = pick;
+  else delete all[key];
+  store_set("adpAt." + (active ? active.leagueId : "none"), all);
 }
 
 /**
@@ -1051,7 +1088,7 @@ async function renderKeepers() {
   // Anybody it leaves out was picked up too late in the season to be
   // kept, so his being on the roster today does not make him a choice.
   const costs = listed
-    ? Object.fromEntries(listed.map((e) => [e.key, costOf(e, boardLookup(e.key))]))
+    ? Object.fromEntries(listed.map((e) => [e.key, costOf(e, boardLookup(e.key), teams)]))
     : keeperCosts();
   const atMarket = new Set(
     (listed ?? []).filter((e) => e.marketPriced).map((e) => e.key),
@@ -1159,10 +1196,21 @@ async function renderKeepers() {
     row.className = "costrow";
 
     if (listed) {
-      row.innerHTML = "costs your <b>" + ordinal(cost) + "</b> round pick" +
-        (atMarket.has(p.key)
-          ? " <span class=\"hint\">(second year running, so market price)</span>"
-          : "");
+      if (!atMarket.has(p.key)) {
+        row.innerHTML = "costs your <b>" + ordinal(cost) + "</b> round pick";
+      } else {
+        // his price is wherever the room takes him, so the pick is the
+        // number to correct, not the round
+        const goesAt = adpOverrides()[p.key] ?? p.adp ?? "";
+        row.innerHTML = "second year running, so he costs market price: " +
+          "goes at pick <input type=\"number\" min=\"1\" max=\"200\" " +
+          "value=\"" + (goesAt ? Math.round(goesAt) : "") + "\" placeholder=\"?\">" +
+          ", a <b>" + ordinal(cost) + "</b>";
+        row.querySelector("input").addEventListener("change", (e) => {
+          saveAdpAt(p.key, Number(e.target.value));
+          renderKeepers();
+        });
+      }
     } else {
       row.innerHTML = "costs a <input type=\"number\" min=\"1\" max=\"15\" " +
         "value=\"" + (cost || "") + "\" placeholder=\"?\"> round";
@@ -1661,6 +1709,27 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 
+/**
+ * What draws each view. The nav and the go button both used to carry
+ * their own copy of this, which is how the two drifted apart.
+ */
+const RENDER = {
+  leagues: renderLeagues,
+  roster: renderRoster,
+  keepers: renderKeepers,
+  draft: renderDraftView,
+  start: renderStart,
+  waivers: renderWaivers,
+};
+
+async function renderView() {
+  const draw = RENDER[view];
+
+  if (draw) {
+    await draw();
+  }
+}
+
 document.querySelectorAll("#subnav button").forEach((b) =>
   b.addEventListener("click", async () => {
     await ready;
@@ -1668,11 +1737,7 @@ document.querySelectorAll("#subnav button").forEach((b) =>
     setView(b.dataset.view);
 
     try {
-      if (view === "start") await renderStart();
-      else if (view === "roster") await renderRoster();
-      else if (view === "waivers") await renderWaivers();
-      else if (view === "keepers") await renderKeepers();
-      else if (view === "draft") await renderDraftView();
+      await renderView();
     } catch (error) {
       $("status").textContent = String(error);
     }
@@ -1688,13 +1753,14 @@ $("go").addEventListener("click", async () => {
   try {
     status.className = "";
     status.textContent = "";
+    // the leagues page goes back to Sleeper rather than redrawing, and
+    // the draft page is a toggle once it is already following along
     if (view === "leagues") await loadLeagues();
-    else if (view === "roster") await renderRoster();
-    else if (view === "start") await renderStart();
-    else if (view === "waivers") await renderWaivers();
-    else if (view === "keepers") await renderKeepers();
-    else if (draftPoll) { clearInterval(draftPoll); draftPoll = null; status.textContent = "paused"; }
-    else await renderDraftView();
+    else if (view === "draft" && draftPoll) {
+      clearInterval(draftPoll);
+      draftPoll = null;
+      status.textContent = "paused";
+    } else await renderView();
     refreshGoLabel();
     saveSettings();
   } catch (error) {
