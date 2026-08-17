@@ -146,8 +146,14 @@ export async function fitRoles(
       availability: Math.min(1, (gamesPlayed.get(id) ?? 0) / weeks),
     };
 
+    // His share is of the plays that happened while he was out there.
+    // Dividing by the team's whole season instead made a man who
+    // played ten games look like a part-timer twice over, once in the
+    // share and again in his availability.
+    const hisGames = Math.max(1, gamesPlayed.get(id) ?? weeks);
+
     for (const s of SITUATIONS) {
-      const seasonPlays = Math.max(1, plays[s] * weeks);
+      const seasonPlays = Math.max(1, plays[s] * hisGames);
       role.targetShare[s] = raw.targets[s] / seasonPlays;
       role.carryShare[s] = raw.carries[s] / seasonPlays;
       const usage = trust?.usage ?? TRUST_AFTER.usage;
