@@ -24,17 +24,20 @@ export interface EndingRules {
 }
 
 /**
- * How often a snap is the last one because the half or the game runs
- * out. Nearly seven percent of drives end that way and a walk that
- * never stops for the clock has to end those some other way, which is
- * most of why it punts too much.
+ * Which drive the half runs out on.
+ *
+ * Nearly seven percent of drives end that way. Taking a slice off every
+ * drive instead cuts short the ones that were about to score, which
+ * cost two points of touchdown rate. A half ends on one drive, so one
+ * drive in fourteen gets a short budget of plays and the rest get none
+ * of this at all.
  */
 export interface ClockRules {
-  /** the chance a drive is cut off after any given play */
-  runsOut: number;
+  /** how often a drive is the last of a half */
+  isLast: number;
 }
 
-export const CLOCK_DEFAULTS: ClockRules = { runsOut: 0.012 };
+export const CLOCK_DEFAULTS: ClockRules = { isLast: 0.071 };
 
 export interface FactorPlay {
   state: PlayState;
@@ -61,9 +64,14 @@ export function walkDrive(
   const state: PlayState = {
     down: 1, toGo: 10, yardline: startAt, margin: 0, secondsLeft: 1800,
   };
+  // how many snaps there is time for, when this is the last drive of a
+  // half. Drawn once, so a drive either has a clock on it or does not.
+  const budget = uniform() < clock.isLast
+    ? 1 + Math.floor(uniform() * 12)
+    : Infinity;
 
   for (;;) {
-    if (plays.length >= rules.maxPlays) {
+    if (plays.length >= Math.min(rules.maxPlays, budget)) {
       return { plays, ending: "clock" };
     }
 
@@ -106,10 +114,6 @@ export function walkDrive(
 
     if (state.yardline <= 0) {
       return { plays, ending: "touchdown" };
-    }
-
-    if (uniform() < clock.runsOut) {
-      return { plays, ending: "clock" };
     }
 
     if (gained >= state.toGo) {

@@ -273,6 +273,44 @@ async function composed(
       "touchdowns came from outside it, where really 24% do",
   );
 
+  /**
+   * Whether a set of downs gets converted, which is what turns a drive
+   * into a score. Everything below it checks out, so if drives stall
+   * more than they should this is where it happens.
+   */
+  console.log("\n  moving the chains");
+  console.log("    down    built   really   plays");
+
+  for (const down of [1, 2, 3]) {
+    const near = test.filter((r) => r.down === down && r.toGo >= 1 && r.toGo <= 20);
+
+    if (near.length < 200) {
+      continue;
+    }
+
+    let got = 0;
+    const tries = 20000;
+
+    for (let i = 0; i < tries; i++) {
+      const from = near[Math.floor(rng() * near.length)]!;
+      const state = {
+        down, toGo: from.toGo, yardline: from.yardline,
+        margin: from.margin, secondsLeft: from.secondsLeft,
+      };
+      const call = rng() < factors.runs(state) ? "run" as const : "pass" as const;
+      const gained = factors.gains(state, call, "", rng);
+      if (gained >= from.toGo) got++;
+    }
+
+    console.log(
+      "    " + String(down).padEnd(8) +
+      `${(100 * got / tries).toFixed(1)}%`.padStart(6) +
+      `${(100 * near.filter((r) => r.yards >= r.toGo).length / near.length).toFixed(1)}%`
+        .padStart(9) +
+      String(near.length).padStart(8),
+    );
+  }
+
   // A quarter of real touchdowns are scored from outside the twenty,
   // on one long play, so the tail of what a play gains has to be right
   // or those never happen.
