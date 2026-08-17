@@ -415,10 +415,11 @@ async function loadLeagues() {
   leagues = [];
 
   for (const lg of found ?? []) {
-    const [rosters, users, traded] = await Promise.all([
+    const [rosters, users, traded, drafts] = await Promise.all([
       api("/league/" + lg.league_id + "/rosters"),
       api("/league/" + lg.league_id + "/users"),
       api("/league/" + lg.league_id + "/traded_picks").catch(() => []),
+      api("/league/" + lg.league_id + "/drafts").catch(() => []),
     ]);
     // Keeping a man costs the pick he is priced at, so a team without
     // that round cannot keep him at any price. Everyone starts with one
@@ -452,6 +453,12 @@ async function loadLeagues() {
       myRoster: (mine && mine.players ? mine.players : [])
         .map((id) => playerMap[id]).filter((p) => p && p.n).map((p) => ({ name: p.n, key: norm(p.n) })),
       myPicks: roundsHeld(mine ? mine.roster_id : -1),
+      // where you sit in the order, so a keeper is priced against the
+      // pick you would actually make rather than the middle of a round
+      draftSlot: (drafts && drafts[0] && drafts[0].draft_order
+        ? drafts[0].draft_order[user.user_id]
+        : null) ?? null,
+      snake: !drafts || !drafts[0] || drafts[0].type === "snake",
       allRosters: rosters.map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
         picks: roundsHeld(r.roster_id),
@@ -737,28 +744,85 @@ function ordinal(n) {
  * already have stops a third quarterback being the reason to let a
  * back go.
  */
-function bestLeftAt(pick, taken, exclude, have) {
+/**
+ * The man you would draft at this pick instead, at the same position.
+ *
+ * Keeping a receiver for a seventh round pick means you do not spend
+ * that seventh on a receiver, so what the keeper is worth is the gap to
+ * the best receiver still on the board there. Compare him to the best
+ * player at any position and the answer comes back a quarterback, because value over replacement is measured from a
+ * different baseline for every position and the numbers do not mean the
+ * same thing across them.
+ */
+function bestLeftAt(pick, taken, exclude, position, byRanking) {
+  const free = board.players.filter((p) =>
+    p.key !== exclude && !taken.has(p.key) && (!position || p.position === position));
+
+  if (byRanking) {
+    // Our own order instead of the market's: sort everyone by what the
+    // model says they are worth, and whoever lands on this pick is who
+    // we think is there. Where the two disagree the room is the one
+    // setting the price, so this is the second opinion, not the answer.
+    const ours = board.players.filter((p) => !taken.has(p.key))
+      .sort((a, b) => b.vor - a.vor);
+    const reachable = new Set(ours.slice(pick - 1).map((p) => p.key));
+    const left = free.filter((p) => reachable.has(p.key));
+    return left.length
+      ? left.reduce((best, p) => (p.vor > best.vor ? p : best))
+      : null;
+  }
+
   // Anyone the market expects to last this long. Ordered by the blend
-  // the board carries, which mixes the room's view with the model's;
+  // on the board, which mixes the room's view with the model's;
   // on its own the model had J.K. Dobbins as the best man at pick 30
   // on a draft position of 96, disagreeing with the room about sixty
   // five players.
-  const left = board.players
-    .filter((p) => p.key !== exclude && !taken.has(p.key) && p.adp && p.adp >= pick)
+  const left = free
+    .filter((p) => p.adp && p.adp >= pick)
     .sort((a, b) => (a.blend ?? a.adp) - (b.blend ?? b.adp))
     .slice(0, 12);
 
-  // then the best of that shortlist for this roster, since the best
-  // quarterback left is worth little to a team already holding two
-  let best = null;
-  let bestWorth = -Infinity;
+  return left.length
+    ? left.reduce((best, p) => (p.vor > best.vor ? p : best))
+    : null;
+}
 
-  for (const p of left) {
-    const worth = p.vor * (have ? needFactor(p.position, have[p.position] ?? 0) : 1);
-    if (worth > bestWorth) { bestWorth = worth; best = p; }
+/**
+ * What a keeper costs you, as an overall pick.
+ *
+ * Most men cost the round the league wrote down. A second straight year
+ * costs market price instead, which is wherever he is going in drafts,
+ * so keeping him for a third round pick when the room takes him in the
+ * third is worth nothing at all.
+ */
+function costOf(entry, player, teams = 12) {
+  if (!entry.marketPriced) {
+    return entry.cost;
   }
 
-  return best ? { ...best, worth: bestWorth } : null;
+  const goesAt = adpOverrides()[entry.key] ?? (player ? player.adp : null);
+
+  return goesAt ? Math.max(1, Math.ceil(goesAt / teams)) : entry.cost;
+}
+
+/**
+ * Where you have seen a man going, when that beats our board.
+ *
+ * Our draft positions come from public mock drafts and the league
+ * drafts on Sleeper, whose own number is a little different and is the
+ * one the room will follow. It only changes anything for a man kept a
+ * second year running, since his price is wherever he goes, so it is
+ * worth typing in for those few rather than chasing the whole board.
+ */
+function adpOverrides() {
+  return store_get("adpAt." + (active ? active.leagueId : "none"), {});
+}
+
+function saveAdpAt(key, pick) {
+  const all = adpOverrides();
+  if (pick) all[key] = pick;
+  else delete all[key];
+  store_set("adpAt." + (active ? active.leagueId : "none"), all);
 }
 
 /**
@@ -772,9 +836,29 @@ function bestLeftAt(pick, taken, exclude, have) {
  */
 const CLOSE_ENOUGH = 1;
 
-function marginAt(player, round, teams, taken, have) {
-  const pick = (round - 1) * teams + Math.ceil(teams / 2);
-  const instead = bestLeftAt(pick, taken, player.key, have);
+/**
+ * The overall pick a round costs you.
+ *
+ * A snake turns the order around every other round, so the third seat
+ * picks third in the first round and tenth in the second. Using the
+ * middle of the round instead was off by up to half a round, which
+ * matters most at the top where the board moves fastest.
+ */
+function pickForRound(round, teams, slot, snake) {
+  if (!slot) {
+    return (round - 1) * teams + Math.ceil(teams / 2);
+  }
+
+  const inRound = snake && round % 2 === 0 ? teams - slot + 1 : slot;
+
+  return (round - 1) * teams + inRound;
+}
+
+function marginAt(player, round, teams, taken) {
+  const pick = pickForRound(
+    round, teams, active ? active.draftSlot : null, !active || active.snake,
+  );
+  const instead = bestLeftAt(pick, taken, player.key, player.position, false);
   /**
    * His good week measured against the man who would start at his
    * position anyway, the same baseline the expectation uses. Comparing
@@ -786,9 +870,15 @@ function marginAt(player, round, teams, taken, have) {
     return high - (p.ppg - p.vor);
   };
 
+  const ourInstead = bestLeftAt(pick, taken, player.key, player.position, true);
+
   return {
     instead,
-    margin: instead ? player.vor - instead.worth : player.vor,
+    margin: instead ? player.vor - instead.vor : player.vor,
+    // the same sum against the man our own order says is there, which
+    // is worth seeing when it disagrees with the room
+    ourInstead,
+    ourMargin: ourInstead ? player.vor - ourInstead.vor : player.vor,
     upside: instead
       ? overReplacement(player) - overReplacement(instead)
       : overReplacement(player),
@@ -797,13 +887,92 @@ function marginAt(player, round, teams, taken, have) {
 }
 
 /** the earliest round he is not clearly worse than the alternative */
-function worthUpTo(player, teams, taken, have) {
+function worthUpTo(player, teams, taken) {
   for (let round = 1; round <= 15; round++) {
-    const at = marginAt(player, round, teams, taken, have);
+    const at = marginAt(player, round, teams, taken);
     if (at.margin > -CLOSE_ENOUGH) return { round, ...at };
   }
 
   return { round: 16, instead: null, margin: 0, thin: true };
+}
+
+let keeperSheet;
+
+/** the league's own keeper list, shipped with the board */
+async function loadKeeperSheet() {
+  if (keeperSheet !== undefined) {
+    return keeperSheet;
+  }
+
+  keeperSheet = await fetch(
+    "data/keepers-" + meta.boardSeason + ".json" + (window.__bust ?? ""),
+  ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+
+  return keeperSheet;
+}
+
+/**
+ * Which sheet team is whose.
+ *
+ * The sheet comes from the league's own paperwork and labels teams the
+ * way the commissioner does, which is not what anybody calls themselves
+ * in Sleeper. Matching on the players gets around that: a team's
+ * eligible list overlaps its own roster and almost nobody else's, and
+ * it keeps working when somebody renames their team.
+ */
+function ownerPerSheetTeam(sheet) {
+  const byTeam = new Map();
+
+  for (const team of new Set(sheet.entries.map((e) => e.team))) {
+    const keys = new Set(
+      sheet.entries.filter((e) => e.team === team).map((e) => e.key),
+    );
+    let best = null;
+    let bestHits = 0;
+
+    for (const roster of active.allRosters ?? []) {
+      const hits = (roster.keys ?? []).filter((r) => keys.has(r.key)).length;
+
+      if (hits > bestHits) {
+        bestHits = hits;
+        best = roster.owner;
+      }
+    }
+
+    if (best) {
+      byTeam.set(team, best);
+    }
+  }
+
+  return byTeam;
+}
+
+/**
+ * What each team may keep, from the sheet, as owner to entries.
+ *
+ * Anyone missing from a team's list was picked up after the deadline
+ * and cannot be kept at all, so the sheet is the whole eligible set
+ * rather than a set of prices laid over the current roster.
+ */
+function eligiblePerOwner(sheet) {
+  const owners = ownerPerSheetTeam(sheet);
+  const byOwner = new Map();
+
+  for (const entry of sheet.entries) {
+    const owner = owners.get(entry.team);
+
+    if (!owner) {
+      continue;
+    }
+
+    if (!byOwner.has(owner)) {
+      byOwner.set(owner, []);
+    }
+
+    byOwner.get(owner).push(entry);
+  }
+
+  return byOwner;
 }
 
 /**
@@ -818,7 +987,7 @@ function worthUpTo(player, teams, taken, have) {
  * The count comes from the keepers-per-team box, so it can be set to
  * whatever the league allows.
  */
-function likelyKept(perTeam) {
+function likelyKept(perTeam, eligible) {
   const gone = new Set();
 
   for (const roster of active.allRosters ?? []) {
@@ -826,6 +995,29 @@ function likelyKept(perTeam) {
 
     // it cannot keep more men than it has picks left to pay with
     const canAfford = Math.min(perTeam, (roster.picks ?? []).length);
+    const listed = eligible ? eligible.get(roster.owner) : null;
+
+    if (listed) {
+      // it pays a named round for each, so it cannot take two men who
+      // cost the same one, and it cannot take anyone it traded the
+      // pick for
+      const spent = new Set();
+
+      for (const entry of listed
+        .map((e) => ({ ...e, player: boardLookup(e.key) }))
+        .filter((e) => e.player)
+        .sort((a, b) => b.player.vor - a.player.vor)) {
+        if (spent.size >= canAfford) break;
+        if (spent.has(entry.cost)) continue;
+        if ((roster.picks ?? []).length && !roster.picks.includes(entry.cost)) continue;
+
+        spent.add(entry.cost);
+        gone.add(entry.key);
+      }
+
+      continue;
+    }
+
     const rated = (roster.keys ?? [])
       .map((r) => boardLookup(r.key))
       .filter(Boolean)
@@ -865,66 +1057,76 @@ async function renderKeepers() {
 
   const teams = active.size || 12;
   const perTeam = Number($("keepn").value) || 3;
-  // Your own marks, plus the men every other team is likely to hold.
+  const sheet = await loadKeeperSheet();
+  const eligible = sheet ? eligiblePerOwner(sheet) : null;
+  const listed = eligible ? eligible.get(active.team) : null;
+  // Your own marks, plus the men every other team is likely to keep.
   // Everyone else on a roster goes back into the draft, so treating a
   // whole roster as unavailable would empty the board.
-  const taken = new Set([...Object.keys(markedKeepers()), ...likelyKept(perTeam)]);
+  const taken = new Set([
+    ...Object.keys(markedKeepers()), ...likelyKept(perTeam, eligible),
+  ]);
 
-  const costs = keeperCosts();
-  const onRoster = active.myRoster.map((r) => boardLookup(r.key)).filter(Boolean);
+  // The league's sheet decides both who you may keep and what he costs.
+  // Anybody it leaves out was picked up too late in the season to be
+  // kept, so his being on the roster today does not make him a choice.
+  const costs = listed
+    ? Object.fromEntries(listed.map((e) => [e.key, costOf(e, boardLookup(e.key), teams)]))
+    : keeperCosts();
+  const atMarket = new Set(
+    (listed ?? []).filter((e) => e.marketPriced).map((e) => e.key),
+  );
+  const onRoster = (listed ?? active.myRoster)
+    .map((r) => boardLookup(r.key)).filter(Boolean);
 
   /**
-   * Who you go into the draft with, and what that makes the rest worth.
+   * Which of them you actually keep.
    *
-   * This is circular: what you keep decides what you need, what you
-   * need decides what the pick would otherwise buy, and that decides
-   * what is worth keeping. Anyone you do not keep is released, so a
-   * roster of thirteen is not what you take to the draft.
-   *
-   * So work it out in order. Start with nobody, take the man who beats
-   * his price by the most, count him, and go again until the slots are
-   * full or nobody is worth his cost.
+   * Each man is judged on his own, against the best player at his
+   * position still on the board at the pick he costs, so what you do
+   * with one does not change what another is worth. That leaves ranking
+   * them by how far they beat their price and taking the best ones you
+   * can pay for: two men who cost the same round cannot both be kept,
+   * and neither can anyone whose round you traded away.
    */
-  const keeping = [];
-  const have = {};
   const slots = Number($("keepn").value) || 3;
-  let left = onRoster.slice();
+  const spent = new Set();
+  const keeping = [];
 
-  for (let round = 0; round < slots; round++) {
-    let pick = null;
-
-    for (const p of left) {
+  for (const { p, cost, at } of onRoster
+    .map((p) => {
       const cost = Number(costs[p.key]) || 0;
-      if (!cost || (active.myPicks && !active.myPicks.includes(cost))) continue;
-      const at = marginAt(p, cost, teams, taken, have);
-      if (!pick || at.margin > pick.at.margin) pick = { p, at };
-    }
+      return { p, cost, at: cost ? marginAt(p, cost, teams, taken) : null };
+    })
+    .filter((m) => m.at && m.at.margin > 0)
+    .filter((m) => !active.myPicks || active.myPicks.includes(m.cost))
+    .sort((a, b) => b.at.margin - a.at.margin)) {
+    if (keeping.length >= slots) break;
+    if (spent.has(cost)) continue;
 
-    if (!pick || pick.at.margin <= 0) break;
-
-    keeping.push(pick.p.key);
-    have[pick.p.position] = (have[pick.p.position] ?? 0) + 1;
-    left = left.filter((p) => p.key !== pick.p.key);
+    spent.add(cost);
+    keeping.push(p.key);
   }
 
   const mine = onRoster
-    .map((p) => {
-      // judged against the roster you would have without him, so his
-      // own slot is not counted twice
-      const others = { ...have };
-      if (keeping.includes(p.key)) others[p.position] = (others[p.position] ?? 1) - 1;
-      return { p, keeping: keeping.includes(p.key), ...worthUpTo(p, teams, taken, others) };
-    })
+    .map((p) => ({
+      p, keeping: keeping.includes(p.key), ...worthUpTo(p, teams, taken),
+    }))
     .sort((a, b) => a.round - b.round);
 
   const head = document.createElement("div");
   head.className = "empty";
   head.innerHTML = "<b>What each man is worth keeping for.</b> Round shown is the " +
-    "earliest pick he still beats. Type what your league charges and the card says " +
-    "whether to keep him.<br>Assuming every other team holds its " + perTeam +
-    " best, which takes " + taken.size + " players out of the draft." +
+    "earliest pick he still beats." +
+    (listed
+      ? " Costs come from the league sheet, and anyone it leaves out was " +
+        "picked up too late to keep."
+      : " Type what your league charges and the card says whether to keep him.") +
+    "<br>Assuming every other team keeps its " + perTeam +
+    " best it can pay for, which takes " + taken.size + " players out of the draft." +
     (active.myPicks
-      ? "<br>You hold rounds " + active.myPicks.join(", ") + "."
+      ? "<br>You pick " + (active.draftSlot ? ordinal(active.draftSlot) + " and " : "") +
+        "have rounds " + active.myPicks.join(", ") + "."
       : "");
   out.appendChild(head);
 
@@ -935,9 +1137,7 @@ async function renderKeepers() {
   for (const m of mine) {
     const { p, round, instead, thin } = m;
     const cost = Number(costs[p.key]) || 0;
-    const others = { ...have };
-    if (m.keeping) others[p.position] = (others[p.position] ?? 1) - 1;
-    const at = cost ? marginAt(p, cost, teams, taken, others) : null;
+    const at = cost ? marginAt(p, cost, teams, taken) : null;
     const who = at && at.instead ? at.instead.name : "what is left";
     const verdict = !at ? ""
       : at.margin > CLOSE_ENOUGH
@@ -962,22 +1162,47 @@ async function renderKeepers() {
         : at && at.margin > CLOSE_ENOUGH ? verdict : "",
       warn: !holdsIt,
       hint: holdsIt && at && at.margin <= CLOSE_ENOUGH ? verdict : "",
-      note: (onUpside ? onUpside + " &middot; " : "") +
+      note: (at && at.ourInstead && at.ourInstead.key !== (at.instead && at.instead.key)
+        ? "our own order has " + at.ourInstead.name + " there instead, " +
+          (at.ourMargin > 0 ? "still keep" : "let go") +
+          " by " + Math.abs(at.ourMargin).toFixed(1) + " &middot; "
+        : "") +
+        (onUpside ? onUpside + " &middot; " : "") +
         (instead
           ? "at a " + ordinal(round) + " the other choice is " + instead.name
           : "nobody left worth the pick") +
         (thin ? ", who is a flier" : "") +
-        (p.adp ? " &middot; goes " + asRound(p.adp) + " in PPR mocks" : ""),
+        (p.adp ? " &middot; goes " + asRound(p.adp) + " in " + (meta.adpFormat ?? "PPR") + " mocks" : ""),
     });
 
     const row = document.createElement("label");
     row.className = "costrow";
-    row.innerHTML = "costs a <input type=\"number\" min=\"1\" max=\"15\" " +
-      "value=\"" + (cost || "") + "\" placeholder=\"?\"> round";
-    row.querySelector("input").addEventListener("change", (e) => {
-      saveKeeperCost(p.key, Number(e.target.value));
-      renderKeepers();
-    });
+
+    if (listed) {
+      if (!atMarket.has(p.key)) {
+        row.innerHTML = "costs your <b>" + ordinal(cost) + "</b> round pick";
+      } else {
+        // his price is wherever the room takes him, so the pick is the
+        // number to correct, not the round
+        const goesAt = adpOverrides()[p.key] ?? p.adp ?? "";
+        row.innerHTML = "second year running, so he costs market price: " +
+          "goes at pick <input type=\"number\" min=\"1\" max=\"200\" " +
+          "value=\"" + (goesAt ? Math.round(goesAt) : "") + "\" placeholder=\"?\">" +
+          ", a <b>" + ordinal(cost) + "</b>";
+        row.querySelector("input").addEventListener("change", (e) => {
+          saveAdpAt(p.key, Number(e.target.value));
+          renderKeepers();
+        });
+      }
+    } else {
+      row.innerHTML = "costs a <input type=\"number\" min=\"1\" max=\"15\" " +
+        "value=\"" + (cost || "") + "\" placeholder=\"?\"> round";
+      row.querySelector("input").addEventListener("change", (e) => {
+        saveKeeperCost(p.key, Number(e.target.value));
+        renderKeepers();
+      });
+    }
+
     card.appendChild(row);
     grid.appendChild(card);
   }

@@ -13,14 +13,25 @@ export interface AdpEntry {
   low: number;
 }
 
+/** which set of mock drafts to read */
+export type AdpFormat = "ppr" | "standard";
+
 /**
- * Preseason PPR ADP from Fantasy Football Calculator mock drafts,
+ * Preseason ADP from Fantasy Football Calculator mock drafts,
  * snapshotted in the final week before each season. Keyed by
  * normalized name plus position, since the source has no gsis ids.
+ *
+ * The format matters more than it looks. The same receiver goes fifteen
+ * to thirty places earlier in a PPR room than a standard one, so a
+ * standard league reading the PPR board thinks the room will take
+ * receivers who are still there and backs who are long gone.
  */
-export async function loadAdp(season: number): Promise<Map<string, AdpEntry>> {
+export async function loadAdp(
+  season: number,
+  format: AdpFormat = "ppr",
+): Promise<Map<string, AdpEntry>> {
   const text = await readFile(
-    join(RAW_DIR, `adp_ppr_${season}.json`),
+    join(RAW_DIR, `adp_${format}_${season}.json`),
     "utf8",
   );
   const parsed = JSON.parse(text) as {

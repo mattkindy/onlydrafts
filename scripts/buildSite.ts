@@ -30,7 +30,7 @@ import {
 import { buildPreseasonWorld } from "../src/features/preseason.js";
 import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
 import { seededRng } from "../src/sim/rng.js";
-import { loadAdp } from "../src/data/adp.js";
+import { loadAdp, type AdpFormat } from "../src/data/adp.js";
 import { fitRoles } from "../src/features/fitRoles.js";
 import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
 import { normalDraw } from "../src/sim/normal.js";
@@ -51,16 +51,24 @@ async function main(): Promise<void> {
   const season = Number(argOf("--season", String(CURRENT_SEASON)));
   const leagueId = argOf("--league", "");
   const format = argOf("--scoring", "");
+  // The draft board has to match the room. A point a catch moves
+  // receivers up the order, so a standard league needs the standard
+  // mocks or every alternative it prices is the wrong man.
+  let adpFormat: AdpFormat = "ppr";
 
   if (leagueId) {
     const rules = await fetchLeagueScoring(leagueId);
     setScoring(rules);
+    adpFormat = rules.receptions >= 0.5 ? "ppr" : "standard";
     console.log(
       `scoring from league ${leagueId}: ${rules.receptions} per catch, ` +
         `${rules.passTd} per passing touchdown`,
     );
+    console.log(`draft board: ${adpFormat} mocks`);
   } else if (format) {
-    setScoring(scoringRules(format as ScoringFormat));
+    const rules = scoringRules(format as ScoringFormat);
+    setScoring(rules);
+    adpFormat = rules.receptions >= 0.5 ? "ppr" : "standard";
     console.log(`scoring: ${format}`);
   } else {
     console.warn(
@@ -244,7 +252,40 @@ async function main(): Promise<void> {
   );
   const replacement = new Map(Object.entries(levels));
 
-  const adp = await loadAdp(season).catch(() => new Map());
+  /**
+   * The league's keeper sheet, if one has been transcribed.
+   *
+   * Who a team may keep comes from last season's roster and the price
+   * agreed with it, not from whoever is on the roster today: a team
+   * that has cleared its squad keeps its rights. Sleeper does not
+   * publish any of this, so it is a curated file and it ships with the
+   * board when it exists.
+   */
+  const keeperSheet = await readFile(
+    join(import.meta.dirname, "..", "data", "curated", `keepers${season}.csv`),
+    "utf8",
+  ).catch(() => "");
+
+  if (keeperSheet) {
+    const { parseCsv } = await import("../src/data/csv.js");
+    const entries = parseCsv(keeperSheet).map((row) => ({
+      team: row["team"] ?? "",
+      player: row["player"] ?? "",
+      key: normalizeName(row["player"] ?? ""),
+      cost: Number(row["cost"]),
+      // a consecutive keep is priced at the earlier of its round and
+      // wherever the market has him this year
+      marketPriced: row["consecutive"] === "1",
+    }));
+
+    await writeFile(
+      join(DOCS, "data", `keepers-${season}.json`),
+      JSON.stringify({ season, entries }),
+    );
+    console.log(`keeper sheet: ${entries.length} entries`);
+  }
+
+  const adp = await loadAdp(season, adpFormat).catch(() => new Map());
 
   /**
    * The shape of a player's week, from the situational simulation.
@@ -413,7 +454,7 @@ async function main(): Promise<void> {
 
   await writeFile(
     join(DOCS, "data", "index.json"),
-    JSON.stringify({ weeks: index, boardSeason: season }),
+    JSON.stringify({ weeks: index, boardSeason: season, adpFormat }),
   );
   await writeFile(
     join(DOCS, "index.html"),
