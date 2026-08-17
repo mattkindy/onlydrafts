@@ -362,3 +362,32 @@ fit, and an entity's description travels when it changes team.
 It also cannot run away. The squashed hidden layer and the clipped
 error hold it finite on targets that sent the factorized fit to
 infinity, which is why the guard that model needed is untestable here.
+
+## Targets against a corner, and what it turned out to measure
+
+Nobody publishes who was covering whom without charting it, but the
+play-by-play names whoever knocked a pass down and whoever made the
+tackle. For a corner on a passing play that is usually the man in
+coverage, so scripts/aggregateCoverage.ts builds targets against from
+it.
+
+It names the right men. Of corners thrown at thirty times or more in
+2024, the fewest yards a target went to Derek Stingley Jr. at 5.34,
+then Kenny Moore II and Jaycee Horn, and the most balls broken up went
+to Stingley, Riq Woolen, Denzel Ward and Trevon Diggs.
+
+The first version charged a safety for any completion he tackled,
+which put Minkah Fitzpatrick among the worst in the league. Charging a
+tackle only to a corner fixed the names and destroyed the finding:
+yards allowed a target carried over at .430 with safeties in and .112
+with them out. The .430 was the measure reliably telling a safety from
+a corner, season after season, because a safety tackles deep
+completions. It was never about coverage.
+
+What is left for a corner alone, over 168 pairs: how often the ball is
+caught on him carries at .231, how often he breaks one up at .178,
+yards allowed a target at .112, which is nothing.
+
+So a corner's coverage is largely not measurable this way. What may
+still work is the room-leader suppression, which is an outcome rather
+than an attribution, and which carried at .204.
