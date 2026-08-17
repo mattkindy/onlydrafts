@@ -48,7 +48,11 @@ export const FACTOR_DEFAULTS: FactorSettings = {
 
 /** everything counted at one state, plus who touched it there */
 interface Counted extends StateCell {
-  byPlayer: Map<string, { touches: number; yards: number; scores: number }>;
+  byPlayer: Map<string, {
+    touches: number; yards: number; scores: number;
+    /** and how often he breaks a long one, which is his own and lasts */
+    long: number;
+  }>;
   /**
    * Where each gain came from, since a gain is cut off by the goal
    * line. A play from the forty one cannot make more than forty one
@@ -91,13 +95,16 @@ export function fitPlayFactors(
   }
 
   for (const row of rows) {
-    const at = stateKey(
+    // Keyed by the call as well. A run and a pass from the same spot
+    // gain differently, 4.5 yards against 6.1 with a far fatter tail,
+    // and go to different men. Pooling them meant the call decided
+    // nothing at all.
+    const at = `${row.call}|` + stateKey(
       row.down, row.toGo, row.yardline, row.secondsLeft, row.margin,
     );
     // and the same play again under any clock and any score, so a thin
     // state can fall back to the spot itself
-    const loose =
-      `${Math.min(4, row.down)}|${Math.min(40, row.toGo)}` +
+    const loose = `${row.call}|${Math.min(4, row.down)}|${Math.min(40, row.toGo)}` +
       `|${Math.min(99, row.yardline)}|any`;
     const cell = cells.get(at) ?? emptyCounted();
     cell.plays++;
@@ -108,10 +115,11 @@ export function fitPlayFactors(
 
     if (row.player) {
       const own = cell.byPlayer.get(row.player) ??
-        { touches: 0, yards: 0, scores: 0 };
+        { touches: 0, yards: 0, scores: 0, long: 0 };
       own.touches++;
       own.yards += row.yards;
       own.scores += row.touchdown;
+      if (row.yards >= 20) own.long++;
       cell.byPlayer.set(row.player, own);
     }
 
@@ -126,10 +134,11 @@ export function fitPlayFactors(
 
     if (row.player) {
       const own = anyTime.byPlayer.get(row.player) ??
-        { touches: 0, yards: 0, scores: 0 };
+        { touches: 0, yards: 0, scores: 0, long: 0 };
       own.touches++;
       own.yards += row.yards;
       own.scores += row.touchdown;
+      if (row.yards >= 20) own.long++;
       anyTime.byPlayer.set(row.player, own);
     }
 
@@ -145,7 +154,9 @@ export function fitPlayFactors(
    * any-time cells on top of them, and those contain the tight ones, so
    * the game situation would be swamped every time.
    */
-  const gather = (state: PlayState, least: number, looseness: number) => {
+  const gather = (
+    state: PlayState, least: number, looseness: number, call?: Call,
+  ) => {
     const pooled = emptyCounted();
 
     for (const spot of widening(state)) {
@@ -157,7 +168,7 @@ export function fitPlayFactors(
         state.down, spot.toGo, spot.yardline,
         state.secondsLeft, state.margin, looseness,
       )) {
-      const cell = cells.get(at);
+      const cell = cells.get(call ? `${call}|${at}` : at);
 
       if (!cell) {
         continue;
@@ -171,10 +182,11 @@ export function fitPlayFactors(
 
       for (const [player, own] of cell.byPlayer) {
         const already = pooled.byPlayer.get(player) ??
-          { touches: 0, yards: 0, scores: 0 };
+          { touches: 0, yards: 0, scores: 0, long: 0 };
         already.touches += own.touches;
         already.yards += own.yards;
         already.scores += own.scores;
+        already.long += own.long;
         pooled.byPlayer.set(player, already);
       }
 
@@ -189,8 +201,8 @@ export function fitPlayFactors(
   };
 
   const remembered = new Map<string, Counted>();
-  const at = (state: PlayState, least: number) => {
-    const key = `${stateKey(
+  const at = (state: PlayState, least: number, call?: Call) => {
+    const key = `${call ?? "both"}|${stateKey(
       state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
     )}|${least}`;
     const already = remembered.get(key);
@@ -199,14 +211,14 @@ export function fitPlayFactors(
       return already;
     }
 
-    let found = gather(state, least, 0);
+    let found = gather(state, least, 0, call);
 
     for (const looseness of [1, 2]) {
       if (found.plays >= least) {
         break;
       }
 
-      found = gather(state, least, looseness);
+      found = gather(state, least, looseness, call);
     }
     remembered.set(key, found);
     return found;
@@ -214,12 +226,15 @@ export function fitPlayFactors(
 
   return {
     runs: (state) => {
-      const cell = at(state, settings.leastForCall);
-      return cell.plays === 0 ? 0.45 : cell.runs / cell.plays;
+      const runs = at(state, settings.leastForCall, "run");
+      const passes = at(state, settings.leastForCall, "pass");
+      const all = runs.plays + passes.plays;
+      return all === 0 ? 0.45 : runs.plays / all;
     },
     goesTo: (state, call, among) => {
-      void call;
-      const cell = at(state, settings.leastForMan * Math.max(1, among.length));
+      const cell = at(
+        state, settings.leastForMan * Math.max(1, among.length), call,
+      );
       const here = [...cell.byPlayer.values()].reduce((a, o) => a + o.touches, 0);
       const shares = new Map<string, number>();
       let total = 0;
@@ -257,8 +272,7 @@ export function fitPlayFactors(
       return shares;
     },
     gains: (state, call, player, uniform) => {
-      void call;
-      const cell = at(state, settings.least);
+      const cell = at(state, settings.least, call);
       const own = cell.byPlayer.get(player);
       const pool = cell.yards;
 
@@ -266,27 +280,52 @@ export function fitPlayFactors(
         return 4;
       }
 
-      const drawn = pool[Math.floor(uniform() * pool.length)]!;
+      /**
+       * Whether this is one of his long ones is decided first, from how
+       * often he breaks them, and the yards are then drawn from that
+       * end of the pool.
+       *
+       * Scaling every draw by what he averages gives a possession
+       * receiver and a deep threat the same shape when they average the
+       * same. Breaking a twenty runs from 1.5% of touches to 14.7%
+       * across men, lasts from season to season at .755, and is mostly
+       * not what his average already says, .684 of it surviving once
+       * the average is taken out.
+       */
+      const enough = own && own.touches >= settings.leastForMan;
+      const longOnes: number[] = [];
+      const shortOnes: number[] = [];
 
-      // his own rate against what a play from here gains, believed in
-      // proportion to how often he has been the one taking it
-      if (!own || own.touches < settings.leastForMan || drawn <= 0) {
+      for (const gained of pool) {
+        (gained >= 20 ? longOnes : shortOnes).push(gained);
+      }
+
+      const leagueLong = longOnes.length / Math.max(1, pool.length);
+      const hisLong = enough ? own!.long / own!.touches : leagueLong;
+      const from = uniform() < hisLong && longOnes.length ? longOnes
+        : shortOnes.length ? shortOnes : pool;
+      const drawn = from[Math.floor(uniform() * from.length)]!;
+
+      if (!enough || drawn <= 0) {
         return drawn;
       }
 
+      // and his level on top, against what the same men made from here
       const league = cell.yards.reduce((a, b) => a + b, 0) / cell.plays;
-      const his = own.yards / own.touches;
+      const his = own!.yards / own!.touches;
+      const shape = leagueLong > 0 && hisLong > 0
+        ? (his / Math.max(0.1, league)) *
+          (leagueLong / hisLong) ** 0.5
+        : his / Math.max(0.1, league);
 
-      return league <= 0 ? drawn : drawn * (his / league);
+      return drawn * Math.max(0.5, Math.min(1.8, shape));
     },
     scores: (state, call, gained) => {
-      void call;
-
       if (state.yardline - gained <= 0) {
         return 1;
       }
 
-      const cell = at(state, settings.least);
+      const cell = at(state, settings.least, call);
       return cell.plays === 0 ? 0 : cell.scores / cell.plays;
     },
   };
