@@ -53,6 +53,10 @@ export interface DriveRules {
   kickSucceeds: (yardline: number) => number;
   /** how far a punt from here leaves them */
   puntLands: (yardline: number, uniform: () => number) => number;
+  /** how often a snap is wiped out by a penalty that moves the chains */
+  penaltyFirstDown: number;
+  /** what such a penalty is worth */
+  penaltyYards: (uniform: () => number) => number;
   /** the most snaps a drive gets before the clock is called on it */
   maxPlays: number;
 }
@@ -103,6 +107,19 @@ export function simulateDrive(
           handsOverAt: rules.puntLands(state.yardline, uniform),
         };
       }
+    }
+
+    // the defence is flagged and the offence gets a new set of downs
+    // without running a play anybody can be credited for
+    if (uniform() < rules.penaltyFirstDown) {
+      const given = rules.penaltyYards(uniform);
+      // a penalty in the field of play cannot score, so the worst it
+      // does is put them on the one
+      state.yardline = Math.max(1, state.yardline - given);
+      state.down = 1;
+      state.toGo = Math.min(10, state.yardline);
+      state.plays++;
+      continue;
     }
 
     const type: PlayType =

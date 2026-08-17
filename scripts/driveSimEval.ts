@@ -1,8 +1,8 @@
 /**
  * Does a walked drive look like a real one?
  *
- * The shapes to match are in scripts/driveShapeEval.ts: 5.9 plays a
- * drive, a quarter of them three or fewer, a tenth eleven or more, and
+ * The shapes to match are measured by the drive shape eval: 5.9 plays
+ * a drive, a third of them three or fewer, a tenth eleven or more, and
  * 23.6% ending in a touchdown.
  *
  * Run: npx tsx scripts/driveSimEval.ts
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
   console.log("                        simulated   actual");
   console.log("  plays a drive     " + (lengths.reduce((a, b) => a + b, 0) / lengths.length)
     .toFixed(1).padStart(11) + "      5.9");
-  console.log("  three or fewer    " + share((n) => n <= 3).padStart(11) + "    25.0%");
+  console.log("  three or fewer    " + share((n) => n <= 3).padStart(11) + "    33.9%");
   console.log("  eleven or more    " + share((n) => n >= 11).padStart(11) + "    10.0%");
   console.log("  ends in a score   " +
     (((endings.get("touchdown") ?? 0) / RUNS) * 100).toFixed(1).padStart(10) + "%    23.6%");

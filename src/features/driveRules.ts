@@ -31,6 +31,11 @@ export async function fitDriveRules(seasons: number[]): Promise<FittedDrives> {
   ).filter((r) => seasons.includes(Number(r["season"])));
 
   const scrimmage = rows.filter((r) => r["playType"] === "run" || r["playType"] === "pass");
+  // A defensive penalty that moves the chains keeps a drive alive
+  // without the offence doing anything, and leaving it out is part of
+  // why the walk stalled more often than drives really do.
+  const flagged = rows.filter((r) => r["playType"] === "penalty");
+  const penaltyYards = flagged.map((r) => Number(r["yards"]) || 0);
 
   // how often it is a run, per down and distance band
   const runs = new Map<string, { runs: number; plays: number }>();
@@ -94,6 +99,11 @@ export async function fitDriveRules(seasons: number[]): Promise<FittedDrives> {
 
   return {
     plays: scrimmage.length,
+    penaltyFirstDown: flagged.length / Math.max(1, scrimmage.length + flagged.length),
+    penaltyYards: (uniform) =>
+      penaltyYards.length === 0
+        ? 10
+        : penaltyYards[Math.floor(uniform() * penaltyYards.length)]!,
     runRate: (down, toGo) => {
       const tally = runs.get(`${down}|${distanceBand(toGo)}`);
       return tally && tally.plays >= 50 ? tally.runs / tally.plays : 0.45;

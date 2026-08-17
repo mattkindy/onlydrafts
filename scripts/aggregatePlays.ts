@@ -109,6 +109,7 @@ async function main(): Promise<void> {
           "down", "ydstogo", "yardline_100", "score_differential",
           "game_seconds_remaining", "play_type", "yards_gained",
           "first_down", "touchdown", "interception", "fumble_lost",
+          "first_down_penalty", "penalty_yards",
         ]) {
           at[field] = header.indexOf(field);
         }
@@ -116,9 +117,15 @@ async function main(): Promise<void> {
       }
 
       const c = splitLine(line);
-      const type = c[at["play_type"]!] ?? "";
+      const raw = c[at["play_type"]!] ?? "";
+      // A defensive penalty that moves the chains wipes out the snap,
+      // so it is a no_play in the release. It happens on 16% of drives
+      // and keeps them alive, which nothing else here can do, so it is
+      // written as its own kind of play.
+      const movedByPenalty = c[at["first_down_penalty"]!] === "1";
+      const type = movedByPenalty ? "penalty" : raw;
 
-      if (!["run", "pass", "punt", "field_goal"].includes(type)) {
+      if (!["run", "pass", "punt", "field_goal", "penalty"].includes(type)) {
         continue;
       }
 
@@ -138,7 +145,10 @@ async function main(): Promise<void> {
         down, c[at["ydstogo"]!], yardline,
         c[at["score_differential"]!] || 0, c[at["game_seconds_remaining"]!] || 0,
         found?.offence ?? "", found?.defence ?? "", found?.box || "",
-        type, c[at["yards_gained"]!] || 0,
+        type,
+        movedByPenalty
+          ? c[at["penalty_yards"]!] || 0
+          : c[at["yards_gained"]!] || 0,
         c[at["first_down"]!] === "1" ? 1 : 0,
         c[at["touchdown"]!] === "1" ? 1 : 0,
         lost ? 1 : 0,

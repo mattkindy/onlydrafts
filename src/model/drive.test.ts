@@ -10,6 +10,8 @@ const plainRules = (over: Partial<DriveRules> = {}): DriveRules => ({
   goesForIt: () => false,
   kickSucceeds: () => 1,
   puntLands: (yardline) => Math.max(20, 100 - Math.max(1, yardline - 40)),
+  penaltyFirstDown: 0,
+  penaltyYards: () => 10,
   maxPlays: 20,
   ...over,
 });
@@ -81,5 +83,29 @@ describe("walking a drive", () => {
     );
 
     expect(drive.plays.length).toBeLessThanOrEqual(20);
+  });
+});
+
+describe("a penalty that moves the chains", () => {
+  it("gives a new set of downs without a play anyone can be credited for", () => {
+    const drive = simulateDrive(
+      75,
+      plainRules({ penaltyFirstDown: 1, penaltyYards: () => 9, maxPlays: 3 }),
+      seededRng(4),
+    );
+
+    // every snap was wiped out, so nobody carried or caught anything
+    expect(drive.plays).toEqual([]);
+    expect(drive.ending).toBe("clock");
+  });
+
+  it("cannot put the ball in the end zone", () => {
+    const drive = simulateDrive(
+      4,
+      plainRules({ penaltyFirstDown: 1, penaltyYards: () => 40, maxPlays: 2 }),
+      seededRng(5),
+    );
+
+    expect(drive.ending).not.toBe("touchdown");
   });
 });

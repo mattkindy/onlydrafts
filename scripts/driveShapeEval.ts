@@ -102,8 +102,16 @@ async function main(): Promise<void> {
   const scored = [...drives.values()].filter((d) => d.some((p) => p.touchdown)).length;
 
   console.log(`\n${drives.size} drives, ${(lengths.reduce((a, b) => a + b, 0) / lengths.length).toFixed(1)} plays each`);
-  console.log("  a quarter of them run " + lengths[Math.floor(lengths.length * 0.25)] +
-    " plays or fewer, a tenth run " + lengths[Math.floor(lengths.length * 0.9)] + " or more");
+  // Drive lengths lump up hard, with 27% of them exactly three plays,
+  // so a quantile is the wrong thing to report: the 25th percentile is
+  // three plays while a third of all drives run three or fewer. Count
+  // the drives instead.
+  const shareAtMost = (n: number) =>
+    (100 * lengths.filter((length) => length <= n).length / lengths.length).toFixed(1);
+  const shareAtLeast = (n: number) =>
+    (100 * lengths.filter((length) => length >= n).length / lengths.length).toFixed(1);
+  console.log("  " + shareAtMost(3) + "% run three plays or fewer, " +
+    shareAtLeast(11) + "% run eleven or more");
   console.log("  " + ((scored / drives.size) * 100).toFixed(1) + "% end in a touchdown");
   console.log("\nthat spread is what ties team-mates together: everyone on a");
   console.log("twelve play drive gets touches, and nobody does on a three and out");
