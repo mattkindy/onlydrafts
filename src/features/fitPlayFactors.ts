@@ -106,6 +106,16 @@ export function fitPlayFactors(
     // state can fall back to the spot itself
     const loose = `${row.call}|${Math.min(4, row.down)}|${Math.min(40, row.toGo)}` +
       `|${Math.min(99, row.yardline)}|any`;
+    // and once more without the call, because how often a side runs has
+    // to come from one cell counting both. Widening a run pool and a
+    // pass pool separately until each has enough finds eighty of each
+    // wherever it must, and the answer is fifty percent every time.
+    const eitherWay = stateKey(
+      row.down, row.toGo, row.yardline, row.secondsLeft, row.margin,
+    );
+    const eitherLoose =
+      `${Math.min(4, row.down)}|${Math.min(40, row.toGo)}` +
+      `|${Math.min(99, row.yardline)}|any`;
     const cell = cells.get(at) ?? emptyCounted();
     cell.plays++;
     if (row.call === "run") cell.runs++;
@@ -143,6 +153,13 @@ export function fitPlayFactors(
     }
 
     cells.set(loose, anyTime);
+
+    for (const key of [eitherWay, eitherLoose]) {
+      const both = cells.get(key) ?? emptyCounted();
+      both.plays++;
+      if (row.call === "run") both.runs++;
+      cells.set(key, both);
+    }
   }
 
   /**
@@ -226,10 +243,8 @@ export function fitPlayFactors(
 
   return {
     runs: (state) => {
-      const runs = at(state, settings.leastForCall, "run");
-      const passes = at(state, settings.leastForCall, "pass");
-      const all = runs.plays + passes.plays;
-      return all === 0 ? 0.45 : runs.plays / all;
+      const cell = at(state, settings.leastForCall);
+      return cell.plays === 0 ? 0.45 : cell.runs / cell.plays;
     },
     goesTo: (state, call, among) => {
       const cell = at(
