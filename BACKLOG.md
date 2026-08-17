@@ -241,3 +241,29 @@ betting line, or how the defence has played.
 What is left untried is information from the day itself rather than
 the week before it: who is inactive, who is carrying a knock into
 Sunday, how the snaps are being shared right now.
+
+## Personnel is the situation, not the team, at least out of sample
+
+Learning what an offence lines up in from the state rather than from
+nine named situations wins, but not by much: surprise of .8568 against
+.8634 for the buckets and .8935 for the league's overall mix, scored
+on 2025 after learning from 2022 to 2024. All three pick the right
+grouping about 65% of the time, because eleven personnel is the mode
+nearly everywhere.
+
+Where the learned version earns its place is the interaction a bucket
+cannot hold. On third and two it puts heavy personnel at 15.4% from
+the two yard line and 5.6% from the fifty, which the taxonomy called
+goal line and third and short and could not compare.
+
+Adding the offence itself makes it worse, three ways round. Tilting by
+a three-year habit gives .8828. Restricting that to the seventeen
+offences that kept their play-caller gives .8791. Fitting a column per
+offence inside the model gives .8781. All are behind the .8568 of the
+state alone.
+
+That tempers the coach finding rather than contradicting it. Shotgun
+rate really does travel with a coordinator at .697. Personnel repeats
+at only .19 to .23 under the same man, and out of sample that is too
+little and too unstable to pay, especially when half the league
+changes play-callers between seasons.
