@@ -18,6 +18,7 @@ import type { FittedDrives } from "../features/driveRules.js";
 import type { Draws, PlayerLine } from "./playerWeek.js";
 import type { SituationalRole } from "./situationalWeek.js";
 import { ROLLS_UP_TO, situationOf } from "./situations.js";
+import { NOBODY, type Against } from "../features/defenceStrength.js";
 
 /** how often an average target is caught, when nobody's own rate is known */
 export const LEAGUE_CATCH_RATE = 0.64;
@@ -100,6 +101,7 @@ export function simulatePlayerDrive(
   available: boolean[],
   rules: FittedDrives,
   draws: Draws,
+  against: Against = NOBODY,
 ): PlayerDrive {
   const plays: PlayerDrivePlay[] = [];
   const state = { down: 1, toGo: 10, yardline: startAt, plays: 0 };
@@ -191,7 +193,11 @@ export function simulatePlayerDrive(
         : 0;
     }
 
-    yards = Math.min(state.yardline, Math.round(yards));
+    // and what the defence in front of him does to it
+    yards = Math.min(
+      state.yardline,
+      Math.round(yards > 0 ? yards * (type === "run" ? against.run : against.pass) : yards),
+    );
     const scored = state.yardline - yards <= 0;
     plays.push({
       down: state.down, toGo: state.toGo, yardline: state.yardline,
