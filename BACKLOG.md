@@ -218,3 +218,26 @@ Worth trying against this: the opponent index is a season aggregate,
 and the one matchup measure that did carry over year to year was a
 defence's extra suppression of the opposing room leader, at .204
 against .100 for its general suppression.
+
+## Measured negative: telling the simulation what game it is
+
+The simulation was given the week it was playing: the opponent, how
+soft that defence had been to the position, the spread, the game
+total, and the wind. All of it bends the play counts the way the
+measurements said it should, and gameContext.test.ts holds it to that.
+
+It buys nothing. Across 3813 player-weeks in 2025, rank went from
+.5257 to .5280 and the average miss from 3.94 to 3.95 points. Within a
+single player, over 222 men with ten or more games, it scores .0127,
+which given how those numbers scatter is not different from zero.
+
+That is the second approach to find nothing there. The weekly ridge,
+with its own opponent index, implied total, recent form and snap
+share, scores -.023 within a player. Two models with different
+information and different shapes both say the same thing: which of a
+man's own afternoons will be the big one is not in the schedule, the
+betting line, or how the defence has played.
+
+What is left untried is information from the day itself rather than
+the week before it: who is inactive, who is carrying a knock into
+Sunday, how the snaps are being shared right now.
