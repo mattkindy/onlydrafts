@@ -44,16 +44,28 @@ const bounded = (value: number, low: number, high: number) =>
  * a big number of yards a catch means for a back and for a receiver are
  * different things.
  */
+/**
+ * Fitted from one season's attributes to the next season's rates, and
+ * applied to a later season's attributes.
+ *
+ * Fitting a season's attributes to its own rates teaches nothing: the
+ * vector contains his catch rate, so a fit learns to copy it, and then
+ * on a man with forty targets it copies noise. Asking a season's
+ * attributes about the season after forces it to lean on the parts that
+ * carry, which is what a man with no history needs.
+ */
 export async function expectedFrom(
-  season: number,
-  shown: Shown[],
+  learnFrom: number,
+  wentOnToDo: Shown[],
+  applyTo: number,
   settings: PriorSettings = PRIOR_DEFAULTS,
 ): Promise<Map<string, Expected>> {
-  const vectors = await buildPlayerVectors(season);
+  const learnVectors = await buildPlayerVectors(learnFrom);
+  const vectors = await buildPlayerVectors(applyTo);
   const byPosition = new Map<string, Shown[]>();
 
-  for (const man of shown) {
-    const described = vectors.get(man.playerId);
+  for (const man of wentOnToDo) {
+    const described = learnVectors.get(man.playerId);
 
     if (!described || man.touches < 25) {
       continue;
@@ -72,7 +84,7 @@ export async function expectedFrom(
       continue;
     }
 
-    const rows = men.map((man) => row(vectors.get(man.playerId)!));
+    const rows = men.map((man) => row(learnVectors.get(man.playerId)!));
     const weightsFor = (of: (man: Shown) => number) =>
       fitRidge(rows, men.map(of), settings.penalty);
     const forCatch = weightsFor((m) => m.catchRate);

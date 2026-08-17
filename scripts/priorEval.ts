@@ -77,9 +77,13 @@ const shownFrom = (tally: Map<string, Own>): Shown[] =>
   });
 
 async function main(): Promise<void> {
+  const older = await seasonOf(2023);
   const before = await seasonOf(2024);
   const now = await seasonOf(2025);
-  const priors = await expectedFrom(2024, shownFrom(before));
+  // what men described in 2023 went on to do in 2024, applied to how
+  // men were described in 2024, to guess 2025
+  const wentOnToDo = shownFrom(before).filter((m) => older.has(m.playerId));
+  const priors = await expectedFrom(2023, wentOnToDo, 2024);
   const position = new Map<string, string>();
 
   for (const s of await loadPlayerStats(2025)) {
