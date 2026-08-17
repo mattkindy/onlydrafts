@@ -372,6 +372,116 @@ async function main(): Promise<void> {
     spearman(withPrice.map((p) => -p.adp!), pricedTruth).toFixed(4).padStart(7),
   );
 
+  /**
+   * The two together, as places rather than numbers, since one is a
+   * draft position and the other a count of plays and they do not share
+   * a scale. How much to lean on each is set by the caller and swept on
+   * an earlier season.
+   */
+  const place = (values: number[]) => {
+    const order = values.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
+    const out = new Array<number>(values.length);
+    order.forEach((o, rank) => { out[o.i] = rank + 1; });
+    return out;
+  };
+
+  const modelPlace = place(withPrice.map((p) => ways[2]![1](p.row)));
+  const roomPlace = place(withPrice.map((p) => -p.adp!));
+
+  console.log("\n  leaning on the model by   together");
+
+  for (const lean of [0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1]) {
+    const mixed = modelPlace.map((m, i) => -(lean * m + (1 - lean) * roomPlace[i]!));
+    console.log(
+      `    ${(100 * lean).toFixed(0)}%`.padEnd(28) +
+      spearman(mixed, pricedTruth).toFixed(4),
+    );
+  }
+
+  /**
+   * The same question asked of each part of the board. Early picks are
+   * men everybody can see, so there is little to add. A sleeper is a
+   * man the room has left late who turns out to matter, and that is
+   * where a model has room to say something.
+   */
+  const LEAN = 0.25;
+  const together = modelPlace.map((m, i) => -(LEAN * m + (1 - LEAN) * roomPlace[i]!));
+  const finished = place(pricedTruth);
+
+  console.log("\nby where the room had him   model   room   together   men");
+
+  for (const [label, keep] of [
+    ["the first three rounds", (i: number) => withPrice[i]!.adp! <= 36],
+    ["rounds four to eight", (i: number) =>
+      withPrice[i]!.adp! > 36 && withPrice[i]!.adp! <= 96],
+    ["after that", (i: number) => withPrice[i]!.adp! > 96],
+  ] as [string, (i: number) => boolean][]) {
+    const at = withPrice.map((_, i) => i).filter(keep);
+
+    if (at.length < 12) {
+      continue;
+    }
+
+    const truthHere = at.map((i) => pricedTruth[i]!);
+    console.log(
+      "  " + label.padEnd(26) +
+      spearman(at.map((i) => -modelPlace[i]!), truthHere).toFixed(3).padStart(6) +
+      spearman(at.map((i) => -roomPlace[i]!), truthHere).toFixed(3).padStart(7) +
+      spearman(at.map((i) => together[i]!), truthHere).toFixed(3).padStart(10) +
+      String(at.length).padStart(6),
+    );
+  }
+
+  // the men the room left late who turned out to matter
+  const sleepers = withPrice.map((_, i) => i)
+    .filter((i) => withPrice[i]!.adp! > 96 && finished[i]! <= 60);
+  console.log(`\n${sleepers.length} men the room left past pick 96 who finished top 60`);
+  console.log("  player                pos   room   model   really");
+
+  for (const i of sleepers.slice(0, 10)) {
+    console.log(
+      "  " + (names.get(withPrice[i]!.row.man.playerId) ?? "").padEnd(21) +
+      withPrice[i]!.row.man.position.padEnd(4) +
+      String(roomPlace[i]!).padStart(5) + String(modelPlace[i]!).padStart(8) +
+      String(finished[i]!).padStart(8),
+    );
+  }
+
+  const better = sleepers.filter((i) => modelPlace[i]! < roomPlace[i]!).length;
+  console.log(
+    `  the model had ${better} of those ${sleepers.length} higher than the room did`,
+  );
+
+  // and where the two disagree most, with what happened
+  const gaps = withPrice.map((p, i) => ({
+    name: names.get(p.row.man.playerId) ?? "",
+    position: p.row.man.position,
+    model: modelPlace[i]!, room: roomPlace[i]!,
+    was: place(pricedTruth)[i]!,
+  })).filter((g) => Math.min(g.model, g.room) <= 100);
+
+  const showGap = (list: typeof gaps, title: string) => {
+    console.log(`\n${title}`);
+    console.log("  player                pos  model  room  really");
+
+    for (const g of list.slice(0, 8)) {
+      console.log(
+        "  " + g.name.padEnd(21) + g.position.padEnd(4) +
+        String(g.model).padStart(5) + String(g.room).padStart(6) +
+        String(g.was).padStart(8),
+      );
+    }
+  };
+
+  showGap(
+    [...gaps].sort((a, b) => (a.model - a.room) - (b.model - b.room)),
+    "the model likes them more than the room does",
+  );
+  showGap(
+    [...gaps].sort((a, b) => (b.model - b.room) - (a.model - a.room)),
+    "the room likes them more than the model does",
+  );
+
   // who the two disagree about most
   const ranked = (values: number[]) => {
     const order = values.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
