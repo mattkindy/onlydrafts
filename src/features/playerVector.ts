@@ -166,15 +166,65 @@ export async function buildPlayerVectors(
   season: number,
   weeks = 18,
 ): Promise<Map<string, PlayerVector>> {
+  const rows = (await loadPlayerStats(season)).filter((r) => r.week <= weeks);
+
+  return vectorsFrom(season, rows);
+}
+
+/**
+ * The same description, from a man's last so many games rather than
+ * from a season.
+ *
+ * A season boundary is nothing to a player. Taking the games behind
+ * him, across seasons where it has to, means the description is right
+ * in week six as well as in August, and a fit from it to what happens
+ * next never sees the games it is being asked about.
+ */
+export async function buildRollingVectors(
+  upTo: { season: number; week: number },
+  games = 17,
+): Promise<Map<string, PlayerVector>> {
+  const seasons = [upTo.season - 2, upTo.season - 1, upTo.season];
+  const every: Awaited<ReturnType<typeof loadPlayerStats>> = [];
+
+  for (const season of seasons) {
+    const rows = await loadPlayerStats(season).catch(() => []);
+
+    for (const row of rows) {
+      if (season < upTo.season || row.week < upTo.week) {
+        every.push({ ...row, season });
+      }
+    }
+  }
+
+  // newest first, then each man's last so many
+  every.sort((a, b) => b.season - a.season || b.week - a.week);
+  const seen = new Map<string, number>();
+  const kept: typeof every = [];
+
+  for (const row of every) {
+    const already = seen.get(row.playerId) ?? 0;
+
+    if (already >= games) {
+      continue;
+    }
+
+    seen.set(row.playerId, already + 1);
+    kept.push(row);
+  }
+
+  return vectorsFrom(upTo.season, kept);
+}
+
+async function vectorsFrom(
+  season: number,
+  rows: Awaited<ReturnType<typeof loadPlayerStats>>,
+): Promise<Map<string, PlayerVector>> {
   const combine = await combineByName();
   const rosters = await loadWeeklyRosters(season);
   const played = new Map<string, Played>();
 
-  for (const row of await loadPlayerStats(season)) {
-    if (row.week > weeks) {
-      continue;
-    }
-
+  for (const row of rows) {
     const own = played.get(row.playerId) ?? {
       games: 0, targets: 0, carries: 0, receptions: 0,
       recYds: 0, rushYds: 0, airYards: 0, afterCatch: 0, scores: 0,
