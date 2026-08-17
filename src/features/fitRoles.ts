@@ -17,6 +17,7 @@ import {
   type FineSituation, type Situation,
 } from "../model/situations.js";
 import type { SituationalRole } from "../model/situationalWeek.js";
+import { BY_POSITION } from "./fitSwing.js";
 
 /** what an average man does, for anything we have little evidence about */
 const LEAGUE = {
@@ -41,6 +42,17 @@ const LEAGUE = {
  */
 export const TRUST_AFTER = { usage: 25, scoring: 2 };
 
+/** what a man swings by before anything is known about him */
+export const LEAGUE_SWING = 1.3;
+
+/**
+ * How much of his own long play rate to believe, in touches.
+ *
+ * The same shrinking as everywhere else: forty touches is enough to
+ * tell a man who breaks them from one who does not, and fewer is not.
+ */
+export const TRUST_SWING_AFTER = 40;
+
 export interface FittedSeason {
   /** the roster of each team, ready to simulate */
   byTeam: Map<string, SituationalRole[]>;
@@ -58,6 +70,7 @@ export async function fitRoles(
   gamesPlayed: Map<string, number>,
   weeks = 17,
   trust?: { usage: number; scoring: number },
+  swings?: Map<string, number>,
 ): Promise<FittedSeason> {
   const rows = parseCsv(
     await readFile(
@@ -138,11 +151,12 @@ export async function fitRoles(
       yardsPerCarry: zeroBySituation(),
       scoresPerCatch: zeroBySituation(),
       scoresPerCarry: zeroBySituation(),
-      // Fitted against how often 100 yard games happen. Below .5 the
-      // number stops moving, which says the upside the model still
-      // has too much of comes from touch counts rather than from the
-      // yards on any one of them.
-      yardSwing: 0.35,
+      // From his own plays where he has enough of them, and from what
+      // his position does where he has not. This took 0.35 for
+      // everybody, and men really swing 1.26 in the middle, so a
+      // simulated play never varied anything like enough.
+      yardSwing: swings?.get(id) ??
+        BY_POSITION[positions.get(id) ?? "WR"] ?? LEAGUE_SWING,
       availability: Math.min(1, (gamesPlayed.get(id) ?? 0) / weeks),
     };
 

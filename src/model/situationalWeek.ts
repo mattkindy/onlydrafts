@@ -115,6 +115,41 @@ export function forGame(team: SituationalTeam, game: GameContext): SituationalTe
   };
 }
 
+/**
+ * A multiplier that swings as far as a man really does without moving
+ * what he averages.
+ *
+ * The plain form, one plus a normal, goes negative and gets clipped,
+ * and the clipping lifts the mean: at a swing of 1.3 a fifth of draws
+ * are cut off and the average comes out 17% high. That is why the
+ * swing had been set to 0.35, which kept the mean honest by making the
+ * play never vary. Dividing by what the clipped draw averages lets the
+ * spread be right and the level stay put.
+ */
+export function keepMean(swing: number, normal: number): number {
+  if (swing <= 0) {
+    return 1;
+  }
+
+  const at = -1 / swing;
+  const above = 1 - normalBelow(at);
+  const bulge = Math.exp(-(at * at) / 2) / Math.sqrt(2 * Math.PI);
+  const lifted = above + swing * bulge;
+
+  return Math.max(0, 1 + normal * swing) / Math.max(0.2, lifted);
+}
+
+/** the share of a normal below here, close enough for this */
+function normalBelow(at: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(at));
+  const density = Math.exp(-(at * at) / 2) / Math.sqrt(2 * Math.PI);
+  const tail = density * t *
+    (0.319381530 + t * (-0.356563782 + t *
+      (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+
+  return at >= 0 ? 1 - tail : tail;
+}
+
 const BLANK: StatLine = {
   passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
   receptions: 0, recYds: 0, recTd: 0, fumblesLost: 0, twoPointConversions: 0,
@@ -167,7 +202,7 @@ export function simulateSituationalWeek(
         const count = Math.round(plays * shares[i]!);
 
         for (let n = 0; n < count; n++) {
-          const swing = () => Math.max(0, 1 + draws.normal() * player.yardSwing);
+          const swing = () => keepMean(player.yardSwing, draws.normal());
 
           if (kind === "target") {
             if (draws.uniform() >= player.catchRate[situation]) {
