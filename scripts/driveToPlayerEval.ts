@@ -20,6 +20,7 @@ import { fitRoles } from "../src/features/fitRoles.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { simulateDrive, type Drive, type DriveEnd } from "../src/model/drive.js";
 import { attributeDrives } from "../src/model/attribution.js";
+import { linesFrom, simulatePlayerDrive } from "../src/model/playerDrive.js";
 import { simulateSituationalWeek, forGame } from "../src/model/situationalWeek.js";
 import type { Draws } from "../src/model/playerWeek.js";
 import type { SituationalRole } from "../src/model/situationalWeek.js";
@@ -176,6 +177,10 @@ async function onePass(seed: number, report: boolean) {
 
   const fromDrives = new Map<string, number[]>();
   const fromSituations = new Map<string, number[]>();
+  const fromPlayers = new Map<string, number[]>();
+  const playerEndings = new Map<string, number>();
+  const playerLengths: number[] = [];
+  const playerPoints: number[] = [];
 
   for (const [team, roster] of byTeam) {
     const plays = playsByTeam.get(team);
@@ -195,6 +200,30 @@ async function onePass(seed: number, report: boolean) {
         fromDrives.set(line.playerId, weeks);
       }
 
+      // the same game, with the players making the plays rather than
+      // being handed yards the drive already chose
+      const available = roster.map((p) => draws.uniform() < p.availability);
+      const walked = Array.from({ length: DRIVES_A_GAME }, () =>
+        simulatePlayerDrive(
+          Math.max(35, Math.min(99, Math.round(75 + draws.normal() * 13))),
+          roster, available, rules, draws,
+        ));
+      let points = 0;
+
+      for (const drive of walked) {
+        playerEndings.set(drive.ending, (playerEndings.get(drive.ending) ?? 0) + 1);
+        playerLengths.push(drive.plays.length);
+        points += drive.ending === "touchdown" ? 7 : drive.ending === "fieldGoal" ? 3 : 0;
+      }
+
+      playerPoints.push(points);
+
+      for (const line of linesFrom(walked, roster, available, quarterback)) {
+        const weeks = fromPlayers.get(line.playerId) ?? [];
+        weeks.push(fantasyPoints(line, RULES));
+        fromPlayers.set(line.playerId, weeks);
+      }
+
       const week = simulateSituationalWeek(
         forGame({ plays }, { favouredBy: 0, total: 45, wind: 0, opponent: 1 }),
         roster, draws,
@@ -208,18 +237,43 @@ async function onePass(seed: number, report: boolean) {
     }
   }
 
-  const rows: { real: number; drive: number; situation: number }[] = [];
+  if (report) {
+    const seen = playerLengths.length;
+    console.log("\ndrives made of players    simulated   really");
+    console.log(
+      "  plays a drive           " + middle(playerLengths).toFixed(1).padStart(8) +
+      "      5.9",
+    );
+    console.log(
+      "  three or fewer          " +
+      (100 * playerLengths.filter((n) => n <= 3).length / seen).toFixed(1)
+        .padStart(7) + "%    33.9%",
+    );
+    console.log(
+      "  ends in a touchdown     " +
+      (100 * (playerEndings.get("touchdown") ?? 0) / seen).toFixed(1)
+        .padStart(7) + "%    23.6%",
+    );
+    console.log(
+      "  points a team           " + middle(playerPoints).toFixed(1).padStart(8) +
+      "     23.0",
+    );
+  }
+
+  const rows: { real: number; drive: number; situation: number; players: number }[] = [];
 
   for (const [playerId, weeks] of actual) {
     const drive = fromDrives.get(playerId);
     const situation = fromSituations.get(playerId);
+    const players = fromPlayers.get(playerId);
 
-    if (!drive || !situation || weeks.length < 8) {
+    if (!drive || !situation || !players || weeks.length < 8) {
       continue;
     }
 
     rows.push({
-      real: middle(weeks), drive: middle(drive), situation: middle(situation),
+      real: middle(weeks), drive: middle(drive),
+      situation: middle(situation), players: middle(players),
     });
   }
 
@@ -244,6 +298,7 @@ async function main(): Promise<void> {
   for (const [label, of] of [
     ["walked drives", (r: { drive: number }) => r.drive],
     ["situational week", (r: { situation: number }) => r.situation],
+    ["players making plays", (r: { players: number }) => r.players],
   ] as [string, (r: any) => number][]) {
     const errors = runs.map((run) => rmse(run.map(of), run.map((r) => r.real)));
     const ranks = runs.map((run) => spearman(run.map(of), run.map((r) => r.real)));
@@ -258,7 +313,8 @@ async function main(): Promise<void> {
   console.log(
     "\n  they really average " + middleOf(rows.map((r) => r.real)).toFixed(2) +
     " a game, walked drives say " + middleOf(rows.map((r) => r.drive)).toFixed(2) +
-    " and the situational week " + middleOf(rows.map((r) => r.situation)).toFixed(2),
+    ", the situational week " + middleOf(rows.map((r) => r.situation)).toFixed(2) +
+    " and players making plays " + middleOf(rows.map((r) => r.players)).toFixed(2),
   );
 }
 

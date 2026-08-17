@@ -192,6 +192,25 @@ async function main(): Promise<void> {
     chancesFrom(d.startYard, rulesFor(d.offense, d.defense), rng),
   );
 
+  // The same team fitted on the season being scored. It cannot be used
+  // to predict anything, since it has already seen the answer, but it
+  // says how much of what a team is the rules could ever pick up, and
+  // how much of the gap is that they were fitted on who used to play.
+  const nowRows = await loadDrivePlays([SCORE_ON]);
+  const ranNow = new Map<string, Record<string, string>[]>();
+
+  for (const row of nowRows) {
+    const offence = row["offense"] ?? "";
+    if (offence) ranNow.set(offence, [...(ranNow.get(offence) ?? []), row]);
+  }
+
+  const nowRules = new Map(
+    [...ranNow].map(([team, own]) => [team, rulesFrom(own, league)]),
+  );
+  const oracleSaid = test.map((d) =>
+    chancesFrom(d.startYard, nowRules.get(d.offense) ?? league, rng),
+  );
+
   console.log("picking out which drive ends in a touchdown");
   console.log("  model                        brier      how often it ranks right");
   for (const [label, guess] of [
@@ -199,6 +218,7 @@ async function main(): Promise<void> {
     ["where it started", leagueSaid.map((s) => s.touchdown)],
     ["and who has the ball", said.map((s) => s.touchdown)],
     ["and who they are playing", matchupSaid.map((s) => s.touchdown)],
+    ["the team as it turned out", oracleSaid.map((s) => s.touchdown)],
   ] as [string, number[]][]) {
     console.log(
       "  " + label.padEnd(28) + brier(guess, scoredTouchdown).toFixed(4).padStart(7) +
@@ -214,6 +234,7 @@ async function main(): Promise<void> {
     ["where it started", leagueSaid.map((s) => s.points)],
     ["and who has the ball", said.map((s) => s.points)],
     ["and who they are playing", matchupSaid.map((s) => s.points)],
+    ["the team as it turned out", oracleSaid.map((s) => s.points)],
   ] as [string, number[]][]) {
     console.log(
       "  " + label.padEnd(28) + rmse(guess, actualPoints).toFixed(3).padStart(7) +
@@ -222,14 +243,15 @@ async function main(): Promise<void> {
   }
 
   // ---- games ----
-  const perGame = new Map<string, { said: number; matchup: number; real: number }>();
+  const perGame = new Map<string, { said: number; matchup: number; oracle: number; real: number }>();
 
   for (let i = 0; i < test.length; i++) {
     const drive = test[i]!;
     const key = `${drive.week}|${drive.offense}`;
-    const tally = perGame.get(key) ?? { said: 0, matchup: 0, real: 0 };
+    const tally = perGame.get(key) ?? { said: 0, matchup: 0, oracle: 0, real: 0 };
     tally.said += said[i]!.points;
     tally.matchup += matchupSaid[i]!.points;
+    tally.oracle += oracleSaid[i]!.points;
     tally.real += drive.points;
     perGame.set(key, tally);
   }
@@ -268,6 +290,7 @@ async function main(): Promise<void> {
     ["with the defence too", games.map((g) => g.matchup)],
     ["pulled toward the average", shrunk(games.map((g) => g.matchup), truth)],
     ["the betting line", games.map((g) => g.vegas!)],
+    ["the team as it turned out", games.map((g) => g.oracle)],
   ] as [string, number[]][]) {
     console.log(
       "  " + label.padEnd(28) + rmse(guess, truth).toFixed(2).padStart(7) +

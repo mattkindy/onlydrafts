@@ -20,6 +20,23 @@ const distanceBand = (toGo: number) =>
 export interface FittedDrives extends DriveRules {
   /** what came out of the file, for anyone checking the fit */
   plays: number;
+  /**
+   * A pass that was caught, on its own. The ordinary pass pool has the
+   * incompletions in it, a third of the plays at nought yards, so
+   * anything that decides the catch for itself has to draw from this
+   * one instead or it drops the ball twice.
+   */
+  caughtYards: (down: number, toGo: number, uniform: () => number) => number;
+  /** what an average touch gains, for scaling a player against */
+  means: { carry: number; caught: number };
+  /**
+   * How often a throw ends with the passer on the floor, and how much
+   * it costs. Anything that decides the catch for itself skips the
+   * ordinary pass pool, and these go with it, or a drive can never lose
+   * ground through the air.
+   */
+  sackRate: number;
+  sackYards: (uniform: () => number) => number;
 }
 
 type Row = Record<string, string>;
@@ -112,6 +129,31 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
   }
 
   const ENOUGH = 40;
+  const caught = new Map<string, number[]>();
+
+  for (const row of scrimmage) {
+    if (row["playType"] !== "pass") {
+      continue;
+    }
+
+    const gained = Number(row["yards"]);
+
+    if (gained <= 0) {
+      continue;
+    }
+
+    const key = `${Number(row["down"])}|${distanceBand(Number(row["togo"]))}`;
+    caught.set(key, [...(caught.get(key) ?? []), gained]);
+  }
+
+  const everyCatch = [...caught.values()].flat();
+  const passes = scrimmage.filter((r) => r["playType"] === "pass");
+  const sacks = passes
+    .map((r) => Number(r["yards"])).filter((gained) => gained < 0);
+  const everyCarry = scrimmage
+    .filter((r) => r["playType"] === "run").map((r) => Number(r["yards"]));
+  const average = (values: number[]) =>
+    values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
 
   return {
     plays: scrimmage.length,
@@ -148,6 +190,38 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
       const wider = gains.get(`${type}|1|${band}`) ?? pool;
       return wider.length === 0 ? 4 : wider[Math.floor(uniform() * wider.length)]!;
     },
+    caughtYards: (down, toGo, uniform) => {
+      const pool = caught.get(`${down}|${distanceBand(toGo)}`) ?? [];
+
+      if (pool.length >= ENOUGH) {
+        return pool[Math.floor(uniform() * pool.length)]!;
+      }
+
+      if (fallback) {
+        return fallback.caughtYards(down, toGo, uniform);
+      }
+
+      return everyCatch.length
+        ? everyCatch[Math.floor(uniform() * everyCatch.length)]!
+        : 11;
+    },
+    means: {
+      carry: everyCarry.length >= ENOUGH || !fallback
+        ? average(everyCarry)
+        : fallback.means.carry,
+      caught: everyCatch.length >= ENOUGH || !fallback
+        ? average(everyCatch)
+        : fallback.means.caught,
+    },
+    sackRate: passes.length >= ENOUGH || !fallback
+      ? sacks.length / Math.max(1, passes.length)
+      : fallback.sackRate,
+    sackYards: (uniform) =>
+      sacks.length < ENOUGH && fallback
+        ? fallback.sackYards(uniform)
+        : sacks.length === 0
+          ? -7
+          : sacks[Math.floor(uniform() * sacks.length)]!,
     turnoverRate: (type) => {
       const seen = type === "run" ? givenAway.runs : givenAway.passes;
 
