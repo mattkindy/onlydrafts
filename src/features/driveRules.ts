@@ -22,14 +22,28 @@ export interface FittedDrives extends DriveRules {
   plays: number;
 }
 
-export async function fitDriveRules(seasons: number[]): Promise<FittedDrives> {
-  const rows = parseCsv(
+type Row = Record<string, string>;
+
+/** the curated plays for these seasons, read once */
+export async function loadDrivePlays(seasons: number[]): Promise<Row[]> {
+  return parseCsv(
     await readFile(
       join(import.meta.dirname, "..", "..", "data", "curated", "plays.csv"),
       "utf8",
     ),
   ).filter((r) => seasons.includes(Number(r["season"])));
+}
 
+/**
+ * Rules from a set of plays, falling back to another set wherever this
+ * one is too thin to believe.
+ *
+ * One team over three seasons has about three thousand plays, which cut
+ * by kind, down and distance leaves under a hundred in most cells and
+ * a handful in some. Where that happens the league's plays are used
+ * instead, so a team is its own only where it has shown enough to be.
+ */
+export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
   const scrimmage = rows.filter((r) => r["playType"] === "run" || r["playType"] === "pass");
   // A defensive penalty that moves the chains keeps a drive alive
   // without the offence doing anything, and leaving it out is part of
@@ -97,32 +111,65 @@ export async function fitDriveRules(seasons: number[]): Promise<FittedDrives> {
     kicks.set(bucket, tally);
   }
 
+  const ENOUGH = 40;
+
   return {
     plays: scrimmage.length,
-    penaltyFirstDown: flagged.length / Math.max(1, scrimmage.length + flagged.length),
+    penaltyFirstDown: flagged.length >= ENOUGH || !fallback
+      ? flagged.length / Math.max(1, scrimmage.length + flagged.length)
+      : fallback.penaltyFirstDown,
     penaltyYards: (uniform) =>
-      penaltyYards.length === 0
-        ? 10
-        : penaltyYards[Math.floor(uniform() * penaltyYards.length)]!,
+      penaltyYards.length < ENOUGH && fallback
+        ? fallback.penaltyYards(uniform)
+        : penaltyYards.length === 0
+          ? 10
+          : penaltyYards[Math.floor(uniform() * penaltyYards.length)]!,
     runRate: (down, toGo) => {
       const tally = runs.get(`${down}|${distanceBand(toGo)}`);
-      return tally && tally.plays >= 50 ? tally.runs / tally.plays : 0.45;
+
+      if (tally && tally.plays >= 50) {
+        return tally.runs / tally.plays;
+      }
+
+      return fallback ? fallback.runRate(down, toGo) : 0.45;
     },
     yardsFor: (type, down, toGo, uniform) => {
       const band = distanceBand(toGo);
-      const pool = gains.get(`${type}|${down}|${band}`) ?? gains.get(`${type}|1|${band}`) ?? [];
-      return pool.length === 0
-        ? 4
-        : pool[Math.floor(uniform() * pool.length)]!;
+      const pool = gains.get(`${type}|${down}|${band}`) ?? [];
+
+      if (pool.length >= ENOUGH) {
+        return pool[Math.floor(uniform() * pool.length)]!;
+      }
+
+      if (fallback) {
+        return fallback.yardsFor(type, down, toGo, uniform);
+      }
+
+      const wider = gains.get(`${type}|1|${band}`) ?? pool;
+      return wider.length === 0 ? 4 : wider[Math.floor(uniform() * wider.length)]!;
     },
-    turnoverRate: (type) =>
-      type === "run"
+    turnoverRate: (type) => {
+      const seen = type === "run" ? givenAway.runs : givenAway.passes;
+
+      if (seen < 200 && fallback) {
+        return fallback.turnoverRate(type);
+      }
+
+      return type === "run"
         ? givenAway.run / Math.max(1, givenAway.runs)
-        : givenAway.pass / Math.max(1, givenAway.passes),
+        : givenAway.pass / Math.max(1, givenAway.passes);
+    },
     goesForIt: (yardline, toGo, uniform) => {
       const key = `${Math.min(9, Math.floor(yardline / 10))}|${distanceBand(toGo)}`;
       const tally = goes.get(key);
-      return uniform() < (tally && tally.all >= 30 ? tally.went / tally.all : 0.12);
+
+      if (tally && tally.all >= 30) {
+        return uniform() < tally.went / tally.all;
+      }
+
+      return fallback
+        ? fallback.goesForIt(yardline, toGo, uniform)
+        : uniform() < 0.12;
     },
     // the league's kicking, by how long the attempt is
     kickSucceeds: (yardline) => {
@@ -140,5 +187,40 @@ export async function fitDriveRules(seasons: number[]): Promise<FittedDrives> {
       return Math.max(20, Math.min(99, 100 - Math.max(1, yardline - net)));
     },
     maxPlays: 20,
+  };
+}
+
+export async function fitDriveRules(seasons: number[]): Promise<FittedDrives> {
+  return rulesFrom(await loadDrivePlays(seasons));
+}
+
+/**
+ * One set of rules per offence, each falling back to the league's.
+ *
+ * Without this the walk has no idea who is playing, so every team plays
+ * the same game and predicting one in particular is out of reach.
+ */
+export async function fitTeamDriveRules(
+  seasons: number[],
+): Promise<{ league: FittedDrives; byTeam: Map<string, FittedDrives> }> {
+  const rows = await loadDrivePlays(seasons);
+  const league = rulesFrom(rows);
+  const byOffence = new Map<string, Row[]>();
+
+  for (const row of rows) {
+    const team = row["offense"] ?? "";
+
+    if (!team) {
+      continue;
+    }
+
+    byOffence.set(team, [...(byOffence.get(team) ?? []), row]);
+  }
+
+  return {
+    league,
+    byTeam: new Map(
+      [...byOffence].map(([team, own]) => [team, rulesFrom(own, league)]),
+    ),
   };
 }
