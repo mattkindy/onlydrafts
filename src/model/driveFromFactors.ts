@@ -19,6 +19,8 @@ export interface EndingRules {
   kickSucceeds: (yardline: number) => number;
   puntLands: (yardline: number, uniform: () => number) => number;
   turnoverRate: (call: Call) => number;
+  /** and the same off the state, where it is known */
+  turnoverAt?: (state: PlayState, call: Call) => number;
   /**
    * A defensive penalty that hands over a first down. It happens on 16%
    * of drives and is the one way a drive carries on without the offence
@@ -42,9 +44,14 @@ export interface EndingRules {
 export interface ClockRules {
   /** how often a drive is the last of a half */
   isLast: number;
+  /** how many snaps one of those gets, drawn */
+  lastLength: (uniform: () => number) => number;
 }
 
-export const CLOCK_DEFAULTS: ClockRules = { isLast: 0.071 };
+export const CLOCK_DEFAULTS: ClockRules = {
+  isLast: 0.071,
+  lastLength: (uniform) => 1 + Math.floor(uniform() * 12),
+};
 
 export interface FactorPlay {
   state: PlayState;
@@ -75,7 +82,7 @@ export function walkDrive(
   // how many snaps there is time for, when this is the last drive of a
   // half. Drawn once, so a drive either has a clock on it or does not.
   const budget = uniform() < clock.isLast
-    ? 1 + Math.floor(uniform() * 12)
+    ? clock.lastLength(uniform)
     : Infinity;
 
   for (;;) {
@@ -109,7 +116,11 @@ export function walkDrive(
 
     const call: Call = uniform() < factors.runs(state) ? "run" : "pass";
 
-    if (uniform() < rules.turnoverRate(call)) {
+    const givenAway = rules.turnoverAt
+      ? rules.turnoverAt(state, call)
+      : rules.turnoverRate(call);
+
+    if (uniform() < givenAway) {
       return { plays, ending: "turnover" };
     }
 

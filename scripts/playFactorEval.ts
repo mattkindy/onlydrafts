@@ -18,6 +18,7 @@ import type { Call, PlayState } from "../src/model/playFactors.js";
 import { walkDrive } from "../src/model/driveFromFactors.js";
 import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
+import { fitEndings } from "../src/features/fitEndings.js";
 import { fitTurnovers, type TurnoverRow } from "../src/features/fitTurnovers.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { normalDraw } from "../src/sim/normal.js";
@@ -212,16 +213,21 @@ async function composed(
       choice: ["run", "pass"].includes(r["playType"] ?? "") ? "go" : "other",
     }));
   const starts = await loadDriveStarts([2022, 2023, 2024]);
+  // the kick and the clock, off the plays rather than written down
+  const kicking = await fitEndings([2021, 2022, 2023, 2024]);
   const turnovers = fitTurnovers(parseCsv(await readFile(
-    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
-  )).filter((r) =>
-    Number(r["season"]) < SCORE_ON && ["run", "pass"].includes(r["playType"] ?? ""),
-  ).map((r) => ({
-    down: Number(r["down"]), toGo: Number(r["togo"]),
-    yardline: Number(r["yardline"]), margin: Number(r["margin"]) || 0,
-    secondsLeft: Number(r["seconds"]) || 1800,
-    call: r["playType"] as "run" | "pass", lost: Number(r["turnover"]) || 0,
-  })) as TurnoverRow[]);
+    join(import.meta.dirname, "..", "data", "curated", "endings.csv"), "utf8",
+  )).filter((r) => r["kind"] === "play" && Number(r["season"]) < SCORE_ON)
+    .map((r) => ({
+      down: Number(r["down"]), toGo: Number(r["togo"]),
+      yardline: Number(r["yardline"]), margin: 0, secondsLeft: 1800,
+      call: r["call"] as "run" | "pass", lost: Number(r["made"]) || 0,
+    })) as TurnoverRow[]);
+  const withEndings = {
+    ...rules, kickSucceeds: kicking.kickSucceeds,
+    turnoverAt: (state: PlayState, call: Call) => turnovers.rate(state, call),
+  };
+  const clock = { isLast: kicking.isLast, lastLength: kicking.lastLength };
   // Over several starts, because changing anything shifts the whole
   // stream of draws and a single run moves by more than most of the
   // things being measured.
@@ -238,7 +244,7 @@ async function composed(
     for (let game = 0; game < games; game++) {
       for (let i = 0; i < 11; i++) {
         const startAt = startFrom(starts, rng);
-        const drive = walkDrive(startAt, factors, rules, fourth, [""], rng);
+        const drive = walkDrive(startAt, factors, withEndings, fourth, [""], rng, clock);
         endings.set(drive.ending, (endings.get(drive.ending) ?? 0) + 1);
         lengths.push(drive.plays.length);
         points += drive.ending === "touchdown" ? 7
@@ -311,7 +317,7 @@ async function composed(
   for (let game = 0; game < games; game++) {
     for (let i = 0; i < 11; i++) {
       const startAt = startFrom(starts, rng);
-      const drive = walkDrive(startAt, factors, rules, fourth, [""], rng);
+      const drive = walkDrive(startAt, factors, withEndings, fourth, [""], rng, clock);
       // a snap taken inside the twenty, and nothing else. Counting
       // every scoring drive as having got there makes the conversion
       // rate come out right whatever the model does.

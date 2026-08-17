@@ -21,6 +21,7 @@ import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js"
 import { walkDrive, CLOCK_DEFAULTS } from "../src/model/driveFromFactors.js";
 import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
+import { fitEndings } from "../src/features/fitEndings.js";
 import { fitTurnovers, type TurnoverRow } from "../src/features/fitTurnovers.js";
 import { divideAmong } from "../src/features/shareCompetition.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
@@ -65,6 +66,10 @@ async function main(): Promise<void> {
   const rules = await fitDriveRules([2021, 2022, 2023, 2024]);
   const fourth = await fourthDowns(SCORE_ON);
   const starts = await loadDriveStarts([2022, 2023, 2024]);
+  // the kick and the clock, off the plays rather than written down
+  const endings = await fitEndings([2021, 2022, 2023, 2024]);
+  const withEndings = { ...rules, kickSucceeds: endings.kickSucceeds };
+  const clock = { isLast: endings.isLast, lastLength: endings.lastLength };
   const turnovers = fitTurnovers(parseCsv(await readFile(
     join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
   )).filter((r) =>
@@ -168,7 +173,7 @@ async function main(): Promise<void> {
         for (let i = 0; i < DRIVES_A_GAME; i++) {
           const startAt = startFrom(starts, rng);
           const drive = walkDrive(
-            startAt, factors, rules, fourth, among, rng, CLOCK_DEFAULTS,
+            startAt, factors, withEndings, fourth, among, rng, clock,
           );
 
           for (const play of drive.plays) {
