@@ -77,6 +77,55 @@ async function main(): Promise<void> {
   const league = await fitDriveRules(LEARN_FROM);
   const { byTeam: teamRules } = await fitTeamDriveRules(LEARN_FROM);
 
+  /**
+   * A team built from the men on it, rather than from what the team
+   * did last year.
+   *
+   * Each player keeps his own description from last season, wherever he
+   * played it, and the shares of whoever is on this roster now are
+   * scaled up to fill the offence between them. A man who left takes
+   * his work with him and a man who arrived brings his.
+   */
+  const nowOn = new Map<string, string>();
+
+  for (const s of await loadPlayerStats(SCORE_ON)) {
+    if (s.week <= 18) nowOn.set(s.playerId, s.teamId);
+  }
+
+  const fromPlayers = new Map<string, typeof byTeam extends Map<string, infer V> ? V : never>();
+
+  for (const roster of byTeam.values()) {
+    for (const player of roster) {
+      const team = nowOn.get(player.playerId);
+
+      if (!team) {
+        continue;
+      }
+
+      fromPlayers.set(team, [...(fromPlayers.get(team) ?? []), player]);
+    }
+  }
+
+  // the offence has one ball, so whoever is here shares it out between
+  // them however much of it they used to take
+  for (const [team, roster] of fromPlayers) {
+    for (const kind of ["targetShare", "carryShare"] as const) {
+      for (const spot of ["openField", "thirdAndShort", "thirdAndLong", "nearGoal"] as const) {
+        const total = roster.reduce((a, p) => a + p[kind][spot], 0);
+
+        if (total <= 0.05) {
+          continue;
+        }
+
+        for (const player of roster) {
+          player[kind][spot] = player[kind][spot] / total;
+        }
+      }
+    }
+
+    fromPlayers.set(team, roster);
+  }
+
   const rng = seededRng(17);
   const draws: Draws = { uniform: rng, normal: () => normalDraw(rng) };
 
@@ -130,6 +179,7 @@ async function main(): Promise<void> {
   const onNow = teams.map((team) => say(team, true, rolesNow));
   const onLoose = teams.map((team) => say(team, true, rolesLoose));
   const onLastLoose = teams.map((team) => say(team, true, lastLoose));
+  const onRoster = teams.map((team) => say(team, true, fromPlayers));
 
   console.log(`${teams.length} offences in ${SCORE_ON}\n`);
   console.log("points a game            spread across teams   ranks them");
@@ -144,6 +194,11 @@ async function main(): Promise<void> {
     "  walked, their own      " + spreadOf(onOwn).toFixed(2).padStart(10) +
     spearman(onOwn, truth).toFixed(3).padStart(14),
   );
+  console.log(
+    "  built from who is on   " + spreadOf(onRoster).toFixed(2).padStart(10) +
+    spearman(onRoster, truth).toFixed(3).padStart(14),
+  );
+  console.log("  the team now");
   console.log(
     "  last season, pulled    " + spreadOf(onLastLoose).toFixed(2).padStart(10) +
     spearman(onLastLoose, truth).toFixed(3).padStart(14),
