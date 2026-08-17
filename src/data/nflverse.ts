@@ -40,6 +40,28 @@ export interface PlayerWeekStats {
   targets: number;
   carries: number;
   airYards: number;
+  /** yards he made after catching it, which is a different skill */
+  yardsAfterCatch: number;
+  /** his cut of what his own offence threw, already worked out upstream */
+  targetShare: number;
+  airYardsShare: number;
+  /** what a quarterback did, so one can be described at all */
+  passing: {
+    attempts: number;
+    completions: number;
+    airYards: number;
+    sacksTaken: number;
+  };
+  /** and what a defender did, which was being thrown away entirely */
+  defence: {
+    tackles: number;
+    tacklesForLoss: number;
+    sacks: number;
+    quarterbackHits: number;
+    interceptions: number;
+    passesDefended: number;
+    forcedFumbles: number;
+  };
 }
 
 function toNumber(value: string | undefined): number | undefined {
@@ -141,6 +163,29 @@ export async function loadSnapCounts(season: number): Promise<SnapCountWeek[]> {
     }));
 }
 
+/**
+ * A week with nothing in it, for tests and for anywhere a row has to
+ * be built by hand. Spreading this means adding a column to
+ * PlayerWeekStats does not break every fixture that mentions one.
+ */
+export function blankPlayerWeek(): Omit<PlayerWeekStats,
+  "playerId" | "playerName" | "position" | "season" | "week" | "teamId"> {
+  return {
+    statLine: emptyStatLine(),
+    targets: 0,
+    carries: 0,
+    airYards: 0,
+    yardsAfterCatch: 0,
+    targetShare: 0,
+    airYardsShare: 0,
+    passing: { attempts: 0, completions: 0, airYards: 0, sacksTaken: 0 },
+    defence: {
+      tackles: 0, tacklesForLoss: 0, sacks: 0, quarterbackHits: 0,
+      interceptions: 0, passesDefended: 0, forcedFumbles: 0,
+    },
+  };
+}
+
 export async function loadPlayerStats(
   season: number,
 ): Promise<PlayerWeekStats[]> {
@@ -185,6 +230,24 @@ export async function loadPlayerStats(
         targets: n("targets"),
         carries: n("carries"),
         airYards: n("receiving_air_yards"),
+        yardsAfterCatch: n("receiving_yards_after_catch"),
+        targetShare: n("target_share"),
+        airYardsShare: n("air_yards_share"),
+        passing: {
+          attempts: n("attempts"),
+          completions: n("completions"),
+          airYards: n("passing_air_yards"),
+          sacksTaken: n("sacks_suffered"),
+        },
+        defence: {
+          tackles: n("def_tackles_solo") + n("def_tackle_assists") * 0.5,
+          tacklesForLoss: n("def_tackles_for_loss"),
+          sacks: n("def_sacks"),
+          quarterbackHits: n("def_qb_hits"),
+          interceptions: n("def_interceptions"),
+          passesDefended: n("def_pass_defended"),
+          forcedFumbles: n("def_fumbles_forced"),
+        },
       };
     });
 }

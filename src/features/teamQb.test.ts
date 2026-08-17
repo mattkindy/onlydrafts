@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlayerWeekStats } from "../data/nflverse.js";
+import { blankPlayerWeek, type PlayerWeekStats } from "../data/nflverse.js";
 import type { RosterAppearance } from "../graph/build.js";
 import { emptyStatLine } from "../scoring/fantasyPoints.js";
 import type { SeasonSummary } from "./seasonSummary.js";
@@ -13,6 +13,7 @@ function qbWeek(playerId: string, teamId: string, week: number): PlayerWeekStats
     season: 2023,
     week,
     teamId,
+    ...blankPlayerWeek(),
     statLine: emptyStatLine(),
     targets: 0,
     carries: 0,

@@ -21,12 +21,18 @@ import { normalizeName } from "../data/names.js";
 
 /** what each slot in the vector means, in order */
 export const ATTRIBUTES = [
+  // what he is
   "height", "weight", "age", "experience",
   "draftPick", "wentUndrafted",
-  "speed", "explosion", "agility",
-  "targetsPerGame", "carriesPerGame", "catchRate",
-  "yardsPerCatch", "yardsPerCarry", "airYardsPerTarget",
-  "scoresPerGame",
+  "speed", "explosion", "agility", "power", "burst",
+  // what his offence asks of him
+  "targetShare", "airYardsShare", "carriesPerGame",
+  "catchRate", "yardsPerCatch", "airYardsPerTarget", "yardsAfterCatch",
+  "yardsPerCarry", "scoresPerGame",
+  // and what he does when he throws it
+  "passAttempts", "completionRate", "yardsPerAttempt", "passDepth", "sackRate",
+  // or when the other team has it
+  "tackles", "sacks", "quarterbackHits", "ballsDefended", "takeaways",
 ] as const;
 
 export type Attribute = (typeof ATTRIBUTES)[number];
@@ -43,20 +49,28 @@ export interface PlayerVector {
 const MIDDLE: Record<Attribute, number> = {
   height: 73, weight: 210, age: 26, experience: 4,
   draftPick: 130, wentUndrafted: 0,
-  speed: 4.55, explosion: 34, agility: 7.0,
-  targetsPerGame: 3, carriesPerGame: 3, catchRate: 0.65,
-  yardsPerCatch: 11, yardsPerCarry: 4.3, airYardsPerTarget: 8,
-  scoresPerGame: 0.25,
+  speed: 4.55, explosion: 34, agility: 7.0, power: 20, burst: 118,
+  targetShare: 0.12, airYardsShare: 0.12, carriesPerGame: 3,
+  catchRate: 0.65, yardsPerCatch: 11, airYardsPerTarget: 8, yardsAfterCatch: 4.4,
+  yardsPerCarry: 4.3, scoresPerGame: 0.25,
+  passAttempts: 32, completionRate: 0.65, yardsPerAttempt: 7.1,
+  passDepth: 7.6, sackRate: 0.065,
+  tackles: 3.5, sacks: 0.25, quarterbackHits: 0.35,
+  ballsDefended: 0.35, takeaways: 0.06,
 };
 
 /** and roughly how far apart players are on it */
 const SPREAD: Record<Attribute, number> = {
   height: 3, weight: 30, age: 3, experience: 3,
   draftPick: 90, wentUndrafted: 1,
-  speed: 0.15, explosion: 4, agility: 0.3,
-  targetsPerGame: 2.5, carriesPerGame: 4, catchRate: 0.12,
-  yardsPerCatch: 3, yardsPerCarry: 1.1, airYardsPerTarget: 3.5,
-  scoresPerGame: 0.2,
+  speed: 0.15, explosion: 4, agility: 0.3, power: 6, burst: 8,
+  targetShare: 0.07, airYardsShare: 0.08, carriesPerGame: 4,
+  catchRate: 0.12, yardsPerCatch: 3, airYardsPerTarget: 3.5, yardsAfterCatch: 2.2,
+  yardsPerCarry: 1.1, scoresPerGame: 0.2,
+  passAttempts: 10, completionRate: 0.06, yardsPerAttempt: 1.1,
+  passDepth: 1.2, sackRate: 0.025,
+  tackles: 2.2, sacks: 0.3, quarterbackHits: 0.4,
+  ballsDefended: 0.35, takeaways: 0.07,
 };
 
 const ageIn = (birth: string, season: number) => {
@@ -82,7 +96,11 @@ async function combineByName(): Promise<Map<string, Record<string, string>>> {
 
 interface Played {
   games: number; targets: number; carries: number; receptions: number;
-  recYds: number; rushYds: number; airYards: number; scores: number;
+  recYds: number; rushYds: number; airYards: number; afterCatch: number;
+  scores: number; targetShare: number; airYardsShare: number;
+  attempts: number; completions: number; passYds: number;
+  passAir: number; sacked: number;
+  tackles: number; sacks: number; hits: number; defended: number; takeaways: number;
 }
 
 export async function buildPlayerVectors(
@@ -100,16 +118,32 @@ export async function buildPlayerVectors(
 
     const own = played.get(row.playerId) ?? {
       games: 0, targets: 0, carries: 0, receptions: 0,
-      recYds: 0, rushYds: 0, airYards: 0, scores: 0,
+      recYds: 0, rushYds: 0, airYards: 0, afterCatch: 0, scores: 0,
+      targetShare: 0, airYardsShare: 0,
+      attempts: 0, completions: 0, passYds: 0, passAir: 0, sacked: 0,
+      tackles: 0, sacks: 0, hits: 0, defended: 0, takeaways: 0,
     };
     own.games++;
     own.targets += row.targets;
     own.carries += row.carries;
     own.airYards += row.airYards;
+    own.afterCatch += row.yardsAfterCatch;
+    own.targetShare += row.targetShare;
+    own.airYardsShare += row.airYardsShare;
     own.receptions += row.statLine.receptions ?? 0;
     own.recYds += row.statLine.recYds ?? 0;
     own.rushYds += row.statLine.rushYds ?? 0;
     own.scores += (row.statLine.recTd ?? 0) + (row.statLine.rushTd ?? 0);
+    own.attempts += row.passing.attempts;
+    own.completions += row.passing.completions;
+    own.passYds += row.statLine.passYds ?? 0;
+    own.passAir += row.passing.airYards;
+    own.sacked += row.passing.sacksTaken;
+    own.tackles += row.defence.tackles;
+    own.sacks += row.defence.sacks;
+    own.hits += row.defence.quarterbackHits;
+    own.defended += row.defence.passesDefended;
+    own.takeaways += row.defence.interceptions + row.defence.forcedFumbles;
     played.set(row.playerId, own);
   }
 
@@ -140,13 +174,31 @@ export async function buildPlayerVectors(
       speed: Number(measured?.["forty"]) || undefined,
       explosion: Number(measured?.["vertical"]) || undefined,
       agility: Number(measured?.["cone"]) || undefined,
-      targetsPerGame: per((s) => s.targets),
+      power: Number(measured?.["bench"]) || undefined,
+      burst: Number(measured?.["broad_jump"]) || undefined,
+      targetShare: per((s) => s.targetShare),
+      airYardsShare: per((s) => s.airYardsShare),
       carriesPerGame: per((s) => s.carries),
       catchRate: own && own.targets > 0 ? own.receptions / own.targets : undefined,
       yardsPerCatch: own && own.receptions > 0 ? own.recYds / own.receptions : undefined,
-      yardsPerCarry: own && own.carries > 0 ? own.rushYds / own.carries : undefined,
       airYardsPerTarget: own && own.targets > 0 ? own.airYards / own.targets : undefined,
+      yardsAfterCatch:
+        own && own.receptions > 0 ? own.afterCatch / own.receptions : undefined,
+      yardsPerCarry: own && own.carries > 0 ? own.rushYds / own.carries : undefined,
       scoresPerGame: per((s) => s.scores),
+      passAttempts: own && own.attempts > 0 ? per((s) => s.attempts) : undefined,
+      completionRate:
+        own && own.attempts > 0 ? own.completions / own.attempts : undefined,
+      yardsPerAttempt:
+        own && own.attempts > 0 ? own.passYds / own.attempts : undefined,
+      passDepth: own && own.attempts > 0 ? own.passAir / own.attempts : undefined,
+      sackRate:
+        own && own.attempts > 0 ? own.sacked / (own.attempts + own.sacked) : undefined,
+      tackles: own && own.tackles > 0 ? per((s) => s.tackles) : undefined,
+      sacks: own && own.tackles > 0 ? per((s) => s.sacks) : undefined,
+      quarterbackHits: own && own.tackles > 0 ? per((s) => s.hits) : undefined,
+      ballsDefended: own && own.tackles > 0 ? per((s) => s.defended) : undefined,
+      takeaways: own && own.tackles > 0 ? per((s) => s.takeaways) : undefined,
     };
 
     const values = new Float64Array(ATTRIBUTES.length);

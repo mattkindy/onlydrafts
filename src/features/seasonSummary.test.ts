@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlayerWeekStats } from "../data/nflverse.js";
+import { blankPlayerWeek, type PlayerWeekStats } from "../data/nflverse.js";
 import { emptyStatLine, presets } from "../scoring/fantasyPoints.js";
 import { summarizeSeason } from "./seasonSummary.js";
 
@@ -12,10 +12,8 @@ function week(
     position: "WR",
     season: 2024,
     teamId: "DET",
+    ...blankPlayerWeek(),
     statLine: { ...emptyStatLine(), receptions: 5, recYds: 50 },
-    targets: 0,
-    carries: 0,
-    airYards: 0,
     ...overrides,
   };
 }

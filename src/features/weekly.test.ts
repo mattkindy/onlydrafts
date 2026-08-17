@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { GameRow, PlayerWeekStats, SnapCountWeek } from "../data/nflverse.js";
+import {
+  blankPlayerWeek,
+  type GameRow, type PlayerWeekStats, type SnapCountWeek,
+} from "../data/nflverse.js";
 import { emptyStatLine, presets } from "../scoring/fantasyPoints.js";
 import { buildWeeklyExamples } from "./weekly.js";
 
@@ -11,6 +14,7 @@ function statWeek(week: number, recYds: number): PlayerWeekStats {
     season: 2023,
     week,
     teamId: "DET",
+    ...blankPlayerWeek(),
     statLine: { ...emptyStatLine(), recYds },
     targets: 0,
     carries: 0,
