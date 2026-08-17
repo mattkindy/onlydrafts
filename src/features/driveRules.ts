@@ -26,7 +26,9 @@ export interface FittedDrives extends DriveRules {
    * anything that decides the catch for itself has to draw from this
    * one instead or it drops the ball twice.
    */
-  caughtYards: (down: number, toGo: number, uniform: () => number) => number;
+  caughtYards: (
+    down: number, toGo: number, yardline: number, uniform: () => number,
+  ) => number;
   /** what an average touch gains, for scaling a player against */
   means: { carry: number; caught: number };
   /**
@@ -70,7 +72,9 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
 
   // how often it is a run, per down and distance band
   const runs = new Map<string, { runs: number; plays: number }>();
-  // and what each kind of play gained, kept whole
+  // What each kind of play gained, kept whole and kept where it
+  // happened. Bucketing the field threw away that the two yard line
+  // scores six times as often as the eighteen.
   const gains = new Map<string, number[]>();
   let givenAway = { run: 0, pass: 0, runs: 0, passes: 0 };
 
@@ -88,7 +92,7 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
     // Down matters as much as distance: on third down a team throws to
     // the sticks and on first it takes what is there, so the same
     // distance gains differently.
-    const gainKey = `${type}|${down}|${band}`;
+    const gainKey = `${type}|${down}|${band}|${Math.min(99, Number(row["yardline"]))}`;
     gains.set(gainKey, [...(gains.get(gainKey) ?? []), Number(row["yards"])]);
 
     if (type === "run") {
@@ -129,6 +133,50 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
   }
 
   const ENOUGH = 40;
+
+  /**
+   * The plays run from around here, widening out from the spot until
+   * there are enough of them to draw from.
+   *
+   * A window that grows only as far as it must keeps the goal line
+   * apart from the eighteen, where there is plenty of history, and
+   * still finds something to draw from on fourth and nineteen at the
+   * forty seven, where there is not.
+   */
+  const found = new Map<string, number[]>();
+  const nearby = (pools: Map<string, number[]>, at: string, yardline: number) => {
+    const seen = found.get(`${at}|${yardline}`);
+
+    if (seen) {
+      return seen;
+    }
+
+    let pool: number[] = [];
+
+    for (const reach of [1, 2, 4, 7, 12, 20, 35, 60, 99]) {
+      pool = [];
+
+      for (let yard = yardline - reach; yard <= yardline + reach; yard++) {
+        if (yard < 1 || yard > 99) {
+          continue;
+        }
+
+        const here = pools.get(`${at}|${yard}`);
+
+        if (here) {
+          pool = pool.concat(here);
+        }
+      }
+
+      if (pool.length >= ENOUGH) {
+        break;
+      }
+    }
+
+    found.set(`${at}|${yardline}`, pool);
+    return pool;
+  };
+
   const caught = new Map<string, number[]>();
 
   for (const row of scrimmage) {
@@ -175,30 +223,26 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
 
       return fallback ? fallback.runRate(down, toGo) : 0.45;
     },
-    yardsFor: (type, down, toGo, uniform) => {
-      const band = distanceBand(toGo);
-      const pool = gains.get(`${type}|${down}|${band}`) ?? [];
+    yardsFor: (type, down, toGo, yardline, uniform) => {
+      const pool = nearby(
+        gains, `${type}|${down}|${distanceBand(toGo)}`, yardline,
+      );
 
-      if (pool.length >= ENOUGH) {
+      if (pool.length) {
         return pool[Math.floor(uniform() * pool.length)]!;
       }
 
-      if (fallback) {
-        return fallback.yardsFor(type, down, toGo, uniform);
-      }
-
-      const wider = gains.get(`${type}|1|${band}`) ?? pool;
-      return wider.length === 0 ? 4 : wider[Math.floor(uniform() * wider.length)]!;
+      return fallback ? fallback.yardsFor(type, down, toGo, yardline, uniform) : 4;
     },
-    caughtYards: (down, toGo, uniform) => {
-      const pool = caught.get(`${down}|${distanceBand(toGo)}`) ?? [];
+    caughtYards: (down, toGo, yardline, uniform) => {
+      const pool = nearby(caught, `${down}|${distanceBand(toGo)}`, yardline);
 
-      if (pool.length >= ENOUGH) {
+      if (pool.length) {
         return pool[Math.floor(uniform() * pool.length)]!;
       }
 
       if (fallback) {
-        return fallback.caughtYards(down, toGo, uniform);
+        return fallback.caughtYards(down, toGo, yardline, uniform);
       }
 
       return everyCatch.length

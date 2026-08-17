@@ -171,10 +171,12 @@ export function simulatePlayerDrive(
     let caught = type === "run";
 
     if (!player) {
-      yards = rules.yardsFor(type, state.down, state.toGo, draws.uniform);
+      yards = rules.yardsFor(
+        type, state.down, state.toGo, state.yardline, draws.uniform,
+      );
     } else if (type === "run") {
       yards = stretch(
-        rules.yardsFor(type, state.down, state.toGo, draws.uniform),
+        rules.yardsFor(type, state.down, state.toGo, state.yardline, draws.uniform),
         player.yardsPerCarry[situation] || rules.means.carry,
         rules.means.carry,
       );
@@ -186,7 +188,7 @@ export function simulatePlayerDrive(
         (player.catchRate[situation] || LEAGUE_CATCH_RATE);
       yards = caught
         ? stretch(
-            rules.caughtYards(state.down, state.toGo, draws.uniform),
+            rules.caughtYards(state.down, state.toGo, state.yardline, draws.uniform),
             player.yardsPerCatch[situation] || rules.means.caught,
             rules.means.caught,
           )

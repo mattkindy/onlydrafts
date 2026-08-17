@@ -43,8 +43,16 @@ export interface Drive {
 export interface DriveRules {
   /** how often it is a run, by down and by yards to go */
   runRate: (down: number, toGo: number) => number;
-  /** one play's yards, drawn from what such a play gains */
-  yardsFor: (type: PlayType, down: number, toGo: number, uniform: () => number) => number;
+  /**
+   * One play's yards, drawn from what such a play gains. Field position
+   * belongs here: a carry from the two gains 0.7 yards on average and
+   * one from midfield gains 4.5, and drawing both from one pool is why
+   * the walk had to clamp its own answers.
+   */
+  yardsFor: (
+    type: PlayType, down: number, toGo: number, yardline: number,
+    uniform: () => number,
+  ) => number;
   /** how often a play is given away */
   turnoverRate: (type: PlayType) => number;
   /** whether to go for it rather than punt or kick */
@@ -129,7 +137,9 @@ export function simulateDrive(
       return { plays, ending: "turnover", handsOverAt: 100 - state.yardline };
     }
 
-    const drawn = rules.yardsFor(type, state.down, state.toGo, uniform);
+    const drawn = rules.yardsFor(
+      type, state.down, state.toGo, state.yardline, uniform,
+    );
     const yards = Math.min(
       state.yardline,
       // a loss is a loss whatever the drive is doing

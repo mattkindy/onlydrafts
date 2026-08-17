@@ -11,7 +11,7 @@ const POOL = [-3, -1, 0, 0, 1, 2, 2, 3, 3, 4, 4, 5, 6, 7, 9, 12, 18, 30];
 
 const rules = (over: Partial<FittedDrives> = {}): FittedDrives => ({
   runRate: () => 1,
-  yardsFor: (_type, _down, _toGo, uniform) =>
+  yardsFor: (_type, _down, _toGo, _yardline, uniform) =>
     POOL[Math.floor(uniform() * POOL.length)]!,
   turnoverRate: () => 0,
   goesForIt: () => false,
@@ -21,7 +21,7 @@ const rules = (over: Partial<FittedDrives> = {}): FittedDrives => ({
   penaltyYards: () => 10,
   maxPlays: 20,
   plays: 0,
-  caughtYards: (_down, _toGo, uniform) =>
+  caughtYards: (_down, _toGo, _yardline, uniform) =>
     POOL.filter((n) => n > 0)[
       Math.floor(uniform() * POOL.filter((n) => n > 0).length)
     ]!,
