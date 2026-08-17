@@ -4,7 +4,7 @@
 
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { loadGames } from "../src/data/nflverse.js";
+import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
 import {
   weeklyExamplesForSeason,
   weeklyProspectiveForWeek,
@@ -31,6 +31,10 @@ import { buildPreseasonWorld } from "../src/features/preseason.js";
 import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
 import { seededRng } from "../src/sim/rng.js";
 import { loadAdp } from "../src/data/adp.js";
+import { fitRoles } from "../src/features/fitRoles.js";
+import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
+import { normalDraw } from "../src/sim/normal.js";
+import { scoring } from "../src/scoring/active.js";
 
 const DOCS = join(import.meta.dirname, "..", "docs", "weekly");
 
@@ -241,6 +245,69 @@ async function main(): Promise<void> {
   const replacement = new Map(Object.entries(levels));
 
   const adp = await loadAdp(season).catch(() => new Map());
+
+  /**
+   * The shape of a player's week, from the situational simulation.
+   *
+   * The pooled residual model gives every player at a scoring level
+   * the same band, so two receivers projected the same got the same
+   * range whatever their roles. The simulation gives each his own,
+   * calibrated at 79.6% inside an 80% band against 80.1% for the
+   * pooled one and on a band 14% narrower.
+   *
+   * It orders players worse than the season model, .72 against .788,
+   * so the level stays where it is and only the shape is taken. Each
+   * man's simulated spread is scaled to sit around his projection.
+   */
+  const shapeOf = new Map<string, { q1: number; q3: number; low: number; high: number }>();
+
+  try {
+    const positions = new Map<string, string>();
+    const gamesLast = new Map<string, number>();
+
+    for (const row of await loadPlayerStats(season - 1)) {
+      positions.set(row.playerId, row.position);
+      gamesLast.set(row.playerId, (gamesLast.get(row.playerId) ?? 0) + 1);
+    }
+
+    const { byTeam, playsByTeam } = await fitRoles(season - 1, positions, gamesLast);
+    const rng = seededRng(29);
+    const draws = { uniform: rng, normal: () => normalDraw(rng) };
+
+    for (const [team, roster] of byTeam) {
+      // No role drift here. The card says middle half of games, which
+      // is a statement about his weeks given the role he has, not
+      // about our doubt over what that role will be. Pooling across
+      // role draws made a receiver's middle half twice as wide as any
+      // receiver's really is.
+      const simulated = simulateSeason(
+        { plays: playsByTeam.get(team)! }, roster,
+        { ...DEFAULT_SEASON, runs: 400, roleDrift: 0, scoring: scoring() }, draws,
+      );
+
+      for (const player of simulated) {
+        const middle = player.weekly.median;
+
+        if (middle <= 0) {
+          continue;
+        }
+
+        // as a share of his own median, so it can be hung on the
+        // season model's projection rather than the simulation's
+        shapeOf.set(player.playerId, {
+          q1: player.weekly.p25 / middle,
+          q3: player.weekly.p75 / middle,
+          low: player.weekly.p10 / middle,
+          high: player.weekly.p90 / middle,
+        });
+      }
+    }
+
+    console.log(`shapes from the simulation for ${shapeOf.size} players`);
+  } catch (error) {
+    console.warn("no simulated shapes, falling back to the pooled bands: " + error);
+  }
+
   console.log("simulating seasons for the board...");
   const sims = simulatePlayerSeasons(
     world.players,
@@ -259,11 +326,16 @@ async function main(): Promise<void> {
     .map((p) => {
       const f = factors(p.playerId, p.projectedPpg);
       const sim = simById.get(p.playerId);
-      const perGame = (q: number) =>
+      const shape = shapeOf.get(p.playerId);
+      const pooled = (q: number) =>
+        Math.max(0, outcomeQuantile(world.residuals, p.position, p.projectedPpg, q));
+      // his own shape when the simulation knows him, the pooled band
+      // when it does not
+      const perGame = (q: number, from?: number) =>
         Number(
-          Math.max(
-            0,
-            outcomeQuantile(world.residuals, p.position, p.projectedPpg, q),
+          (shape && from !== undefined
+            ? Math.max(0, p.projectedPpg * from)
+            : pooled(q)
           ).toFixed(1),
         );
       return {
@@ -281,12 +353,13 @@ async function main(): Promise<void> {
         bye: world.byeWeek.get(p.teamId) ?? null,
         game: {
           ev: Number(p.projectedPpg.toFixed(1)),
-          q1: perGame(0.25),
-          mid: perGame(0.5),
-          q3: perGame(0.75),
-          low: perGame(0.1),
-          high: perGame(0.9),
+          q1: perGame(0.25, shape?.q1),
+          mid: Number(p.projectedPpg.toFixed(1)),
+          q3: perGame(0.75, shape?.q3),
+          low: perGame(0.1, shape?.low),
+          high: perGame(0.9, shape?.high),
         },
+        shaped: Boolean(shape),
         sim: sim
           ? {
               ev: Math.round(sim.meanTotal),
