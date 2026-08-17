@@ -22,6 +22,11 @@ export interface RosterAppearance {
   draftOverall?: number;
   /** ISO date string when the source has it */
   birthDate?: string;
+  /** what he is, which the descriptions in playerVector are built from */
+  heightInches?: number;
+  weightPounds?: number;
+  yearsExperience?: number;
+  depthPosition?: string;
 }
 
 /** nflverse roster labels collapsed into the graph's position groups. */

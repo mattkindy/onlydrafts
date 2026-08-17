@@ -111,6 +111,10 @@ export async function loadWeeklyRosters(
       draftYear: toNumber(row["entry_year"]),
       draftOverall: toNumber(row["draft_number"]),
       birthDate: row["birth_date"] || undefined,
+      heightInches: toNumber(row["height"]),
+      weightPounds: toNumber(row["weight"]),
+      yearsExperience: toNumber(row["years_exp"]),
+      depthPosition: row["depth_chart_position"] || undefined,
     }));
 }
 

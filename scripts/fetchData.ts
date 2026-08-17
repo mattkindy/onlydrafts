@@ -39,6 +39,22 @@ function participationUrl(season: number): string {
   return `https://github.com/nflverse/nflverse-data/releases/download/pbp_participation/pbp_participation_${season}.csv`;
 }
 
+/**
+ * What a player is, rather than what he did. Height, weight, where he
+ * was drafted and what he ran at the combine do not change from week
+ * to week, so they come as one file each rather than per season.
+ */
+const PLAYER_FILES: [url: string, name: string][] = [
+  [
+    "https://github.com/nflverse/nflverse-data/releases/download/combine/combine.csv",
+    "combine.csv",
+  ],
+  [
+    "https://github.com/nflverse/nflverse-data/releases/download/draft_picks/draft_picks.csv",
+    "draft_picks.csv",
+  ],
+];
+
 function parseSeasons(arg: string | undefined): number[] {
   if (!arg) {
     return [2021, 2022, 2023, 2024, 2025];
@@ -84,6 +100,18 @@ async function download(url: string, fileName: string): Promise<void> {
   console.log(`saved ${fileName}`);
 }
 
+// nflverse renames and retires releases, so one missing file should
+// not stop the rest of the download
+const missing: string[] = [];
+
+async function tryDownload(url: string, fileName: string): Promise<void> {
+  try {
+    await download(url, fileName);
+  } catch (error) {
+    missing.push(`${fileName}: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
 async function main(): Promise<void> {
   const seasonsFlag = process.argv.indexOf("--seasons");
   const seasons = parseSeasons(
@@ -93,17 +121,9 @@ async function main(): Promise<void> {
   await mkdir(RAW_DIR, { recursive: true });
   await download(GAMES_URL, "games.csv");
 
-  // nflverse renames and retires releases, so one missing file should
-  // not stop the rest of the download
-  const missing: string[] = [];
-
-  const tryDownload = async (url: string, fileName: string) => {
-    try {
-      await download(url, fileName);
-    } catch (error) {
-      missing.push(`${fileName}: ${error instanceof Error ? error.message : error}`);
-    }
-  };
+  for (const [url, name] of PLAYER_FILES) {
+    await tryDownload(url, name);
+  }
 
   for (const season of seasons) {
     await tryDownload(playerStatsUrl(season), `player_stats_${season}.csv`);
