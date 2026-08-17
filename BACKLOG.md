@@ -267,3 +267,28 @@ rate really does travel with a coordinator at .697. Personnel repeats
 at only .19 to .23 under the same man, and out of sample that is too
 little and too unstable to pay, especially when half the league
 changes play-callers between seasons.
+
+## Third-down throwing depth belongs to the quarterback
+
+I wrote that teams throw to the sticks on third down, which was wrong
+twice. Over 159 team-seasons of third and four or more, away from the
+goal line, the median offence throws half a yard short of the marker,
+and the range runs from 4.28 short to 5.64 past. Between 35% and 75%
+of a team's third-down throws land short of it.
+
+It is a strong habit and it follows the passer, not the play-caller:
+
+  kept the passer         .434 past the marker, .394 short of it
+  changed the passer      .253                  .140
+  kept the play-caller    .293                  .241
+  changed the play-caller .423                  .438
+
+Keeping the quarterback preserves it. Keeping the coordinator does
+nothing for it, and the row for changing him reads higher, which is
+what happens when the split has no signal in it.
+
+That matters for the drive walk, which conditions a play's yards on
+the down and the distance and has no idea who is throwing. It also
+matters for who gets the ball: a passer who checks down feeds backs
+and tight ends, and one who throws past the marker feeds the men
+outside. See scripts/thirdDownDepthEval.ts.
