@@ -11,41 +11,12 @@ import { writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { RAW_DIR } from "../src/data/nflverse.js";
+import { splitLine } from "../src/data/csv.js";
 
 const SEASONS = [2022, 2023, 2024, 2025];
 const OUT = join(RAW_DIR, "..", "curated", "pressureMatchups.csv");
 
 /** splits one csv line, honoring double quotes */
-function splitLine(line: string): string[] {
-  const cells: string[] = [];
-  let cell = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!;
-
-    if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') {
-        cell += '"';
-        i++;
-      } else if (ch === '"') {
-        inQuotes = false;
-      } else {
-        cell += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ",") {
-      cells.push(cell);
-      cell = "";
-    } else {
-      cell += ch;
-    }
-  }
-
-  cells.push(cell);
-  return cells;
-}
 
 interface Tally {
   dropbacks: number;

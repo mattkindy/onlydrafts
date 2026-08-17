@@ -6,42 +6,13 @@ import { createReadStream, writeFileSync, existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { RAW_DIR } from "../src/data/nflverse.js";
+import { splitLine } from "../src/data/csv.js";
 
 const SEASONS = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 const OUT = join(RAW_DIR, "..", "curated", "teamTendencies.csv");
 const OUT_WEEKS = join(RAW_DIR, "..", "curated", "teamTendencyWeeks.csv");
 
 /** splits one csv line, honoring double quotes; embedded newlines lose the row */
-function splitLine(line: string): string[] {
-  const cells: string[] = [];
-  let cell = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!;
-
-    if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') {
-        cell += '"';
-        i++;
-      } else if (ch === '"') {
-        inQuotes = false;
-      } else {
-        cell += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ",") {
-      cells.push(cell);
-      cell = "";
-    } else {
-      cell += ch;
-    }
-  }
-
-  cells.push(cell);
-  return cells;
-}
 
 interface Tendency {
   plays: number;

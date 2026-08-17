@@ -92,3 +92,42 @@ function tokenize(text: string): string[][] {
   rows.push(row);
   return rows;
 }
+
+/**
+ * One line of a CSV into its cells. Reading a big file a line at a time
+ * needs this on its own, separate from parseCsv, since a whole
+ * play-by-play season does not want to be held in memory at once.
+ *
+ * A quoted field containing a newline would be split across two lines
+ * and come out wrong here, which no nflverse release does.
+ */
+export function splitLine(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        cell += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ",") {
+      cells.push(cell);
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+
+  cells.push(cell);
+  return cells;
+}

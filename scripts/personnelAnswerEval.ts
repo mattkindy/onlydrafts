@@ -14,19 +14,7 @@ import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { RAW_DIR } from "../src/data/nflverse.js";
-
-function splitLine(line: string): string[] {
-  const cells: string[] = []; let cell = ""; let q = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!;
-    if (q) { if (ch === '"' && line[i+1] === '"') { cell += '"'; i++; }
-      else if (ch === '"') q = false; else cell += ch; }
-    else if (ch === '"') q = true;
-    else if (ch === ",") { cells.push(cell); cell = ""; }
-    else cell += ch;
-  }
-  cells.push(cell); return cells;
-}
+import { splitLine } from "../src/data/csv.js";
 
 /**
  * The field lists actual positions rather than a shorthand, so count

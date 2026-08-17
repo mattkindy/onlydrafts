@@ -103,6 +103,9 @@
   .range { position: relative; height: 14px; background: var(--chip);
     border-radius: 999px; margin-top: .7rem; }
   /* the middle half, which is where he lands most weeks */
+  .range .tail { position: absolute; top: 4px; bottom: 4px;
+    background: color-mix(in srgb, var(--go) 22%, var(--chip)); border-radius: 2px; }
+  .card.mine .range .tail { background: color-mix(in srgb, var(--go) 34%, var(--chip)); }
   .range .span { position: absolute; top: 0; bottom: 0;
     background: color-mix(in srgb, var(--go) 55%, var(--chip));
     border-radius: 999px; }
@@ -614,7 +617,7 @@ function ownerOf(key) {
  */
 /** one scale for every season card on screen, so the bars compare */
 function seasonScale(players) {
-  return Math.max(12, ...players.map((p) => (p.game ? p.game.q3 : p.ppg) ?? 0)) * 1.05;
+  return Math.max(12, ...players.map((p) => (p.game ? p.game.high : p.ppg) ?? 0)) * 1.02;
 }
 
 function card(p, opts) {
@@ -623,12 +626,22 @@ function card(p, opts) {
     (opts.kept ? " kept" : "") + (opts.gone ? " gone" : "");
   const r = opts.range;
   const span = (v) => Math.max(0, Math.min(100, (v / opts.max) * 100));
+  // The middle half sits inside the tenth to ninetieth, because the
+  // middle half on its own reads as a steady player: it covers 0.72 of
+  // a man's own average where his weeks actually run 1.27 across.
+  const tail = r && r.tailLow !== undefined
+    ? '<span class="tail" style="left:' + span(r.tailLow) +
+      "%; width:" + (span(r.tailHigh) - span(r.tailLow)) + '%"></span>'
+    : "";
   const range = r
-    ? '<div class="range"><span class="span" style="left:' + span(r.low) +
+    ? '<div class="range">' + tail + '<span class="span" style="left:' + span(r.low) +
       "%; width:" + (span(r.high) - span(r.low)) + '%"></span>' +
       '<span class="mark" style="left:' + span(r.mid) + '%"></span></div>' +
-      '<div class="rangenum"><span>' + r.low.toFixed(1) + "</span><span>" +
-      r.label + "</span><span>" + r.high.toFixed(1) + "</span></div>"
+      '<div class="rangenum"><span>' +
+      (r.tailLow !== undefined ? r.tailLow.toFixed(1) : r.low.toFixed(1)) +
+      "</span><span>" + r.label + "</span><span>" +
+      (r.tailHigh !== undefined ? r.tailHigh.toFixed(1) : r.high.toFixed(1)) +
+      "</span></div>"
     : "";
   const aside = opts.aside
     ? '<span class="val">' + opts.aside.label + " " + opts.aside.value.toFixed(1) + "</span>"
@@ -677,7 +690,11 @@ function seasonCard(p, opts = {}) {
     value: g ? g.ev : p.ppg,
     unit: "a game",
     range: g
-      ? { low: g.q1, mid: g.ev, high: g.q3, label: "middle half of games" }
+      ? {
+          low: g.q1, mid: g.ev, high: g.q3,
+          tailLow: g.low, tailHigh: g.high,
+          label: "middle half, and a bad to a good week",
+        }
       : undefined,
     note: [
       p.adp

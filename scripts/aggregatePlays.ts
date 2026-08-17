@@ -18,29 +18,10 @@ import { writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { RAW_DIR } from "../src/data/nflverse.js";
+import { splitLine } from "../src/data/csv.js";
 
 const SEASONS = [2022, 2023, 2024, 2025];
 const OUT = join(RAW_DIR, "..", "curated", "plays.csv");
-
-function splitLine(line: string): string[] {
-  const cells: string[] = [];
-  let cell = "";
-  let quoted = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]!;
-    if (quoted) {
-      if (ch === '"' && line[i + 1] === '"') { cell += '"'; i++; }
-      else if (ch === '"') quoted = false;
-      else cell += ch;
-    } else if (ch === '"') quoted = true;
-    else if (ch === ",") { cells.push(cell); cell = ""; }
-    else cell += ch;
-  }
-
-  cells.push(cell);
-  return cells;
-}
 
 const offenceGroup = (text: string): string => {
   const backs = Number(/(\d+) RB/.exec(text)?.[1] ?? NaN);
