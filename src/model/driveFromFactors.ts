@@ -19,6 +19,14 @@ export interface EndingRules {
   kickSucceeds: (yardline: number) => number;
   puntLands: (yardline: number, uniform: () => number) => number;
   turnoverRate: (call: Call) => number;
+  /**
+   * A defensive penalty that hands over a first down. It happens on 16%
+   * of drives and is the one way a drive carries on without the offence
+   * doing anything. The older walks have it and this one was written
+   * without it, which is most of why it does not finish.
+   */
+  penaltyFirstDown: number;
+  penaltyYards: (uniform: () => number) => number;
   maxPlays: number;
 }
 
@@ -87,6 +95,16 @@ export function walkDrive(
       if (choice === "punt") {
         return { plays, ending: "punt" };
       }
+    }
+
+    if (uniform() < rules.penaltyFirstDown) {
+      state.yardline = Math.max(1, state.yardline - rules.penaltyYards(uniform));
+      state.down = 1;
+      state.toGo = Math.min(10, state.yardline);
+      plays.push({
+        state: { ...state }, call: "pass", player: "", yards: 0, scored: false,
+      });
+      continue;
     }
 
     const call: Call = uniform() < factors.runs(state) ? "run" : "pass";
