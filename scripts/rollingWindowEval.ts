@@ -45,7 +45,8 @@ async function main(): Promise<void> {
   }
 
   const at = ATTRIBUTES.indexOf("yardsPerCatch");
-  console.log("guessing what a man does from a week on, by how he is described\n");
+  console.log("guessing what a man does from a week on, by how he is described");
+  console.log("as rank correlation against what he went on to make a touch, more is better\n");
   console.log("  from week   a season of him   his last 17 games   men");
 
   for (const week of [1, 6, 10, 14]) {

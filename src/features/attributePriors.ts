@@ -31,8 +31,8 @@ export interface PriorSettings {
 
 export const PRIOR_DEFAULTS: PriorSettings = { penalty: 3 };
 
-/** how far to lean on the attributes for each rate, against the league */
-export type Leanings = Record<keyof Expected, number>;
+/** how much of the attribute guess to use, the rest being the league */
+export type Weights = Record<keyof Expected, number>;
 
 /** what a man actually did, to fit the guesses against */
 export interface Shown extends Expected {
@@ -45,21 +45,21 @@ export const RATES: (keyof Expected)[] = [
 ];
 
 /**
- * How far to lean on the attributes for each rate, worked out rather
- * than chosen.
+ * How much of the attribute guess to use for each rate, worked out
+ * rather than chosen.
  *
  * Saying attributes for these and the league for those is picking
  * whichever won on the men being scored. One rule instead: guess from
- * the attributes, pull toward the league, and fit how far by trying it
- * on a season nobody is being judged on. A guess with nothing behind it
- * takes a lean of nothing by itself.
+ * the attributes, mix with the league, and fit the proportions by
+ * trying them on a season nobody is being judged on. A guess with
+ * nothing behind it takes a share of nothing by itself.
  */
-export function fitLeanings(
+export function fitWeights(
   guessed: Map<string, Expected>,
   wentOnToDo: Shown[],
   league: Expected,
-): Leanings {
-  const out = {} as Leanings;
+): Weights {
+  const out = {} as Weights;
 
   for (const rate of RATES) {
     const men = wentOnToDo.filter((m) => guessed.has(m.playerId));
@@ -87,15 +87,15 @@ export function fitLeanings(
   return out;
 }
 
-/** the two put together, at whatever lean was fitted */
-export const leaning = (
-  guessed: Expected | undefined, league: Expected, leanings: Leanings,
+/** the two mixed, in whatever proportion was fitted */
+export const blended = (
+  guessed: Expected | undefined, league: Expected, weights: Weights,
 ): Expected => {
   const out = {} as Expected;
 
   for (const rate of RATES) {
     out[rate] = guessed
-      ? leanings[rate] * guessed[rate] + (1 - leanings[rate]) * league[rate]
+      ? weights[rate] * guessed[rate] + (1 - weights[rate]) * league[rate]
       : league[rate];
   }
 

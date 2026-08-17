@@ -63,7 +63,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`${pairs.length} backs with sixty carries in two seasons running\n`);
-  console.log("carried from one season to the next   spearman");
+  console.log("carried from one season to the next, as rank correlation, more is better");
 
   for (const [label, of] of [
     ["his yards a carry", (r: Rush) => r.perCarry],
@@ -124,6 +124,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`\n  backs who changed teams, ${movers.length} of them`);
+  console.log("    which of the two he ends up looking like, as rank correlation");
   console.log("    part              his own before   his new team's backs");
 
   for (const part of ["beforeContact", "afterContact"] as const) {

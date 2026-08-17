@@ -15,7 +15,7 @@ import { parseCsv } from "../src/data/csv.js";
 import { rmse, spearman } from "../src/backtest/metrics.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import {
-  expectedFrom, fitLeanings, leaning, RATES,
+  expectedFrom, fitWeights, blended, RATES,
   type Expected, type Shown,
 } from "../src/features/attributePriors.js";
 import { loadAfterContact } from "../src/data/advancedStats.js";
@@ -109,10 +109,10 @@ async function main(): Promise<void> {
 
   // how far to lean on the attributes for each, fitted on the season
   // before the one being scored so nothing chooses on its own answers
-  const leanings = fitLeanings(priors, wentOnToDo, league);
+  const weights = fitWeights(priors, wentOnToDo, league);
   console.log(
-    "how far the attributes are leaned on, fitted on the season before\n  " +
-      RATES.map((r) => `${r} ${(100 * leanings[r]).toFixed(0)}%`).join(", ") + "\n",
+    "how much of the attribute guess is used, fitted on the season before\n  " +
+      RATES.map((r) => `${r} ${(100 * weights[r]).toFixed(0)}%`).join(", ") + "\n",
   );
 
   // the men the shrinking matters for: little behind them, enough after
@@ -124,7 +124,9 @@ async function main(): Promise<void> {
     `${thin.length} men with under forty touches before and thirty after\n`,
   );
   console.log("guessing what he did, for a man with little behind him");
-  console.log("  rate              league   attributes    leaned    order");
+  console.log("  the first three are how far off, in the rate's own units, so less is better");
+  console.log("  the last is how well it orders the men, so more is better\n");
+  console.log("  rate              league   attributes     mixed    order");
 
   for (const [label, of, low, high] of [
     ["catch rate", (m: Shown) => m.catchRate, 0.3, 0.95],
@@ -144,12 +146,12 @@ async function main(): Promise<void> {
     const truth = at.map(of);
     const fromLeague = at.map(() => of(league as unknown as Shown));
     const fromAttributes = at.map((m) => of(priors.get(m.playerId)! as unknown as Shown));
-    const leaned = at.map((m) =>
-      of(leaning(priors.get(m.playerId), league, leanings) as unknown as Shown));
+    const mixed = at.map((m) =>
+      of(blended(priors.get(m.playerId), league, weights) as unknown as Shown));
     console.log(
       "  " + label.padEnd(18) + rmse(fromLeague, truth).toFixed(3).padStart(6) +
       rmse(fromAttributes, truth).toFixed(3).padStart(14) +
-      rmse(leaned, truth).toFixed(3).padStart(11) +
+      rmse(mixed, truth).toFixed(3).padStart(11) +
       spearman(fromAttributes, truth).toFixed(3).padStart(9),
     );
   }
