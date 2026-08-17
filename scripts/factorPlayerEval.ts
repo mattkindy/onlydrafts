@@ -19,6 +19,8 @@ import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js";
 import { walkDrive, CLOCK_DEFAULTS } from "../src/model/driveFromFactors.js";
+import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
+import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
 import { divideAmong } from "../src/features/shareCompetition.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import type { Call } from "../src/model/playFactors.js";
@@ -30,6 +32,21 @@ const GAMES = 400;
 
 const middle = (values: number[]) =>
   values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
+
+
+/** what sides really did on fourth down, before the season being tested */
+async function fourthDowns(before: number) {
+  const rows = parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+  )).filter((r) => Number(r["season"]) < before && Number(r["down"]) === 4);
+
+  return fitFourthDown(rows.map((r) => ({
+    toGo: Number(r["togo"]), yardline: Number(r["yardline"]),
+    margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,
+    choice: ["run", "pass"].includes(r["playType"] ?? "") ? "go"
+      : r["playType"] === "field_goal" ? "kick" : "punt",
+  })) as FourthRow[]);
+}
 
 async function main(): Promise<void> {
   const rows = parseCsv(await readFile(
@@ -45,6 +62,8 @@ async function main(): Promise<void> {
 
   const learn = rows.filter((r) => r.season < SCORE_ON);
   const rules = await fitDriveRules([2021, 2022, 2023, 2024]);
+  const fourth = await fourthDowns(SCORE_ON);
+  const starts = await loadDriveStarts([2022, 2023, 2024]);
 
   // each team's men, from the season before the one being guessed at
   const roster = new Map<string, Set<string>>();
@@ -136,9 +155,9 @@ async function main(): Promise<void> {
 
       for (let game = 0; game < GAMES; game++) {
         for (let i = 0; i < DRIVES_A_GAME; i++) {
-          const startAt = Math.max(35, Math.min(99, Math.round(75 + normal() * 13)));
+          const startAt = startFrom(starts, rng);
           const drive = walkDrive(
-            startAt, factors, rules, among, rng, CLOCK_DEFAULTS,
+            startAt, factors, rules, fourth, among, rng, CLOCK_DEFAULTS,
           );
 
           for (const play of drive.plays) {

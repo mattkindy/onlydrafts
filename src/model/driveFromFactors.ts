@@ -13,10 +13,9 @@
 
 import type { Call, PlayFactors, PlayState } from "./playFactors.js";
 import type { DriveEnd } from "./drive.js";
-import { KICK_LENGTH } from "./drive.js";
+import type { FourthDown } from "../features/fitFourthDown.js";
 
 export interface EndingRules {
-  goesForIt: (yardline: number, toGo: number, uniform: () => number) => boolean;
   kickSucceeds: (yardline: number) => number;
   puntLands: (yardline: number, uniform: () => number) => number;
   turnoverRate: (call: Call) => number;
@@ -56,6 +55,7 @@ export function walkDrive(
   startAt: number,
   factors: PlayFactors,
   rules: EndingRules,
+  fourth: FourthDown,
   among: string[],
   uniform: () => number,
   clock: ClockRules = CLOCK_DEFAULTS,
@@ -75,14 +75,18 @@ export function walkDrive(
       return { plays, ending: "clock" };
     }
 
-    if (state.down === 4 && !rules.goesForIt(state.yardline, state.toGo, uniform)) {
-      if (KICK_LENGTH(state.yardline) <= 62 && state.yardline <= 40) {
+    if (state.down === 4) {
+      const choice = fourth.choose(state, uniform);
+
+      if (choice === "kick") {
         return uniform() < rules.kickSucceeds(state.yardline)
           ? { plays, ending: "fieldGoal" }
           : { plays, ending: "missedKick" };
       }
 
-      return { plays, ending: "punt" };
+      if (choice === "punt") {
+        return { plays, ending: "punt" };
+      }
     }
 
     const call: Call = uniform() < factors.runs(state) ? "run" : "pass";

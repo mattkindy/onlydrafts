@@ -16,6 +16,8 @@ import { seededRng } from "../src/sim/rng.js";
 import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js";
 import type { Call, PlayState } from "../src/model/playFactors.js";
 import { walkDrive } from "../src/model/driveFromFactors.js";
+import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
+import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { normalDraw } from "../src/sim/normal.js";
 
@@ -40,6 +42,21 @@ async function load(): Promise<{ learn: PlayRow[]; test: PlayRow[] }> {
     learn: rows.filter((r) => r.season < SCORE_ON),
     test: rows.filter((r) => r.season === SCORE_ON),
   };
+}
+
+
+/** what sides really did on fourth down, before the season being tested */
+async function fourthDowns(before: number) {
+  const rows = parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+  )).filter((r) => Number(r["season"]) < before && Number(r["down"]) === 4);
+
+  return fitFourthDown(rows.map((r) => ({
+    toGo: Number(r["togo"]), yardline: Number(r["yardline"]),
+    margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,
+    choice: ["run", "pass"].includes(r["playType"] ?? "") ? "go"
+      : r["playType"] === "field_goal" ? "kick" : "punt",
+  })) as FourthRow[]);
 }
 
 async function main(): Promise<void> {
@@ -171,6 +188,15 @@ async function composed(
   test: PlayRow[],
 ): Promise<void> {
   const rules = await fitDriveRules([2021, 2022, 2023, 2024]);
+  const fourth = await fourthDowns(SCORE_ON);
+  const fourths = parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+  )).filter((r) => Number(r["season"]) === SCORE_ON && Number(r["down"]) === 4)
+    .map((r) => ({
+      toGo: Number(r["togo"]), yardline: Number(r["yardline"]),
+      choice: ["run", "pass"].includes(r["playType"] ?? "") ? "go" : "other",
+    }));
+  const starts = await loadDriveStarts([2022, 2023, 2024]);
   const rng = seededRng(9);
   const normal = () => normalDraw(rng);
   const endings = new Map<string, number>();
@@ -180,8 +206,8 @@ async function composed(
 
   for (let game = 0; game < games; game++) {
     for (let i = 0; i < 11; i++) {
-      const startAt = Math.max(35, Math.min(99, Math.round(75 + normal() * 13)));
-      const drive = walkDrive(startAt, factors, rules, [""], rng);
+      const startAt = startFrom(starts, rng);
+      const drive = walkDrive(startAt, factors, rules, fourth, [""], rng);
       endings.set(drive.ending, (endings.get(drive.ending) ?? 0) + 1);
       lengths.push(drive.plays.length);
       points += drive.ending === "touchdown" ? 7
@@ -241,8 +267,8 @@ async function composed(
 
   for (let game = 0; game < games; game++) {
     for (let i = 0; i < 11; i++) {
-      const startAt = Math.max(35, Math.min(99, Math.round(75 + normal() * 13)));
-      const drive = walkDrive(startAt, factors, rules, [""], rng);
+      const startAt = startFrom(starts, rng);
+      const drive = walkDrive(startAt, factors, rules, fourth, [""], rng);
       // a snap taken inside the twenty, and nothing else. Counting
       // every scoring drive as having got there makes the conversion
       // rate come out right whatever the model does.
@@ -272,6 +298,33 @@ async function composed(
       `\n    ${(100 * (1 - finished / Math.max(1, scoredAll))).toFixed(1)}% of the ` +
       "touchdowns came from outside it, where really 24% do",
   );
+
+  console.log("\n  fourth down, what a side does");
+  console.log("    state                    go   kick   punt   really go");
+
+  for (const [label, toGo, yardline] of [
+    ["and goal at the 2", 2, 2],
+    ["and goal at the 5", 5, 5],
+    ["and three at the 8", 3, 8],
+    ["and one at the 15", 1, 15],
+    ["and five at the 30", 5, 30],
+    ["and one at the 55", 1, 55],
+  ] as [string, number, number][]) {
+    const state = { down: 4, toGo, yardline, margin: 0, secondsLeft: 1800 };
+    const odds = fourth.chances(state);
+    const near = fourths.filter((r) =>
+      Math.abs(r.toGo - toGo) <= 1 && Math.abs(r.yardline - yardline) <= 3);
+    console.log(
+      "    " + label.padEnd(24) +
+      `${(100 * odds.go).toFixed(0)}%`.padStart(5) +
+      `${(100 * odds.kick).toFixed(0)}%`.padStart(7) +
+      `${(100 * odds.punt).toFixed(0)}%`.padStart(7) +
+      (near.length >= 20
+        ? `${(100 * near.filter((r) => r.choice === "go").length / near.length).toFixed(0)}%`
+          .padStart(11)
+        : "          -"),
+    );
+  }
 
   /**
    * Whether a set of downs gets converted, which is what turns a drive
