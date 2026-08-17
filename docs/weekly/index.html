@@ -872,16 +872,49 @@ async function renderKeepers() {
 
   const costs = keeperCosts();
   const onRoster = active.myRoster.map((r) => boardLookup(r.key)).filter(Boolean);
-  // what you already have at each spot, so the alternative is judged
-  // as it would be worth to you rather than to a team with nobody
-  const have = {};
 
-  for (const p of onRoster) {
-    have[p.position] = (have[p.position] ?? 0) + 1;
+  /**
+   * Who you go into the draft with, and what that makes the rest worth.
+   *
+   * This is circular: what you keep decides what you need, what you
+   * need decides what the pick would otherwise buy, and that decides
+   * what is worth keeping. Anyone you do not keep is released, so a
+   * roster of thirteen is not what you take to the draft.
+   *
+   * So work it out in order. Start with nobody, take the man who beats
+   * his price by the most, count him, and go again until the slots are
+   * full or nobody is worth his cost.
+   */
+  const keeping = [];
+  const have = {};
+  const slots = Number($("keepn").value) || 3;
+  let left = onRoster.slice();
+
+  for (let round = 0; round < slots; round++) {
+    let pick = null;
+
+    for (const p of left) {
+      const cost = Number(costs[p.key]) || 0;
+      if (!cost || (active.myPicks && !active.myPicks.includes(cost))) continue;
+      const at = marginAt(p, cost, teams, taken, have);
+      if (!pick || at.margin > pick.at.margin) pick = { p, at };
+    }
+
+    if (!pick || pick.at.margin <= 0) break;
+
+    keeping.push(pick.p.key);
+    have[pick.p.position] = (have[pick.p.position] ?? 0) + 1;
+    left = left.filter((p) => p.key !== pick.p.key);
   }
 
   const mine = onRoster
-    .map((p) => ({ p, ...worthUpTo(p, teams, taken, have) }))
+    .map((p) => {
+      // judged against the roster you would have without him, so his
+      // own slot is not counted twice
+      const others = { ...have };
+      if (keeping.includes(p.key)) others[p.position] = (others[p.position] ?? 1) - 1;
+      return { p, keeping: keeping.includes(p.key), ...worthUpTo(p, teams, taken, others) };
+    })
     .sort((a, b) => a.round - b.round);
 
   const head = document.createElement("div");
@@ -899,9 +932,12 @@ async function renderKeepers() {
   grid.className = "cards";
   const seasonMax = seasonScale(mine.map((m) => m.p));
 
-  for (const { p, round, instead, thin } of mine) {
+  for (const m of mine) {
+    const { p, round, instead, thin } = m;
     const cost = Number(costs[p.key]) || 0;
-    const at = cost ? marginAt(p, cost, teams, taken, have) : null;
+    const others = { ...have };
+    if (m.keeping) others[p.position] = (others[p.position] ?? 1) - 1;
+    const at = cost ? marginAt(p, cost, teams, taken, others) : null;
     const who = at && at.instead ? at.instead.name : "what is left";
     const verdict = !at ? ""
       : at.margin > CLOSE_ENOUGH
