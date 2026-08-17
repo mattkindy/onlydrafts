@@ -715,15 +715,35 @@ function bestLeftAt(pick, taken, exclude) {
   return best;
 }
 
-/** the earliest round he still beats what that pick would buy */
+/**
+ * How much better or worse he is than what the pick would buy.
+ *
+ * A verdict on half a point a game is false precision from a model
+ * whose typical weekly miss is nearly four, so anything inside a point
+ * is called level rather than decided. The pool also thins to guesswork
+ * past the tenth round, where only a couple of hundred players carry a
+ * draft position at all, so a late alternative is a flier.
+ */
+const CLOSE_ENOUGH = 1;
+
+function marginAt(player, round, teams, taken) {
+  const pick = (round - 1) * teams + Math.ceil(teams / 2);
+  const instead = bestLeftAt(pick, taken, player.key);
+  return {
+    instead,
+    margin: instead ? player.vor - instead.vor : player.vor,
+    thin: pick > 130,
+  };
+}
+
+/** the earliest round he is not clearly worse than the alternative */
 function worthUpTo(player, teams, taken) {
   for (let round = 1; round <= 15; round++) {
-    const pick = (round - 1) * teams + Math.ceil(teams / 2);
-    const instead = bestLeftAt(pick, taken, player.key);
-    if (!instead || player.vor >= instead.vor) return { round, instead };
+    const at = marginAt(player, round, teams, taken);
+    if (at.margin > -CLOSE_ENOUGH) return { round, ...at };
   }
 
-  return { round: 16, instead: null };
+  return { round: 16, instead: null, margin: 0, thin: true };
 }
 
 function keeperCosts() {
@@ -775,22 +795,29 @@ async function renderKeepers() {
   grid.className = "cards";
   const seasonMax = seasonScale(mine.map((m) => m.p));
 
-  for (const { p, round, instead } of mine) {
+  for (const { p, round, instead, thin } of mine) {
     const cost = Number(costs[p.key]) || 0;
-    const verdict = !cost ? ""
-      : cost > round ? "keep him, he is worth a " + ordinal(round)
-      : cost === round ? "line ball at a " + ordinal(cost)
-      : "let him go, he is only worth a " + ordinal(round);
+    const at = cost ? marginAt(p, cost, teams, taken) : null;
+    const verdict = !at ? ""
+      : at.margin > CLOSE_ENOUGH
+        ? "keep him, " + at.margin.toFixed(1) + " a game better than " +
+          (at.instead ? at.instead.name : "anyone left")
+      : at.margin < -CLOSE_ENOUGH
+        ? "let him go, " + (-at.margin).toFixed(1) + " a game behind " +
+          (at.instead ? at.instead.name : "the field")
+      : "level with " + (at.instead ? at.instead.name : "what is left") +
+        ", take the pick";
 
     const card = seasonCard(p, {
       max: seasonMax,
       aside: { label: "worth a", value: round },
-      tag: cost && cost > round ? verdict : "",
-      hint: cost ? (cost > round ? "" : verdict) : "",
+      tag: at && at.margin > CLOSE_ENOUGH ? verdict : "",
+      hint: at && at.margin <= CLOSE_ENOUGH ? verdict : "",
       note: (instead
-        ? "at a " + ordinal(round) + " you would otherwise get " + instead.name
-        : "worth keeping at any price") +
-        (p.adp ? " &middot; goes " + asRound(p.adp) + " in mocks" : ""),
+        ? "at a " + ordinal(round) + " the other choice is " + instead.name
+        : "nobody left worth the pick") +
+        (thin ? ", who is a flier" : "") +
+        (p.adp ? " &middot; goes " + asRound(p.adp) + " in PPR mocks" : ""),
     });
 
     const row = document.createElement("label");
