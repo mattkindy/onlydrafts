@@ -292,3 +292,41 @@ the down and the distance and has no idea who is throwing. It also
 matters for who gets the ball: a passer who checks down feeds backs
 and tight ends, and one who throws past the marker feeds the men
 outside. See scripts/thirdDownDepthEval.ts.
+
+## Letting a model find the combinations, instead of naming them
+
+Every interaction found today came from a hypothesis, a group-by and a
+rank correlation, so only questions somebody thought to ask ever got
+answered. src/model/factorization.ts gives each entity on a play a
+vector instead: this offence, this defence, this coordinator, this
+down, this grouping. What the play produces depends on how those
+vectors line up, so a pairing nobody looked for is found on the same
+footing as one somebody did.
+
+Seven tests hold it to that, including one where two coaches and two
+quarterbacks each average the same alone and differ only in how they
+pair, which it recovers.
+
+On the real plays it does not beat adding the pieces up.
+
+  predicting a play's yards        rmse    rank
+    the average always            10.005   .000
+    adding the pieces up           8.288   .096
+    letting them combine           8.351   .091
+
+  predicting a tight end set       rmse    rank
+    the average always             0.614   .000
+    adding the pieces up           0.458   .246
+    letting them combine           0.467   .213
+
+It does find some structure. The goal line and third down pull
+together at .180, which is a distinct thing rather than the sum of two
+things. But nothing it finds pays out of sample.
+
+That is worth sitting with rather than filing away. The interactions I
+found by hand were one to one and a half standard errors, and a model
+searching every pair with no prior cannot tell those from noise, so it
+shrinks them away. Adding them by hand is injecting a prior the data
+alone will not support. Which also means my hand-found interactions
+may be fitted to the hypothesis I happened to pick, and the honest
+next step is more seasons rather than a cleverer model.
