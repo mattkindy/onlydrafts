@@ -181,6 +181,23 @@ async function composed(
     "  points a team         " + (points / games).toFixed(1).padStart(6) + "     23.0",
   );
 
+  // A drive that should have scored ended some other way, so count
+  // every ending against what really happens rather than guessing
+  // which factor is short.
+  const reallyEnds: Record<string, number> = {
+    touchdown: 23.8, fieldGoal: 15.7, punt: 35.7, turnover: 10.1,
+    downs: 5.8, missedKick: 2.7, clock: 6.8,
+  };
+  console.log("\n  how they end          built   really");
+
+  for (const [end, share] of Object.entries(reallyEnds)) {
+    console.log(
+      "    " + end.padEnd(14) +
+      `${(100 * (endings.get(end) ?? 0) / seen).toFixed(1)}%`.padStart(7) +
+      `${share.toFixed(1)}%`.padStart(9),
+    );
+  }
+
   // Where a drive is being lost. Too few touchdowns and too many kicks
   // says they arrive and do not finish, so count the arriving and the
   // finishing separately.

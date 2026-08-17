@@ -23,6 +23,19 @@ export interface EndingRules {
   maxPlays: number;
 }
 
+/**
+ * How often a snap is the last one because the half or the game runs
+ * out. Nearly seven percent of drives end that way and a walk that
+ * never stops for the clock has to end those some other way, which is
+ * most of why it punts too much.
+ */
+export interface ClockRules {
+  /** the chance a drive is cut off after any given play */
+  runsOut: number;
+}
+
+export const CLOCK_DEFAULTS: ClockRules = { runsOut: 0.012 };
+
 export interface FactorPlay {
   state: PlayState;
   call: Call;
@@ -42,6 +55,7 @@ export function walkDrive(
   rules: EndingRules,
   among: string[],
   uniform: () => number,
+  clock: ClockRules = CLOCK_DEFAULTS,
 ): FactorDrive {
   const plays: FactorPlay[] = [];
   const state: PlayState = {
@@ -92,6 +106,10 @@ export function walkDrive(
 
     if (state.yardline <= 0) {
       return { plays, ending: "touchdown" };
+    }
+
+    if (uniform() < clock.runsOut) {
+      return { plays, ending: "clock" };
     }
 
     if (gained >= state.toGo) {
