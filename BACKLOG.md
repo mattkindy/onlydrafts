@@ -391,3 +391,36 @@ yards allowed a target at .112, which is nothing.
 So a corner's coverage is largely not measurable this way. What may
 still work is the room-leader suppression, which is an outcome rather
 than an attribution, and which carried at .204.
+
+## Correcting the claim that a play's yards cannot be predicted
+
+Five model classes came out level on a play's yards, all within 1.5%
+of saying the average every time, and I concluded the thing was
+unpredictable and stopped. That was measuring the model against the
+game's randomness rather than against what is knowable.
+
+The play call is not in the data. The formation, the personnel and the
+situation are, and what a simulator needs is what such a configuration
+averages, not what one snap of it produced.
+
+Scored that way, on 2025 after learning from 2022 to 2024:
+
+  cells of at least   n   spearman   rmse   spread of the truth
+               20    240      .698   1.37           2.00
+               50    123      .773   1.02           1.60
+              150     47      .836   0.63           1.16
+              400     15      .850   0.57           0.95
+
+  against single plays  .084 and 8.30
+
+Same model, same predictions. It explains most of the variation
+between configurations and none of the variation within one, which is
+what it should do when the play call is unobserved.
+
+The busiest cells land close: a pass from eleven personnel against
+nickel on first and long in a team's own half was predicted at 7.07
+and averaged 6.99, over 1715 plays.
+
+That also explains the five-way tie. They were all being scored
+against the same wall of noise. Comparing them on cell means might
+separate them, and has not been done.
