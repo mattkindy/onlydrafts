@@ -47,13 +47,17 @@ async function main(): Promise<void> {
     byPlayer.set(s.playerId, [...(byPlayer.get(s.playerId) ?? []), {
       week: s.week,
       points: fantasyPoints(s.statLine, RULES),
-      touches: s.carries + s.statLine.receptions,
+      // targets rather than catches, since what he was given is the
+      // workload and what he caught is already an outcome
+      touches: s.carries + s.targets,
       yards: s.statLine.rushYds + s.statLine.recYds,
       scores: s.statLine.rushTd + s.statLine.recTd,
     }]);
   }
 
-  const players = [...byPlayer.values()].filter((weeks) => weeks.length >= 8)
+  const players = [...byPlayer.values()]
+    .filter((weeks) =>
+      weeks.length >= 8 && middle(weeks.map((w) => w.touches)) >= 3)
     .map((weeks) => [...weeks].sort((a, b) => a.week - b.week));
   console.log(`${players.length} men with eight weeks or more in ${SCORE_ON}\n`);
 
@@ -77,23 +81,20 @@ async function main(): Promise<void> {
     // the same as knowing his touches, but guessing them from the
     // weeks before rather than being told, which is what anybody
     // setting a line-up actually has
+    // Weeks with nothing to look back on are skipped rather than
+    // handed the season average, which would both leak and pin their
+    // deviation to nothing.
     ["guessing touches from his last three", (week, own) => {
       const perTouch = middle(own.map((w) => w.points)) /
         Math.max(0.1, middle(own.map((w) => w.touches)));
       const before = own.filter((w) => w.week < week.week).slice(-3);
-      const guess = before.length
-        ? middle(before.map((w) => w.touches))
-        : middle(own.map((w) => w.touches));
-      return guess * perTouch;
+      return before.length < 3 ? NaN : middle(before.map((w) => w.touches)) * perTouch;
     }],
-    ["guessing touches from every week before", (week, own) => {
+    ["guessing touches from his last one", (week, own) => {
       const perTouch = middle(own.map((w) => w.points)) /
         Math.max(0.1, middle(own.map((w) => w.touches)));
-      const before = own.filter((w) => w.week < week.week);
-      const guess = before.length
-        ? middle(before.map((w) => w.touches))
-        : middle(own.map((w) => w.touches));
-      return guess * perTouch;
+      const before = own.filter((w) => w.week < week.week).slice(-1);
+      return before.length < 1 ? NaN : before[0]!.touches * perTouch;
     }],
   ];
 
@@ -105,18 +106,59 @@ async function main(): Promise<void> {
 
     for (const own of players) {
       const guesses = own.map((week) => say(week, own));
-      const saidMean = middle(guesses);
-      const wasMean = middle(own.map((w) => w.points));
+      const usable = own.map((_, i) => Number.isFinite(guesses[i]!));
 
       for (let i = 0; i < own.length; i++) {
-        said.push(guesses[i]! - saidMean);
-        was.push(own[i]!.points - wasMean);
+        if (!usable[i]) {
+          continue;
+        }
+
+        // his average with this week left out of it. Counting a week
+        // inside its own baseline drags the answer down by about one
+        // over the number of weeks, which on a ten game season turns a
+        // small positive into a negative.
+        const otherSaid = guesses.filter((_, j) => j !== i && usable[j]!);
+        const otherWas = own
+          .filter((_, j) => j !== i && usable[j]!).map((w) => w.points);
+        said.push(guesses[i]! - middle(otherSaid));
+        was.push(own[i]!.points - middle(otherWas));
       }
     }
 
     console.log(
       "  " + label.padEnd(40) + spearman(said, was).toFixed(4).padStart(8) +
       spreadOf(said).toFixed(2).padStart(14),
+    );
+  }
+
+  // the same question asked of the workload itself, so the chain can
+  // be seen: does the past predict his touches, and do his touches
+  // predict his points
+  console.log("\nthe workload on its own                    spearman");
+
+  for (const [label, look] of [["from his last one", 1], ["from his last three", 3]] as
+    [string, number][]) {
+    const said: number[] = [];
+    const was: number[] = [];
+
+    for (const own of players) {
+      for (let i = 0; i < own.length; i++) {
+        const before = own.filter((w) => w.week < own[i]!.week).slice(-look);
+
+        if (before.length < look) {
+          continue;
+        }
+
+        const others = own.filter((_, j) => j !== i);
+        const mid = middle(others.map((w) => w.touches));
+        said.push(middle(before.map((w) => w.touches)) - mid);
+        was.push(own[i]!.touches - mid);
+      }
+    }
+
+    console.log(
+      "  guessing his touches " + label.padEnd(20) +
+      spearman(said, was).toFixed(4).padStart(8) + `   (${said.length} weeks)`,
     );
   }
 
