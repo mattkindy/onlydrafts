@@ -36,6 +36,7 @@ async function main(): Promise<void> {
     season: Number(r["season"]),
     down: Number(r["down"]), toGo: Number(r["togo"]),
     yardline: Number(r["yardline"]), call: (r["playType"] ?? "") as Call,
+    margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,
     yards: Number(r["yards"]) || 0, touchdown: Number(r["touchdown"]) || 0,
     player: r["player"] ?? "", team: r["offense"] ?? "",
   }));

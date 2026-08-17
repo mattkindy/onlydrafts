@@ -55,8 +55,44 @@ export interface StateCell {
 export const emptyCell = (): StateCell =>
   ({ plays: 0, runs: 0, yards: [], scores: 0 });
 
-/** the states near this one, nearest first, out to the whole field */
-export function* widening(state: PlayState): Generator<{ toGo: number; yardline: number }> {
+/**
+ * The states near this one, nearest first.
+ *
+ * The clock and the score are let go before the field is, since they
+ * move a call less than the down and the distance do. A thin state ends
+ * up borrowing from any time and any score at the same spot before it
+ * borrows from a different spot.
+ */
+export function* widening(
+  state: PlayState,
+): Generator<{ toGo: number; yardline: number; loose: boolean }> {
+  // The clock and the score are held first and let go only when this
+  // spot cannot answer for itself. Offering the any-time cell up front
+  // meant it always had enough plays, and the call never moved with the
+  // game at all.
+  for (const reach of [0, 1, 2, 3, 5]) {
+    for (let yard = state.yardline - reach; yard <= state.yardline + reach; yard++) {
+      if (yard < 1 || yard > 99) {
+        continue;
+      }
+
+      const near = Math.ceil(reach / 2);
+
+      for (let toGo = state.toGo - near; toGo <= state.toGo + near; toGo++) {
+        if (toGo < 1 || toGo > 40) {
+          continue;
+        }
+
+        const onEdge = Math.abs(yard - state.yardline) === reach ||
+          Math.abs(toGo - state.toGo) === near;
+
+        if (reach === 0 || onEdge) {
+          yield { toGo, yardline: yard, loose: false };
+        }
+      }
+    }
+  }
+
   for (const reach of [0, 1, 2, 3, 5, 8, 12, 20, 35, 60, 99]) {
     for (let yard = state.yardline - reach; yard <= state.yardline + reach; yard++) {
       if (yard < 1 || yard > 99) {
@@ -76,12 +112,34 @@ export function* widening(state: PlayState): Generator<{ toGo: number; yardline:
           Math.abs(toGo - state.toGo) === near;
 
         if (reach === 0 || onEdge) {
-          yield { toGo, yardline: yard };
+          yield { toGo, yardline: yard, loose: true };
         }
       }
     }
   }
 }
 
-export const stateKey = (down: number, toGo: number, yardline: number) =>
-  `${Math.min(4, down)}|${Math.min(40, toGo)}|${Math.min(99, yardline)}`;
+/**
+ * How the clock and the score are cut for counting.
+ *
+ * A team two scores down with four minutes left calls a different game
+ * from the same team level in the first quarter, and neither the down
+ * nor the field position says so. Coarse on purpose: these matter far
+ * less than the down and the distance, and a fine cut on four things at
+ * once leaves nothing in any cell.
+ */
+export const timeBand = (secondsLeft: number) =>
+  secondsLeft > 1500 ? 0
+    : secondsLeft > 300 ? 1
+    : secondsLeft > 120 ? 2
+    : 3;
+
+export const marginBand = (margin: number) =>
+  margin <= -9 ? 0 : margin < 0 ? 1 : margin < 9 ? 2 : 3;
+
+export const stateKey = (
+  down: number, toGo: number, yardline: number,
+  secondsLeft = 1800, margin = 0,
+) =>
+  `${Math.min(4, down)}|${Math.min(40, toGo)}|${Math.min(99, yardline)}` +
+  `|${timeBand(secondsLeft)}|${marginBand(margin)}`;

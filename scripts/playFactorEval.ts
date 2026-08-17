@@ -31,6 +31,7 @@ async function load(): Promise<{ learn: PlayRow[]; test: PlayRow[] }> {
     season: Number(r["season"]),
     down: Number(r["down"]), toGo: Number(r["togo"]),
     yardline: Number(r["yardline"]), call: (r["playType"] ?? "") as Call,
+    margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,
     yards: Number(r["yards"]) || 0, touchdown: Number(r["touchdown"]) || 0,
     player: r["player"] ?? "",
   }));
@@ -77,6 +78,37 @@ async function main(): Promise<void> {
       `${(100 * factors.runs(state)).toFixed(0)}%`.padStart(6) +
       `${(100 * near.filter((r) => r.call === "run").length / near.length).toFixed(0)}%`
         .padStart(8) +
+      String(near.length).padStart(8),
+    );
+  }
+
+  // the same spot on the field under a different clock and score, to
+  // show the call moving with them rather than only with the down
+  console.log("\nfirst and ten at the 40, as the game changes");
+  console.log("  when                              runs   really   plays");
+
+  const clocks: [string, number, number][] = [
+    ["early, level", 2400, 0],
+    ["late, a score behind", 240, -7],
+    ["late, a score ahead", 240, 7],
+    ["late, two scores behind", 240, -14],
+  ];
+
+  for (const [label, secondsLeft, margin] of clocks) {
+    const state = { down: 1, toGo: 10, yardline: 40, margin, secondsLeft };
+    const near = test.filter((r) =>
+      r.down === 1 && Math.abs(r.toGo - 10) <= 1 &&
+      Math.abs(r.yardline - 40) <= 6 &&
+      Math.abs(r.secondsLeft - secondsLeft) <= 400 &&
+      Math.abs(r.margin - margin) <= 4);
+
+    console.log(
+      "  " + label.padEnd(32) +
+      `${(100 * factors.runs(state)).toFixed(0)}%`.padStart(6) +
+      (near.length >= 25
+        ? `${(100 * near.filter((r) => r.call === "run").length / near.length).toFixed(0)}%`
+          .padStart(9)
+        : "       -") +
       String(near.length).padStart(8),
     );
   }
