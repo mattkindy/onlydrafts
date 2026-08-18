@@ -108,6 +108,15 @@ async function main(): Promise<void> {
         play.yardline,
         Math.round(factors.gains(state, ran ? "run" : "pass", play.player, rng, sides)),
       );
+
+      // the pool a throw is drawn from has sacks in it, and the plays
+      // it is being compared with are the ones somebody was credited
+      // with, which have none. Comparing the two straight makes every
+      // passing down look a yard light.
+      if (process.env["NO_SACKS"] && !ran && gained < -2) {
+        continue;
+      }
+
       cell.draws++;
       if (ran) cell.saidRan++;
       if (gained <= 0) cell.saidNothing++;
