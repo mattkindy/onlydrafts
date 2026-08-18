@@ -40,6 +40,36 @@ them and from what his attributes say where he does not.
 `attributePriors.ts` mixes the two, and how much of each is fitted on a
 season nobody is being judged on rather than chosen.
 
+## Which way things are passed
+
+Think of it as a stack that passes messages in three directions, since
+that is what says which parts are missing rather than merely unwired.
+
+**Upward** is plays into drives into games into seasons. The walk is
+all of this and it works: drives come out 6.1 plays long against 5.9,
+and a third of them end in three plays or fewer against a third really.
+
+**Sideways** is one thing against another at the same level. Players
+compete with their team-mates for the ball, in `shareCompetition.ts`,
+and an offence meets a defence, in `againstDefence.ts` and
+`interactionNet.ts`. Both are built and measured and neither is
+connected to the walk.
+
+**Downward** is a level constraining what happens beneath it, and there
+is none of it. `teamState.ts` knows what an offence is worth and cannot
+tell a drive. `gameSize.ts` knows how big an afternoon looks and is not
+in the walk.
+
+That is why the model comes out calibrated and knows nothing about a
+particular game. Passing upward alone gives the right spread of
+outcomes across a season and no way to tell two sides apart: it puts
+two team games 1.29 points apart where the market puts them 3.82 and
+where they really land 9.69 apart. A team's quality is known at the top
+and never reaches the plays.
+
+It also says why working the level out from the plays failed. The level
+is not down there to be found. It is up here to be sent down.
+
 ## The rules that keep it honest
 
 Everything shrinks toward something, and what it shrinks toward is
