@@ -15,6 +15,9 @@ import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
 import { seededRng } from "../src/sim/rng.js";
 import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js";
+import {
+  realCounts, drawnCounts, type Whom,
+} from "../src/features/comparablePlays.js";
 import type { Call, PlayState } from "../src/model/playFactors.js";
 
 const SCORE_ON = 2025;
@@ -80,9 +83,13 @@ async function main(): Promise<void> {
   const rng = seededRng(41);
   const cells = new Map<string, Cell>();
 
+  // over the plays somebody was credited with, on both sides, since
+  // a pass pool has sacks in it and no receiver is credited with one
+  const whom: Whom = "plays with a man on them";
+
   // every eleventh play, which is three thousand spots
   for (const play of held.filter((_, i) => i % 11 === 0)) {
-    if (!play.player) {
+    if (!realCounts(play, whom)) {
       continue;
     }
 
@@ -109,11 +116,7 @@ async function main(): Promise<void> {
         Math.round(factors.gains(state, ran ? "run" : "pass", play.player, rng, sides)),
       );
 
-      // the pool a throw is drawn from has sacks in it, and the plays
-      // it is being compared with are the ones somebody was credited
-      // with, which have none. Comparing the two straight makes every
-      // passing down look a yard light.
-      if (process.env["NO_SACKS"] && !ran && gained < -2) {
+      if (!drawnCounts(ran ? "run" : "pass", gained, whom)) {
         continue;
       }
 
@@ -143,19 +146,6 @@ async function main(): Promise<void> {
   // the simplest cut first, since if it is wrong per down nothing
   // below it is worth reading
   const byDown = new Map<number, Cell>();
-
-  for (const play of held.filter((_, i) => i % 11 === 0)) {
-    if (!play.player) {
-      continue;
-    }
-
-    const key = whereItStood(play);
-    const from = cells.get(key)!;
-    const own = byDown.get(play.down) ?? empty();
-    own.plays += 0;
-    byDown.set(play.down, own);
-    void from;
-  }
 
   for (const [key, cell] of cells) {
     const down = Number(key.split(" ")[0]);
@@ -206,6 +196,43 @@ async function main(): Promise<void> {
     `\n  gets a first     ${(100 * middle(every.map((o) => Math.abs(o.first)))).toFixed(1)}%` +
     `\n  yards            ${middle(every.map((o) => Math.abs(o.yards))).toFixed(2)}`,
   );
+
+  // and pooled by where on the field, since the worst corners all
+  // looked like midfield and that wants checking on its own
+  const byZone = new Map<string, Cell>();
+
+  for (const [key, cell] of cells) {
+    const zone = key.split(", ")[1] ?? "";
+    const own = byZone.get(zone) ?? empty();
+    own.plays += cell.plays;
+    own.reallyNothing += cell.reallyNothing;
+    own.reallyFirst += cell.reallyFirst;
+    own.reallyYards += cell.reallyYards;
+    own.saidNothing += cell.saidNothing;
+    own.saidFirst += cell.saidFirst;
+    own.saidYards += cell.saidYards;
+    own.draws += cell.draws;
+    byZone.set(zone, own);
+  }
+
+  console.log("\nby where on the field\n");
+  console.log("  where            plays   gains nothing      gets a first        yards");
+
+  for (const [zone, cell] of [...byZone.entries()].sort((a, b) => b[1].plays - a[1].plays)) {
+    if (cell.plays < 100) {
+      continue;
+    }
+
+    const pair = (said: number, really: number) =>
+      `${(100 * said / cell.draws).toFixed(0)}% v ${(100 * really / cell.plays).toFixed(0)}%`;
+    console.log(
+      "  " + zone.padEnd(16) + String(cell.plays).padStart(6) +
+        pair(cell.saidNothing, cell.reallyNothing).padStart(16) +
+        pair(cell.saidFirst, cell.reallyFirst).padStart(19) +
+        `   ${(cell.saidYards / cell.draws).toFixed(1)} v ` +
+        `${(cell.reallyYards / cell.plays).toFixed(1)}`,
+    );
+  }
 
   for (const [what, of] of [
     ["running too much or too little", (o: ReturnType<typeof off>) => o.ran],
