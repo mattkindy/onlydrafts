@@ -507,12 +507,37 @@ export function fitPlayFactors(
        */
       const longOnes: number[] = [];
       const shortOnes: number[] = [];
+      const wentNowhere: number[] = [];
 
       for (const gained of pool) {
+        if (gained <= 0) {
+          wentNowhere.push(gained);
+          continue;
+        }
+
         (gained >= 20 ? longOnes : shortOnes).push(gained);
       }
 
-      const leagueLong = longOnes.length / Math.max(1, pool.length);
+      /**
+       * Whether it went anywhere at all, decided before how far.
+       *
+       * A third of throws gain nothing because nobody caught them, and
+       * that is most of what a good defence does. Multiplying a drawn
+       * gain can never produce one, since nothing times anything is
+       * nothing, so which end of the pool to draw from is asked first.
+       */
+      const wentNowhereHere = wentNowhere.length / Math.max(1, pool.length);
+      const stuffed = playLevel && sides
+        ? Math.max(0, Math.min(0.95,
+            wentNowhereHere * playLevel.stuffedBy(state, call, player, sides)))
+        : wentNowhereHere;
+
+      if (wentNowhere.length && uniform() < stuffed) {
+        return wentNowhere[Math.floor(uniform() * wentNowhere.length)]!;
+      }
+
+      const gainful = longOnes.length + shortOnes.length;
+      const leagueLong = longOnes.length / Math.max(1, gainful);
       /**
        * Him against the league, both measured over the same plays.
        *
@@ -534,7 +559,7 @@ export function fitPlayFactors(
               (found.league.long / found.league.touches)))
         : leagueLong;
       const from = uniform() < hisLong && longOnes.length ? longOnes
-        : shortOnes.length ? shortOnes : pool;
+        : shortOnes.length ? shortOnes : longOnes.length ? longOnes : pool;
       const drawn = from[Math.floor(uniform() * from.length)]!;
 
       if (!found?.league || drawn <= 0) {
@@ -548,14 +573,8 @@ export function fitPlayFactors(
       const his = found.his.yards / Math.max(1, found.his.touches);
       const leagueLongRate = found.league.long / Math.max(1, found.league.touches);
       const hisLongRate = found.his.long / Math.max(1, found.his.touches);
-      /**
-       * On a carry, what this back in this scheme should make against
-       * what an average back in an average scheme makes.
-       *
-       * His yards a carry are his line's and his coordinator's as much
-       * as his, and they only carry to the next season at .345. The
-       * two parts kept apart carry at .61 and .35.
-       */
+      // and how far it went, now that whether it went anywhere has
+      // already been settled above
       const level = playLevel && sides
         ? playLevel.levelFor(state, call, player, sides)
         : his / Math.max(0.1, league);

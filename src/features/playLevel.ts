@@ -31,7 +31,20 @@ export interface PlaySides {
 }
 
 export interface PlayLevel {
-  /** what to multiply a drawn gain by, near one */
+  /**
+   * How much more or less often this play gains nothing at all than
+   * an average cast would in the same spot.
+   *
+   * A third of throws gain exactly nothing because nobody caught
+   * them, and that is most of what a defence does to an offence.
+   * Scaling a drawn gain cannot touch it, since nothing times
+   * anything is still nothing, so it is asked for separately and
+   * moves which end of the pool the draw comes from.
+   */
+  stuffedBy: (
+    state: PlayState, call: Call, player: string, sides: PlaySides,
+  ) => number;
+  /** and what to multiply a gain by once it is one, near one */
   levelFor: (
     state: PlayState, call: Call, player: string, sides: PlaySides,
   ) => number;
@@ -47,8 +60,14 @@ export interface PlayLevelSettings {
   depth: number;
 }
 
+/**
+ * The clamp is what the measurements support rather than what the
+ * model will say. The men on a defence move a throw by about 1.3
+ * yards out of 6.1, so a fifth, and a drive is a chain of plays where
+ * a per-play error compounds into points.
+ */
 export const LEVEL_DEFAULTS: PlayLevelSettings = {
-  most: 0.45, trees: 150, depth: 4,
+  most: Number(process.env["LEVEL_MOST"] ?? 0.15), trees: 150, depth: 4,
 };
 
 export interface PlayLevelRequest {
@@ -221,12 +240,18 @@ export async function buildPlayLevel(
     describe: [...request.learn, request.scoreOn],
   });
   const forests = new Map<Call, Forest>();
+  const stuffing = new Map<Call, Forest>();
+  /** a sample of what was learned on, for centring the ratios */
+  const held = new Map<Call, { row: number[] }[]>();
   const middles = new Map<Call, number>();
   let learnedOn = 0;
 
   for (const call of ["run", "pass"] as Call[]) {
     const rows: number[][] = [];
-    const target: number[] = [];
+    // what a gain came to once it was one, kept apart from whether
+    // there was one at all
+    const gained: number[] = [];
+    const stuffed: number[] = [];
 
     for (const season of request.learn) {
       const known = knownBefore(plays, season, coaches);
@@ -244,15 +269,22 @@ export async function buildPlayLevel(
           },
           season,
         ));
-        target.push(play.yards);
+        gained.push(Math.max(0, play.yards));
+        stuffed.push(play.yards <= 0 ? 1 : 0);
       }
     }
 
+    const settingsFor = {
+      ...TREE_DEFAULTS, trees: settings.trees, depth: settings.depth,
+    };
     forests.set(call, fitForest({
-      rows, target, names: NAMES,
-      settings: { ...TREE_DEFAULTS, trees: settings.trees, depth: settings.depth },
+      rows, target: gained, names: NAMES, settings: settingsFor,
     }));
-    middles.set(call, target.reduce((a, b) => a + b, 0) / Math.max(1, target.length));
+    stuffing.set(call, fitForest({
+      rows, target: stuffed, names: NAMES, settings: settingsFor,
+    }));
+    middles.set(call, gained.reduce((a, b) => a + b, 0) / Math.max(1, gained.length));
+    held.set(call, rows.filter((_, i) => i % 7 === 0).map((row) => ({ row })));
     learnedOn += rows.length;
   }
 
@@ -268,9 +300,100 @@ export async function buildPlayLevel(
     [12, 1], [13, 1],
   ]);
 
+  /**
+   * The same row with an average cast in it, so the situation can be
+   * divided out. The draw this bends has already come from the pool
+   * of plays at this spot, so a level that includes the situation
+   * counts it twice.
+   */
+  const withNobody = (row: number[]) => {
+    const nobody = [...row];
+
+    for (const [at, value] of neutral) {
+      nobody[at] = value;
+    }
+
+    return nobody;
+  };
+  const asked = (
+    forest: Forest | undefined, state: PlayState, call: Call, player: string,
+    sides: PlaySides,
+  ) => {
+    if (!forest || !player) {
+      return undefined;
+    }
+
+    const row = rowFor(
+      known, onField, coaches, state, call, player, sides, request.scoreOn,
+    );
+    const said = predictForest(forest, row);
+    const plain = predictForest(forest, withNobody(row));
+
+    return Number.isFinite(said) && Number.isFinite(plain)
+      ? { said, plain }
+      : undefined;
+  };
+
+  /**
+   * What the ratio comes to on average, so it can be taken back out.
+   *
+   * A ratio of what the model says to what it says about nobody in
+   * particular has no reason to average one, and if it averages 1.06
+   * then every side gains six percent it never gained. The same
+   * mistake cost three points a game when a receiver was compared
+   * against a league average that included sacks.
+   */
+  const centres = new Map<Call, { stuffed: number; level: number }>();
+
+  for (const call of ["run", "pass"] as Call[]) {
+    const sample = held.get(call) ?? [];
+    let stuffedTo = 0;
+    let levelTo = 0;
+    let seen = 0;
+
+    for (const { row } of sample) {
+      const stuffedForest = stuffing.get(call);
+      const forest = forests.get(call);
+
+      if (!stuffedForest || !forest) {
+        continue;
+      }
+
+      const plainStuffed = predictForest(stuffedForest, withNobody(row));
+      const plainLevel = predictForest(forest, withNobody(row));
+
+      if (plainStuffed < 0.02 || plainLevel < 0.5) {
+        continue;
+      }
+
+      stuffedTo += predictForest(stuffedForest, row) / plainStuffed;
+      levelTo += predictForest(forest, row) / plainLevel;
+      seen++;
+    }
+
+    centres.set(call, {
+      stuffed: seen > 0 ? stuffedTo / seen : 1,
+      level: seen > 0 ? levelTo / seen : 1,
+    });
+  }
+
+  const centred = (value: number, by: number) =>
+    Math.max(
+      1 - settings.most, Math.min(1 + settings.most, value / Math.max(0.5, by)),
+    );
+
   return {
     learnedOn,
     middleOn: (call) => middles.get(call) ?? 5,
+    stuffedBy: (state, call, player, sides) => {
+      const both = asked(stuffing.get(call), state, call, player, sides);
+
+      if (!both || both.plain < 0.02) {
+        return 1;
+      }
+
+      return centred(both.said / both.plain, centres.get(call)?.stuffed ?? 1);
+    },
     levelFor: (state, call, player, sides) => {
       const forest = forests.get(call);
       const middle = middles.get(call) ?? 5;
@@ -304,9 +427,7 @@ export async function buildPlayLevel(
         return 1;
       }
 
-      return Math.max(
-        1 - settings.most, Math.min(1 + settings.most, said / plain),
-      );
+      return centred(said / plain, centres.get(call)?.level ?? 1);
     },
   };
 }

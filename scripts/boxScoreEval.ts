@@ -28,6 +28,7 @@ import { divideAmong } from "../src/features/shareCompetition.js";
 import { buildMatchupTable } from "../src/features/matchupTable.js";
 import { buildRunParts } from "../src/features/runParts.js";
 import { buildDefenceOnField } from "../src/features/defenceOnField.js";
+import { buildPlayLevel } from "../src/features/playLevel.js";
 import { fitPassing } from "../src/features/passerLevels.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import type { Call } from "../src/model/playFactors.js";
@@ -168,8 +169,16 @@ async function main(): Promise<void> {
     );
   }
 
+  const playLevel = process.env["NO_LEVEL"]
+    ? undefined
+    : await buildPlayLevel({ learn: LEARN.slice(-3), scoreOn: SCORE_ON });
+
+  if (playLevel) {
+    console.log(`the level model learned on ${playLevel.learnedOn} plays`);
+  }
+
   const factors = fitPlayFactors(
-    learnRows, undefined, projected, pairing?.bend, runParts, undefined,
+    learnRows, undefined, projected, pairing?.bend, runParts, playLevel,
     onField && passing
       ? {
           defenceNow: (defence, season, week, call) => {
