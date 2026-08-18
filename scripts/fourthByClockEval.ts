@@ -42,6 +42,7 @@ async function main(): Promise<void> {
     .map((r) => ({ season: Number(r["season"]), ...asRow(r) }));
   const fitted = fitFourthDown(
     fourths.filter((r) => r.season < SCORE_ON) as FourthRow[],
+    60, Number(process.env["STEADY"] ?? 40), 1,
   );
   const held = fourths.filter((r) => r.season === SCORE_ON);
 
