@@ -302,7 +302,11 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
       // a punt from deep gains more field than one from midfield, and
       // near the fringe it is often fair caught inside the twenty
       const net = 38 + uniform() * 14;
-      return Math.max(20, Math.min(99, 100 - Math.max(1, yardline - net)));
+      const lands = yardline - net;
+
+      // into the end zone is a touchback, and the ball comes out to
+      // the twenty rather than pinning anybody on their own one
+      return lands <= 0 ? 80 : Math.max(20, Math.min(99, Math.round(100 - lands)));
     },
     maxPlays: 20,
   };

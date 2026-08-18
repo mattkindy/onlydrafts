@@ -53,6 +53,12 @@ export interface GameSettings {
    * two sides taking turns.
    */
   frozen?: boolean;
+  /**
+   * Where a drive starts, when the caller would rather draw it than
+   * take whatever the last drive left. Only for telling the chain
+   * apart from everything else.
+   */
+  startsAt?: (uniform: () => number) => number;
 }
 
 export const GAME_DEFAULTS: GameSettings = {
@@ -107,6 +113,10 @@ export function playGame(
       startAt = settings.afterKickoff;
     }
 
+    if (settings.startsAt) {
+      startAt = settings.startsAt(uniform);
+    }
+
     const margin = points[withBall.team]! - points[against.team]!;
     const opening: Opening = settings.frozen
       ? { yardline: startAt, margin: 0, secondsLeft: 1800 }
@@ -128,7 +138,10 @@ export function playGame(
     points[withBall.team] = points[withBall.team]! + pointsFor(drive);
     drives[withBall.team] = drives[withBall.team]! + 1;
     secondsLeft = Math.max(0, secondsLeft - Math.max(20, drive.took));
-    startAt = Math.max(1, Math.min(99, drive.handsOverAt));
+    // rounded, because the counts are kept against whole yard lines
+    // and a start of 52.47 matches none of them, so every lookup
+    // widens past the spot it was asked about
+    startAt = Math.max(1, Math.min(99, Math.round(drive.handsOverAt)));
     const wasOn = withBall;
     withBall = against;
     against = wasOn;

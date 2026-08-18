@@ -199,8 +199,10 @@ async function main(): Promise<void> {
     };
   };
 
+  const drawnStarts = await loadDriveStarts([2022, 2023, 2024]);
   const everyDrive = {
     plays: 0, seconds: 0, count: 0, startedAt: 0,
+    starts: [] as number[],
     ends: new Map<string, number>(),
   };
   const rng = seededRng(Number(process.env["SEED"] ?? 23));
@@ -236,6 +238,9 @@ async function main(): Promise<void> {
         ticking, season: SCORE_ON, week: truth.week,
       }, rng, {
         ...GAME_DEFAULTS, frozen: Boolean(process.env["FROZEN"]),
+        startsAt: process.env["DRAWN_STARTS"]
+          ? (u) => startFrom(drawnStarts, u)
+          : undefined,
       });
 
       for (const one of game.possessions) {
@@ -246,6 +251,7 @@ async function main(): Promise<void> {
           one.drive.ending, (everyDrive.ends.get(one.drive.ending) ?? 0) + 1,
         );
         everyDrive.startedAt += one.startedAt;
+        everyDrive.starts.push(one.startedAt);
       }
 
       for (const team of [home.team, away.team]) {
@@ -271,16 +277,52 @@ async function main(): Promise<void> {
   if (someSide) {
     const starts = await loadDriveStarts([2022, 2023, 2024]);
 
-    for (let i = 0; i < 3000; i++) {
-      const drive = walkDrive(
-        startFrom(starts, rng), factors,
-        { ...rules, kickSucceeds: kicking.kickSucceeds }, fourth,
-        someSide.among, rng,
-        { isLast: kicking.isLast, lastLength: kicking.lastLength },
+    for (const [how, withSides] of [
+      ["nobody named on either side", false], ["with both sides named", true],
+    ] as [string, boolean][]) {
+      const tally = { plays: 0, count: 0, ends: new Map<string, number>() };
+
+      const everyTeam = [...byTeam.keys()];
+
+      for (let i = 0; i < 3000; i++) {
+        const one = sideFor(everyTeam[i % everyTeam.length]!);
+
+        if (!one) {
+          continue;
+        }
+
+        const drive = walkDrive(
+          startFrom(starts, rng), factors,
+          { ...rules, kickSucceeds: kicking.kickSucceeds }, fourth,
+          one.among, rng,
+          { isLast: kicking.isLast, lastLength: kicking.lastLength },
+          withSides
+            ? {
+                offence: everyTeam[i % everyTeam.length]!,
+                defence: everyTeam[(i + 1) % everyTeam.length]!,
+                season: SCORE_ON, week: 1,
+              }
+            : {},
+          ticking,
+        );
+        tally.plays += drive.plays.length;
+        tally.count++;
+        tally.ends.set(drive.ending, (tally.ends.get(drive.ending) ?? 0) + 1);
+      }
+
+      console.log(
+        `\n  one drive at a time, ${how}: ` +
+          `${(tally.plays / tally.count).toFixed(1)} plays, ` +
+          [...tally.ends.entries()].sort((a, b) => b[1] - a[1])
+            .map(([e, n]) => `${e} ${(100 * n / tally.count).toFixed(0)}%`)
+            .join(", "),
       );
-      alone.plays += drive.plays.length;
-      alone.count++;
-      alone.ends.set(drive.ending, (alone.ends.get(drive.ending) ?? 0) + 1);
+    }
+
+    for (let i = 0; i < 1; i++) {
+      alone.count = 1;
+      alone.plays = 0;
+      alone.ends.set("skip", 1);
     }
 
     console.log(
@@ -302,6 +344,15 @@ async function main(): Promise<void> {
     }))
     .filter((row) => row.truth && row.priced !== undefined);
 
+  const sorted = [...everyDrive.starts].sort((a, b) => a - b);
+  const at = (q: number) => sorted[Math.floor(sorted.length * q)] ?? 0;
+  console.log(
+    "\nwhere a simulated drive starts, in yards from the goal\n" +
+      `  a tenth inside ${at(0.1)}, half inside ${at(0.5)}, ` +
+      `a tenth beyond ${at(0.9)}, and ` +
+      `${(100 * sorted.filter((y) => y >= 90).length / Math.max(1, sorted.length)).toFixed(1)}% ` +
+      "start 90 or more out",
+  );
   console.log(
     `\nwhat a simulated drive looks like, over ${everyDrive.count} of them\n` +
       `  ${(everyDrive.plays / everyDrive.count).toFixed(1)} plays, ` +
