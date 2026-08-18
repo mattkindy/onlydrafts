@@ -237,6 +237,26 @@ export function fitForest(input: TreeInput): Forest {
       }
     }
 
+    // the ones made on the last level down have never been asked what
+    // they are worth, and rows land on them
+    const stillOpen = new Set(frontier);
+    const sums = new Map<number, { sum: number; count: number }>();
+
+    for (let i = 0; i < count; i++) {
+      if (!stillOpen.has(where[i]!)) {
+        continue;
+      }
+
+      const own = sums.get(where[i]!) ?? { sum: 0, count: 0 };
+      own.sum += left[i]!;
+      own.count++;
+      sums.set(where[i]!, own);
+    }
+
+    for (const [node, own] of sums) {
+      nodes[node]!.value = own.sum / Math.max(1, own.count);
+    }
+
     for (let i = 0; i < count; i++) {
       said[i] = said[i]! + settings.rate * nodes[where[i]!]!.value;
     }

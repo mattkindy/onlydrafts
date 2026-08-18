@@ -29,6 +29,8 @@ export interface PlayRow {
   touchdown: number;
   /** who had it, empty when the play is only being counted */
   player: string;
+  /** and who threw it, empty on a carry or when nobody was credited */
+  passer?: string;
 }
 
 export interface FactorSettings {
