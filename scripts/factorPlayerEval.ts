@@ -19,6 +19,8 @@ import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js";
 import { fitTargetDepth } from "../src/features/targetDepth.js";
+import { loadAdp } from "../src/data/adp.js";
+import { normalizeName } from "../src/data/names.js";
 import { walkDrive, CLOCK_DEFAULTS } from "../src/model/driveFromFactors.js";
 import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
@@ -210,10 +212,72 @@ async function main(): Promise<void> {
   for (const [label, from] of Object.entries(both)) {
     const guess = men.map(([player]) => from.get(player) ?? 0);
     console.log(
-      "  " + label.padEnd(26) + spearman(guess, truth).toFixed(4).padStart(6) +
+      "  " + label.padEnd(28) + spearman(guess, truth).toFixed(4).padStart(6) +
       rmse(guess, truth).toFixed(2).padStart(8) +
       middle(guess).toFixed(2).padStart(7) +
       middle(truth).toFixed(2).padStart(9),
+    );
+  }
+
+  /**
+   * And against the market, on the men it priced.
+   *
+   * The board mixes places from the season regression, the share model
+   * and adp. If the walk can stand in that mix, the board comes out of
+   * the simulation rather than beside it.
+   */
+  // only the point-a-catch mocks go back this far, and the question
+  // here is whether the walk adds anything to a market, not which
+  // market it is
+  const adp = await loadAdp(SCORE_ON, "ppr").catch(() => new Map());
+  const names = new Map<string, string>();
+
+  for (const s of await loadPlayerStats(SCORE_ON)) {
+    names.set(s.playerId, s.playerName);
+  }
+
+  const priced = men
+    .map(([player]) => ({
+      player,
+      adp: adp.get(
+        `${normalizeName(names.get(player) ?? "")}|${position.get(player) ?? ""}`,
+      )?.adp ?? null,
+      points: (scored.get(player) ?? 0) / 17,
+    }))
+    .filter((row) => row.adp !== null);
+
+  if (priced.length < 30) {
+    console.log("\ntoo few men matched to adp to say anything");
+    return;
+  }
+
+  const place = (values: number[]) => {
+    const order = values.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
+    const out = new Array<number>(values.length);
+    order.forEach((row, rank) => { out[row.i] = rank + 1; });
+    return out;
+  };
+  const pricedTruth = priced.map((row) => row.points);
+  const byAdp = place(priced.map((row) => -row.adp!));
+  const walked = place(priced.map((row) =>
+    both["and drawn at his own depth"]!.get(row.player) ?? 0));
+
+  console.log(`\nagainst adp, on the ${priced.length} men it priced\n`);
+  console.log(
+    "  where adp had him            " +
+      spearman(byAdp.map((r) => -r), pricedTruth).toFixed(4),
+  );
+  console.log(
+    "  the walk                     " +
+      spearman(walked.map((r) => -r), pricedTruth).toFixed(4),
+  );
+  console.log("\n  leaning on the walk by   together");
+
+  for (const lean of [0.25, 0.375, 0.5, 0.625, 0.75]) {
+    const mixed = walked.map((w, i) => -(lean * w + (1 - lean) * byAdp[i]!));
+    console.log(
+      `    ${(100 * lean).toFixed(0)}%`.padEnd(28) +
+        spearman(mixed, pricedTruth).toFixed(4),
     );
   }
 }
