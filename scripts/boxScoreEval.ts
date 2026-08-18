@@ -25,6 +25,7 @@ import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js"
 import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
 import { walkDrive } from "../src/model/driveFromFactors.js";
 import { divideAmong } from "../src/features/shareCompetition.js";
+import { buildMatchupTable } from "../src/features/matchupTable.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import type { Call } from "../src/model/playFactors.js";
 
@@ -119,7 +120,13 @@ async function main(): Promise<void> {
     }
   }
 
-  const factors = fitPlayFactors(learnRows, undefined, projected);
+  // the network's read on a pairing, put where the team play counts
+  // are, and left out when it is asked for
+  const pairing = process.env["NO_MATCHUP"]
+    ? undefined
+    : await buildMatchupTable({ learn: LEARN.slice(-3), scoreOn: SCORE_ON });
+
+  const factors = fitPlayFactors(learnRows, undefined, projected, pairing?.bend);
 
   // what really happened, per team per game
   const scored = new Map<string, Truth>();
@@ -177,7 +184,7 @@ async function main(): Promise<void> {
   }
 
   const everyCount = [...driveCount.values()];
-  const rng = seededRng(23);
+  const rng = seededRng(Number(process.env["SEED"] ?? 23));
   const rows: {
     truth: Truth; points: number; passYards: number; rushYards: number;
     scores: number; line: number;

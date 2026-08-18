@@ -51,6 +51,24 @@ export const FACTOR_DEFAULTS: FactorSettings = {
   least: 300, leastForCall: 80, leastForMan: 40, leastForSide: 60,
 };
 
+/** what somebody managed over a set of plays, at whatever scope */
+interface Rate {
+  touches: number;
+  yards: number;
+  /** and how many of them went for twenty or more */
+  long: number;
+}
+
+const emptyRate = (): Rate => ({ touches: 0, yards: 0, long: 0 });
+
+const addTo = (into: Map<string, Rate>, key: string, yards: number): void => {
+  const own = into.get(key) ?? emptyRate();
+  own.touches++;
+  own.yards += yards;
+  if (yards >= 20) own.long++;
+  into.set(key, own);
+};
+
 /** everything counted at one state, plus who touched it there */
 interface Counted extends StateCell {
   byPlayer: Map<string, {
@@ -65,10 +83,25 @@ interface Counted extends StateCell {
    * can produce and halves the long scores.
    */
   from: number[];
+  /**
+   * And the same again over the plays a player was named on.
+   *
+   * A tenth of passes are sacks, which nobody is credited with and
+   * which average four and a third yards backwards. Comparing a
+   * receiver's yards against a league average that includes them makes
+   * every receiver look 21% better than he is.
+   */
+  named: Rate;
 }
 
 const emptyCounted = (): Counted =>
-  ({ ...emptyCell(), byPlayer: new Map(), from: [] });
+  ({ ...emptyCell(), byPlayer: new Map(), from: [], named: emptyRate() });
+
+const countIn = (rate: Rate, yards: number): void => {
+  rate.touches++;
+  rate.yards += yards;
+  if (yards >= 20) rate.long++;
+};
 
 /**
  * What share of his offence's work each man is expected to take.
@@ -81,10 +114,22 @@ const emptyCounted = (): Counted =>
  */
 export type ProjectedShares = Map<string, number>;
 
+/**
+ * What these two sides together do to a play, against what an average
+ * pair does.
+ *
+ * The counts below ask each side on its own, so an offence that has
+ * gained a lot and a defence that has given up little multiply
+ * together as though neither had met the other. They also cannot see a
+ * defence whose men have changed since those plays.
+ */
+export type Pairing = (offence: string, defence: string, call: Call) => number;
+
 export function fitPlayFactors(
   rows: PlayRow[],
   settings: FactorSettings = FACTOR_DEFAULTS,
   projected?: ProjectedShares,
+  pairing?: Pairing,
 ): PlayFactors {
   const cells = new Map<string, Counted>();
   /**
@@ -98,6 +143,19 @@ export function fitPlayFactors(
    */
   const byOffence = new Map<string, Counted>();
   const byDefence = new Map<string, Counted>();
+  /**
+   * And each man over everything he did on a call, with the league
+   * beside him for comparison.
+   *
+   * Asking for his forty touches inside one widened state never found
+   * them. The widening stops when the state has three hundred plays,
+   * and the busiest man in such a state has thirty. So every carry and
+   * every catch came out at the league's yards and no player differed
+   * from any other, which is most of why the model moved a team game
+   * by one point where what happened moves by ten.
+   */
+  const byMan = new Map<string, Rate>();
+  const leagueOn = new Map<string, Rate>();
   // how much of the ball each man took overall, so his usage at one
   // state can be read as a leaning rather than a level
   const overall = new Map<string, number>();
@@ -107,6 +165,8 @@ export function fitPlayFactors(
     if (row.player) {
       overall.set(row.player, (overall.get(row.player) ?? 0) + 1);
       everyTouch++;
+      addTo(byMan, `${row.player}|${row.call}`, row.yards);
+      addTo(leagueOn, row.call, row.yards);
     }
   }
 
@@ -140,6 +200,7 @@ export function fitPlayFactors(
     cell.scores += row.touchdown;
 
     if (row.player) {
+      countIn(cell.named, row.yards);
       const own = cell.byPlayer.get(row.player) ??
         { touches: 0, yards: 0, scores: 0, long: 0 };
       own.touches++;
@@ -159,6 +220,7 @@ export function fitPlayFactors(
     anyTime.scores += row.touchdown;
 
     if (row.player) {
+      countIn(anyTime.named, row.yards);
       const own = anyTime.byPlayer.get(row.player) ??
         { touches: 0, yards: 0, scores: 0, long: 0 };
       own.touches++;
@@ -229,6 +291,9 @@ export function fitPlayFactors(
       pooled.scores += cell.scores;
       pooled.yards = pooled.yards.concat(cell.yards);
       pooled.from = pooled.from.concat(cell.from);
+      pooled.named.touches += cell.named.touches;
+      pooled.named.yards += cell.named.yards;
+      pooled.named.long += cell.named.long;
 
       for (const [player, own] of cell.byPlayer) {
         const already = pooled.byPlayer.get(player) ??
@@ -414,7 +479,6 @@ export function fitPlayFactors(
        * not what his average already says, .684 of it surviving once
        * the average is taken out.
        */
-      const enough = own && own.touches >= settings.leastForMan;
       const longOnes: number[] = [];
       const shortOnes: number[] = [];
 
@@ -423,27 +487,54 @@ export function fitPlayFactors(
       }
 
       const leagueLong = longOnes.length / Math.max(1, pool.length);
-      const hisLong = enough ? own!.long / own!.touches : leagueLong;
+      /**
+       * Him against the league, both measured over the same plays.
+       *
+       * At this state when he has been here enough, otherwise over
+       * everything he did on this call. The two have to be compared at
+       * the same scope: his season average against a goal line average
+       * would make every man look twice as good near the line.
+       */
+      const wide = byMan.get(`${player}|${call}`);
+      const atState = own && own.touches >= settings.leastForMan
+        ? { his: own, league: cell.named }
+        : undefined;
+      const found = atState ?? (wide && wide.touches >= settings.leastForMan
+        ? { his: wide, league: leagueOn.get(call) }
+        : undefined);
+      const hisLong = found?.league && found.league.touches > 0 && found.league.long > 0
+        ? Math.max(0, Math.min(0.6,
+            leagueLong * (found.his.long / found.his.touches) /
+              (found.league.long / found.league.touches)))
+        : leagueLong;
       const from = uniform() < hisLong && longOnes.length ? longOnes
         : shortOnes.length ? shortOnes : pool;
       const drawn = from[Math.floor(uniform() * from.length)]!;
 
-      if (!enough || drawn <= 0) {
+      if (!found?.league || drawn <= 0) {
         return drawn;
       }
 
-      // and his level on top, against what the same men made from here
-      const league = cell.yards.reduce((a, b) => a + b, 0) / cell.plays;
-      const his = own!.yards / own!.touches;
-      const shape = leagueLong > 0 && hisLong > 0
+      // and his level on top, against what everybody made over the
+      // same plays, with the long ones taken out of it since the draw
+      // above has already put them in
+      const league = found.league.yards / Math.max(1, found.league.touches);
+      const his = found.his.yards / Math.max(1, found.his.touches);
+      const leagueLongRate = found.league.long / Math.max(1, found.league.touches);
+      const hisLongRate = found.his.long / Math.max(1, found.his.touches);
+      const shape = leagueLongRate > 0 && hisLongRate > 0
         ? (his / Math.max(0.1, league)) *
-          (leagueLong / hisLong) ** 0.5
+          (leagueLongRate / hisLongRate) ** 0.5
         : his / Math.max(0.1, league);
 
       const bent = drawn * Math.max(0.5, Math.min(1.8, shape));
 
       if (!sides || bent <= 0) {
         return bent;
+      }
+
+      if (pairing && sides.offence && sides.defence) {
+        return bent * pairing(sides.offence, sides.defence, call);
       }
 
       // and what the two sides do to it, each against what everybody
