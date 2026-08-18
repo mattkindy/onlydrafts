@@ -18,6 +18,7 @@ import { loadPlayerStats } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js";
+import { fitTargetDepth } from "../src/features/targetDepth.js";
 import { walkDrive, CLOCK_DEFAULTS } from "../src/model/driveFromFactors.js";
 import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
@@ -61,6 +62,9 @@ async function main(): Promise<void> {
     margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,
     yards: Number(r["yards"]) || 0, touchdown: Number(r["touchdown"]) || 0,
     player: r["player"] ?? "", team: r["offense"] ?? "",
+    passer: r["passer"] ?? "",
+    airYards: r["airYards"] === "" || r["airYards"] === undefined
+      ? undefined : Number(r["airYards"]),
   }));
 
   const learn = rows.filter((r) => r.season < SCORE_ON);
@@ -153,12 +157,16 @@ async function main(): Promise<void> {
   const both: Record<string, Map<string, number>> = {
     "who touched it before": new Map(),
     "the competition model": new Map(),
+    "and drawn at his own depth": new Map(),
   };
+  const depth = fitTargetDepth(learn as PlayRow[]);
 
   for (const [label, into] of Object.entries(both)) {
     const factors = fitPlayFactors(
       learn as PlayRow[], undefined,
-      label === "the competition model" ? projected : undefined,
+      label === "who touched it before" ? undefined : projected,
+      undefined, undefined, undefined,
+      label === "and drawn at his own depth" ? depth : undefined,
     );
 
     for (const [team, men] of roster) {
