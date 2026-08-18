@@ -120,7 +120,9 @@ export function walkDrive(
    */
   const tick = (call: Call, yards: number) => {
     const seconds = ticking
-      ? ticking.secondsFor(call, yards, state.margin, state.secondsLeft)
+      ? ticking.secondsFor(
+          call, yards, state.margin, state.secondsLeft, sides.offence,
+        )
       : 0;
     sinceLastSnap = seconds;
     took += seconds;

@@ -66,8 +66,10 @@ async function main(): Promise<void> {
         ? undefined : Number(r["airYards"]),
     })),
   );
-  const ticking = fitPlayClock(learnRows);
-  console.log(`the clock learned on ${ticking.learnedOn} plays`);
+  const ticking = fitPlayClock(
+    process.env["NO_PACE"] ? learnRows.map((r) => ({ ...r, offence: "" })) : learnRows,
+  );
+  console.error(`the clock learned on ${ticking.learnedOn} plays`);
 
   const positions = new Map<string, string>();
   const played = new Map<string, number>();

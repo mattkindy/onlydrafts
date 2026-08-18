@@ -18,6 +18,8 @@ export interface ClockRow {
   yards: number;
   margin: number;
   secondsLeft: number;
+  /** whose snap it was, since sides differ by two possessions a game */
+  offence?: string;
   /** the gap to the next snap, where one could be worked out */
   took?: number;
 }
@@ -26,7 +28,10 @@ export interface PlayClock {
   /** seconds from this snap to the next */
   secondsFor: (
     call: Call, yards: number, margin: number, secondsLeft: number,
+    offence?: string,
   ) => number;
+  /** how far from the league a side plays, for anyone who wants to say */
+  paceOf: (offence: string) => number;
   learnedOn: number;
 }
 
@@ -52,7 +57,7 @@ const keyFor = (
   return `${what}|${how}`;
 };
 
-export function fitPlayClock(rows: ClockRow[]): PlayClock {
+export function fitPlayClock(rows: ClockRow[], steadyAt = 400): PlayClock {
   const byKind = new Map<string, Tally>();
   const overall = empty();
 
@@ -71,14 +76,54 @@ export function fitPlayClock(rows: ClockRow[]): PlayClock {
   }
 
   const middle = overall.plays > 0 ? overall.seconds / overall.plays : 30.5;
+  const usual = (call: Call, yards: number, margin: number, secondsLeft: number) => {
+    const own = byKind.get(keyFor(call, yards, margin, secondsLeft));
+
+    return own && own.plays >= 100 ? own.seconds / own.plays : middle;
+  };
+
+  /**
+   * And how far each side runs from that, with what happened on the
+   * play held still.
+   *
+   * A side that throws more has more snaps that stop the clock, so raw
+   * seconds a snap would call it quick when it is only incomplete.
+   * Measured this way the quickest and the slowest are seventeen
+   * seconds apart over a drive, which is two possessions a game, and
+   * it carries to the next season at .507.
+   */
+  const bySide = new Map<string, { plays: number; over: number }>();
+
+  for (const row of rows) {
+    if (row.took === undefined || row.took <= 0 || row.took > 120 || !row.offence) {
+      continue;
+    }
+
+    const own = bySide.get(row.offence) ?? { plays: 0, over: 0 };
+    own.plays++;
+    own.over += row.took - usual(row.call, row.yards, row.margin, row.secondsLeft);
+    bySide.set(row.offence, own);
+  }
+
+  const paceOf = (offence: string) => {
+    const own = bySide.get(offence);
+
+    if (!own || own.plays <= 0) {
+      return 0;
+    }
+
+    // pulled toward the league until a side has played enough
+    return (own.over / own.plays) * (own.plays / (own.plays + steadyAt));
+  };
 
   return {
     learnedOn: overall.plays,
-    secondsFor: (call, yards, margin, secondsLeft) => {
-      const own = byKind.get(keyFor(call, yards, margin, secondsLeft));
-
-      return own && own.plays >= 100 ? own.seconds / own.plays : middle;
-    },
+    paceOf,
+    secondsFor: (call, yards, margin, secondsLeft, offence) =>
+      Math.max(
+        4,
+        usual(call, yards, margin, secondsLeft) + (offence ? paceOf(offence) : 0),
+      ),
   };
 }
 
