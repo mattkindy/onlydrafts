@@ -1,5 +1,5 @@
 /**
- * Where the room is wrong in a way that repeats.
+ * Where adp is wrong in a way that repeats.
  *
  * Beating it on the whole board is one thing, and small. Finding a kind
  * of player it misprices the same way every year is worth more, because
@@ -87,9 +87,9 @@ async function main(): Promise<void> {
     }
 
     /**
-     * Built from the room's list, not from the men who played.
+     * Built from adp's list, not from the men who played.
      *
-     * Taking only players with a stat line drops everybody the room
+     * Taking only players with a stat line drops everybody adp
      * drafted who never took a snap, and those are late picks almost to
      * a man. That alone would make late picks look like bargains.
      */
@@ -161,12 +161,12 @@ async function main(): Promise<void> {
 
   /**
    * Within a band of the board, so the comparison is between men the
-   * room priced alike.
+   * adp priced alike.
    *
    * A gap of places gained cannot be read straight. A man taken third
    * can only fall and one taken 150th can only climb, so any noisy
    * order shows early picks losing and late picks gaining whether the
-   * room is wrong or not. Holding the band fixed takes that out.
+   * adp is wrong or not. Holding the band fixed takes that out.
    */
   const bands: [string, (m: Priced) => boolean][] = [
     ["early", (m) => m.adp <= 48],
@@ -201,7 +201,7 @@ async function main(): Promise<void> {
   };
 
   console.log(
-    "against other men the room priced alike, places gained\n",
+    "against other men adp priced alike, places gained\n",
   );
 
   for (const position of ["RB", "TE"]) {
@@ -213,7 +213,7 @@ async function main(): Promise<void> {
   withinBands("seven years and up", (m) => m.experience >= 7);
 
   console.log("\nand the same without holding the band, which cannot be read");
-  console.log("places gained on where the room had him, by kind of player");
+  console.log("places gained on where adp had him, by kind of player");
   console.log("  kind                            gap                        men");
 
   for (const position of ["RB", "WR", "TE"]) {
@@ -240,11 +240,11 @@ async function main(): Promise<void> {
     report(label, all.filter(keep));
   }
 
-  // and whether last season's points, which the room can see, are
-  // still worth something after the room has priced him
+  // and whether last season's points, which adp can see, are
+  // still worth something after adp has priced him
   const withLast = all.filter((m) => m.lastSeason !== null);
   console.log(
-    `\nafter the room has spoken, does last season still say anything` +
+    `\nafter adp has spoken, does last season still say anything` +
       `\n  ${withLast.length} men: ` +
       spearman(
         withLast.map((m) => m.lastSeason!), withLast.map((m) => -m.finished),

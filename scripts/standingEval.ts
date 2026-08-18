@@ -229,7 +229,7 @@ async function main(): Promise<void> {
         .toFixed(4).padStart(7),
     );
   }
-  // and the question that matters: against the room, on the men it
+  // and the question that matters: against adp, on the men it
   // priced, with the two mixed as places
   const adp = await loadAdp(SCORE_ON, "ppr").catch(() => new Map());
   const names = new Map<string, string>();
@@ -259,7 +259,7 @@ async function main(): Promise<void> {
   };
 
   const pricedTruth = priced.map((p) => p.points);
-  const roomPlace = place(priced.map((p) => -p.adp!));
+  const adpPlace = place(priced.map((p) => -p.adp!));
   const best = built.get(process.env["USE"] ?? "three seasons")!;
   const plays = new Map<string, number>();
 
@@ -274,7 +274,7 @@ async function main(): Promise<void> {
   const modelPlace = place(priced.map((p) =>
     (best.get(p.man.playerId) ?? 0) * (plays.get(p.man.team) ?? 1000)));
 
-  console.log(`\nagainst the room, ${priced.length} men it priced   spearman`);
+  console.log(`\nagainst adp, ${priced.length} men it priced   spearman`);
 
   for (const [label, said] of built) {
     const at = place(priced.map((p) =>
@@ -290,13 +290,13 @@ async function main(): Promise<void> {
     spearman(modelPlace.map((r) => -r), pricedTruth).toFixed(4).padStart(7),
   );
   console.log(
-    "  where the room drafted him    " +
-    spearman(roomPlace.map((r) => -r), pricedTruth).toFixed(4).padStart(7),
+    "  where adp had him    " +
+    spearman(adpPlace.map((r) => -r), pricedTruth).toFixed(4).padStart(7),
   );
   console.log("\n  leaning on the model by   together");
 
   for (const lean of [0.2, 0.25, 0.3, 0.4, 0.5]) {
-    const mixed = modelPlace.map((m, i) => -(lean * m + (1 - lean) * roomPlace[i]!));
+    const mixed = modelPlace.map((m, i) => -(lean * m + (1 - lean) * adpPlace[i]!));
     console.log(
       `    ${(100 * lean).toFixed(0)}%`.padEnd(28) +
       spearman(mixed, pricedTruth).toFixed(4),

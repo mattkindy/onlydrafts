@@ -35,6 +35,14 @@ import { fitRoles } from "../src/features/fitRoles.js";
 import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
 import { normalDraw } from "../src/sim/normal.js";
 import { scoring } from "../src/scoring/active.js";
+import {
+  experienceBefore,
+  pastShares,
+  projectShares,
+  SHARING_POSITIONS,
+} from "../src/features/projectedShares.js";
+import { loadDraftPicks } from "../src/data/draftPicks.js";
+import { blendedPlace, placesBy } from "../src/features/boardOrder.js";
 
 const DOCS = join(import.meta.dirname, "..", "docs", "weekly");
 
@@ -51,7 +59,7 @@ async function main(): Promise<void> {
   const season = Number(argOf("--season", String(CURRENT_SEASON)));
   const leagueId = argOf("--league", "");
   const format = argOf("--scoring", "");
-  // The draft board has to match the room. A point a catch moves
+  // The draft board has to match the draft. A point a catch moves
   // receivers up the order, so a standard league needs the standard
   // mocks or every alternative it prices is the wrong man.
   let adpFormat: AdpFormat = "ppr";
@@ -288,6 +296,60 @@ async function main(): Promise<void> {
   const adp = await loadAdp(season, adpFormat).catch(() => new Map());
 
   /**
+   * How much of his offence each man is projected to touch.
+   *
+   * The regression asks what a player did and what has changed around
+   * him. This asks a different question: of the work his position
+   * group has to give out, how much does he win against the men he is
+   * competing with. The two disagree about different players, which
+   * is why mixing both with the market beats mixing either.
+   */
+  const touchesFor = new Map<string, number>();
+
+  try {
+    const ranPlays = new Map<string, number>();
+    const { parseCsv: readPlays } = await import("../src/data/csv.js");
+
+    for (const row of readPlays(await readFile(
+      join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+    ))) {
+      if (!["run", "pass"].includes(row["playType"] ?? "")) {
+        continue;
+      }
+
+      const key = `${row["season"]}|${row["offense"]}`;
+      ranPlays.set(key, (ranPlays.get(key) ?? 0) + 1);
+    }
+
+    const roster = world.players
+      .filter((p) => SHARING_POSITIONS.includes(p.position))
+      .map((p) => ({ playerId: p.playerId, position: p.position, team: p.teamId }));
+    const shares = projectShares({
+      season, roster,
+      past: await pastShares(
+        [season - 3, season - 2, season - 1],
+        (s, team) => ranPlays.get(`${s}|${team}`) ?? 1000,
+      ),
+      picks: await loadDraftPicks(),
+      experience: await experienceBefore(season),
+    });
+
+    for (const man of roster) {
+      const share = shares.get(man.playerId);
+
+      if (share !== undefined) {
+        touchesFor.set(
+          man.playerId, share * (ranPlays.get(`${season - 1}|${man.team}`) ?? 1000),
+        );
+      }
+    }
+
+    console.log(`projected touches for ${touchesFor.size} players`);
+  } catch (error) {
+    console.warn("no share projection, so the board is the old two-way mix: " + error);
+  }
+
+  /**
    * The shape of a player's week, from the situational simulation.
    *
    * The pooled residual model gives every player at a scoring level
@@ -388,6 +450,9 @@ async function main(): Promise<void> {
         vor: Number(
           (p.projectedPpg - (replacement.get(p.position) ?? 0)).toFixed(1),
         ),
+        touches: touchesFor.has(p.playerId)
+          ? Math.round(touchesFor.get(p.playerId)!)
+          : null,
         adp: adp.get(`${normalizeName(p.name)}|${p.position}`)?.adp ?? null,
         adpLow: adp.get(`${normalizeName(p.name)}|${p.position}`)?.low ?? null,
         adpHigh: adp.get(`${normalizeName(p.name)}|${p.position}`)?.high ?? null,
@@ -425,19 +490,17 @@ async function main(): Promise<void> {
     })
     .sort((a, b) => b.vor - a.vor);
 
-  // the measured best ordering blends market rank with model rank; players
-  // the market has not priced keep their model rank
-  const modelRank = new Map(board.map((p, i) => [p.key, i + 1]));
-  const marketOrder = board
-    .filter((p) => p.adp !== null)
-    .sort((a, b) => (a.adp ?? 999) - (b.adp ?? 999));
-  const marketRank = new Map(marketOrder.map((p, i) => [p.key, i + 1]));
+  const keyOf = (p: (typeof board)[number]) => p.key;
+  const modelPlace = placesBy(board, keyOf, (p) => p.vor);
+  const sharePlace = placesBy(board, keyOf, (p) => p.touches);
+  const adpPlace = placesBy(board, keyOf, (p) => (p.adp === null ? null : -p.adp));
 
   for (const p of board) {
-    const mine = modelRank.get(p.key)!;
-    const theirs = marketRank.get(p.key);
-    (p as unknown as { blend: number }).blend =
-      theirs === undefined ? mine : (mine + theirs) / 2;
+    (p as unknown as { blend: number }).blend = blendedPlace({
+      model: modelPlace.get(p.key)!,
+      share: sharePlace.get(p.key),
+      adp: adpPlace.get(p.key),
+    });
   }
 
   board.sort(
