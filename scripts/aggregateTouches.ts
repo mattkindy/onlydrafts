@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   const out = createWriteStream(OUT);
   out.write(
     "season,week,offense,defense,down,togo,yardline,margin,seconds," +
-      "playType,player,passer,yards,touchdown\n",
+      "playType,player,passer,airYards,yards,touchdown\n",
   );
   let total = 0;
 
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
           "week", "posteam", "defteam", "down", "ydstogo", "yardline_100",
           "score_differential", "game_seconds_remaining", "play_type",
           "yards_gained", "touchdown", "rusher_player_id", "receiver_player_id",
-          "complete_pass", "passer_player_id",
+          "complete_pass", "passer_player_id", "air_yards",
         ]) {
           at[field] = header.indexOf(field);
         }
@@ -72,6 +72,10 @@ async function main(): Promise<void> {
       // quarterback's and the walk could not see one at all
       const threw = c[at["passer_player_id"]!] ?? "";
       const passer = type === "pass" && threw.startsWith("00-") ? threw : "";
+      // how far downfield it was thrown, which is chosen before
+      // anybody catches it and decides most of what happens next
+      const air = Number(c[at["air_yards"]!]);
+      const airYards = type === "pass" && Number.isFinite(air) ? air : "";
       const down = Number(c[at["down"]!]);
       const yardline = Number(c[at["yardline_100"]!]);
 
@@ -83,7 +87,7 @@ async function main(): Promise<void> {
         season, c[at["week"]!], c[at["posteam"]!], c[at["defteam"]!],
         down, c[at["ydstogo"]!], yardline,
         c[at["score_differential"]!] || 0, c[at["game_seconds_remaining"]!] || 0,
-        type, player, passer, c[at["yards_gained"]!] || 0,
+        type, player, passer, airYards, c[at["yards_gained"]!] || 0,
         c[at["touchdown"]!] === "1" ? 1 : 0,
       ].join(",") + "\n");
       written++;
