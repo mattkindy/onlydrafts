@@ -75,7 +75,10 @@ export function walkDrive(
   uniform: () => number,
   clock: ClockRules = CLOCK_DEFAULTS,
   /** who is playing, so the two sides can bend what a play does */
-  sides: { offence?: string; defence?: string } = {},
+  sides: {
+    offence?: string; defence?: string;
+    passer?: string; season?: number; week?: number;
+  } = {},
 ): FactorDrive {
   const plays: FactorPlay[] = [];
   const state: PlayState = {

@@ -255,9 +255,69 @@ async function main(): Promise<void> {
       console.log("    " + one.name.padEnd(36) + (100 * one.share).toFixed(1) + "%");
     }
 
+    // and what each of them is worth in yards: hold a play as it was,
+    // move one feature from its low end to its high end, and see how
+    // far the guess travels
+    const spreadOf = (feature: number, over: number[][]) => {
+      const column = [...over.map((row) => row[feature] ?? 0)].sort((a, b) => a - b);
+      const low = column[Math.floor(column.length * 0.1)] ?? 0;
+      const high = column[Math.floor(column.length * 0.9)] ?? 0;
+      let moved = 0;
+
+      for (const row of over) {
+        const asLow = [...row];
+        const asHigh = [...row];
+        asLow[feature] = low;
+        asHigh[feature] = high;
+        moved += predictForest(forest, asHigh) - predictForest(forest, asLow);
+      }
+
+      return moved / Math.max(1, over.length);
+    };
+
+    // the men with the ball, split by what they have shown, since the
+    // question is whether the same change is worth more to one of them
+    const ownYards = 6;
+    const byMan = [...testRows].map((row) => row[ownYards] ?? 1).sort((a, b) => a - b);
+    const third = byMan[Math.floor(byMan.length / 3)] ?? 1;
+    const twoThirds = byMan[Math.floor((2 * byMan.length) / 3)] ?? 1;
+    const groups: [string, number[][]][] = [
+      ["every man", testRows],
+      ["the weakest third", testRows.filter((r) => (r[ownYards] ?? 1) <= third)],
+      ["the middle third", testRows.filter((r) =>
+        (r[ownYards] ?? 1) > third && (r[ownYards] ?? 1) <= twoThirds)],
+      ["the best third", testRows.filter((r) => (r[ownYards] ?? 1) > twoThirds)],
+    ];
+    const interesting = [
+      ["his own yards", ownYards], ["the men on that defence", 14],
+      ["his coordinator", 15], ["the coordinator before him", 16],
+      ["his quarterback", 8], ["yards to the goal", 2],
+    ] as [string, number][];
+
+    console.log(
+      "\n  what each is worth in yards a play, from its low end to its high\n",
+    );
+    console.log(
+      "    what                      " +
+        groups.map(([name]) => name.padStart(18)).join(""),
+    );
+
+    for (const [label, feature] of interesting) {
+      if (feature >= NAMES.length) {
+        continue;
+      }
+
+      console.log(
+        "    " + label.padEnd(26) +
+          groups.map(([, over]) =>
+            (over.length < 200 ? "  too few" : spreadOf(feature, over).toFixed(2))
+              .padStart(18)).join(""),
+      );
+    }
+
     const pairs = [...forest.pairCredit.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 6);
+      .slice(0, 14);
 
     console.log("\n  and the pairs it asks about together\n");
 

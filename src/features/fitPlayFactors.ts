@@ -13,6 +13,7 @@ import {
   type Call, type PlayFactors, type PlayState, type StateCell,
 } from "../model/playFactors.js";
 import type { RunParts } from "./runParts.js";
+import type { PlayLevel } from "./playLevel.js";
 
 export interface PlayRow {
   /** who had the ball and who was trying to stop them */
@@ -130,12 +131,31 @@ export type Pairing = (offence: string, defence: string, call: Call) => number;
 
 export type { RunParts } from "./runParts.js";
 
+export type { PlayLevel } from "./playLevel.js";
+
 export function fitPlayFactors(
   rows: PlayRow[],
   settings: FactorSettings = FACTOR_DEFAULTS,
   projected?: ProjectedShares,
   pairing?: Pairing,
   runParts?: RunParts,
+  /**
+   * One model for the level, with everybody on the play at once.
+   * Given it, the per-man and per-side multipliers below stand down,
+   * since it already knows all of them and how they bear on each
+   * other.
+   */
+  playLevel?: PlayLevel,
+  /**
+   * The two things the joint fit found worth having: the men on that
+   * defence this week, which moves a throw by 1.3 yards where a
+   * franchise-level number moves it by a fraction, and the
+   * quarterback, who did not exist here at all.
+   */
+  people?: {
+    defenceNow?: (defence: string, season: number, week: number, call: Call) => number;
+    passing?: (receiver: string, passer: string) => number;
+  },
 ): PlayFactors {
   const cells = new Map<string, Counted>();
   /**
@@ -536,15 +556,31 @@ export function fitPlayFactors(
        * as his, and they only carry to the next season at .345. The
        * two parts kept apart carry at .61 and .35.
        */
-      const level = his / Math.max(0.1, league);
+      const level = playLevel && sides
+        ? playLevel.levelFor(state, call, player, sides)
+        : his / Math.max(0.1, league);
       const shape = leagueLongRate > 0 && hisLongRate > 0
         ? level * (leagueLongRate / hisLongRate) ** 0.5
         : level;
 
       const bent = drawn * Math.max(0.5, Math.min(1.8, shape));
 
-      if (!sides || bent <= 0) {
+      if (!sides || bent <= 0 || playLevel) {
         return bent;
+      }
+
+      let byPeople = 1;
+
+      if (people?.defenceNow && sides.defence && sides.season && sides.week) {
+        byPeople *= people.defenceNow(sides.defence, sides.season, sides.week, call);
+      }
+
+      if (people?.passing && call === "pass" && sides.passer) {
+        byPeople *= people.passing(player, sides.passer);
+      }
+
+      if (byPeople !== 1) {
+        return bent * byPeople;
       }
 
       if (pairing && sides.offence && sides.defence) {

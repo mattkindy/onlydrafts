@@ -35,7 +35,11 @@ export interface PlayFactors {
   /** what he gains, drawn */
   gains: (
     state: PlayState, call: Call, player: string, uniform: () => number,
-    sides?: { offence?: string; defence?: string },
+    sides?: {
+      offence?: string; defence?: string;
+      /** who threw it, and when, so a level model can be asked */
+      passer?: string; season?: number; week?: number;
+    },
   ) => number;
   /** how often it ends in the end zone from here, given the yards */
   scores: (state: PlayState, call: Call, gained: number) => number;

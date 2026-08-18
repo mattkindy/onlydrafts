@@ -27,6 +27,8 @@ import { walkDrive } from "../src/model/driveFromFactors.js";
 import { divideAmong } from "../src/features/shareCompetition.js";
 import { buildMatchupTable } from "../src/features/matchupTable.js";
 import { buildRunParts } from "../src/features/runParts.js";
+import { buildDefenceOnField } from "../src/features/defenceOnField.js";
+import { fitPassing } from "../src/features/passerLevels.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import type { Call } from "../src/model/playFactors.js";
 
@@ -59,7 +61,8 @@ async function main(): Promise<void> {
       secondsLeft: Number(r["seconds"]) || 1800,
       call: (r["playType"] ?? "") as Call,
       yards: Number(r["yards"]) || 0, touchdown: Number(r["touchdown"]) || 0,
-      player: r["player"] ?? "",
+      player: r["player"] ?? "", passer: r["passer"] ?? "",
+      offence: r["offense"] ?? "", defence: r["defense"] ?? "",
     })) as PlayRow[];
 
   const positions = new Map<string, string>();
@@ -141,8 +144,48 @@ async function main(): Promise<void> {
     );
   }
 
+  /**
+   * The men on that defence this week, and the quarterback.
+   *
+   * The joint fit put the on-field defence at 1.3 yards a throw and
+   * the quarterback at .53, against a franchise-level defence worth a
+   * fraction of that. Both go in as multipliers on the drawn gain.
+   */
+  const onField = process.env["NO_PEOPLE"]
+    ? undefined
+    : await buildDefenceOnField({
+        learn: [2022, 2023], describe: [2024, SCORE_ON],
+      });
+  const passing = process.env["NO_PEOPLE"]
+    ? undefined
+    : fitPassing(learnRows);
+  const middleYards = { run: 4.5, pass: 6.1 };
+
+  if (onField && passing) {
+    console.log(
+      `the on-field fit knows ${onField.knownMen} men, ` +
+        `and ${passing.knownPassers} men who threw it`,
+    );
+  }
+
   const factors = fitPlayFactors(
-    learnRows, undefined, projected, pairing?.bend, runParts,
+    learnRows, undefined, projected, pairing?.bend, runParts, undefined,
+    onField && passing
+      ? {
+          defenceNow: (defence, season, week, call) => {
+            const effect = onField.weekOf(season, week, defence);
+
+            if (effect === undefined) {
+              return 1;
+            }
+
+            const moved = 1 - effect / middleYards[call];
+
+            return Math.max(0.75, Math.min(1.25, moved));
+          },
+          passing: (receiver, passer) => passing.changeFor(receiver, passer),
+        }
+      : undefined,
   );
 
   // what really happened, per team per game
@@ -200,6 +243,28 @@ async function main(): Promise<void> {
     driveCount.set(key, (driveCount.get(key) ?? 0) + 1);
   }
 
+  // each side's main quarterback last season, since the walk now
+  // wants to know who is throwing
+  const attempts = new Map<string, Map<string, number>>();
+
+  for (const r of touches.filter((x) => Number(x["season"]) === SCORE_ON - 1)) {
+    if (r["playType"] !== "pass" || !r["passer"]) {
+      continue;
+    }
+
+    const team = r["offense"] ?? "";
+    const own = attempts.get(team) ?? new Map<string, number>();
+    own.set(r["passer"]!, (own.get(r["passer"]!) ?? 0) + 1);
+    attempts.set(team, own);
+  }
+
+  const throwsFor = new Map<string, string>();
+
+  for (const [team, own] of attempts) {
+    const most = [...own.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (most) throwsFor.set(team, most[0]);
+  }
+
   const everyCount = [...driveCount.values()];
   const rng = seededRng(Number(process.env["SEED"] ?? 23));
   const rows: {
@@ -233,7 +298,11 @@ async function main(): Promise<void> {
           startFrom(starts, rng), factors,
           { ...rules, kickSucceeds: kicking.kickSucceeds }, fourth, among, rng,
           { isLast: kicking.isLast, lastLength: kicking.lastLength },
-          { offence: truth.team, defence: against },
+          {
+            offence: truth.team, defence: against,
+            passer: throwsFor.get(truth.team), season: SCORE_ON,
+            week: truth.week,
+          },
         );
         points += drive.ending === "touchdown" ? 7
           : drive.ending === "fieldGoal" ? 3 : 0;
