@@ -208,47 +208,70 @@ async function main(): Promise<void> {
     `learning on ${learn.rows.length} plays, scoring on ${test.rows.length}\n`,
   );
 
-  const forest = fitForest({
-    rows: learn.rows, target: learn.target, names: NAMES,
-    settings: { ...TREE_DEFAULTS, trees: 150, depth: 4 },
-  });
-  const said = test.rows.map((row) => predictForest(forest, row));
-  const flat = learn.target.reduce((a, b) => a + b, 0) / learn.target.length;
+  const report = (label: string, keep: (row: number[]) => boolean) => {
+    const rows = learn.rows.filter(keep);
+    const target = learn.target.filter((_, i) => keep(learn.rows[i]!));
+    const testRows = test.rows.filter(keep);
+    const testTarget = test.target.filter((_, i) => keep(test.rows[i]!));
 
-  console.log("guessing the yards on a play in 2025\n");
-  console.log(
-    "  the tree                 error " + rmse(said, test.target).toFixed(3) +
-      "   ordering " + spearman(said, test.target).toFixed(4),
-  );
-  console.log(
-    "  the same for every play  error " +
-      rmse(test.rows.map(() => flat), test.target).toFixed(3),
-  );
-
-  const total = forest.credit.reduce((a, b) => a + b, 0);
-  const ranked = forest.names
-    .map((name, i) => ({ name, share: (forest.credit[i] ?? 0) / total }))
-    .sort((a, b) => b.share - a.share);
-
-  console.log("\nwhat the tree splits on, as a share of the error it removes\n");
-
-  for (const one of ranked) {
-    if (one.share < 0.005) {
-      continue;
+    if (rows.length < 500 || testRows.length < 500) {
+      console.log(`\n${label}: too few plays`);
+      return;
     }
 
-    console.log("  " + one.name.padEnd(32) + (100 * one.share).toFixed(1) + "%");
-  }
+    const forest = fitForest({
+      rows, target, names: NAMES,
+      settings: { ...TREE_DEFAULTS, trees: 150, depth: 4 },
+    });
+    const said = testRows.map((row) => predictForest(forest, row));
+    const flat = target.reduce((a, b) => a + b, 0) / target.length;
 
-  const pairs = [...forest.pairCredit.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 12);
+    console.log(
+      `\n${label}, ${rows.length} plays learned on, ` +
+        `${testRows.length} scored\n`,
+    );
+    console.log(
+      "  the tree                 error " +
+        rmse(said, testTarget).toFixed(3) +
+        "   ordering " + spearman(said, testTarget).toFixed(4),
+    );
+    console.log(
+      "  the same for every play  error " +
+        rmse(testRows.map(() => flat), testTarget).toFixed(3),
+    );
 
-  console.log("\nand which pairs it asks about together, down one path\n");
+    const total = forest.credit.reduce((a, b) => a + b, 0);
+    const ranked = forest.names
+      .map((name, i) => ({ name, share: (forest.credit[i] ?? 0) / total }))
+      .sort((a, b) => b.share - a.share);
 
-  for (const [pair, credit] of pairs) {
-    console.log("  " + pair.padEnd(52) + (100 * credit / total).toFixed(1) + "%");
-  }
+    console.log("\n  what it splits on\n");
+
+    for (const one of ranked) {
+      if (one.share < 0.005) {
+        continue;
+      }
+
+      console.log("    " + one.name.padEnd(36) + (100 * one.share).toFixed(1) + "%");
+    }
+
+    const pairs = [...forest.pairCredit.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
+
+    console.log("\n  and the pairs it asks about together\n");
+
+    for (const [pair, credit] of pairs) {
+      console.log("    " + pair.padEnd(56) + (100 * credit / total).toFixed(1) + "%");
+    }
+  };
+
+  // the call itself takes a third of the splits, which is capacity
+  // spent separating two things we already know apart
+  const isRun = (row: number[]) => row[5] === 1;
+  report("everything together", () => true);
+  report("carries only", isRun);
+  report("throws only", (row) => !isRun(row));
 }
 
 main().catch((error) => {
