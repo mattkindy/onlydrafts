@@ -33,6 +33,7 @@ import {
   experienceBefore,
   pastShares,
   projectShares,
+  projectSplitShares,
   SHARING_POSITIONS,
   type RosterMan,
 } from "../src/features/projectedShares.js";
@@ -104,6 +105,8 @@ interface Row {
   adp: number;
   model: number;
   touches: number;
+  /** those targets at what his own depth is worth a target */
+  atHisDepth: number;
   /** those touches at what his position scores on one */
   atPosition: number;
   /** and at what he himself has scored on one */
@@ -155,10 +158,9 @@ async function rowsFor(
     [season - 3, season - 2, season - 1],
     (s, team) => plays.get(`${s}|${team}`) ?? 1000,
   );
-  const shares = projectShares({
-    season, roster, past, picks,
-    experience: await experienceBefore(season),
-  });
+  const experience = await experienceBefore(season);
+  const shares = projectShares({ season, roster, past, picks, experience });
+  const split = projectSplitShares({ season, roster, past, picks, experience });
   const teamOf = new Map(roster.map((man) => [man.playerId, man.team]));
   const adp = await loadAdp(season);
   const scored = new Map<string, number>();
@@ -174,6 +176,56 @@ async function rowsFor(
     );
     played.set(s.playerId, (played.get(s.playerId) ?? 0) + 1);
   }
+
+  /**
+   * What a target is worth at each depth, and how deep each man is
+   * thrown.
+   *
+   * How far downfield a man is thrown carries to the next season at
+   * .877, the surest thing known about a player, and it sets what a
+   * target is worth: a checkdown makes five yards and a shot past
+   * twenty-five makes thirteen. So volume from the share model and
+   * depth from the man should say more together than either alone.
+   */
+  const depthOf = new Map<string, { targets: number; depth: number }>();
+  const worthAt = new Map<number, { throws: number; yards: number }>();
+
+  for (const row of parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "curated", "touches.csv"), "utf8",
+  ))) {
+    const at = Number(row["season"]);
+
+    if (at >= season || at < season - 3 || row["playType"] !== "pass") {
+      continue;
+    }
+
+    const air = Number(row["airYards"]);
+    const yards = Number(row["yards"]) || 0;
+
+    if (!Number.isFinite(air)) {
+      continue;
+    }
+
+    const band = Math.min(5, Math.max(0, Math.floor((air + 5) / 7)));
+    const seen = worthAt.get(band) ?? { throws: 0, yards: 0 };
+    seen.throws++;
+    seen.yards += yards;
+    worthAt.set(band, seen);
+
+    if (row["player"]) {
+      const his = depthOf.get(row["player"]!) ?? { targets: 0, depth: 0 };
+      his.targets++;
+      his.depth += air;
+      depthOf.set(row["player"]!, his);
+    }
+  }
+
+  const perTargetAt = (air: number) => {
+    const band = Math.min(5, Math.max(0, Math.floor((air + 5) / 7)));
+    const seen = worthAt.get(band);
+
+    return seen && seen.throws > 20 ? seen.yards / seen.throws : 6.5;
+  };
 
   // what a touch has been worth, from the seasons before this one
   const before = new Map<string, { points: number; touches: number }>();
@@ -253,6 +305,22 @@ async function rowsFor(
       adp: entry.adp,
       model: predictSeasonBlend(fit, e),
       touches,
+      atHisDepth: (() => {
+        const halves = split.get(e.playerId);
+
+        if (!halves) {
+          return touches * perGroupTouch;
+        }
+
+        // his carries at what a carry makes, and his targets at what
+        // a target makes when it goes as far as his usually do
+        const his = depthOf.get(e.playerId);
+        const perTarget = his && his.targets >= 20
+          ? perTargetAt(his.depth / his.targets)
+          : 6.5;
+
+        return halves.carries * ran * 4.4 + halves.targets * ran * perTarget;
+      })(),
       atPosition: touches * perGroupTouch,
       atHisOwn: touches * perTouch(before.get(e.playerId), perGroupTouch),
       points: scored.get(e.playerId) ?? 0,
@@ -281,6 +349,7 @@ async function main(): Promise<void> {
     const share = placeOf(rows.map((r) => r.touches));
     const byGroup = placeOf(rows.map((r) => r.atPosition));
     const byOwn = placeOf(rows.map((r) => r.atHisOwn));
+    const byDepth = placeOf(rows.map((r) => r.atHisDepth));
 
     for (const [truth, into] of [
       [rows.map((r) => r.points), onPoints],
@@ -302,12 +371,13 @@ async function main(): Promise<void> {
       note("the share model, in touches", alone(share));
       note("touches at his position's points", alone(byGroup));
       note("touches at his own points", alone(byOwn));
+      note("his carries and his targets, each at what they make", alone(byDepth));
       note("regression and adp, the board today", mix([model, byAdp], [0.5, 0.5]));
 
       // and the whole grid for each way of voting, so the weighting
       // is picked off a plateau rather than off a peak
       for (const [how, vote] of [
-        ["touches", share], ["at position", byGroup], ["at his own", byOwn],
+        ["touches", share], ["split by depth", byDepth],
       ] as [string, number[]][]) {
         for (const onAdp of [0.3, 0.4, 0.5, 0.6]) {
           for (const ofRest of [0.25, 0.5, 0.75, 1]) {

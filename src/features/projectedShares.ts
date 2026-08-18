@@ -26,8 +26,13 @@ export interface PastYear {
   team: string;
   games: number;
   touches: number;
+  carries: number;
+  targets: number;
   /** touches over the plays his offence ran */
   share: number;
+  /** and the two halves of it, since they are different jobs */
+  carryShare: number;
+  targetShare: number;
 }
 
 /** who is expected to be where, going into the season being projected */
@@ -87,16 +92,22 @@ export async function pastShares(
 
       const own = tally.get(s.playerId) ?? {
         playerId: s.playerId, position: s.position, team: s.teamId,
-        games: 0, touches: 0, share: 0,
+        games: 0, touches: 0, carries: 0, targets: 0,
+        share: 0, carryShare: 0, targetShare: 0,
       };
       own.games++;
       own.touches += s.carries + s.targets;
+      own.carries += s.carries;
+      own.targets += s.targets;
       own.team = s.teamId;
       tally.set(s.playerId, own);
     }
 
     for (const own of tally.values()) {
-      own.share = own.touches / Math.max(1, playsFor(season, own.team));
+      const ran = Math.max(1, playsFor(season, own.team));
+      own.share = own.touches / ran;
+      own.carryShare = own.carries / ran;
+      own.targetShare = own.targets / ran;
     }
 
     out.set(season, tally);
@@ -123,6 +134,7 @@ export async function experienceBefore(
 /** what the position groups took, per team and across the league */
 function budgetsFrom(
   past: Map<number, Map<string, PastYear>>, season: number,
+  partOf: (was: PastYear) => number,
 ): { own: Map<string, number>; league: Map<string, number> } {
   const own = new Map<string, number>();
   const pooled = new Map<string, number[]>();
@@ -133,7 +145,7 @@ function budgetsFrom(
 
     for (const man of past.get(s)!.values()) {
       const team = byTeam.get(man.team) ?? new Map<string, number>();
-      team.set(man.position, (team.get(man.position) ?? 0) + man.share);
+      team.set(man.position, (team.get(man.position) ?? 0) + partOf(man));
       byTeam.set(man.team, team);
     }
 
@@ -221,10 +233,44 @@ export interface ShareRequest {
  * a man alone at his position gets all of it and a man behind two
  * better ones gets little however good his last season was.
  */
-export function projectShares(request: ShareRequest): Map<string, number> {
+/** the two halves of a man's work, each won against his own rivals */
+export interface SplitShare {
+  carries: number;
+  targets: number;
+}
+
+/**
+ * The same competition run twice, once for the carries and once for
+ * the targets.
+ *
+ * A back and a receiver compete for different things, and what a
+ * target is worth depends on how far downfield it goes where a carry
+ * does not. Keeping them apart is what lets depth be used at all.
+ */
+export function projectSplitShares(
+  request: ShareRequest,
+): Map<string, SplitShare> {
+  const carries = projectShares(request, (was) => was.carryShare);
+  const targets = projectShares(request, (was) => was.targetShare);
+  const out = new Map<string, SplitShare>();
+
+  for (const man of request.roster) {
+    out.set(man.playerId, {
+      carries: carries.get(man.playerId) ?? 0,
+      targets: targets.get(man.playerId) ?? 0,
+    });
+  }
+
+  return out;
+}
+
+export function projectShares(
+  request: ShareRequest,
+  partOf: (was: PastYear) => number = (was) => was.share,
+): Map<string, number> {
   const { season, roster, past, picks, experience } = request;
   const settings = request.settings ?? SHARE_DEFAULTS;
-  const budgets = budgetsFrom(past, season);
+  const budgets = budgetsFrom(past, season, partOf);
   const asRookie = rookieStandings(past, picks);
 
   const standing = (playerId: string, position: string) => {
@@ -240,7 +286,7 @@ export function projectShares(request: ShareRequest): Map<string, number> {
       }
 
       anySeason = true;
-      total += settings.weights[i]! * was.share;
+      total += settings.weights[i]! * partOf(was);
       weight += settings.weights[i]!;
     }
 
