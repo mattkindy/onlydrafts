@@ -32,7 +32,7 @@ export interface AfterContact {
 }
 
 /** gsis id to pfr id, since the advanced stats only carry the latter */
-async function pfrIds(): Promise<Map<string, string>> {
+export async function pfrToGsis(): Promise<Map<string, string>> {
   const rows = parseCsv(await readFile(join(RAW_DIR, "players.csv"), "utf8"));
   const out = new Map<string, string>();
 
@@ -89,7 +89,7 @@ export async function loadRushingSeasons(
 export async function loadAfterContact(
   season: number,
 ): Promise<Map<string, AfterContact>> {
-  const toGsis = await pfrIds();
+  const toGsis = await pfrToGsis();
   const out = new Map<string, AfterContact>();
 
   const rushing = parseCsv(await readFile(join(RAW_DIR, "advstats_rush.csv"), "utf8"))

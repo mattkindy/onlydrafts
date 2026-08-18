@@ -26,6 +26,7 @@ import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js"
 import { walkDrive } from "../src/model/driveFromFactors.js";
 import { divideAmong } from "../src/features/shareCompetition.js";
 import { buildMatchupTable } from "../src/features/matchupTable.js";
+import { buildRunParts } from "../src/features/runParts.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import type { Call } from "../src/model/playFactors.js";
 
@@ -126,7 +127,23 @@ async function main(): Promise<void> {
     ? undefined
     : await buildMatchupTable({ learn: LEARN.slice(-3), scoreOn: SCORE_ON });
 
-  const factors = fitPlayFactors(learnRows, undefined, projected, pairing?.bend);
+  // a carry split into what the scheme opens and what the back makes
+  const runParts = process.env["NO_PARTS"]
+    ? undefined
+    : await buildRunParts({ season: SCORE_ON });
+
+  if (runParts) {
+    console.log(
+      `a carry is ${runParts.leagueBefore.toFixed(2)} yards before contact ` +
+        `and ${runParts.leagueAfter.toFixed(2)} after, over ` +
+        `${runParts.knownSides} sides who kept their coordinator ` +
+        `and ${runParts.knownBacks} backs`,
+    );
+  }
+
+  const factors = fitPlayFactors(
+    learnRows, undefined, projected, pairing?.bend, runParts,
+  );
 
   // what really happened, per team per game
   const scored = new Map<string, Truth>();

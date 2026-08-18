@@ -133,6 +133,53 @@ async function main(): Promise<void> {
   ] as [string, (p: Pair) => boolean][]) {
     report(label, pairs.filter(is));
   }
+
+  // and how far apart the two ends are, since a part that everybody
+  // does the same is not worth carrying through the model
+  const teams = new Map<string, { yards: number; carries: number }>();
+  const backs = new Map<string, { yards: number; carries: number }>();
+
+  for (const row of await loadRushingSeasons(20)) {
+    for (const [into, key, part] of [
+      [teams, `${asTeam(row.team)}|${row.season}`, row.beforeContact],
+      [backs, row.pfrId, row.afterContact],
+    ] as [Map<string, { yards: number; carries: number }>, string, number][]) {
+      const own = into.get(key) ?? { yards: 0, carries: 0 };
+      own.yards += part * row.attempts;
+      own.carries += row.attempts;
+      into.set(key, own);
+    }
+  }
+
+  const spreadOf = (of: Map<string, { yards: number; carries: number }>) => {
+    const rates = [...of.values()]
+      .filter((one) => one.carries >= 100)
+      .map((one) => one.yards / one.carries)
+      .sort((a, b) => a - b);
+    const mid = rates.reduce((a, b) => a + b, 0) / Math.max(1, rates.length);
+
+    return {
+      count: rates.length,
+      middle: mid,
+      low: rates[Math.floor(rates.length * 0.1)] ?? 0,
+      high: rates[Math.floor(rates.length * 0.9)] ?? 0,
+    };
+  };
+
+  console.log("\n  how far apart the two ends are, in yards a carry\n");
+
+  for (const [label, of] of [
+    ["before contact, by team season", teams],
+    ["after contact, by back", backs],
+  ] as [string, typeof teams][]) {
+    const spread = spreadOf(of);
+    console.log(
+      "  " + label.padEnd(34) + String(spread.count).padStart(4) +
+        `   middle ${spread.middle.toFixed(2)}` +
+        `   a tenth are under ${spread.low.toFixed(2)}` +
+        `   a tenth over ${spread.high.toFixed(2)}`,
+    );
+  }
 }
 
 main().catch((error) => {

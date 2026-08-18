@@ -12,6 +12,7 @@ import {
   emptyCell, keysAt, stateKey, widening,
   type Call, type PlayFactors, type PlayState, type StateCell,
 } from "../model/playFactors.js";
+import type { RunParts } from "./runParts.js";
 
 export interface PlayRow {
   /** who had the ball and who was trying to stop them */
@@ -125,11 +126,14 @@ export type ProjectedShares = Map<string, number>;
  */
 export type Pairing = (offence: string, defence: string, call: Call) => number;
 
+export type { RunParts } from "./runParts.js";
+
 export function fitPlayFactors(
   rows: PlayRow[],
   settings: FactorSettings = FACTOR_DEFAULTS,
   projected?: ProjectedShares,
   pairing?: Pairing,
+  runParts?: RunParts,
 ): PlayFactors {
   const cells = new Map<string, Counted>();
   /**
@@ -522,10 +526,18 @@ export function fitPlayFactors(
       const his = found.his.yards / Math.max(1, found.his.touches);
       const leagueLongRate = found.league.long / Math.max(1, found.league.touches);
       const hisLongRate = found.his.long / Math.max(1, found.his.touches);
+      /**
+       * On a carry, what this back in this scheme should make against
+       * what an average back in an average scheme makes.
+       *
+       * His yards a carry are his line's and his coordinator's as much
+       * as his, and they only carry to the next season at .345. The
+       * two parts kept apart carry at .61 and .35.
+       */
+      const level = his / Math.max(0.1, league);
       const shape = leagueLongRate > 0 && hisLongRate > 0
-        ? (his / Math.max(0.1, league)) *
-          (leagueLongRate / hisLongRate) ** 0.5
-        : his / Math.max(0.1, league);
+        ? level * (leagueLongRate / hisLongRate) ** 0.5
+        : level;
 
       const bent = drawn * Math.max(0.5, Math.min(1.8, shape));
 
