@@ -32,11 +32,53 @@ export const AGAINST_DEFAULTS: AgainstSettings = { most: 0.2 };
 export type SituationRow = (run: boolean) => Float64Array;
 
 /**
- * One multiplier per kind of play.
+ * Both sides at once, each measured against an average one.
  *
- * The offence is held at the league average on both sides of the
- * comparison, so what comes out is the defence on its own rather than
- * the pairing, which is what a multiplier can carry.
+ * Asking only what a defence does leaves the offence at the league, so
+ * a good side meeting a good side comes out average when it should come
+ * out somewhere in between. The two are asked separately and their
+ * effects multiplied, which is what the network was fitted to do.
+ */
+export function matchup(
+  net: InteractionNet,
+  offence: Float64Array,
+  defence: Float64Array,
+  averageOffence: Float64Array,
+  averageDefence: Float64Array,
+  situation: SituationRow,
+  settings: AgainstSettings = AGAINST_DEFAULTS,
+): Against {
+  const ask = (them: Float64Array, they: Float64Array, run: boolean) =>
+    predict(net, [
+      { kind: "offence", values: them },
+      { kind: "defence", values: they },
+      { kind: "situation", values: situation(run) },
+    ], "yards");
+
+  const ratio = (run: boolean) => {
+    const plain = ask(averageOffence, averageDefence, run);
+
+    if (!Number.isFinite(plain) || Math.abs(plain) < 0.5) {
+      return 1;
+    }
+
+    const theirs = ask(offence, defence, run);
+    const raw = theirs / plain;
+
+    if (!Number.isFinite(raw)) {
+      return 1;
+    }
+
+    return Math.max(1 - settings.most, Math.min(1 + settings.most, raw));
+  };
+
+  return { run: ratio(true), pass: ratio(false) };
+}
+
+/**
+ * A defence on its own, with the offence held at the league on both
+ * sides of the comparison. Superseded by the pairing above and kept
+ * because one eval still scores against it.
  */
 export function againstDefence(
   net: InteractionNet,
