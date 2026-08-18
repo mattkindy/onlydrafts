@@ -14,6 +14,7 @@ import {
 } from "../model/playFactors.js";
 import type { RunParts } from "./runParts.js";
 import type { PlayLevel } from "./playLevel.js";
+import { bandOf, type TargetDepth } from "./targetDepth.js";
 
 export interface PlayRow {
   /** who had the ball and who was trying to stop them */
@@ -32,6 +33,8 @@ export interface PlayRow {
   player: string;
   /** and who threw it, empty on a carry or when nobody was credited */
   passer?: string;
+  /** how far downfield it was thrown, absent on a carry */
+  airYards?: number;
 }
 
 export interface FactorSettings {
@@ -96,10 +99,60 @@ interface Counted extends StateCell {
    * every receiver look 21% better than he is.
    */
   named: Rate;
+  /**
+   * And the gains kept apart by how far downfield the throw went.
+   *
+   * A checkdown gains nothing a quarter of the time and makes seven
+   * when it works; a shot past twenty-five gains nothing two thirds of
+   * the time and makes thirty-nine. Drawing both from one pool gives
+   * every receiver the same throw.
+   */
+  byDepth: Map<number, number[]>;
 }
 
 const emptyCounted = (): Counted =>
-  ({ ...emptyCell(), byPlayer: new Map(), from: [], named: emptyRate() });
+  ({
+    ...emptyCell(), byPlayer: new Map(), from: [], named: emptyRate(),
+    byDepth: new Map(),
+  });
+
+/**
+ * Which depth this throw goes to, from what happens here tilted by how
+ * this man is used.
+ *
+ * Taking his own mix straight would throw deep at the goal line
+ * because that is what he does over a season. The situation says what
+ * depths happen here and his leaning says which of them are his.
+ */
+const bandHere = (
+  cell: Counted, leaning: number[], uniform: () => number,
+): number => {
+  const weights: number[] = [];
+  let total = 0;
+
+  for (let band = 0; band < leaning.length; band++) {
+    const here = (cell.byDepth.get(band) ?? []).length;
+    const weight = here * (leaning[band] ?? 1);
+    weights.push(weight);
+    total += weight;
+  }
+
+  if (total <= 0) {
+    return 0;
+  }
+
+  let left = uniform() * total;
+
+  for (let band = 0; band < weights.length; band++) {
+    left -= weights[band]!;
+
+    if (left <= 0) {
+      return band;
+    }
+  }
+
+  return weights.length - 1;
+};
 
 const countIn = (rate: Rate, yards: number): void => {
   rate.touches++;
@@ -152,6 +205,7 @@ export function fitPlayFactors(
    * franchise-level number moves it by a fraction, and the
    * quarterback, who did not exist here at all.
    */
+  depth?: TargetDepth,
   people?: {
     defenceNow?: (defence: string, season: number, week: number, call: Call) => number;
     passing?: (receiver: string, passer: string) => number;
@@ -225,6 +279,11 @@ export function fitPlayFactors(
     cell.from.push(row.yardline);
     cell.scores += row.touchdown;
 
+    if (row.call === "pass" && row.airYards !== undefined) {
+      const band = bandOf(row.airYards);
+      cell.byDepth.set(band, [...(cell.byDepth.get(band) ?? []), row.yards]);
+    }
+
     if (row.player) {
       countIn(cell.named, row.yards);
       const own = cell.byPlayer.get(row.player) ??
@@ -244,6 +303,11 @@ export function fitPlayFactors(
     anyTime.yards.push(row.yards);
     anyTime.from.push(row.yardline);
     anyTime.scores += row.touchdown;
+
+    if (row.call === "pass" && row.airYards !== undefined) {
+      const band = bandOf(row.airYards);
+      anyTime.byDepth.set(band, [...(anyTime.byDepth.get(band) ?? []), row.yards]);
+    }
 
     if (row.player) {
       countIn(anyTime.named, row.yards);
@@ -317,6 +381,10 @@ export function fitPlayFactors(
       pooled.scores += cell.scores;
       pooled.yards = pooled.yards.concat(cell.yards);
       pooled.from = pooled.from.concat(cell.from);
+      for (const [band, gains] of cell.byDepth) {
+        pooled.byDepth.set(band, (pooled.byDepth.get(band) ?? []).concat(gains));
+      }
+
       pooled.named.touches += cell.named.touches;
       pooled.named.yards += cell.named.yards;
       pooled.named.long += cell.named.long;
@@ -505,11 +573,23 @@ export function fitPlayFactors(
        * not what his average already says, .684 of it surviving once
        * the average is taken out.
        */
+      /**
+       * On a throw, the man's own depth picks which pool.
+       *
+       * How far downfield he is thrown carries to the next season at
+       * .877, so it is the surest thing we know about him, and it
+       * settles how often the throw gains nothing as well as how much
+       * it makes when it does.
+       */
+      const atDepth = depth && call === "pass" && player
+        ? cell.byDepth.get(bandHere(cell, depth.leaningOf(player), uniform))
+        : undefined;
+      const drawFrom = atDepth && atDepth.length >= 40 ? atDepth : pool;
       const longOnes: number[] = [];
       const shortOnes: number[] = [];
       const wentNowhere: number[] = [];
 
-      for (const gained of pool) {
+      for (const gained of drawFrom) {
         if (gained <= 0) {
           wentNowhere.push(gained);
           continue;
@@ -526,7 +606,7 @@ export function fitPlayFactors(
        * gain can never produce one, since nothing times anything is
        * nothing, so which end of the pool to draw from is asked first.
        */
-      const wentNowhereHere = wentNowhere.length / Math.max(1, pool.length);
+      const wentNowhereHere = wentNowhere.length / Math.max(1, drawFrom.length);
       const stuffed = playLevel && sides
         ? Math.max(0, Math.min(0.95,
             wentNowhereHere * playLevel.stuffedBy(state, call, player, sides)))

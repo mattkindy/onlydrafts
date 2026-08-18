@@ -29,6 +29,7 @@ import { buildMatchupTable } from "../src/features/matchupTable.js";
 import { buildRunParts } from "../src/features/runParts.js";
 import { buildDefenceOnField } from "../src/features/defenceOnField.js";
 import { buildPlayLevel } from "../src/features/playLevel.js";
+import { fitTargetDepth } from "../src/features/targetDepth.js";
 import { fitPassing } from "../src/features/passerLevels.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import type { Call } from "../src/model/playFactors.js";
@@ -64,6 +65,8 @@ async function main(): Promise<void> {
       yards: Number(r["yards"]) || 0, touchdown: Number(r["touchdown"]) || 0,
       player: r["player"] ?? "", passer: r["passer"] ?? "",
       offence: r["offense"] ?? "", defence: r["defense"] ?? "",
+      airYards: r["airYards"] === "" || r["airYards"] === undefined
+        ? undefined : Number(r["airYards"]),
     })) as PlayRow[];
 
   const positions = new Map<string, string>();
@@ -149,17 +152,17 @@ async function main(): Promise<void> {
    * The men on that defence this week, and the quarterback.
    *
    * The joint fit put the on-field defence at 1.3 yards a throw and
-   * the quarterback at .53, against a franchise-level defence worth a
-   * fraction of that. Both go in as multipliers on the drawn gain.
+   * the quarterback at .53. Both go in as multipliers on a drawn
+   * gain, which is the channel that cannot carry them, and both cost
+   * the walk more than the pairing they replace. Off by default until
+   * the draw itself can be moved.
    */
-  const onField = process.env["NO_PEOPLE"]
-    ? undefined
-    : await buildDefenceOnField({
+  const onField = process.env["PEOPLE"]
+    ? await buildDefenceOnField({
         learn: [2022, 2023], describe: [2024, SCORE_ON],
-      });
-  const passing = process.env["NO_PEOPLE"]
-    ? undefined
-    : fitPassing(learnRows);
+      })
+    : undefined;
+  const passing = process.env["PEOPLE"] ? fitPassing(learnRows) : undefined;
   const middleYards = { run: 4.5, pass: 6.1 };
 
   if (onField && passing) {
@@ -169,16 +172,37 @@ async function main(): Promise<void> {
     );
   }
 
-  const playLevel = process.env["NO_LEVEL"]
-    ? undefined
-    : await buildPlayLevel({ learn: LEARN.slice(-3), scoreOn: SCORE_ON });
+  /**
+   * Off by default, and worth understanding why. It knows more than
+   * anything else here, and it says it through a multiplier on a
+   * drawn gain, which cannot move how often a throw gains nothing.
+   */
+  const playLevel = process.env["LEVEL"]
+    ? await buildPlayLevel({ learn: LEARN.slice(-3), scoreOn: SCORE_ON })
+    : undefined;
 
   if (playLevel) {
     console.log(`the level model learned on ${playLevel.learnedOn} plays`);
   }
 
+  /**
+   * How far downfield each man is thrown, which picks his pool.
+   *
+   * Off by default. The measurements behind it are the strongest of
+   * any taken here, but drawing from a depth pool costs the walk 1.8
+   * points a game and nobody has found where that goes yet.
+   */
+  const depth = process.env["DEPTH"] ? fitTargetDepth(learnRows) : undefined;
+
+  if (depth) {
+    console.log(
+      `depth known for ${depth.knownMen} men, the league throwing ` +
+        depth.leagueBands.map((s) => `${(100 * s).toFixed(0)}%`).join(" / "),
+    );
+  }
+
   const factors = fitPlayFactors(
-    learnRows, undefined, projected, pairing?.bend, runParts, playLevel,
+    learnRows, undefined, projected, pairing?.bend, runParts, playLevel, depth,
     onField && passing
       ? {
           defenceNow: (defence, season, week, call) => {
