@@ -48,6 +48,44 @@ async function pfrIds(): Promise<Map<string, string>> {
   return out;
 }
 
+/** one back's season of carrying, with the side he did it for */
+export interface RushingSeason {
+  /** the reference's own identifier, the only one in this file */
+  pfrId: string;
+  team: string;
+  season: number;
+  attempts: number;
+  perCarry: number;
+  beforeContact: number;
+  afterContact: number;
+  /** carries between broken tackles, so smaller is better */
+  brokenPer: number;
+}
+
+/**
+ * Every back's season of carrying, for questions about what travels.
+ *
+ * Kept apart from the season lookup above because these questions
+ * compare a man with himself a year later, and want the team he did it
+ * for rather than a description to hang on a player.
+ */
+export async function loadRushingSeasons(
+  leastCarries = 60,
+): Promise<RushingSeason[]> {
+  return parseCsv(await readFile(join(RAW_DIR, "advstats_rush.csv"), "utf8"))
+    .map((row) => ({
+      pfrId: row["pfr_id"] ?? "",
+      team: row["tm"] ?? "",
+      season: Number(row["season"]),
+      attempts: Number(row["att"]) || 0,
+      perCarry: Number(row["yds"]) / Math.max(1, Number(row["att"])),
+      beforeContact: Number(row["ybc_att"]) || 0,
+      afterContact: Number(row["yac_att"]) || 0,
+      brokenPer: Number(row["att_br"]) || 0,
+    }))
+    .filter((row) => row.pfrId && row.attempts >= leastCarries);
+}
+
 export async function loadAfterContact(
   season: number,
 ): Promise<Map<string, AfterContact>> {
