@@ -154,6 +154,30 @@ const bandHere = (
   return weights.length - 1;
 };
 
+/**
+ * The gains at one depth, borrowing from the bands beside it when
+ * that one is thin.
+ *
+ * Falling back to every depth at this spot is what a thin band used to
+ * do, and it quietly turned a deep throw into an average one: a shot
+ * past twenty-five is worth thirty-nine yards when it works and the
+ * pool of all throws is worth six. A band next door is much closer to
+ * the truth than no band at all.
+ */
+const gainsAtDepth = (cell: Counted, band: number): number[] => {
+  let found = [...(cell.byDepth.get(band) ?? [])];
+
+  for (let step = 1; step < 6 && found.length < 40; step++) {
+    for (const beside of [band - step, band + step]) {
+      if (beside >= 0) {
+        found = found.concat(cell.byDepth.get(beside) ?? []);
+      }
+    }
+  }
+
+  return found;
+};
+
 const countIn = (rate: Rate, yards: number): void => {
   rate.touches++;
   rate.yards += yards;
@@ -582,9 +606,9 @@ export function fitPlayFactors(
        * it makes when it does.
        */
       const atDepth = depth && call === "pass" && player
-        ? cell.byDepth.get(bandHere(cell, depth.leaningOf(player), uniform))
+        ? gainsAtDepth(cell, bandHere(cell, depth.leaningOf(player), uniform))
         : undefined;
-      const drawFrom = atDepth && atDepth.length >= 40 ? atDepth : pool;
+      const drawFrom = atDepth && atDepth.length >= 20 ? atDepth : pool;
       const longOnes: number[] = [];
       const shortOnes: number[] = [];
       const wentNowhere: number[] = [];
