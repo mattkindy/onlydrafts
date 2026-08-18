@@ -30,6 +30,7 @@ import { walkDrive } from "../src/model/driveFromFactors.js";
 import {
   playGame, GAME_DEFAULTS, type Side,
 } from "../src/model/gameFromDrives.js";
+import { myShare } from "../src/sim/acrossCores.js";
 import type { Call } from "../src/model/playFactors.js";
 
 const SCORE_ON = 2025;
@@ -210,9 +211,12 @@ async function main(): Promise<void> {
   const seen = new Set<string>();
 
   const only = Number(process.env["GAMES"] ?? 0);
+  const mine = new Set(
+    myShare([...scored.keys()].filter((key) => homeSide.has(key))),
+  );
 
   for (const [key, truth] of scored) {
-    if (!homeSide.has(key) || seen.has(key)) {
+    if (!homeSide.has(key) || seen.has(key) || !mine.has(key)) {
       continue;
     }
 
@@ -343,6 +347,20 @@ async function main(): Promise<void> {
       priced: line.get(key),
     }))
     .filter((row) => row.truth && row.priced !== undefined);
+
+  if (process.env["SHARES"]) {
+    // one share of the work, so hand back what it simulated rather
+    // than scoring it: only the whole season is worth scoring
+    console.log(JSON.stringify({
+      said: [...said.entries()],
+      drive: {
+        plays: everyDrive.plays, seconds: everyDrive.seconds,
+        count: everyDrive.count, startedAt: everyDrive.startedAt,
+        ends: [...everyDrive.ends.entries()],
+      },
+    }));
+    return;
+  }
 
   const sorted = [...everyDrive.starts].sort((a, b) => a - b);
   const at = (q: number) => sorted[Math.floor(sorted.length * q)] ?? 0;
