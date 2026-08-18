@@ -18,6 +18,7 @@ import { parseCsv } from "../src/data/csv.js";
 import { rmse, spearman } from "../src/backtest/metrics.js";
 import { loadCoaches } from "../src/data/coaches.js";
 import { fitForest, predictForest, TREE_DEFAULTS } from "../src/model/boostedTrees.js";
+import { buildDefenceOnField } from "../src/features/defenceOnField.js";
 import type { Call } from "../src/model/playFactors.js";
 
 const LEARN = [2022, 2023, 2024];
@@ -28,10 +29,13 @@ const NAMES = [
   "it is a run", "his own yards", "how often he breaks a long one",
   "his quarterback's yards", "this offence's yards", "this defence's yards",
   "his coordinator changed", "he changed team", "his touches behind him",
+  "the men on that defence this week",
+  "his coordinator's own yards", "the coordinator before him",
 ];
 
 interface Play {
   season: number;
+  week: number;
   offence: string;
   defence: string;
   down: number;
@@ -72,11 +76,14 @@ const per = (own: Tally | undefined, middle: number, steadyAt: number) => {
 };
 
 /** what was known going into a season, from the ones before it */
-function knownBefore(plays: Play[], upTo: number) {
+function knownBefore(
+  plays: Play[], upTo: number, coaches: Map<string, string>,
+) {
   const byMan = new Map<string, Tally>();
   const byPasser = new Map<string, Tally>();
   const byOffence = new Map<string, Tally>();
   const byDefence = new Map<string, Tally>();
+  const byCoordinator = new Map<string, Tally>();
   const league = new Map<string, Tally>();
   const teamOf = new Map<string, string>();
 
@@ -86,6 +93,15 @@ function knownBefore(plays: Play[], upTo: number) {
     }
 
     add(league, play.call, play.yards);
+
+    // the coordinator who called it, so the tree can be told which man
+    // rather than only that the man changed
+    const called = coaches.get(`${play.offence}|${play.season}|OC`);
+
+    if (called) {
+      add(byCoordinator, `${called}|${play.call}`, play.yards);
+    }
+
     add(byOffence, `${play.offence}|${play.call}`, play.yards);
     add(byDefence, `${play.defence}|${play.call}`, play.yards);
 
@@ -104,7 +120,10 @@ function knownBefore(plays: Play[], upTo: number) {
     return own && own.plays > 0 ? own.yards / own.plays : 5;
   };
 
-  return { byMan, byPasser, byOffence, byDefence, teamOf, middleOn, league };
+  return {
+    byMan, byPasser, byOffence, byDefence, byCoordinator, teamOf, middleOn,
+    league,
+  };
 }
 
 async function main(): Promise<void> {
@@ -113,7 +132,7 @@ async function main(): Promise<void> {
     join(import.meta.dirname, "..", "data", "curated", "touches.csv"), "utf8",
   ))
     .map((r) => ({
-      season: Number(r["season"]),
+      season: Number(r["season"]), week: Number(r["week"]),
       offence: r["offense"] ?? "", defence: r["defense"] ?? "",
       down: Number(r["down"]), toGo: Number(r["togo"]),
       yardline: Number(r["yardline"]), margin: Number(r["margin"]) || 0,
@@ -126,8 +145,17 @@ async function main(): Promise<void> {
 
   console.log(`${plays.length} plays with somebody credited\n`);
 
+  // the eleven who actually played, rather than the franchise
+  const onField = await buildDefenceOnField({
+    learn: [2022, 2023], describe: [2022, 2023, 2024, 2025],
+  });
+  console.log(
+    `the on-field fit knows ${onField.knownMen} men over ${onField.weeks} ` +
+      "team weeks\n",
+  );
+
   const rowsFor = (season: number) => {
-    const known = knownBefore(plays, season);
+    const known = knownBefore(plays, season, coaches);
     const rows: number[][] = [];
     const target: number[] = [];
 
@@ -157,6 +185,9 @@ async function main(): Promise<void> {
         known.teamOf.has(play.player) &&
           known.teamOf.get(play.player) !== play.offence ? 1 : 0,
         his ? his.plays : 0,
+        onField.weekOf(play.season, play.week, play.defence) ?? 0,
+        per(known.byCoordinator.get(`${now}|${play.call}`), middle, 400) / middle,
+        per(known.byCoordinator.get(`${before}|${play.call}`), middle, 400) / middle,
       ]);
       target.push(play.yards);
     }
