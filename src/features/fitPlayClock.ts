@@ -57,7 +57,17 @@ const keyFor = (
   return `${what}|${how}`;
 };
 
-export function fitPlayClock(rows: ClockRow[], steadyAt = 400): PlayClock {
+/** how much of a side's own tempo survives the staff changing */
+export interface StaffKept {
+  /** true when the same head coach is still there */
+  sameHeadCoach: (offence: string) => boolean;
+  /** and the same coordinator */
+  sameCoordinator: (offence: string) => boolean;
+}
+
+export function fitPlayClock(
+  rows: ClockRow[], steadyAt = 400, staff?: StaffKept,
+): PlayClock {
   const byKind = new Map<string, Tally>();
   const overall = empty();
 
@@ -105,6 +115,27 @@ export function fitPlayClock(rows: ClockRow[], steadyAt = 400): PlayClock {
     bySide.set(row.offence, own);
   }
 
+  /**
+   * How much of last year's tempo a side still owns.
+   *
+   * It carries at .613 when the staff stays, .404 once the
+   * coordinator goes and .280 once the head coach does, so tempo is
+   * the staff's and mostly the head coach's. What gets called belongs
+   * to the coordinator; how fast the operation runs is game
+   * management.
+   */
+  const stillTheirs = (offence: string) => {
+    if (!staff) {
+      return 1;
+    }
+
+    if (!staff.sameHeadCoach(offence)) {
+      return 0.28 / 0.613;
+    }
+
+    return staff.sameCoordinator(offence) ? 1 : 0.404 / 0.613;
+  };
+
   const paceOf = (offence: string) => {
     const own = bySide.get(offence);
 
@@ -112,8 +143,10 @@ export function fitPlayClock(rows: ClockRow[], steadyAt = 400): PlayClock {
       return 0;
     }
 
-    // pulled toward the league until a side has played enough
-    return (own.over / own.plays) * (own.plays / (own.plays + steadyAt));
+    // pulled toward the league until a side has played enough, and
+    // again by however much of the staff has gone
+    return (own.over / own.plays) *
+      (own.plays / (own.plays + steadyAt)) * stillTheirs(offence);
   };
 
   return {

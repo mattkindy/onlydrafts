@@ -25,6 +25,7 @@ import { fitPlayClock, timeBetween } from "../src/features/fitPlayClock.js";
 import { divideAmong } from "../src/features/shareCompetition.js";
 import { buildMatchupTable } from "../src/features/matchupTable.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
+import { loadCoaches } from "../src/data/coaches.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
 import { walkDrive } from "../src/model/driveFromFactors.js";
 import {
@@ -66,8 +67,17 @@ async function main(): Promise<void> {
         ? undefined : Number(r["airYards"]),
     })),
   );
+  const staffing = await loadCoaches();
+  const stillThere = (role: string) => (offence: string) =>
+    (staffing.get(`${offence}|${SCORE_ON}|${role}`) ?? "a") ===
+      (staffing.get(`${offence}|${SCORE_ON - 1}|${role}`) ?? "b");
   const ticking = fitPlayClock(
     process.env["NO_PACE"] ? learnRows.map((r) => ({ ...r, offence: "" })) : learnRows,
+    400,
+    {
+      sameHeadCoach: stillThere("HC"),
+      sameCoordinator: stillThere("OC"),
+    },
   );
   console.error(`the clock learned on ${ticking.learnedOn} plays`);
 
