@@ -134,6 +134,15 @@ async function main(): Promise<void> {
     );
   }
 
+  // and the gap between two snaps of the same drive, against the gap
+  // across a change of possession, which are different things
+  const withinDrive = timed.filter((p) => p.yards < p.toGo && p.down < 4);
+  console.log(
+    `\n  a snap to the next snap of the same drive: ` +
+      `${middle(withinDrive.map((p) => p.took!)).toFixed(1)} seconds ` +
+      `over ${withinDrive.length} of them`,
+  );
+
   // how much a drive's time is worth knowing, since that is what
   // decides how many drives a game gets
   const perDrive = middle(timed.map((p) => p.took!)) * 5.9;

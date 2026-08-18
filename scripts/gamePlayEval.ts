@@ -25,12 +25,16 @@ import { fitPlayClock, timeBetween } from "../src/features/fitPlayClock.js";
 import { divideAmong } from "../src/features/shareCompetition.js";
 import { buildMatchupTable } from "../src/features/matchupTable.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
-import { playGame, type Side } from "../src/model/gameFromDrives.js";
+import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
+import { walkDrive } from "../src/model/driveFromFactors.js";
+import {
+  playGame, GAME_DEFAULTS, type Side,
+} from "../src/model/gameFromDrives.js";
 import type { Call } from "../src/model/playFactors.js";
 
 const SCORE_ON = 2025;
 const LEARN = [2021, 2022, 2023, 2024];
-const RUNS = 40;
+const RUNS = Number(process.env["RUNS"] ?? 40);
 
 const middle = (values: number[]) =>
   values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
@@ -187,17 +191,31 @@ async function main(): Promise<void> {
 
     return {
       team, factors, passer: throwsFor.get(team),
-      among: roster.filter((p) => positions.has(p.playerId)).map((p) => p.playerId),
+      // with nobody named, a play gains what the league gains, which
+      // is how the drive shape was checked in the first place
+      among: process.env["NOBODY"]
+        ? [""]
+        : roster.filter((p) => positions.has(p.playerId)).map((p) => p.playerId),
     };
   };
 
+  const everyDrive = {
+    plays: 0, seconds: 0, count: 0, startedAt: 0,
+    ends: new Map<string, number>(),
+  };
   const rng = seededRng(Number(process.env["SEED"] ?? 23));
   const said = new Map<string, { points: number; drives: number }>();
   const seen = new Set<string>();
 
+  const only = Number(process.env["GAMES"] ?? 0);
+
   for (const [key, truth] of scored) {
     if (!homeSide.has(key) || seen.has(key)) {
       continue;
+    }
+
+    if (only && seen.size >= only) {
+      break;
     }
 
     const home = sideFor(truth.team);
@@ -216,7 +234,19 @@ async function main(): Promise<void> {
         fourth,
         clock: { isLast: kicking.isLast, lastLength: kicking.lastLength },
         ticking, season: SCORE_ON, week: truth.week,
-      }, rng);
+      }, rng, {
+        ...GAME_DEFAULTS, frozen: Boolean(process.env["FROZEN"]),
+      });
+
+      for (const one of game.possessions) {
+        everyDrive.plays += one.drive.plays.length;
+        everyDrive.seconds += one.drive.took;
+        everyDrive.count++;
+        everyDrive.ends.set(
+          one.drive.ending, (everyDrive.ends.get(one.drive.ending) ?? 0) + 1,
+        );
+        everyDrive.startedAt += one.startedAt;
+      }
 
       for (const team of [home.team, away.team]) {
         const own = tally.get(team) ?? { points: 0, drives: 0 };
@@ -233,6 +263,36 @@ async function main(): Promise<void> {
     }
   }
 
+  // the same factors walked the old way, eleven drives from a drawn
+  // starting spot, so the two can be told apart in one process
+  const alone = { plays: 0, count: 0, ends: new Map<string, number>() };
+  const someSide = sideFor([...byTeam.keys()][0] ?? "");
+
+  if (someSide) {
+    const starts = await loadDriveStarts([2022, 2023, 2024]);
+
+    for (let i = 0; i < 3000; i++) {
+      const drive = walkDrive(
+        startFrom(starts, rng), factors,
+        { ...rules, kickSucceeds: kicking.kickSucceeds }, fourth,
+        someSide.among, rng,
+        { isLast: kicking.isLast, lastLength: kicking.lastLength },
+      );
+      alone.plays += drive.plays.length;
+      alone.count++;
+      alone.ends.set(drive.ending, (alone.ends.get(drive.ending) ?? 0) + 1);
+    }
+
+    console.log(
+      `\nthe same factors walked one drive at a time, ${alone.count} of them\n` +
+        `  ${(alone.plays / alone.count).toFixed(1)} plays\n` +
+        "  ends: " + [...alone.ends.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([how, n]) => `${how} ${(100 * n / alone.count).toFixed(0)}%`)
+          .join(", "),
+    );
+  }
+
   const rows = [...said.entries()]
     .map(([key, guess]) => ({
       key, guess,
@@ -242,6 +302,16 @@ async function main(): Promise<void> {
     }))
     .filter((row) => row.truth && row.priced !== undefined);
 
+  console.log(
+    `\nwhat a simulated drive looks like, over ${everyDrive.count} of them\n` +
+      `  ${(everyDrive.plays / everyDrive.count).toFixed(1)} plays, ` +
+      `${(everyDrive.seconds / everyDrive.count).toFixed(0)} seconds, ` +
+      `starting ${(everyDrive.startedAt / everyDrive.count).toFixed(0)} out\n` +
+      "  ends: " + [...everyDrive.ends.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([how, n]) => `${how} ${(100 * n / everyDrive.count).toFixed(0)}%`)
+        .join(", "),
+  );
   console.log(`\n${rows.length} team games played out\n`);
   console.log("  what                     model   always the average   order");
 

@@ -165,12 +165,12 @@ const bandHere = (
  * the truth than no band at all.
  */
 const gainsAtDepth = (cell: Counted, band: number): number[] => {
-  let found = [...(cell.byDepth.get(band) ?? [])];
+  const found = [...(cell.byDepth.get(band) ?? [])];
 
   for (let step = 1; step < 6 && found.length < 40; step++) {
     for (const beside of [band - step, band + step]) {
-      if (beside >= 0) {
-        found = found.concat(cell.byDepth.get(beside) ?? []);
+      for (const gained of cell.byDepth.get(beside) ?? []) {
+        found.push(gained);
       }
     }
   }
@@ -403,10 +403,15 @@ export function fitPlayFactors(
       pooled.plays += cell.plays;
       pooled.runs += cell.runs;
       pooled.scores += cell.scores;
-      pooled.yards = pooled.yards.concat(cell.yards);
-      pooled.from = pooled.from.concat(cell.from);
+      // pushed rather than concatenated: rebuilding the array at every
+      // spot makes the gather quadratic, and a game that plays out
+      // asks for far more distinct states than one that does not
+      for (const gained of cell.yards) pooled.yards.push(gained);
+      for (const spot of cell.from) pooled.from.push(spot);
       for (const [band, gains] of cell.byDepth) {
-        pooled.byDepth.set(band, (pooled.byDepth.get(band) ?? []).concat(gains));
+        const already = pooled.byDepth.get(band) ?? [];
+        for (const gained of gains) already.push(gained);
+        pooled.byDepth.set(band, already);
       }
 
       pooled.named.touches += cell.named.touches;
@@ -475,7 +480,7 @@ export function fitPlayFactors(
           pooled.plays += cell.plays;
           pooled.runs += cell.runs;
           pooled.scores += cell.scores;
-          pooled.yards = pooled.yards.concat(cell.yards);
+          for (const gained of cell.yards) pooled.yards.push(gained);
         }
 
         if (pooled.plays >= least) {

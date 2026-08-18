@@ -46,6 +46,13 @@ export interface GameSettings {
   afterKickoff: number;
   /** the most drives before the loop gives up, as a backstop */
   mostDrives: number;
+  /**
+   * Tell every drive it is nil apiece with half the clock left, which
+   * is what the walk used to be told. Only for finding out whether a
+   * change of behaviour comes from the score and the clock or from the
+   * two sides taking turns.
+   */
+  frozen?: boolean;
 }
 
 export const GAME_DEFAULTS: GameSettings = {
@@ -101,7 +108,9 @@ export function playGame(
     }
 
     const margin = points[withBall.team]! - points[against.team]!;
-    const opening: Opening = { yardline: startAt, margin, secondsLeft };
+    const opening: Opening = settings.frozen
+      ? { yardline: startAt, margin: 0, secondsLeft: 1800 }
+      : { yardline: startAt, margin, secondsLeft };
     const drive = walkDrive(
       startAt, withBall.factors, rules.rules, rules.fourth, withBall.among,
       uniform, rules.clock,

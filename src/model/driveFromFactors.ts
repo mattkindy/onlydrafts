@@ -111,15 +111,33 @@ export function walkDrive(
     margin: opening.margin, secondsLeft: opening.secondsLeft,
   };
   let took = 0;
+  let sinceLastSnap = 0;
+  /**
+   * The clock runs between one snap and the next, so a drive of six
+   * plays has five gaps rather than six. Charging one after the last
+   * play as well made a drive a third too long, and a game lost a
+   * third of its possessions.
+   */
   const tick = (call: Call, yards: number) => {
     const seconds = ticking
       ? ticking.secondsFor(call, yards, state.margin, state.secondsLeft)
       : 0;
+    sinceLastSnap = seconds;
     took += seconds;
     state.secondsLeft = Math.max(0, state.secondsLeft - seconds);
   };
-  const ended = (ending: DriveEnd, handsOverAt: number): FactorDrive =>
-    ({ plays, ending, handsOverAt, took });
+  /**
+   * What the punt or the kick or the change of possession costs, once
+   * the last snap is done with. Twenty seconds is what is left over
+   * when the gaps between snaps are taken out of a real drive.
+   */
+  const ENDS_A_DRIVE = 20;
+  const ended = (ending: DriveEnd, handsOverAt: number): FactorDrive => {
+    const forReal = Math.max(ENDS_A_DRIVE, took - sinceLastSnap + ENDS_A_DRIVE);
+    state.secondsLeft = Math.max(0, state.secondsLeft + sinceLastSnap - ENDS_A_DRIVE);
+
+    return { plays, ending, handsOverAt, took: forReal };
+  };
   // how many snaps there is time for, when this is the last drive of a
   // half. Drawn once, so a drive either has a clock on it or does not.
   const budget = uniform() < clock.isLast
