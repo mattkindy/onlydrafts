@@ -14,6 +14,7 @@
 
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { splitLine } from "../data/csv.js";
 import { RAW_DIR } from "../data/nflverse.js";
@@ -31,6 +32,12 @@ export interface MatchupRequest {
   scoreOn: number;
   /** how far a pairing may move a play */
   settings?: AgainstSettings;
+  /**
+   * Where to keep the answer, since fitting the network is minutes and
+   * every side against every other is two thousand numbers. Several
+   * runs of the same job would otherwise each fit their own copy.
+   */
+  keptAt?: string;
 }
 
 /** the state the network is asked about, which is a first and ten */
@@ -60,9 +67,47 @@ export interface MatchupTable {
   sides: string[];
 }
 
+/** every pairing worked out, which is all the walk ever asks for */
+interface Kept {
+  sides: string[];
+  /** `${offence}|${defence}` to what it does to a carry and a throw */
+  bends: [string, [number, number]][];
+}
+
+const keptFor = (request: MatchupRequest) =>
+  request.keptAt ?? join(
+    import.meta.dirname, "..", "..", "data", "kept",
+    `matchup-${request.learn.join("-")}-${request.scoreOn}-` +
+      `${(request.settings ?? { most: 0.2 }).most}.json`,
+  );
+
+const asTable = (kept: Kept): MatchupTable => {
+  const bends = new Map(kept.bends);
+
+  return {
+    sides: kept.sides,
+    bend: (offence, defence, call) => {
+      const both = bends.get(`${offence}|${defence}`);
+
+      if (!both) {
+        return 1;
+      }
+
+      return call === "run" ? both[0] : both[1];
+    },
+  };
+};
+
 export async function buildMatchupTable(
   request: MatchupRequest,
 ): Promise<MatchupTable> {
+  const keptAt = keptFor(request);
+  const already = await readFile(keptAt, "utf8").catch(() => "");
+
+  if (already) {
+    return asTable(JSON.parse(already) as Kept);
+  }
+
   const vectors = new Map<string, Float64Array>();
 
   for (const season of [...request.learn, request.scoreOn]) {
@@ -157,26 +202,23 @@ export async function buildMatchupTable(
     });
   }
 
-  const worked = new Map<string, { run: number; pass: number }>();
+  // every pairing at once, so it can be written down and read back
+  const sides = [...describes.keys()].sort();
+  const bends: [string, [number, number]][] = [];
 
-  return {
-    sides: [...describes.keys()].sort(),
-    bend: (offence, defence, call) => {
-      const them = describes.get(offence);
-      const they = describes.get(defence);
-
-      if (!them || !they) {
-        return 1;
-      }
-
-      const key = `${offence}|${defence}`;
-      const already = worked.get(key) ?? matchup(
-        net, them.offence, they.defence,
+  for (const offence of sides) {
+    for (const defence of sides) {
+      const bent = matchup(
+        net, describes.get(offence)!.offence, describes.get(defence)!.defence,
         averageOffence, averageDefence, stateOf, request.settings,
       );
-      worked.set(key, already);
+      bends.push([`${offence}|${defence}`, [bent.run, bent.pass]]);
+    }
+  }
 
-      return call === "run" ? already.run : already.pass;
-    },
-  };
+  const kept: Kept = { sides, bends };
+  await mkdir(join(keptAt, ".."), { recursive: true }).catch(() => undefined);
+  await writeFile(keptAt, JSON.stringify(kept)).catch(() => undefined);
+
+  return asTable(kept);
 }
