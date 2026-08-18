@@ -74,6 +74,8 @@ export function walkDrive(
   among: string[],
   uniform: () => number,
   clock: ClockRules = CLOCK_DEFAULTS,
+  /** who is playing, so the two sides can bend what a play does */
+  sides: { offence?: string; defence?: string } = {},
 ): FactorDrive {
   const plays: FactorPlay[] = [];
   const state: PlayState = {
@@ -114,7 +116,8 @@ export function walkDrive(
       continue;
     }
 
-    const call: Call = uniform() < factors.runs(state) ? "run" : "pass";
+    const call: Call = uniform() < factors.runs(state, sides.offence)
+      ? "run" : "pass";
 
     const givenAway = rules.turnoverAt
       ? rules.turnoverAt(state, call)
@@ -139,7 +142,8 @@ export function walkDrive(
     }
 
     const gained = Math.min(
-      state.yardline, Math.round(factors.gains(state, call, player, uniform)),
+      state.yardline,
+      Math.round(factors.gains(state, call, player, uniform, sides)),
     );
     const scored = state.yardline - gained <= 0;
     plays.push({ state: { ...state }, call, player, yards: gained, scored });

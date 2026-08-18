@@ -14,6 +14,9 @@ import {
 } from "../model/playFactors.js";
 
 export interface PlayRow {
+  /** who had the ball and who was trying to stop them */
+  offence: string;
+  defence: string;
   down: number;
   toGo: number;
   yardline: number;
@@ -40,10 +43,12 @@ export interface FactorSettings {
   leastForCall: number;
   /** touches needed before a man's own share at a state is believed */
   leastForMan: number;
+  /** plays needed before one side's own numbers are believed */
+  leastForSide: number;
 }
 
 export const FACTOR_DEFAULTS: FactorSettings = {
-  least: 300, leastForCall: 80, leastForMan: 40,
+  least: 300, leastForCall: 80, leastForMan: 40, leastForSide: 60,
 };
 
 /** everything counted at one state, plus who touched it there */
@@ -82,6 +87,17 @@ export function fitPlayFactors(
   projected?: ProjectedShares,
 ): PlayFactors {
   const cells = new Map<string, Counted>();
+  /**
+   * The same counts again per offence and per defence.
+   *
+   * Every side was walked with the league's numbers, so two teams
+   * differed only in who took the ball off them, and the model had no
+   * skill on a particular game at all. A side that runs well keeps its
+   * own numbers where it has enough plays, and a defence moves them by
+   * how much it gives up against what everybody gives up.
+   */
+  const byOffence = new Map<string, Counted>();
+  const byDefence = new Map<string, Counted>();
   // how much of the ball each man took overall, so his usage at one
   // state can be read as a leaning rather than a level
   const overall = new Map<string, number>();
@@ -160,6 +176,23 @@ export function fitPlayFactors(
       if (row.call === "run") both.runs++;
       cells.set(key, both);
     }
+
+    for (const [into, who] of [
+      [byOffence, row.offence], [byDefence, row.defence],
+    ] as [Map<string, Counted>, string][]) {
+      if (!who) {
+        continue;
+      }
+
+      for (const key of [`${who}|${at}`, `${who}|${loose}`, `${who}|${eitherLoose}`]) {
+        const side = into.get(key) ?? emptyCounted();
+        side.plays++;
+        if (row.call === "run") side.runs++;
+        side.yards.push(row.yards);
+        side.scores += row.touchdown;
+        into.set(key, side);
+      }
+    }
   }
 
   /**
@@ -217,6 +250,70 @@ export function fitPlayFactors(
     return pooled;
   };
 
+  /**
+   * The same gathering over one side's own plays. Kept apart from the
+   * league version so a thin team falls back to everybody rather than
+   * quietly mixing the two.
+   */
+  const sideRemembered = new Map<string, Counted>();
+  const forSide = (
+    from: Map<string, Counted>, who: string, state: PlayState,
+    least: number, call?: Call,
+  ) => {
+    const key = `${who}|${call ?? "both"}|${stateKey(
+      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
+    )}|${least}`;
+    const already = sideRemembered.get(key);
+
+    if (already) {
+      return already;
+    }
+
+    let found = emptyCounted();
+
+    for (const looseness of [0, 1, 2]) {
+      const pooled = emptyCounted();
+
+      for (const spot of widening(state)) {
+        if (spot.looseness !== looseness) {
+          continue;
+        }
+
+        for (const cellKey of keysAt(
+          state.down, spot.toGo, spot.yardline,
+          state.secondsLeft, state.margin, looseness,
+        )) {
+          const cell = from.get(`${who}|${call ? `${call}|${cellKey}` : cellKey}`);
+
+          if (!cell) {
+            continue;
+          }
+
+          pooled.plays += cell.plays;
+          pooled.runs += cell.runs;
+          pooled.scores += cell.scores;
+          pooled.yards = pooled.yards.concat(cell.yards);
+        }
+
+        if (pooled.plays >= least) {
+          break;
+        }
+      }
+
+      found = pooled;
+
+      if (found.plays >= least) {
+        break;
+      }
+    }
+
+    sideRemembered.set(key, found);
+    return found;
+  };
+
+  const average = (cell: Counted) =>
+    cell.plays === 0 ? 0 : cell.yards.reduce((a, b) => a + b, 0) / cell.plays;
+
   const remembered = new Map<string, Counted>();
   const at = (state: PlayState, least: number, call?: Call) => {
     const key = `${call ?? "both"}|${stateKey(
@@ -242,9 +339,19 @@ export function fitPlayFactors(
   };
 
   return {
-    runs: (state) => {
-      const cell = at(state, settings.leastForCall);
-      return cell.plays === 0 ? 0.45 : cell.runs / cell.plays;
+    runs: (state, offence) => {
+      const league = at(state, settings.leastForCall);
+      const leagueRate = league.plays === 0 ? 0.45 : league.runs / league.plays;
+
+      if (!offence) {
+        return leagueRate;
+      }
+
+      // his own where he has run enough of them from here
+      const own = forSide(byOffence, offence, state, settings.leastForSide);
+      return own.plays >= settings.leastForSide
+        ? own.runs / own.plays
+        : leagueRate;
     },
     goesTo: (state, call, among) => {
       const cell = at(
@@ -286,7 +393,7 @@ export function fitPlayFactors(
 
       return shares;
     },
-    gains: (state, call, player, uniform) => {
+    gains: (state, call, player, uniform, sides) => {
       const cell = at(state, settings.least, call);
       const own = cell.byPlayer.get(player);
       const pool = cell.yards;
@@ -333,7 +440,37 @@ export function fitPlayFactors(
           (leagueLong / hisLong) ** 0.5
         : his / Math.max(0.1, league);
 
-      return drawn * Math.max(0.5, Math.min(1.8, shape));
+      const bent = drawn * Math.max(0.5, Math.min(1.8, shape));
+
+      if (!sides || bent <= 0) {
+        return bent;
+      }
+
+      // and what the two sides do to it, each against what everybody
+      // does from here, held near one since a side is not that
+      // different from the rest
+      /**
+       * A ratio needs far fewer plays than a distribution does, so the
+       * sides are asked with a lower bar than the pool itself. Asking
+       * for three hundred of one team's plays at one state meant the
+       * answer was one every time and the teams never differed.
+       */
+      const leagueYards = average(cell);
+      const held = (found: Counted) => {
+        if (leagueYards <= 0 || found.plays < settings.leastForSide) {
+          return 1;
+        }
+
+        return Math.max(0.8, Math.min(1.25, average(found) / leagueYards));
+      };
+      const theirs = sides.offence
+        ? held(forSide(byOffence, sides.offence, state, settings.leastForSide, call))
+        : 1;
+      const against = sides.defence
+        ? held(forSide(byDefence, sides.defence, state, settings.leastForSide, call))
+        : 1;
+
+      return bent * theirs * against;
     },
     scores: (state, call, gained) => {
       if (state.yardline - gained <= 0) {

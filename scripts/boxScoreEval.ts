@@ -157,6 +157,26 @@ async function main(): Promise<void> {
     line.set(`${game.week}|${game.awayTeamId}`, t / 2 - s / 2);
   }
 
+  /**
+   * Who they played and how many drives they got.
+   *
+   * Eleven for everybody is another constant: a side really gets
+   * anywhere from eight to fifteen depending on the pace of the game,
+   * and that alone moves its points by several.
+   */
+  const faced = new Map<string, string>();
+  const driveCount = new Map<string, number>();
+
+  for (const row of parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "curated", "drives.csv"), "utf8",
+  ))) {
+    if (Number(row["season"]) !== SCORE_ON || Number(row["week"]) > 18) continue;
+    const key = `${row["week"]}|${row["offense"]}`;
+    faced.set(key, row["defense"] ?? "");
+    driveCount.set(key, (driveCount.get(key) ?? 0) + 1);
+  }
+
+  const everyCount = [...driveCount.values()];
   const rng = seededRng(23);
   const rows: {
     truth: Truth; points: number; passYards: number; rushYards: number;
@@ -178,12 +198,18 @@ async function main(): Promise<void> {
     let rushYards = 0;
     let scores = 0;
 
+    const against = faced.get(key);
+
     for (let run = 0; run < RUNS; run++) {
-      for (let i = 0; i < DRIVES; i++) {
+      // drawn from what teams really get, rather than eleven every time
+      const howMany = everyCount[Math.floor(rng() * everyCount.length)] ?? DRIVES;
+
+      for (let i = 0; i < howMany; i++) {
         const drive = walkDrive(
           startFrom(starts, rng), factors,
           { ...rules, kickSucceeds: kicking.kickSucceeds }, fourth, among, rng,
           { isLast: kicking.isLast, lastLength: kicking.lastLength },
+          { offence: truth.team, defence: against },
         );
         points += drive.ending === "touchdown" ? 7
           : drive.ending === "fieldGoal" ? 3 : 0;
@@ -234,6 +260,26 @@ async function main(): Promise<void> {
     `\n  the model says ${middle(rows.map((r) => r.points)).toFixed(1)} points, ` +
       `the line says ${middle(rows.map((r) => r.line)).toFixed(1)}, ` +
       `they scored ${middle(truth).toFixed(1)}`,
+  );
+
+  /**
+   * How far apart the model puts two team games, against how far apart
+   * they really are and how far the line puts them.
+   *
+   * Ordering nothing can mean two things: the model says everyone is
+   * the same, or it says they differ and picks the wrong ones. This
+   * tells them apart.
+   */
+  const spread = (values: number[]) => {
+    const mid = middle(values);
+    return Math.sqrt(middle(values.map((v) => (v - mid) ** 2)));
+  };
+
+  console.log(
+    "\n  how far apart it puts two team games, in points" +
+      `\n    the model  ${spread(rows.map((r) => r.points)).toFixed(2)}` +
+      `\n    the line   ${spread(rows.map((r) => r.line)).toFixed(2)}` +
+      `\n    what happened ${spread(truth).toFixed(2)}`,
   );
 }
 

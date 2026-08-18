@@ -35,6 +35,7 @@ async function load(): Promise<{ learn: PlayRow[]; test: PlayRow[] }> {
     season: Number(r["season"]),
     down: Number(r["down"]), toGo: Number(r["togo"]),
     yardline: Number(r["yardline"]), call: (r["playType"] ?? "") as Call,
+    offence: r["offense"] ?? "", defence: r["defense"] ?? "",
     margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,
     yards: Number(r["yards"]) || 0, touchdown: Number(r["touchdown"]) || 0,
     player: r["player"] ?? "",

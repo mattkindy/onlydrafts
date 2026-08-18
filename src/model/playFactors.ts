@@ -28,13 +28,14 @@ export interface PlayState {
 export type Call = "run" | "pass";
 
 export interface PlayFactors {
-  /** how often the call is a run */
-  runs: (state: PlayState) => number;
+  /** how often the call is a run, for this offence where it is known */
+  runs: (state: PlayState, offence?: string) => number;
   /** how the work at this state divides between the men available */
   goesTo: (state: PlayState, call: Call, among: string[]) => Map<string, number>;
   /** what he gains, drawn */
   gains: (
     state: PlayState, call: Call, player: string, uniform: () => number,
+    sides?: { offence?: string; defence?: string },
   ) => number;
   /** how often it ends in the end zone from here, given the yards */
   scores: (state: PlayState, call: Call, gained: number) => number;
