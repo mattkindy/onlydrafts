@@ -98,6 +98,11 @@ async function main(): Promise<void> {
   score("everything", rows);
   score("2025 alone", rows.filter((r) => r.season === 2025));
   score("2025 from week 6 on", rows.filter((r) => r.season === 2025 && r.week >= 6));
+  // Where the carried belief has least to go on, and where a prior
+  // built from the players on the roster would have most to add.
+  score("every season, weeks 1 to 3", rows.filter((r) => r.week <= 3));
+  score("every season, weeks 4 to 6", rows.filter((r) => r.week >= 4 && r.week <= 6));
+  score("every season, week 7 on", rows.filter((r) => r.week >= 7));
 }
 
 main().catch((error) => {
