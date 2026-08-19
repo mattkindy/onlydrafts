@@ -38,8 +38,8 @@ import type { Call } from "../src/model/playFactors.js";
 /** the fourth downs where a side actually chose, so not the flags */
 const DECIDED = ["run", "pass", "field_goal", "punt"];
 
-const SCORE_ON = 2025;
-const LEARN = [2021, 2022, 2023, 2024];
+const SCORE_ON = Number(process.env["SEASON"] ?? 2025);
+const LEARN = [SCORE_ON - 4, SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1];
 const RUNS = Number(process.env["RUNS"] ?? 20);
 const RULES = presets.standard;
 
@@ -154,6 +154,66 @@ async function main(): Promise<void> {
     if (most) throwsFor.set(team, most[0]);
   }
 
+  /**
+   * A quarterback runs too, and his share of the carries is his own
+   * habit rather than a competition: nobody else scrambles for him.
+   * Half of what the running quarterbacks score is on the ground, and
+   * without this the walk projects them as statues.
+   */
+  const qbCarries = new Map<string, number>();
+  const qbSeasons = [SCORE_ON - 2, SCORE_ON - 1];
+  const carried = new Map<string, number>();
+
+  for (const r of raw) {
+    const season = Number(r["season"]);
+
+    if (!qbSeasons.includes(season)) {
+      continue;
+    }
+
+    if (r["playType"] === "run" && r["player"] &&
+        positions.get(r["player"]!) === "QB") {
+      carried.set(r["player"]!, (carried.get(r["player"]!) ?? 0) + 1);
+    }
+
+  }
+
+  const everyQbCarry = [...carried.values()].reduce((a, b) => a + b, 0);
+  const everyPlay = qbSeasons.reduce(
+    (sum, season) =>
+      sum + [...teamPlays.entries()]
+        .filter(([key]) => key.startsWith(`${season}|`))
+        .reduce((s2, [, n]) => s2 + n, 0),
+    0,
+  );
+  const leagueQb = everyPlay > 0 ? everyQbCarry / everyPlay : 0.05;
+
+  for (const [team] of attempts) {
+    const passer = throwsFor.get(team);
+
+    if (!passer) {
+      continue;
+    }
+
+    const ran = carried.get(passer) ?? 0;
+    const plays = qbSeasons.reduce(
+      (sum, season) => sum + (teamPlays.get(`${season}|${team}`) ?? 0), 0,
+    );
+
+    if (plays <= 0) {
+      qbCarries.set(passer, leagueQb);
+      continue;
+    }
+
+    // his own habit, pulled toward the league until he has run enough
+    const trust = ran / (ran + 30);
+    qbCarries.set(passer, trust * (ran / plays) + (1 - trust) * leagueQb);
+  }
+
+  for (const [passer, share] of qbCarries) {
+    split.set(passer, { carries: share, targets: 0 });
+  }
+
   const sideFor = (team: string): Side | undefined => {
     const men = byTeam.get(team);
 
@@ -161,11 +221,16 @@ async function main(): Promise<void> {
       return undefined;
     }
 
+    const passer = throwsFor.get(team);
+
     return {
-      team, factors, passer: throwsFor.get(team),
-      among: men
-        .filter((p) => SHARING_POSITIONS.includes(p.position))
-        .map((p) => p.playerId),
+      team, factors, passer,
+      among: [
+        ...men
+          .filter((p) => SHARING_POSITIONS.includes(p.position))
+          .map((p) => p.playerId),
+        ...(passer ? [passer] : []),
+      ],
     };
   };
 
