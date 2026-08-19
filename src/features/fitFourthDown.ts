@@ -16,6 +16,17 @@ import type { PlayState } from "../model/playFactors.js";
 
 export type FourthChoice = "go" | "kick" | "punt";
 
+/**
+ * How far along the field to reach for more plays.
+ *
+ * Kicking falls off a cliff at the forty, where a field goal becomes
+ * fifty seven yards: sides kick on 55% of fourth downs from the thirty
+ * to the forty and 4% from the forty to the fifty. Reaching eight
+ * yards either way steps over that and the model punted 19% from the
+ * thirty to the forty where sides punt 11%.
+ */
+const REACHES = [0, 1, 2, 3];
+
 export interface FourthDown {
   /** the chance of each, adding to one */
   chances: (state: PlayState) => Record<FourthChoice, number>;
@@ -134,7 +145,7 @@ export function fitFourthDown(
     for (const under of [band, "any"]) {
       let found = empty();
 
-      for (const reach of [0, 1, 2, 3, 5, 8]) {
+      for (const reach of REACHES) {
         const pooled = empty();
 
         for (
