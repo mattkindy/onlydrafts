@@ -571,6 +571,50 @@ export function fitPlayFactors(
     return found;
   };
 
+  /**
+   * What the level averages over the touches it is put on.
+   *
+   * A man's level is his yards against the league's, and the men who
+   * get the ball are better than the average of everyone who ever
+   * touched it, so the levels average above one and every play comes
+   * out long. Asked about the plays a season really had, the walk
+   * gained 4.66 on a carry against the 4.50 sides managed and 7.68 on
+   * a throw against 7.32. Dividing by what it averages puts the level
+   * back where it belongs and leaves what separates two men alone.
+   */
+  const centreOf = new Map<string, number>();
+
+  for (const call of ["run", "pass"] as Call[]) {
+    const league = leagueOn.get(call);
+
+    if (!league || league.touches <= 0) {
+      continue;
+    }
+
+    const middle = league.yards / league.touches;
+    const leagueLong = league.long / Math.max(1, league.touches);
+    let weighted = 0;
+    let touches = 0;
+
+    for (const [key, his] of byMan) {
+      if (!key.endsWith(`|${call}`) || his.touches < settings.leastForMan) {
+        continue;
+      }
+
+      const hisLong = his.long / Math.max(1, his.touches);
+      const level = (his.yards / his.touches) / Math.max(0.1, middle);
+      const shape = leagueLong > 0 && hisLong > 0
+        ? level * (leagueLong / hisLong) ** 0.5
+        : level;
+      weighted += Math.max(0.5, Math.min(1.8, shape)) * his.touches;
+      touches += his.touches;
+    }
+
+    if (touches > 0) {
+      centreOf.set(call, weighted / touches);
+    }
+  }
+
   return {
     runs: (state, offence) => {
       const league = at(state, settings.leastForCall);
@@ -760,7 +804,9 @@ export function fitPlayFactors(
         ? level * (leagueLongRate / hisLongRate) ** 0.5
         : level;
 
-      const bent = drawn * Math.max(0.5, Math.min(1.8, shape));
+      const centre = process.env["NO_CENTRE"] ? 1 : centreOf.get(call) ?? 1;
+      const bent = drawn *
+        Math.max(0.5, Math.min(1.8, shape)) / Math.max(0.5, centre);
 
       if (!sides || bent <= 0 || playLevel) {
         return bent;
