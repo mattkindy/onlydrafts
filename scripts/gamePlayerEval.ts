@@ -284,6 +284,36 @@ async function main(): Promise<void> {
         spearman(mixed, pricedTruth).toFixed(4),
     );
   }
+
+  /**
+   * And inside bands of the draft, since an edge that lives only among
+   * the men taken late is a different thing to sell than one across
+   * the board. Ranks are rebuilt inside each band so early picks are
+   * not being credited for beating late ones.
+   */
+  console.log("\ninside bands of the draft\n");
+  console.log("  band            men   adp   the played games");
+
+  for (const [label, from, upTo] of [
+    ["the first 60", 0, 60], ["61 to 120", 60, 120], ["past 120", 120, 999],
+  ] as [string, number, number][]) {
+    const band = priced.filter((row) => row.adp! > from && row.adp! <= upTo);
+
+    if (band.length < 20) {
+      console.log("  " + label.padEnd(14) + String(band.length).padStart(4) +
+        "   too few");
+      continue;
+    }
+
+    const bandTruth = band.map((row) => row.really);
+    const bandAdp = place(band.map((row) => -row.adp!));
+    const bandWalk = place(band.map((row) => row.points));
+    console.log(
+      "  " + label.padEnd(14) + String(band.length).padStart(4) +
+        spearman(bandAdp.map((r) => -r), bandTruth).toFixed(3).padStart(8) +
+        spearman(bandWalk.map((r) => -r), bandTruth).toFixed(3).padStart(15),
+    );
+  }
 }
 
 main().catch((error) => {
