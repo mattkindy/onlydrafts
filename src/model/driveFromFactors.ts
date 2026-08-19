@@ -70,11 +70,12 @@ export interface FactorDrive {
   /** and how much of the clock went by, when one is being kept */
   took: number;
   /**
-   * Where it stood when it faced fourth down, absent if it never did.
-   * A punt or a kick returns before any play is pushed, so this is the
-   * only way to see where the choice was made.
+   * Where it stood at every fourth down it faced, since a drive can
+   * go for one, convert, and face another. A punt or a kick returns
+   * before any play is pushed, so this is the only way to see where
+   * the choices were made.
    */
-  decidedAt?: number;
+  facedAt: number[];
 }
 
 /** where a game stands when a drive begins */
@@ -140,12 +141,12 @@ export function walkDrive(
    * when the gaps between snaps are taken out of a real drive.
    */
   const ENDS_A_DRIVE = 20;
-  let decidedAt: number | undefined;
+  const facedAt: number[] = [];
   const ended = (ending: DriveEnd, handsOverAt: number): FactorDrive => {
     const forReal = Math.max(ENDS_A_DRIVE, took - sinceLastSnap + ENDS_A_DRIVE);
     state.secondsLeft = Math.max(0, state.secondsLeft + sinceLastSnap - ENDS_A_DRIVE);
 
-    return { plays, ending, handsOverAt, took: forReal, decidedAt };
+    return { plays, ending, handsOverAt, took: forReal, facedAt };
   };
   // how many snaps there is time for, when this is the last drive of a
   // half. Drawn once, so a drive either has a clock on it or does not.
@@ -159,7 +160,7 @@ export function walkDrive(
     }
 
     if (state.down === 4) {
-      decidedAt = state.yardline;
+      facedAt.push(state.yardline);
       const choice = fourth.choose(state, uniform);
 
       if (choice === "kick") {

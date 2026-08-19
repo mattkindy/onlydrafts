@@ -342,8 +342,8 @@ async function composed(
 
       // recorded before the guard below, which drops every drive that
       // never reached the twenty
-      if (drive.decidedAt !== undefined) {
-        faced.push(drive.decidedAt);
+      for (const spot of drive.facedAt) {
+        faced.push(spot);
       }
 
       if (drive.ending === "touchdown") {
