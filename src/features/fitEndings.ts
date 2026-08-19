@@ -65,12 +65,37 @@ export async function fitEndings(seasons: number[]): Promise<Endings> {
   const ranOut = drives.filter((r) => r["result"] === "End of half");
   const lengths = ranOut.map((r) => Number(r["plays"]) || 1);
 
+  /**
+   * How often a drive is given a short count of plays before the half
+   * ends on it.
+   *
+   * A side gets two last drives a game, so about a fifth of them, but
+   * the count of plays comes from the drives that really ran out of
+   * time and those are short by selection. Handing a fifth of drives a
+   * short count ended 15.1% of them on the clock where 6.8% really
+   * end that way.
+   *
+   * About five in six of the drives given one run out before they
+   * finish another way, so the share that gets one is the share that
+   * should end on the clock over that.
+   */
+  const perTeamGame = new Map<string, number>();
+
+  for (const row of drives) {
+    const key = `${row["season"]}|${row["week"]}|${row["offense"]}`;
+    perTeamGame.set(key, (perTeamGame.get(key) ?? 0) + 1);
+  }
+
+  const runsOutOnce = 0.83;
+
   return {
     kickSucceeds: (yardline) => {
       const length = Math.round(lengthOf(yardline));
       return made.get(Math.max(15, Math.min(70, length))) ?? 0.7;
     },
-    isLast: ranOut.length / Math.max(1, drives.length),
+    isLast: Math.min(
+      0.4, ranOut.length / Math.max(1, drives.length) / runsOutOnce,
+    ),
     lastLength: (uniform) =>
       lengths.length === 0
         ? 4
