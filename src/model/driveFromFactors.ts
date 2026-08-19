@@ -60,6 +60,8 @@ export interface FactorPlay {
   player: string;
   yards: number;
   scored: boolean;
+  /** whether the throw was caught; a run always was */
+  caught: boolean;
 }
 
 export interface FactorDrive {
@@ -76,6 +78,8 @@ export interface FactorDrive {
    * the choices were made.
    */
   facedAt: number[];
+  /** when it ended in a turnover, whether that was an interception */
+  thrownAway: boolean;
 }
 
 /** where a game stands when a drive begins */
@@ -142,11 +146,12 @@ export function walkDrive(
    */
   const ENDS_A_DRIVE = 20;
   const facedAt: number[] = [];
+  let thrownAway = false;
   const ended = (ending: DriveEnd, handsOverAt: number): FactorDrive => {
     const forReal = Math.max(ENDS_A_DRIVE, took - sinceLastSnap + ENDS_A_DRIVE);
     state.secondsLeft = Math.max(0, state.secondsLeft + sinceLastSnap - ENDS_A_DRIVE);
 
-    return { plays, ending, handsOverAt, took: forReal, facedAt };
+    return { plays, ending, handsOverAt, took: forReal, facedAt, thrownAway };
   };
   // how many snaps there is time for, when this is the last drive of a
   // half. Drawn once, so a drive either has a clock on it or does not.
@@ -184,6 +189,7 @@ export function walkDrive(
       state.toGo = Math.min(10, state.yardline);
       plays.push({
         state: { ...state }, call: "pass", player: "", yards: 0, scored: false,
+        caught: false,
       });
       tick("pass", 0);
       continue;
@@ -197,6 +203,9 @@ export function walkDrive(
       : rules.turnoverRate(call);
 
     if (uniform() < givenAway) {
+      // an interception belongs to the man who threw it, and which
+      // kind this was is knowable from the call
+      thrownAway = call === "pass";
       return ended("turnover", 100 - state.yardline);
     }
 
@@ -219,7 +228,10 @@ export function walkDrive(
       Math.round(factors.gains(state, call, player, uniform, sides)),
     );
     const scored = state.yardline - gained <= 0;
-    plays.push({ state: { ...state }, call, player, yards: gained, scored });
+    // drawn from what throws for these yards were, so a zero is
+    // usually an incompletion and a small loss is usually a screen
+    const caught = call === "run" || factors.caught(gained, uniform);
+    plays.push({ state: { ...state }, call, player, yards: gained, scored, caught });
     tick(call, gained);
     state.yardline -= gained;
 

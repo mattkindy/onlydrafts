@@ -43,6 +43,8 @@ export interface PlayFactors {
   ) => number;
   /** how often it ends in the end zone from here, given the yards */
   scores: (state: PlayState, call: Call, gained: number) => number;
+  /** whether a throw for this many yards was caught, drawn */
+  caught: (gained: number, uniform: () => number) => boolean;
 }
 
 /**

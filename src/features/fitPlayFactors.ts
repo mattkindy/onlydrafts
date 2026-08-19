@@ -35,6 +35,8 @@ export interface PlayRow {
   passer?: string;
   /** how far downfield it was thrown, absent on a carry */
   airYards?: number;
+  /** whether anybody caught it, absent on a carry */
+  caught?: boolean;
 }
 
 export interface FactorSettings {
@@ -241,6 +243,15 @@ const countIn = (rate: Rate, yards: number): void => {
 export type ProjectedShares = Map<string, number>;
 
 /**
+ * The same, with the two halves of a man's work kept apart.
+ *
+ * One combined share lets a receiver's target volume leak onto run
+ * plays. With the halves separate, a carry is divided by who competes
+ * for carries and a throw by who competes for targets.
+ */
+export type SplitProjected = Map<string, { carries: number; targets: number }>;
+
+/**
  * What these two sides together do to a play, against what an average
  * pair does.
  *
@@ -255,31 +266,35 @@ export type { RunParts } from "./runParts.js";
 
 export type { PlayLevel } from "./playLevel.js";
 
-export function fitPlayFactors(
-  rows: PlayRow[],
-  settings: FactorSettings = FACTOR_DEFAULTS,
-  projected?: ProjectedShares,
-  pairing?: Pairing,
-  runParts?: RunParts,
+/** everything the factors can be handed beyond the plays themselves */
+export interface FactorExtras {
+  /** each man's expected share of the work, one number for all of it */
+  projected?: ProjectedShares;
+  /** the same with the two halves kept apart, which wins if both given */
+  split?: SplitProjected;
+  /** what one side does to another, from the network */
+  pairing?: Pairing;
+  runParts?: RunParts;
   /**
-   * One model for the level, with everybody on the play at once.
-   * Given it, the per-man and per-side multipliers below stand down,
-   * since it already knows all of them and how they bear on each
-   * other.
+   * One model for the level with everybody on the play at once. Given
+   * it, the per-man and per-side multipliers stand down.
    */
-  playLevel?: PlayLevel,
-  /**
-   * The two things the joint fit found worth having: the men on that
-   * defence this week, which moves a throw by 1.3 yards where a
-   * franchise-level number moves it by a fraction, and the
-   * quarterback, who did not exist here at all.
-   */
-  depth?: TargetDepth,
+  playLevel?: PlayLevel;
+  /** how far downfield each man is thrown, which picks his pool */
+  depth?: TargetDepth;
+  /** the men on that defence this week, and the quarterback */
   people?: {
     defenceNow?: (defence: string, season: number, week: number, call: Call) => number;
     passing?: (receiver: string, passer: string) => number;
-  },
+  };
+}
+
+export function fitPlayFactors(
+  rows: PlayRow[],
+  settings: FactorSettings = FACTOR_DEFAULTS,
+  extras: FactorExtras = {},
 ): PlayFactors {
+  const { projected, split, pairing, runParts, playLevel, depth, people } = extras;
   const cells = new Map<string, Counted>();
   /**
    * The same counts again per offence and per defence.
@@ -305,12 +320,29 @@ export function fitPlayFactors(
    */
   const byMan = new Map<string, Rate>();
   const leagueOn = new Map<string, Rate>();
+  /**
+   * How often a throw for this many yards was caught.
+   *
+   * A gain above zero is nearly always a catch and a big loss is a
+   * sack, but a zero is usually an incompletion and a small loss is
+   * usually a screen brought down behind the line. Fitted from the
+   * plays rather than asserted.
+   */
+  const caughtAt = new Map<number, { threw: number; caught: number }>();
   // how much of the ball each man took overall, so his usage at one
   // state can be read as a leaning rather than a level
   const overall = new Map<string, number>();
   let everyTouch = 0;
 
   for (const row of rows) {
+    if (row.call === "pass" && row.caught !== undefined) {
+      const band = Math.max(-8, Math.min(8, row.yards));
+      const own = caughtAt.get(band) ?? { threw: 0, caught: 0 };
+      own.threw++;
+      if (row.caught) own.caught++;
+      caughtAt.set(band, own);
+    }
+
     if (row.player) {
       overall.set(row.player, (overall.get(row.player) ?? 0) + 1);
       everyTouch++;
@@ -615,7 +647,18 @@ export function fitPlayFactors(
     }
   }
 
+  const wasCaught = (gained: number, uniform: () => number) => {
+    const own = caughtAt.get(Math.max(-8, Math.min(8, Math.round(gained))));
+
+    if (!own || own.threw < 50) {
+      return gained > 0;
+    }
+
+    return uniform() < own.caught / own.threw;
+  };
+
   return {
+    caught: wasCaught,
     runs: (state, offence) => {
       const league = at(state, settings.leastForCall);
       const leagueRate = league.plays === 0 ? 0.45 : league.runs / league.plays;
@@ -656,7 +699,11 @@ export function fitPlayFactors(
         const leaning = hisOverall > 0 && hisHere > 0
           ? hisHere / hisOverall
           : 1;
-        const weight = (projected.get(player) ?? 0) * leaning;
+        const half = split?.get(player);
+        const projectedShare = half
+          ? (call === "run" ? half.carries : half.targets)
+          : projected.get(player) ?? 0;
+        const weight = projectedShare * leaning;
         shares.set(player, weight);
         total += weight;
       }

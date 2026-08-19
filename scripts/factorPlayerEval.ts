@@ -164,12 +164,10 @@ async function main(): Promise<void> {
   const depth = fitTargetDepth(learn as PlayRow[]);
 
   for (const [label, into] of Object.entries(both)) {
-    const factors = fitPlayFactors(
-      learn as PlayRow[], undefined,
-      label === "who touched it before" ? undefined : projected,
-      undefined, undefined, undefined,
-      label === "and drawn at his own depth" ? depth : undefined,
-    );
+    const factors = fitPlayFactors(learn as PlayRow[], undefined, {
+      projected: label === "who touched it before" ? undefined : projected,
+      depth: label === "and drawn at his own depth" ? depth : undefined,
+    });
 
     for (const [team, men] of roster) {
       const among = [...men].filter((p) => position.has(p));

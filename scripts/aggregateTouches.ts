@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   const out = createWriteStream(OUT);
   out.write(
     "season,week,offense,defense,down,togo,yardline,margin,seconds," +
-      "playType,player,passer,airYards,yards,touchdown\n",
+      "playType,player,passer,airYards,caught,yards,touchdown\n",
   );
   let total = 0;
 
@@ -76,6 +76,9 @@ async function main(): Promise<void> {
       // anybody catches it and decides most of what happens next
       const air = Number(c[at["air_yards"]!]);
       const airYards = type === "pass" && Number.isFinite(air) ? air : "";
+      // whether anybody caught it, blank on a run
+      const caught = type === "pass"
+        ? (c[at["complete_pass"]!] === "1" ? 1 : 0) : "";
       const down = Number(c[at["down"]!]);
       const yardline = Number(c[at["yardline_100"]!]);
 
@@ -87,7 +90,7 @@ async function main(): Promise<void> {
         season, c[at["week"]!], c[at["posteam"]!], c[at["defteam"]!],
         down, c[at["ydstogo"]!], yardline,
         c[at["score_differential"]!] || 0, c[at["game_seconds_remaining"]!] || 0,
-        type, player, passer, airYards, c[at["yards_gained"]!] || 0,
+        type, player, passer, airYards, caught, c[at["yards_gained"]!] || 0,
         c[at["touchdown"]!] === "1" ? 1 : 0,
       ].join(",") + "\n");
       written++;

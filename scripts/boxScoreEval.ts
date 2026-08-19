@@ -206,9 +206,9 @@ async function main(): Promise<void> {
     );
   }
 
-  const factors = fitPlayFactors(
-    learnRows, undefined, projected, pairing?.bend, runParts, playLevel, depth,
-    onField && passing
+  const factors = fitPlayFactors(learnRows, undefined, {
+    projected, pairing: pairing?.bend, runParts, playLevel, depth,
+    people: onField && passing
       ? {
           defenceNow: (defence, season, week, call) => {
             const effect = onField.weekOf(season, week, defence);
@@ -224,7 +224,7 @@ async function main(): Promise<void> {
           passing: (receiver, passer) => passing.changeFor(receiver, passer),
         }
       : undefined,
-  );
+  });
 
   // what really happened, per team per game
   const scored = new Map<string, Truth>();

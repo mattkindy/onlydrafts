@@ -14,6 +14,7 @@
  */
 
 import { walkDrive, type FactorDrive, type Opening } from "./driveFromFactors.js";
+import type { PlayerLine } from "./playerWeek.js";
 import type { PlayFactors } from "./playFactors.js";
 import type { EndingRules, ClockRules } from "./driveFromFactors.js";
 import type { FourthDown } from "../features/fitFourthDown.js";
@@ -78,6 +79,69 @@ export interface PlayedGame {
   points: Record<string, number>;
   /** how many drives each side got, which nobody handed it */
   drives: Record<string, number>;
+}
+
+/**
+ * The stat lines a played game produced, one per man who appeared.
+ *
+ * Nothing is decided here: each play already says who had it, whether
+ * it was caught and what it made, so this only adds them up. The
+ * passer gets the passing yards and touchdowns, and an interception
+ * when a drive of his ended in one on a throw.
+ */
+export function linesFrom(
+  game: PlayedGame, sides: [Side, Side],
+): Map<string, PlayerLine> {
+  const lines = new Map<string, PlayerLine>();
+  const blank = (playerId: string): PlayerLine => ({
+    playerId, played: true,
+    passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
+    receptions: 0, recYds: 0, recTd: 0, fumblesLost: 0, twoPointConversions: 0,
+  });
+  const lineOf = (playerId: string) => {
+    const already = lines.get(playerId) ?? blank(playerId);
+    lines.set(playerId, already);
+    return already;
+  };
+  const passerOf = new Map(sides.map((side) => [side.team, side.passer]));
+
+  for (const one of game.possessions) {
+    const passer = passerOf.get(one.team);
+
+    for (const play of one.drive.plays) {
+      if (play.call === "run") {
+        if (!play.player) {
+          continue;
+        }
+
+        const his = lineOf(play.player);
+        his.rushYds += play.yards;
+        if (play.scored) his.rushTd++;
+        continue;
+      }
+
+      if (!play.caught || !play.player) {
+        continue;
+      }
+
+      const his = lineOf(play.player);
+      his.receptions++;
+      his.recYds += play.yards;
+      if (play.scored) his.recTd++;
+
+      if (passer) {
+        const threw = lineOf(passer);
+        threw.passYds += play.yards;
+        if (play.scored) threw.passTd++;
+      }
+    }
+
+    if (one.drive.ending === "turnover" && one.drive.thrownAway && passer) {
+      lineOf(passer).interceptions++;
+    }
+  }
+
+  return lines;
 }
 
 const pointsFor = (drive: FactorDrive) =>

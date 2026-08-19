@@ -15,9 +15,14 @@ describe("fitGbm", () => {
     const X: number[][] = [];
     const y: number[] = [];
 
+    // Tilted rather than pure: an even XOR has zero gain on any first
+    // split, and a greedy tree never takes a zero-gain split, so it
+    // returns the base rate forever. One uneven cell gives the first
+    // split a difference to find, which any data that is not a textbook
+    // case does anyway.
     for (let a = 0; a < 2; a++) {
       for (let b = 0; b < 2; b++) {
-        for (let n = 0; n < 25; n++) {
+        for (let n = 0; n < (a === 0 && b === 0 ? 35 : 25); n++) {
           X.push([a, b]);
           y.push(a === b ? 1 : 0);
         }

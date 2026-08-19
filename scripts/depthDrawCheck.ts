@@ -42,9 +42,7 @@ async function main(): Promise<void> {
   const held = rows.filter((r) => Number(r["season"]) === SCORE_ON).map(asPlay);
   const depth = fitTargetDepth(learn);
   const plain = fitPlayFactors(learn);
-  const byDepth = fitPlayFactors(
-    learn, undefined, undefined, undefined, undefined, undefined, depth,
-  );
+  const byDepth = fitPlayFactors(learn, undefined, { depth });
 
   console.log(
     `${learn.length} plays learned on, ${held.length} to ask about, ` +

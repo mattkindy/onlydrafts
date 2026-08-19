@@ -147,9 +147,9 @@ async function main(): Promise<void> {
   const pairing = process.env["NO_MATCHUP"]
     ? undefined
     : await buildMatchupTable({ learn: LEARN.slice(-3), scoreOn: SCORE_ON });
-  const factors = fitPlayFactors(
-    learnRows as PlayRow[], undefined, projected, pairing?.bend,
-  );
+  const factors = fitPlayFactors(learnRows as PlayRow[], undefined, {
+    projected, pairing: pairing?.bend,
+  });
 
   // who threw for each side last season
   const attempts = new Map<string, Map<string, number>>();
