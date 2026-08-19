@@ -52,10 +52,29 @@ export interface FactorSettings {
   leastForMan: number;
   /** plays needed before one side's own numbers are believed */
   leastForSide: number;
+  /**
+   * And how many are needed among the plays that had room to run this
+   * far, before that narrower pool is used instead of all of them.
+   */
+  leastWithRoom: number;
+  /**
+   * Beyond this far from the goal, a gain is drawn only from plays
+   * that had room to run that far. Closer in nothing is being cut off
+   * by the end zone that was not going to be short anyway.
+   */
+  roomBeyond: number;
 }
 
 export const FACTOR_DEFAULTS: FactorSettings = {
   least: 300, leastForCall: 80, leastForMan: 40, leastForSide: 60,
+  leastWithRoom: 60,
+  /**
+   * Swept over the drive shape. Beyond the five the touchdowns land
+   * at 23.6% against 23.8% and the long ones at 20.6% against 24%.
+   * Applying it everywhere sends the red zone to 62% against 57%, and
+   * from the twenty out the touchdowns fall to 21.7%.
+   */
+  roomBeyond: 5,
 };
 
 /** what somebody managed over a set of plays, at whatever scope */
@@ -172,6 +191,24 @@ const gainsAtDepth = (cell: Counted, band: number): number[] => {
       for (const gained of cell.byDepth.get(beside) ?? []) {
         found.push(gained);
       }
+    }
+  }
+
+  return found;
+};
+
+/**
+ * The gains from spots with at least this much field in front of them.
+ *
+ * Kept in the order they were counted, so the yards and where they
+ * came from line up.
+ */
+const roomFor = (cell: Counted, yardline: number): number[] => {
+  const found: number[] = [];
+
+  for (let i = 0; i < cell.yards.length; i++) {
+    if ((cell.from[i] ?? 0) >= yardline) {
+      found.push(cell.yards[i]!);
     }
   }
 
@@ -613,7 +650,30 @@ export function fitPlayFactors(
       const atDepth = depth && call === "pass" && player
         ? gainsAtDepth(cell, bandHere(cell, depth.leaningOf(player), uniform))
         : undefined;
-      const drawFrom = atDepth && atDepth.length >= 20 ? atDepth : pool;
+      /**
+       * Only the gains that had room to be this long.
+       *
+       * A play from the eleven cannot make more than eleven yards, so
+       * drawing one for a play from the forty five caps what can come
+       * out. The pool keeps where each gain came from for exactly this
+       * and nothing has ever read it: 13.5% of the model's touchdowns
+       * come from outside the twenty where 24% of real ones do, which
+       * is the half the comment predicted.
+       */
+      /**
+       * And only out in the field, where the cut matters.
+       *
+       * Inside the twenty the filter throws away the short stuffed
+       * runs from the ten and the twelve, which are the plays that
+       * should happen there, and the red zone starts converting 62%
+       * where sides convert 57%.
+       */
+      const hadRoom = atDepth || state.yardline <= settings.roomBeyond
+        ? undefined
+        : roomFor(cell, state.yardline);
+      const drawFrom = atDepth && atDepth.length >= 20 ? atDepth
+        : hadRoom && hadRoom.length >= settings.leastWithRoom ? hadRoom
+        : pool;
       const longOnes: number[] = [];
       const shortOnes: number[] = [];
       const wentNowhere: number[] = [];
