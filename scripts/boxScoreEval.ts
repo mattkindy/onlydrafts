@@ -34,6 +34,9 @@ import { fitPassing } from "../src/features/passerLevels.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import type { Call } from "../src/model/playFactors.js";
 
+/** the fourth downs where a side actually chose, so not the flags */
+const DECIDED = ["run", "pass", "field_goal", "punt"];
+
 const SCORE_ON = 2025;
 const LEARN = [2021, 2022, 2023, 2024];
 const RUNS = 60;
@@ -86,7 +89,9 @@ async function main(): Promise<void> {
 
   const fourths = parseCsv(await readFile(
     join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
-  )).filter((r) => Number(r["season"]) < SCORE_ON && Number(r["down"]) === 4);
+  )).filter((r) =>
+    Number(r["season"]) < SCORE_ON && Number(r["down"]) === 4 &&
+    DECIDED.includes(r["playType"] ?? ""));
   const fourth = fitFourthDown(fourths.map((r) => ({
     toGo: Number(r["togo"]), yardline: Number(r["yardline"]),
     margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,

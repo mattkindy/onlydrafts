@@ -25,6 +25,9 @@ import { fitTurnovers, type TurnoverRow } from "../src/features/fitTurnovers.js"
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { normalDraw } from "../src/sim/normal.js";
 
+/** the fourth downs where a side actually chose, so not the flags */
+const DECIDED = ["run", "pass", "field_goal", "punt"];
+
 const SCORE_ON = 2025;
 
 const middle = (values: number[]) =>
@@ -54,7 +57,9 @@ async function load(): Promise<{ learn: PlayRow[]; test: PlayRow[] }> {
 async function fourthDowns(before: number) {
   const rows = parseCsv(await readFile(
     join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
-  )).filter((r) => Number(r["season"]) < before && Number(r["down"]) === 4);
+  )).filter((r) =>
+    Number(r["season"]) < before && Number(r["down"]) === 4 &&
+    DECIDED.includes(r["playType"] ?? ""));
 
   // lifted to where the season being asked about sits on the climb,
   // using only the seasons fitted on
@@ -320,6 +325,7 @@ async function composed(
   // Where a drive is being lost. Too few touchdowns and too many kicks
   // says they arrive and do not finish, so count the arriving and the
   // finishing separately.
+  const faced: number[] = [];
   let reached = 0;
   let finished = 0;
   let insidePlays = 0;
@@ -333,6 +339,12 @@ async function composed(
       // every scoring drive as having got there makes the conversion
       // rate come out right whatever the model does.
       const got = drive.plays.some((p) => p.state.yardline <= 20);
+
+      // recorded before the guard below, which drops every drive that
+      // never reached the twenty
+      if (drive.decidedAt !== undefined) {
+        faced.push(drive.decidedAt);
+      }
 
       if (drive.ending === "touchdown") {
         scoredAll++;
@@ -357,6 +369,16 @@ async function composed(
       `\n    and they run ${(insidePlays / reached).toFixed(1)} plays inside it` +
       `\n    ${(100 * (1 - finished / Math.max(1, scoredAll))).toFixed(1)}% of the ` +
       "touchdowns came from outside it, where really 24% do",
+  );
+
+  const sortedFaced = [...faced].sort((a, b) => a - b);
+  const middleOf = (v: number[]) => v.reduce((a, b) => a + b, 0) / Math.max(1, v.length);
+  console.log(
+    "\n  where it stands when it faces fourth down\n" +
+      `    average ${middleOf(faced).toFixed(1)} out where sides average 47.3,\n` +
+      `    half inside ${sortedFaced[Math.floor(sortedFaced.length / 2)]} where sides are inside 50,\n` +
+      `    ${(100 * faced.filter((y) => y <= 40).length / Math.max(1, faced.length)).toFixed(1)}% ` +
+      "inside the forty where 38.8% of theirs are",
   );
 
   console.log("\n  fourth down, what a side does");

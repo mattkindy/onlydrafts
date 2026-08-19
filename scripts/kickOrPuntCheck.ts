@@ -18,13 +18,17 @@ import {
 } from "../src/features/fitFourthDown.js";
 import type { PlayState } from "../src/model/playFactors.js";
 
+/** the fourth downs where a side actually chose, so not the flags */
+const DECIDED = ["run", "pass", "field_goal", "punt"];
+
 const SCORE_ON = 2025;
 const DRAWS = 20;
 
 async function main(): Promise<void> {
   const rows = parseCsv(await readFile(
     join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
-  )).filter((r) => Number(r["down"]) === 4);
+  )).filter((r) =>
+    Number(r["down"]) === 4 && DECIDED.includes(r["playType"] ?? ""));
   const asRow = (r: Record<string, string>): FourthRow => ({
     toGo: Number(r["togo"]), yardline: Number(r["yardline"]),
     margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,

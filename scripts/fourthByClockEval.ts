@@ -16,6 +16,9 @@ import { seededRng } from "../src/sim/rng.js";
 import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
 import { timeBand, marginBand, type PlayState } from "../src/model/playFactors.js";
 
+/** the fourth downs where a side actually chose, so not the flags */
+const DECIDED = ["run", "pass", "field_goal", "punt"];
+
 const LEARN = [2021, 2022, 2023, 2024];
 const SCORE_ON = 2025;
 const DRAWS = 400;
@@ -38,7 +41,8 @@ async function main(): Promise<void> {
       : r["playType"] === "field_goal" ? "kick" : "punt",
   });
   const fourths = plays
-    .filter((r) => Number(r["down"]) === 4)
+    .filter((r) =>
+      Number(r["down"]) === 4 && DECIDED.includes(r["playType"] ?? ""))
     .map((r) => ({ season: Number(r["season"]), ...asRow(r) }));
   const fitted = fitFourthDown(
     fourths.filter((r) => r.season < SCORE_ON) as FourthRow[],
