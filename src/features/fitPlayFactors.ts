@@ -63,6 +63,13 @@ export interface FactorSettings {
    * by the end zone that was not going to be short anyway.
    */
   roomBeyond: number;
+  /**
+   * And not past here either. Backed up against his own goal a side
+   * has only 3,808 plays that had the room, and their long rate falls
+   * to 5.0% against 5.8% for all of them, so the cut makes the pool
+   * worse rather than better.
+   */
+  roomUpTo: number;
 }
 
 export const FACTOR_DEFAULTS: FactorSettings = {
@@ -75,6 +82,7 @@ export const FACTOR_DEFAULTS: FactorSettings = {
    * from the twenty out the touchdowns fall to 21.7%.
    */
   roomBeyond: 5,
+  roomUpTo: 99,
 };
 
 /** what somebody managed over a set of plays, at whatever scope */
@@ -668,7 +676,8 @@ export function fitPlayFactors(
        * should happen there, and the red zone starts converting 62%
        * where sides convert 57%.
        */
-      const hadRoom = atDepth || state.yardline <= settings.roomBeyond
+      const hadRoom = atDepth || state.yardline <= settings.roomBeyond ||
+        state.yardline > settings.roomUpTo || process.env["NO_ROOM"]
         ? undefined
         : roomFor(cell, state.yardline);
       const drawFrom = atDepth && atDepth.length >= 20 ? atDepth
