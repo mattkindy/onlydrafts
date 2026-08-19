@@ -51,8 +51,28 @@ const empty = (): Tally => ({ go: 0, kick: 0, punt: 0, all: 0 });
  * off: it thins the rare bands, which makes the blend trust them less,
  * which is the opposite of what it was for.
  */
+/**
+ * How much to lift going for it, for a model fitted on earlier
+ * seasons and asked about a later one.
+ *
+ * Sides went for it on 18.7% of fourth downs in 2022, 19.4% in 2023,
+ * 20.1% in 2024 and 22.7% in 2025, so it climbs about 3.6% a year and
+ * jumped harder than that once. A model fitted flat over several
+ * seasons sits in the middle of them and guesses at the middle of a
+ * climb.
+ */
+export function climbTo(learn: number[], target: number, byYear = 1.036): number {
+  if (!learn.length) {
+    return 1;
+  }
+
+  const middleOf = learn.reduce((a, b) => a + b, 0) / learn.length;
+
+  return Math.pow(byYear, Math.max(0, target - middleOf));
+}
+
 export function fitFourthDown(
-  rows: FourthRow[], least = 60, steadyAt = 6, fades = 1,
+  rows: FourthRow[], least = 60, steadyAt = 6, fades = 1, lift = 1,
 ): FourthDown {
   const cells = new Map<string, Tally>();
 
@@ -177,7 +197,17 @@ export function fitFourthDown(
       mixed.all += mixed[choice];
     }
 
-    const found = mixed;
+    /**
+     * And lifted, since going for it climbs every year and this was
+     * fitted on the seasons before the one being asked about.
+     */
+    const found = empty();
+    const wanted = Math.min(0.98, mixed.go * lift);
+    const rest = mixed.kick + mixed.punt;
+    found.go = wanted;
+    found.kick = rest > 0 ? mixed.kick * (1 - wanted) / rest : 0;
+    found.punt = rest > 0 ? mixed.punt * (1 - wanted) / rest : 1 - wanted;
+    found.all = found.go + found.kick + found.punt;
 
     remembered.set(key, found);
     return found;

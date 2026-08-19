@@ -16,7 +16,9 @@ import { seededRng } from "../src/sim/rng.js";
 import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js";
 import type { Call, PlayState } from "../src/model/playFactors.js";
 import { walkDrive } from "../src/model/driveFromFactors.js";
-import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
+import {
+  fitFourthDown, climbTo, type FourthRow,
+} from "../src/features/fitFourthDown.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
 import { fitEndings } from "../src/features/fitEndings.js";
 import { fitTurnovers, type TurnoverRow } from "../src/features/fitTurnovers.js";
@@ -54,12 +56,20 @@ async function fourthDowns(before: number) {
     join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
   )).filter((r) => Number(r["season"]) < before && Number(r["down"]) === 4);
 
-  return fitFourthDown(rows.map((r) => ({
-    toGo: Number(r["togo"]), yardline: Number(r["yardline"]),
-    margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,
-    choice: ["run", "pass"].includes(r["playType"] ?? "") ? "go"
-      : r["playType"] === "field_goal" ? "kick" : "punt",
-  })) as FourthRow[]);
+  // lifted to where the season being asked about sits on the climb,
+  // using only the seasons fitted on
+  const seasons = [...new Set(rows.map((r) => Number(r["season"])))];
+
+  return fitFourthDown(
+    rows.map((r) => ({
+      toGo: Number(r["togo"]), yardline: Number(r["yardline"]),
+      margin: Number(r["margin"]) || 0, secondsLeft: Number(r["seconds"]) || 1800,
+      choice: ["run", "pass"].includes(r["playType"] ?? "") ? "go"
+        : r["playType"] === "field_goal" ? "kick" : "punt",
+    })) as FourthRow[],
+    60, 6, 1,
+    Number(process.env["LIFT"] ?? 0) || climbTo(seasons, before),
+  );
 }
 
 async function main(): Promise<void> {
