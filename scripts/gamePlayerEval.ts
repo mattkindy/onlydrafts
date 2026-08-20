@@ -59,6 +59,7 @@ async function main(): Promise<void> {
 
   const total = new Map<string, number>();
   const games = new Map<string, number>();
+  const onlyWeek = Number(process.env["WEEK"] ?? 0);
 
   /**
    * The scoring pass needs none of the fitting, so it skips all of
@@ -298,9 +299,15 @@ async function main(): Promise<void> {
     };
   };
 
-  // the schedule the season actually had
+  /**
+   * One week alone, when asked for. A season total buries how well
+   * the players are known at the start under seventeen weeks of
+   * drift the frozen descriptions never hear about, so week one is
+   * the cleanest read on the knowing itself.
+   */
   const schedule = (await loadGames())
-    .filter((g) => g.season === SCORE_ON && g.week <= 17);
+    .filter((g) => g.season === SCORE_ON && g.week <= 17 &&
+      (!onlyWeek || g.week === onlyWeek));
   const mine = myShare(schedule);
   const rng = seededRng(Number(process.env["SEED"] ?? 23));
 
@@ -367,11 +374,15 @@ async function main(): Promise<void> {
    * own games over the last two seasons, pulled toward the league.
    */
   const gamesBefore = new Map<string, number>();
+  const seasonsSeen = new Map<string, Set<number>>();
 
   for (const season of [SCORE_ON - 2, SCORE_ON - 1]) {
     for (const s2 of await loadPlayerStats(season)) {
       if (s2.week <= 17) {
         gamesBefore.set(s2.playerId, (gamesBefore.get(s2.playerId) ?? 0) + 1);
+        const own = seasonsSeen.get(s2.playerId) ?? new Set<number>();
+        own.add(season);
+        seasonsSeen.set(s2.playerId, own);
       }
     }
   }
@@ -396,19 +407,24 @@ async function main(): Promise<void> {
     : 0.85;
   const availOf = (playerId: string) => {
     const seen = gamesBefore.get(playerId);
+    const seasons = seasonsSeen.get(playerId)?.size ?? 0;
 
-    if (seen === undefined) {
+    if (seen === undefined || seasons === 0) {
       return leagueAvail;
     }
 
-    const his = Math.min(1, seen / 34);
-    const trust = seen / (seen + 17);
+    // his games over the games he could have played, which is
+    // seventeen for each season he was in the league, not a flat
+    // thirty four that halves every one-season man
+    const possible = 17 * seasons;
+    const his = Math.min(1, seen / possible);
+    const trust = possible / (possible + 17);
 
     return trust * his + (1 - trust) * leagueAvail;
   };
 
   for (const [playerId, points] of total) {
-    total.set(playerId, points * availOf(playerId));
+    total.set(playerId, onlyWeek ? points : points * availOf(playerId));
   }
 
   // what they really scored, with the same rules
@@ -416,7 +432,7 @@ async function main(): Promise<void> {
   const names = new Map<string, string>();
 
   for (const s of await loadPlayerStats(SCORE_ON)) {
-    if (s.week > 17) {
+    if (s.week > 17 || (onlyWeek && s.week !== onlyWeek)) {
       continue;
     }
 
@@ -426,12 +442,37 @@ async function main(): Promise<void> {
     );
   }
 
+  const spanned = onlyWeek ? 1 : 17;
   const men = [...total.entries()]
-    .filter(([playerId]) => scored.has(playerId) && (games.get(playerId) ?? 0) >= 10);
-  const truth = men.map(([playerId]) => scored.get(playerId)! / 17);
-  const guess = men.map(([, points]) => points / 17);
+    .filter(([playerId]) =>
+      scored.has(playerId) &&
+      (games.get(playerId) ?? 0) >= (onlyWeek ? 1 : 10));
+  const truth = men.map(([playerId]) => scored.get(playerId)! / spanned);
+  const guess = men.map(([, points]) => points / spanned);
+
+  const prevPpg = new Map<string, { points: number; games: number }>();
+
+  for (const s2 of await loadPlayerStats(SCORE_ON - 1)) {
+    if (s2.week > 17) {
+      continue;
+    }
+
+    const own = prevPpg.get(s2.playerId) ?? { points: 0, games: 0 };
+    own.points += fantasyPoints(s2.statLine, RULES);
+    own.games++;
+    prevPpg.set(s2.playerId, own);
+  }
+
+  const naive = men.map(([playerId]) => {
+    const was = prevPpg.get(playerId);
+    return was && was.games >= 4 ? was.points / was.games : 0;
+  });
 
   console.log(`${men.length} men projected out of played games\n`);
+  console.log(
+    "  last season's points a game orders it " +
+      spearman(naive, truth).toFixed(4) + "\n",
+  );
   console.log(
     "  rank " + spearman(guess, truth).toFixed(4) +
       "   error " + rmse(guess, truth).toFixed(2) +
@@ -443,8 +484,8 @@ async function main(): Promise<void> {
   const adp = await loadAdp(SCORE_ON, "ppr").catch(() => new Map());
   const priced = men
     .map(([playerId, points]) => ({
-      points: points / 17,
-      really: scored.get(playerId)! / 17,
+      points: points / spanned,
+      really: scored.get(playerId)! / spanned,
       adp: adp.get(
         `${normalizeName(names.get(playerId) ?? "")}|${positions.get(playerId) ?? ""}`,
       )?.adp ?? null,
