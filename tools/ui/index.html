@@ -881,7 +881,8 @@ function pickForRound(round, teams, slot, snake) {
  * his cost.
  */
 function worthAtPick(pick) {
-  const priced = board.filter((p) => p.adp).sort((a, b) => a.adp - b.adp);
+  const men = board && board.players ? board.players : [];
+  const priced = men.filter((p) => p.adp).sort((a, b) => a.adp - b.adp);
 
   if (!priced.length) {
     return 0;
