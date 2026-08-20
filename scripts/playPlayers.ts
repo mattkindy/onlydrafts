@@ -13,9 +13,16 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { acrossCores, roomFor } from "../src/sim/acrossCores.js";
+import { buildMatchupTable } from "../src/features/matchupTable.js";
 
 async function oneSeason(season: number): Promise<void> {
   console.log(`\n===== ${season} =====`);
+  // fitted once here so eight shares read the table rather than each
+  // fitting the network in a race
+  await buildMatchupTable({
+    learn: [season - 3, season - 2, season - 1].filter((s) => s >= 2022),
+    scoreOn: season,
+  });
   const printed = await acrossCores({
     script: join(import.meta.dirname, "gamePlayerEval.ts"),
     shares: Math.min(8, roomFor()),

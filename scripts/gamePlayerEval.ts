@@ -33,6 +33,7 @@ import { normalizeName } from "../src/data/names.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
 import { myShare } from "../src/sim/acrossCores.js";
+import { buildMatchupTable } from "../src/features/matchupTable.js";
 import type { Call } from "../src/model/playFactors.js";
 
 /** the fourth downs where a side actually chose, so not the flags */
@@ -129,8 +130,17 @@ async function main(): Promise<void> {
   });
 
   const depth = fitTargetDepth(learnRows);
+  /**
+   * The pairing is a table off the disk and it short-circuits the
+   * per-side gathering, which was most of the time a play took.
+   */
+  const pairing = await buildMatchupTable({
+    learn: [SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1].filter((s2) => s2 >= 2022),
+    scoreOn: SCORE_ON,
+  });
   const factors = fitPlayFactors(learnRows as PlayRow[], undefined, {
-    split, depth: process.env["NO_DEPTH"] ? undefined : depth,
+    split, pairing: pairing.bend,
+    depth: process.env["NO_DEPTH"] ? undefined : depth,
   });
 
   // who throws for each side, from last season's attempts

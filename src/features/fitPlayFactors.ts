@@ -305,6 +305,9 @@ export function fitPlayFactors(
    * own numbers where it has enough plays, and a defence moves them by
    * how much it gives up against what everybody gives up.
    */
+  // with the pairing given, the per-side counts are never read, and
+  // they are a third of the ingestion and a good share of the memory
+  const wantsSides = !pairing;
   const byOffence = new Map<string, Counted>();
   const byDefence = new Map<string, Counted>();
   /**
@@ -430,9 +433,10 @@ export function fitPlayFactors(
       cells.set(key, both);
     }
 
-    for (const [into, who] of [
-      [byOffence, row.offence], [byDefence, row.defence],
-    ] as [Map<string, Counted>, string][]) {
+    for (const [into, who] of wantsSides
+      ? [[byOffence, row.offence], [byDefence, row.defence]] as
+          [Map<string, Counted>, string][]
+      : []) {
       if (!who) {
         continue;
       }
@@ -719,7 +723,7 @@ export function fitPlayFactors(
         const own = cell.byPlayer.get(player);
         const touches = own ? own.touches : 0;
 
-        if (!projected) {
+        if (!projected && !split) {
           shares.set(player, touches);
           total += touches;
           continue;
@@ -736,7 +740,7 @@ export function fitPlayFactors(
         const half = split?.get(player);
         const projectedShare = half
           ? (call === "run" ? half.carries : half.targets)
-          : projected.get(player) ?? 0;
+          : projected?.get(player) ?? 0;
         const weight = projectedShare * leaning;
         shares.set(player, weight);
         total += weight;
