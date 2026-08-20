@@ -871,6 +871,72 @@ function pickForRound(round, teams, slot, snake) {
   return (round - 1) * teams + inRound;
 }
 
+/**
+ * What a pick normally buys, from the board's own value by adp.
+ *
+ * A three point surplus in the tenth round, where a pick buys almost
+ * nothing, is a far better trade than three points in the second. The
+ * curve is a rolling middle of vor over the men adp has priced, so
+ * return on a keep can be read as his value over the going rate at
+ * his cost.
+ */
+function worthAtPick(pick) {
+  const priced = board.filter((p) => p.adp).sort((a, b) => a.adp - b.adp);
+
+  if (!priced.length) {
+    return 0;
+  }
+
+  const around = priced.filter((p) => Math.abs(p.adp - pick) <= 12)
+    .map((p) => p.vor).sort((a, b) => a - b);
+
+  if (!around.length) {
+    return Math.max(0, priced[priced.length - 1].vor);
+  }
+
+  return around[Math.floor(around.length / 2)];
+}
+
+/**
+ * The waiting branch: what letting him go is worth, which is the
+ * chance he is still there at your first realistic pick times his
+ * surplus over that pick's going rate. His adp spread says the
+ * chance: certainly there before his early end, certainly gone past
+ * his late end, sliding in between.
+ */
+function redraftWorth(player, teams) {
+  if (!player.adp) {
+    return { chance: 0, gain: 0, atPick: null };
+  }
+
+  const early = player.adpHigh || player.adp;
+  const late = player.adpLow || player.adp;
+  const slot = active ? active.draftSlot : null;
+  const snake = !active || active.snake;
+
+  for (let round = 1; round <= 16; round++) {
+    // only the picks still yours: a traded round cannot draft anybody
+    if (active && active.myPicks && !active.myPicks.includes(round)) {
+      continue;
+    }
+
+    const pick = pickForRound(round, teams, slot, snake);
+
+    if (pick < early - 2) {
+      continue;
+    }
+
+    const chance = pick <= early ? 1
+      : pick >= late ? 0.05
+      : 1 - (pick - early) / Math.max(1, late - early);
+    const gain = Math.max(0, player.vor - worthAtPick(pick));
+
+    return { chance, gain: chance * gain, atPick: pick, round };
+  }
+
+  return { chance: 0, gain: 0, atPick: null };
+}
+
 function marginAt(player, round, teams, taken) {
   const pick = pickForRound(
     round, teams, active ? active.draftSlot : null, !active || active.snake,
@@ -1147,6 +1213,34 @@ async function renderKeepers() {
       : "");
   out.appendChild(head);
 
+  /**
+   * The keep as a trade: his value against what the cost pick buys,
+   * and against the chance of drafting him anyway.
+   */
+  function keepEconomics(p, cost, teams) {
+    if (!cost || !p.vor) {
+      return "";
+    }
+
+    const costPick = pickForRound(
+      cost, teams, active ? active.draftSlot : null, !active || active.snake,
+    );
+    const rate = worthAtPick(costPick);
+    const roi = p.vor - rate;
+    const wait = redraftWorth(p, teams);
+    const net = roi - wait.gain;
+    let out = " &middot; the pick buys " + rate.toFixed(1) +
+      " there, so keeping him is +" + roi.toFixed(1);
+
+    if (wait.atPick && wait.chance > 0.1 && wait.chance < 0.98) {
+      out += " &middot; about " + Math.round(100 * wait.chance) +
+        "% he is still there at your " + ordinal(wait.round) +
+        ", worth " + wait.gain.toFixed(1) + " to wait, net +" + net.toFixed(1);
+    }
+
+    return out;
+  }
+
   const grid = document.createElement("div");
   grid.className = "cards";
   const seasonMax = seasonScale(mine.map((m) => m.p));
@@ -1189,7 +1283,8 @@ async function renderKeepers() {
           ? "at a " + ordinal(round) + " the other choice is " + instead.name
           : "nobody left worth the pick") +
         (thin ? ", who is a flier" : "") +
-        (p.adp ? " &middot; goes " + asRound(p.adp) + " in " + (meta.adpFormat ?? "PPR") + " mocks" : ""),
+        (p.adp ? " &middot; goes " + asRound(p.adp) + " in " + (meta.adpFormat ?? "PPR") + " mocks" : "") +
+        keepEconomics(p, cost, teams),
     });
 
     const row = document.createElement("label");
