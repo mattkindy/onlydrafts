@@ -141,6 +141,27 @@ async function main(): Promise<void> {
     );
   }
 
+  console.log("\nthe draft bands again, with and without the quarterbacks\n");
+  console.log("  band            all: adp v walk      no QBs: adp v walk");
+
+  for (const [label, from, upTo] of [
+    ["the first 60", 0, 60], ["61 to 120", 60, 120], ["past 120", 120, 999],
+  ] as [string, number, number][]) {
+    const band = men.filter((m) => m.adp! > from && m.adp! <= upTo);
+    const bandSkill = band.filter((m) => m.position !== "QB");
+    const pair = (of: typeof band) =>
+      of.length >= 15
+        ? spearman(of.map((m) => -m.adp!), of.map((m) => m.really)).toFixed(2) +
+          " v " +
+          spearman(of.map((m) => m.says), of.map((m) => m.really)).toFixed(2)
+        : "too few";
+    console.log(
+      "  " + label.padEnd(14) +
+        `(${band.length}) ${pair(band)}`.padStart(20) +
+        `(${bandSkill.length}) ${pair(bandSkill)}`.padStart(24),
+    );
+  }
+
   const skill = men.filter((m) => m.position !== "QB");
   console.log(
     "\n  all but the quarterbacks: adp " +
@@ -148,6 +169,42 @@ async function main(): Promise<void> {
       ", the walk " +
       spearman(skill.map((m) => m.says), skill.map((m) => m.really)).toFixed(3) + "\n",
   );
+
+  if (process.env["WITHIN"]) {
+    for (const at of ["RB", "WR", "TE", "QB"]) {
+      const these = men.filter((m) => m.position === at);
+
+      if (these.length < 10) {
+        continue;
+      }
+
+      const placeIn = (of: (m: (typeof men)[number]) => number) => {
+        const order = [...these].sort((a, b) => of(b) - of(a));
+        const out = new Map<string, number>();
+        order.forEach((m, i) => out.set(m.id, i + 1));
+        return out;
+      };
+      const w = placeIn((m) => m.says);
+      const r = placeIn((m) => -m.adp!);
+      const t = placeIn((m) => m.really);
+
+      console.log(`\n${at}, the walk's order, of ${these.length}\n`);
+      console.log("   walk   adp   finished");
+
+      for (const m of [...these].sort((a, b) => b.says - a.says).slice(0, 14)) {
+        const flag = Math.abs(w.get(m.id)! - t.get(m.id)!) <
+          Math.abs(r.get(m.id)! - t.get(m.id)!) ? "  <- closer" : "";
+        console.log(
+          "  " + String(w.get(m.id)).padStart(4) +
+            String(r.get(m.id)).padStart(6) +
+            String(t.get(m.id)).padStart(9) +
+            `   ${m.name}${flag}`,
+        );
+      }
+    }
+
+    return;
+  }
 
   console.log(`${season}, ${calls.length} men both had an opinion on\n`);
   console.log("boldest calls upward, the walk against the room\n");

@@ -395,19 +395,22 @@ async function main(): Promise<void> {
       note("his carries and his targets, each at what they make", alone(byDepth));
       note("the played out games, silent men at their regression", alone(walk));
 
-      // the four opinions together, swept where the walk leads
-      for (const onWalk of [0.4, 0.5, 0.6, 0.7]) {
-        for (const onAdp of [0.15, 0.25, 0.35]) {
-          const rest = Math.max(0, 1 - onWalk - onAdp);
-          note(
-            `walk ${(100 * onWalk).toFixed(0)}%, adp ${(100 * onAdp).toFixed(0)}%, ` +
-              "the rest split on the models",
-            mix(
-              [walk, byAdp, model, share],
-              [onWalk, onAdp, rest / 2, rest / 2],
-            ),
-          );
-        }
+      /**
+       * The walk as a minority voice on top of the blend that already
+       * works, which is the bar the other members met: nobody in the
+       * mix beats adp alone.
+       */
+      const keeps = { adp: 0.3, share: 0.525, model: 0.175 };
+
+      for (const onWalk of [0, 0.05, 0.1, 0.15, 0.2, 0.3]) {
+        const scale = 1 - onWalk;
+        note(
+          `the board's blend with the walk at ${(100 * onWalk).toFixed(0)}%`,
+          mix(
+            [walk, byAdp, share, model],
+            [onWalk, keeps.adp * scale, keeps.share * scale, keeps.model * scale],
+          ),
+        );
       }
       note("regression and adp, the board today", mix([model, byAdp], [0.5, 0.5]));
 

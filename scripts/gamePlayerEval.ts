@@ -15,9 +15,9 @@ import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
 import { rmse, spearman } from "../src/backtest/metrics.js";
 import { seededRng } from "../src/sim/rng.js";
-import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
-import { fitRoles } from "../src/features/fitRoles.js";
-import { fitSwings } from "../src/features/fitSwing.js";
+import {
+  loadGames, loadPlayerStats, loadWeeklyRosters,
+} from "../src/data/nflverse.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { fitEndings } from "../src/features/fitEndings.js";
 import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js";
@@ -78,10 +78,29 @@ async function main(): Promise<void> {
     played.set(s.playerId, (played.get(s.playerId) ?? 0) + 1);
   }
 
-  const swings = await fitSwings(SCORE_ON - 1, positions);
-  const { byTeam } = await fitRoles(
-    SCORE_ON - 1, positions, played, 17, undefined, swings,
-  );
+  /**
+   * The cast comes from week one of the season being played, which a
+   * drafter knows in August: who made the team, where the rookies
+   * landed, who starts. Building it from last season's stats priced
+   * every rookie at exactly nothing and handed Dallas to the backup
+   * who mopped up while Prescott was hurt.
+   */
+  const openingWeek = (await loadWeeklyRosters(SCORE_ON))
+    .filter((row) => row.week === 1);
+  const onTeam = new Map<string, { playerId: string; position: string }[]>();
+
+  for (const row of openingWeek) {
+    const position = positions.get(row.playerId) ?? row.rawPosition;
+
+    if (!positions.has(row.playerId)) {
+      positions.set(row.playerId, position);
+    }
+
+    onTeam.set(row.teamId, [
+      ...(onTeam.get(row.teamId) ?? []), { playerId: row.playerId, position },
+    ]);
+  }
+
   const rules = await fitDriveRules(LEARN);
   const kicking = await fitEndings(LEARN);
 
@@ -114,7 +133,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const roster = [...byTeam.entries()].flatMap(([team, men]) =>
+  const roster = [...onTeam.entries()].flatMap(([team, men]) =>
     men
       .filter((p) => SHARING_POSITIONS.includes(p.position))
       .map((p) => ({ playerId: p.playerId, position: p.position, team })),
@@ -145,11 +164,20 @@ async function main(): Promise<void> {
     depth: process.env["NO_DEPTH"] ? undefined : depth,
   });
 
-  // who throws for each side, from last season's attempts
+  /**
+   * Who throws for each side: whoever took the throws in the opening
+   * fortnight of the season being played. A drafter in August knows
+   * the named starter; the first two weeks are the closest thing the
+   * data has to that name, and they carry one fortnight of leak in a
+   * seventeen week season.
+   */
   const attempts = new Map<string, Map<string, number>>();
 
-  for (const r of raw.filter((x) => Number(x["season"]) === SCORE_ON - 1)) {
-    if (r["playType"] !== "pass" || !r["passer"]) {
+  for (const r of raw) {
+    if (
+      Number(r["season"]) !== SCORE_ON || Number(r["week"]) > 2 ||
+      r["playType"] !== "pass" || !r["passer"]
+    ) {
       continue;
     }
 
@@ -227,7 +255,7 @@ async function main(): Promise<void> {
   }
 
   const sideFor = (team: string): Side | undefined => {
-    const men = byTeam.get(team);
+    const men = onTeam.get(team);
 
     if (!men) {
       return undefined;
@@ -308,6 +336,59 @@ async function main(): Promise<void> {
     for (const [playerId, n] of merged.games) {
       games.set(playerId, n);
     }
+  }
+
+  /**
+   * Expected games rather than seventeen for everybody.
+   *
+   * The walk plays every man healthy and its worst calls were bodies:
+   * it had Tyreek Hill ninth and Lamar first in a season they missed.
+   * Injury is mostly unforecastable, so this is base rates only: his
+   * own games over the last two seasons, pulled toward the league.
+   */
+  const gamesBefore = new Map<string, number>();
+
+  for (const season of [SCORE_ON - 2, SCORE_ON - 1]) {
+    for (const s2 of await loadPlayerStats(season)) {
+      if (s2.week <= 17) {
+        gamesBefore.set(s2.playerId, (gamesBefore.get(s2.playerId) ?? 0) + 1);
+      }
+    }
+  }
+
+  // what a man who mattered last season played of it, on average
+  const before = new Map<string, { games: number; points: number }>();
+
+  for (const s2 of await loadPlayerStats(SCORE_ON - 1)) {
+    if (s2.week > 17) {
+      continue;
+    }
+
+    const own = before.get(s2.playerId) ?? { games: 0, points: 0 };
+    own.games++;
+    own.points += fantasyPoints(s2.statLine, RULES);
+    before.set(s2.playerId, own);
+  }
+
+  const mattered = [...before.values()].filter((o) => o.points >= 60);
+  const leagueAvail = mattered.length
+    ? mattered.reduce((a, o) => a + o.games, 0) / (17 * mattered.length)
+    : 0.85;
+  const availOf = (playerId: string) => {
+    const seen = gamesBefore.get(playerId);
+
+    if (seen === undefined) {
+      return leagueAvail;
+    }
+
+    const his = Math.min(1, seen / 34);
+    const trust = seen / (seen + 17);
+
+    return trust * his + (1 - trust) * leagueAvail;
+  };
+
+  for (const [playerId, points] of total) {
+    total.set(playerId, points * availOf(playerId));
   }
 
   // what they really scored, with the same rules
