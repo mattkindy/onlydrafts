@@ -88,7 +88,7 @@ export const FACTOR_DEFAULTS: FactorSettings = {
 };
 
 /** what somebody managed over a set of plays, at whatever scope */
-interface Rate {
+export interface Rate {
   touches: number;
   yards: number;
   /** and how many of them went for twenty or more */
@@ -106,7 +106,7 @@ const addTo = (into: Map<string, Rate>, key: string, yards: number): void => {
 };
 
 /** everything counted at one state, plus who touched it there */
-interface Counted extends StateCell {
+export interface Counted extends StateCell {
   byPlayer: Map<string, {
     touches: number; yards: number; scores: number;
     /** and how often he breaks a long one, which is his own and lasts */
@@ -266,6 +266,18 @@ export type { RunParts } from "./runParts.js";
 
 export type { PlayLevel } from "./playLevel.js";
 
+/** everything the counting pass produces, which is all the fit needs */
+export interface CountedPlays {
+  cells: Map<string, Counted>;
+  byOffence: Map<string, Counted>;
+  byDefence: Map<string, Counted>;
+  byMan: Map<string, Rate>;
+  leagueOn: Map<string, Rate>;
+  caughtAt: Map<number, { threw: number; caught: number }>;
+  overall: Map<string, number>;
+  everyTouch: number;
+}
+
 /** everything the factors can be handed beyond the plays themselves */
 export interface FactorExtras {
   /** each man's expected share of the work, one number for all of it */
@@ -287,14 +299,24 @@ export interface FactorExtras {
     defenceNow?: (defence: string, season: number, week: number, call: Call) => number;
     passing?: (receiver: string, passer: string) => number;
   };
+  /**
+   * The counting already done, so eight shares of one job do not each
+   * count the same rows. From countPlays, usually by way of the disk.
+   */
+  counted?: CountedPlays;
 }
 
-export function fitPlayFactors(
-  rows: PlayRow[],
-  settings: FactorSettings = FACTOR_DEFAULTS,
-  extras: FactorExtras = {},
-): PlayFactors {
-  const { projected, split, pairing, runParts, playLevel, depth, people } = extras;
+/**
+ * The counting pass on its own, so it can run once and be kept.
+ *
+ * Everything below reads what this produces and none of it needs the
+ * rows again, which is what lets eight shares of one job load the
+ * counts instead of each counting 141 thousand rows.
+ */
+export function countPlays(
+  rows: PlayRow[], settings: FactorSettings = FACTOR_DEFAULTS,
+  wantsSides = true,
+): CountedPlays {
   const cells = new Map<string, Counted>();
   /**
    * The same counts again per offence and per defence.
@@ -305,9 +327,6 @@ export function fitPlayFactors(
    * own numbers where it has enough plays, and a defence moves them by
    * how much it gives up against what everybody gives up.
    */
-  // with the pairing given, the per-side counts are never read, and
-  // they are a third of the ingestion and a good share of the memory
-  const wantsSides = !pairing;
   const byOffence = new Map<string, Counted>();
   const byDefence = new Map<string, Counted>();
   /**
@@ -451,6 +470,22 @@ export function fitPlayFactors(
       }
     }
   }
+  return {
+    cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
+    everyTouch,
+  };
+}
+
+export function fitPlayFactors(
+  rows: PlayRow[],
+  settings: FactorSettings = FACTOR_DEFAULTS,
+  extras: FactorExtras = {},
+): PlayFactors {
+  const { projected, split, pairing, runParts, playLevel, depth, people } = extras;
+  const {
+    cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
+    everyTouch,
+  } = extras.counted ?? countPlays(rows, settings, !pairing);
 
   /**
    * The states around this one, taken until there are enough plays.

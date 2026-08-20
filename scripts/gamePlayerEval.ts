@@ -34,6 +34,7 @@ import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
 import { myShare } from "../src/sim/acrossCores.js";
 import { buildMatchupTable } from "../src/features/matchupTable.js";
+import { countsFor } from "../src/features/countsCache.js";
 import type { Call } from "../src/model/playFactors.js";
 
 /** the fourth downs where a side actually chose, so not the flags */
@@ -138,8 +139,9 @@ async function main(): Promise<void> {
     learn: [SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1].filter((s2) => s2 >= 2022),
     scoreOn: SCORE_ON,
   });
-  const factors = fitPlayFactors(learnRows as PlayRow[], undefined, {
-    split, pairing: pairing.bend,
+  const counted = await countsFor(SCORE_ON, () => learnRows as PlayRow[]);
+  const factors = fitPlayFactors([], undefined, {
+    split, pairing: pairing.bend, counted,
     depth: process.env["NO_DEPTH"] ? undefined : depth,
   });
 
@@ -252,7 +254,8 @@ async function main(): Promise<void> {
   const total = new Map<string, number>();
   const games = new Map<string, number>();
 
-  for (const fixture of process.env["MERGED"] ? [] : mine) {
+  for (const fixture of
+    process.env["MERGED"] || process.env["PREWARM"] ? [] : mine) {
     const home = sideFor(fixture.homeTeamId);
     const away = sideFor(fixture.awayTeamId);
 

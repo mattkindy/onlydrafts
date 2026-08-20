@@ -17,8 +17,15 @@ import { buildMatchupTable } from "../src/features/matchupTable.js";
 
 async function oneSeason(season: number): Promise<void> {
   console.log(`\n===== ${season} =====`);
-  // fitted once here so eight shares read the table rather than each
-  // fitting the network in a race
+  // counted once here so the eight shares read the disk rather than
+  // each counting the same rows in a race
+  spawnSync("npx", ["tsx", join(import.meta.dirname, "gamePlayerEval.ts")], {
+    env: {
+      ...process.env, SEASON: String(season), SHARES: "on", PREWARM: "on",
+      NODE_OPTIONS: "--max-old-space-size=8192",
+    },
+    encoding: "utf8",
+  });
   await buildMatchupTable({
     learn: [season - 3, season - 2, season - 1].filter((s) => s >= 2022),
     scoreOn: season,
