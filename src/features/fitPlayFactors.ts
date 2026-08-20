@@ -267,6 +267,47 @@ export type { RunParts } from "./runParts.js";
 export type { PlayLevel } from "./playLevel.js";
 
 /** everything the counting pass produces, which is all the fit needs */
+/**
+ * The plays themselves, kept whole, so an outcome can be drawn as a
+ * package instead of assembled from parts.
+ *
+ * A man's play carries its yards and its catch together, correlated
+ * the way reality correlated them, and drawing his own play needs no
+ * multiplier, no catch table and no centring, because nothing is a
+ * ratio. The pooled path stays for the men too thin to sample.
+ */
+export interface PlayStore {
+  down: Int8Array;
+  toGo: Int16Array;
+  yardline: Int8Array;
+  yards: Int16Array;
+  caught: Uint8Array;
+  /** `${player}|${call}` to the rows that were his */
+  ofMan: Map<string, number[]>;
+}
+
+export function storePlays(rows: PlayRow[]): PlayStore {
+  const kept = rows.filter((r) => r.player);
+  const down = new Int8Array(kept.length);
+  const toGo = new Int16Array(kept.length);
+  const yardline = new Int8Array(kept.length);
+  const yards = new Int16Array(kept.length);
+  const caught = new Uint8Array(kept.length);
+  const ofMan = new Map<string, number[]>();
+
+  kept.forEach((r, i) => {
+    down[i] = r.down;
+    toGo[i] = r.toGo;
+    yardline[i] = r.yardline;
+    yards[i] = r.yards;
+    caught[i] = r.call === "run" || r.caught ? 1 : 0;
+    const key = `${r.player}|${r.call}`;
+    ofMan.set(key, [...(ofMan.get(key) ?? []), i]);
+  });
+
+  return { down, toGo, yardline, yards, caught, ofMan };
+}
+
 export interface CountedPlays {
   cells: Map<string, Counted>;
   byOffence: Map<string, Counted>;
@@ -304,6 +345,8 @@ export interface FactorExtras {
    * count the same rows. From countPlays, usually by way of the disk.
    */
   counted?: CountedPlays;
+  /** the plays kept whole, which turns the draw personal */
+  plays?: PlayStore;
 }
 
 /**
@@ -481,7 +524,9 @@ export function fitPlayFactors(
   settings: FactorSettings = FACTOR_DEFAULTS,
   extras: FactorExtras = {},
 ): PlayFactors {
-  const { projected, split, pairing, runParts, playLevel, depth, people } = extras;
+  const {
+    projected, split, pairing, runParts, playLevel, depth, people, plays,
+  } = extras;
   const {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
     everyTouch,
@@ -730,7 +775,54 @@ export function fitPlayFactors(
     return uniform() < own.caught / own.threw;
   };
 
+  /**
+   * His own plays at spots like this one, widened over the state in
+   * three passes: same down and near distance, then any down with the
+   * field alike, then everything he has done on this call. Room to
+   * run is asked of the pool the same way the pooled path asks it.
+   */
+  const hisOwnPlay = plays
+    ? (
+        state: PlayState, call: Call, player: string, uniform: () => number,
+      ) => {
+        const his = plays.ofMan.get(`${player}|${call}`);
+
+        if (!his || his.length < 25) {
+          return undefined;
+        }
+
+        const passes: ((i: number) => boolean)[] = [
+          (i) => plays.down[i] === state.down &&
+            Math.abs(plays.toGo[i]! - state.toGo) <= 3 &&
+            Math.abs(plays.yardline[i]! - state.yardline) <= 20,
+          (i) => Math.abs(plays.yardline[i]! - state.yardline) <= 25,
+          () => true,
+        ];
+
+        for (const fits of passes) {
+          const pool = his.filter((i) =>
+            fits(i) &&
+            (state.yardline > 20 || plays.yardline[i]! <= state.yardline + 10) &&
+            (state.yardline <= 20 || plays.yardline[i]! >= state.yardline - 40));
+
+          if (pool.length < 20) {
+            continue;
+          }
+
+          const at = pool[Math.floor(uniform() * pool.length)]!;
+
+          return {
+            yards: Math.min(state.yardline, plays.yards[at]!),
+            caught: plays.caught[at] === 1,
+          };
+        }
+
+        return undefined;
+      }
+    : undefined;
+
   return {
+    hisOwnPlay,
     caught: wasCaught,
     runs: (state, offence) => {
       const league = at(state, settings.leastForCall);

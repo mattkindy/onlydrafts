@@ -45,6 +45,14 @@ export interface PlayFactors {
   scores: (state: PlayState, call: Call, gained: number) => number;
   /** whether a throw for this many yards was caught, drawn */
   caught: (gained: number, uniform: () => number) => boolean;
+  /**
+   * A whole play drawn as the man's own, yards and catch together,
+   * or nothing when he is too thin to sample and the pooled path
+   * should answer instead.
+   */
+  hisOwnPlay?: (
+    state: PlayState, call: Call, player: string, uniform: () => number,
+  ) => { yards: number; caught: boolean } | undefined;
 }
 
 /**

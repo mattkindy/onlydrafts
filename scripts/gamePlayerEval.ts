@@ -21,7 +21,7 @@ import {
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { fitEndings } from "../src/features/fitEndings.js";
 import {
-  fitPlayFactors, countPlays, type PlayRow,
+  fitPlayFactors, countPlays, storePlays, type PlayRow,
 } from "../src/features/fitPlayFactors.js";
 import { fitFourthDown, climbTo, type FourthRow } from "../src/features/fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "../src/features/fitPlayClock.js";
@@ -257,6 +257,8 @@ async function main(): Promise<void> {
   const factors = fitPlayFactors([], undefined, {
     split, pairing: pairing.bend, counted,
     depth: process.env["NO_DEPTH"] ? undefined : depth,
+    plays: process.env["NO_SAMPLE"]
+      ? undefined : storePlays(learnRows as PlayRow[]),
   });
 
   /**

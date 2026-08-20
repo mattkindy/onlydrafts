@@ -223,14 +223,21 @@ export function walkDrive(
       }
     }
 
-    const gained = Math.min(
-      state.yardline,
-      Math.round(factors.gains(state, call, player, uniform, sides)),
-    );
+    // his own play when he has enough behind him, whole, and the
+    // pooled draw with its multipliers when he does not
+    const own = factors.hisOwnPlay
+      ? factors.hisOwnPlay(state, call, player, uniform)
+      : undefined;
+    const gained = own
+      ? own.yards
+      : Math.min(
+          state.yardline,
+          Math.round(factors.gains(state, call, player, uniform, sides)),
+        );
     const scored = state.yardline - gained <= 0;
-    // drawn from what throws for these yards were, so a zero is
-    // usually an incompletion and a small loss is usually a screen
-    const caught = call === "run" || factors.caught(gained, uniform);
+    const caught = own
+      ? own.caught
+      : call === "run" || factors.caught(gained, uniform);
     plays.push({ state: { ...state }, call, player, yards: gained, scored, caught });
     tick(call, gained);
     state.yardline -= gained;
