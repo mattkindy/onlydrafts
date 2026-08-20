@@ -20,7 +20,9 @@ import {
 } from "../src/data/nflverse.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
 import { fitEndings } from "../src/features/fitEndings.js";
-import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js";
+import {
+  fitPlayFactors, countPlays, type PlayRow,
+} from "../src/features/fitPlayFactors.js";
 import { fitFourthDown, climbTo, type FourthRow } from "../src/features/fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "../src/features/fitPlayClock.js";
 import { fitTargetDepth } from "../src/features/targetDepth.js";
@@ -70,8 +72,12 @@ async function main(): Promise<void> {
   const raw = parseCsv(await readFile( 
     join(import.meta.dirname, "..", "data", "curated", "touches.csv"), "utf8",
   ));
+  const live = Boolean(process.env["LIVE"]) && onlyWeek > 1;
   const learnRows = timeBetween(
-    raw.filter((r) => Number(r["season"]) < SCORE_ON).map((r) => ({
+    raw.filter((r) =>
+      Number(r["season"]) < SCORE_ON ||
+      (live && Number(r["season"]) === SCORE_ON && Number(r["week"]) < onlyWeek),
+    ).map((r) => ({
       season: Number(r["season"]), week: Number(r["week"]),
       offence: r["offense"] ?? "", defence: r["defense"] ?? "",
       down: Number(r["down"]), toGo: Number(r["togo"]),
@@ -96,8 +102,9 @@ async function main(): Promise<void> {
    * every rookie at exactly nothing and handed Dallas to the backup
    * who mopped up while Prescott was hurt.
    */
+  const castWeek = live ? onlyWeek : 1;
   const openingWeek = (await loadWeeklyRosters(SCORE_ON))
-    .filter((row) => row.week === 1);
+    .filter((row) => row.week === castWeek);
   const onTeam = new Map<string, { playerId: string; position: string }[]>();
 
   for (const row of openingWeek) {
@@ -169,9 +176,63 @@ async function main(): Promise<void> {
         experience: await experienceBefore(SCORE_ON),
       });
 
-  if (!splitKept) {
+  if (!splitKept && !live) {
     await writeFile(splitAt, JSON.stringify([...split.entries()]))
       .catch(() => undefined);
+  }
+
+  if (live) {
+    /**
+     * August's projection pulled toward what the season has shown.
+     * Four weeks of evidence and the two count about equally, which
+     * is where the season-to-date baseline started beating the frozen
+     * walk on its own.
+     */
+    const soFar = new Map<string, { carries: number; targets: number }>();
+    let teamWeeks = 0;
+    const weeksSeen = new Set<number>();
+
+    for (const r of raw) {
+      if (Number(r["season"]) !== SCORE_ON || Number(r["week"]) >= onlyWeek) {
+        continue;
+      }
+
+      weeksSeen.add(Number(r["week"]));
+
+      if (!r["player"]) {
+        continue;
+      }
+
+      const own = soFar.get(r["player"]!) ?? { carries: 0, targets: 0 };
+      if (r["playType"] === "run") own.carries++;
+      else own.targets++;
+      soFar.set(r["player"]!, own);
+    }
+
+    teamWeeks = weeksSeen.size;
+    let playsSoFar = 0;
+
+    for (const r of raw) {
+      if (
+        Number(r["season"]) === SCORE_ON && Number(r["week"]) < onlyWeek &&
+        ["run", "pass"].includes(r["playType"] ?? "")
+      ) {
+        playsSoFar++;
+      }
+    }
+
+    const perWeekPlays = Math.max(30, playsSoFar / (32 * Math.max(1, teamWeeks)));
+    const trust = teamWeeks / (teamWeeks + 4);
+
+    for (const [playerId, shown] of soFar) {
+      const august = split.get(playerId) ?? { carries: 0, targets: 0 };
+      split.set(playerId, {
+        carries: trust * (shown.carries / (teamWeeks * perWeekPlays)) +
+          (1 - trust) * august.carries,
+        targets: trust * (shown.targets / (teamWeeks * perWeekPlays)) +
+          (1 - trust) * august.targets,
+      });
+    }
   }
 
   const depth = fitTargetDepth(learnRows);
@@ -183,7 +244,9 @@ async function main(): Promise<void> {
     learn: [SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1].filter((s2) => s2 >= 2022),
     scoreOn: SCORE_ON,
   });
-  const counted = await countsFor(SCORE_ON, () => learnRows as PlayRow[]);
+  const counted = live
+    ? countPlays(learnRows as PlayRow[], undefined, false)
+    : await countsFor(SCORE_ON, () => learnRows as PlayRow[]);
   const factors = fitPlayFactors([], undefined, {
     split, pairing: pairing.bend, counted,
     depth: process.env["NO_DEPTH"] ? undefined : depth,
@@ -198,9 +261,13 @@ async function main(): Promise<void> {
    */
   const attempts = new Map<string, Map<string, number>>();
 
+  const passerFrom = live ? Math.max(1, onlyWeek - 2) : 1;
+  const passerTo = live ? onlyWeek - 1 : 2;
+
   for (const r of raw) {
     if (
-      Number(r["season"]) !== SCORE_ON || Number(r["week"]) > 2 ||
+      Number(r["season"]) !== SCORE_ON ||
+      Number(r["week"]) < passerFrom || Number(r["week"]) > passerTo ||
       r["playType"] !== "pass" || !r["passer"]
     ) {
       continue;
@@ -468,11 +535,43 @@ async function main(): Promise<void> {
     return was && was.games >= 4 ? was.points / was.games : 0;
   });
 
+  /**
+   * And what the season has already shown by this week, which is what
+   * a live updater would know for free. Meaningless in week one.
+   */
+  const toDate = new Map<string, { points: number; games: number }>();
+
+  if (onlyWeek > 1) {
+    for (const s2 of await loadPlayerStats(SCORE_ON)) {
+      if (s2.week >= onlyWeek || s2.week > 17) {
+        continue;
+      }
+
+      const own = toDate.get(s2.playerId) ?? { points: 0, games: 0 };
+      own.points += fantasyPoints(s2.statLine, RULES);
+      own.games++;
+      toDate.set(s2.playerId, own);
+    }
+  }
+
   console.log(`${men.length} men projected out of played games\n`);
   console.log(
     "  last season's points a game orders it " +
-      spearman(naive, truth).toFixed(4) + "\n",
+      spearman(naive, truth).toFixed(4),
   );
+
+  if (onlyWeek > 1) {
+    const shown = men.map(([playerId]) => {
+      const so = toDate.get(playerId);
+      return so && so.games >= 2 ? so.points / so.games : 0;
+    });
+    console.log(
+      "  this season to date orders it         " +
+        spearman(shown, truth).toFixed(4),
+    );
+  }
+
+  console.log("");
   console.log(
     "  rank " + spearman(guess, truth).toFixed(4) +
       "   error " + rmse(guess, truth).toFixed(2) +
