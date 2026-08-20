@@ -62,6 +62,13 @@ async function main(): Promise<void> {
   const total = new Map<string, number>();
   const games = new Map<string, number>();
   const onlyWeek = Number(process.env["WEEK"] ?? 0);
+  const endings = new Map<string, number>();
+  const boxSaid = new Map<string, {
+    passYds: number; rushYds: number; receptions: number; recYds: number;
+    tds: number;
+  }>();
+  let drivesSimmed = 0;
+  const teamSaid = new Map<string, number>();
 
   /**
    * The scoring pass needs none of the fitting, so it skips all of
@@ -389,6 +396,8 @@ async function main(): Promise<void> {
 
     const meanFor = new Map<string, number>();
 
+    const saidPoints = new Map<string, number>();
+
     for (let run = 0; run < RUNS; run++) {
       const game = playGame(home, away, {
         rules: { ...rules, kickSucceeds: kicking.kickSucceeds },
@@ -402,12 +411,202 @@ async function main(): Promise<void> {
           playerId,
           (meanFor.get(playerId) ?? 0) + fantasyPoints(line, RULES) / RUNS,
         );
+
+        if (onlyWeek) {
+          const box = boxSaid.get(playerId) ??
+            { passYds: 0, rushYds: 0, receptions: 0, recYds: 0, tds: 0 };
+          box.passYds += (line.passYds ?? 0) / RUNS;
+          box.rushYds += (line.rushYds ?? 0) / RUNS;
+          box.receptions += (line.receptions ?? 0) / RUNS;
+          box.recYds += (line.recYds ?? 0) / RUNS;
+          box.tds += ((line.rushTd ?? 0) + (line.recTd ?? 0) +
+            (line.passTd ?? 0)) / RUNS;
+          boxSaid.set(playerId, box);
+        }
       }
+
+      if (onlyWeek) {
+        for (const one of game.possessions) {
+          endings.set(
+            one.drive.ending, (endings.get(one.drive.ending) ?? 0) + 1,
+          );
+          drivesSimmed++;
+        }
+
+        for (const team of [home.team, away.team]) {
+          saidPoints.set(
+            team, (saidPoints.get(team) ?? 0) + (game.points[team] ?? 0) / RUNS,
+          );
+        }
+      }
+    }
+
+    for (const [team, points] of saidPoints) {
+      teamSaid.set(`${fixture.week}|${team}`, points);
     }
 
     for (const [playerId, points] of meanFor) {
       total.set(playerId, (total.get(playerId) ?? 0) + points);
       games.set(playerId, (games.get(playerId) ?? 0) + 1);
+    }
+  }
+
+  if (onlyWeek && !process.env["MERGED"]) {
+    // the actual plays of this week, asked of the same factors
+    const theWeek = raw.filter((r) =>
+      Number(r["season"]) === SCORE_ON && Number(r["week"]) === onlyWeek &&
+      ["run", "pass"].includes(r["playType"] ?? ""));
+    let calls = 0;
+    let rightCall = 0;
+    let touches = 0;
+    let covered = 0;
+    let top1 = 0;
+
+    for (const r of theWeek) {
+      const state = {
+        down: Number(r["down"]), toGo: Number(r["togo"]),
+        yardline: Number(r["yardline"]), margin: Number(r["margin"]) || 0,
+        secondsLeft: Number(r["seconds"]) || 1800,
+      };
+
+      if (!Number.isFinite(state.down) || !Number.isFinite(state.yardline)) {
+        continue;
+      }
+
+      calls++;
+      const pRun = factors.runs(state, r["offense"] ?? "");
+      if ((pRun >= 0.5) === (r["playType"] === "run")) rightCall++;
+
+      const who = r["player"] ?? "";
+      const among = onTeam.get(r["offense"] ?? "")
+        ?.filter((m) => SHARING_POSITIONS.includes(m.position))
+        .map((m) => m.playerId);
+
+      if (!who || !among?.length) {
+        continue;
+      }
+
+      touches++;
+
+      if (!among.includes(who)) {
+        continue;
+      }
+
+      covered++;
+      const shares = factors.goesTo(
+        state, (r["playType"] ?? "") as Call, among,
+      );
+      const best = [...shares.entries()].sort((a, b) => b[1] - a[1])[0];
+      if (best && best[0] === who) top1++;
+    }
+
+    console.log(
+      "\nthe week itself, play by play: the call right " +
+        (100 * rightCall / Math.max(1, calls)).toFixed(1) + "%, " +
+        "the toucher first " +
+        (100 * top1 / Math.max(1, covered)).toFixed(1) + "% " +
+        "of " + covered + " covered, " + touches + " touched",
+    );
+
+    // how the simulated drives ended, against that week
+    const drives = parseCsv(await readFile(
+      join(import.meta.dirname, "..", "data", "curated", "drives.csv"), "utf8",
+    )).filter((r) =>
+      Number(r["season"]) === SCORE_ON && Number(r["week"]) === onlyWeek);
+    const reallyEnded = new Map<string, number>();
+
+    for (const r of drives) {
+      const how = r["result"] === "Touchdown" ? "touchdown"
+        : r["result"] === "Field goal" ? "fieldGoal"
+        : r["result"] === "Punt" ? "punt" : "other";
+      reallyEnded.set(how, (reallyEnded.get(how) ?? 0) + 1);
+    }
+
+    const pct = (n: number, of: number) =>
+      (100 * n / Math.max(1, of)).toFixed(0) + "%";
+    console.log(
+      "per drive: touchdown " +
+        pct(endings.get("touchdown") ?? 0, drivesSimmed) + " v " +
+        pct(reallyEnded.get("touchdown") ?? 0, drives.length) +
+        ", field goal " + pct(endings.get("fieldGoal") ?? 0, drivesSimmed) +
+        " v " + pct(reallyEnded.get("fieldGoal") ?? 0, drives.length) +
+        ", punt " + pct(endings.get("punt") ?? 0, drivesSimmed) +
+        " v " + pct(reallyEnded.get("punt") ?? 0, drives.length),
+    );
+
+    // and the week's sixteen team games
+    const teamReally = new Map<string, number>();
+
+    for (const r of drives) {
+      const key = r["week"] + "|" + r["offense"];
+      teamReally.set(key, (teamReally.get(key) ?? 0) + Number(r["points"]));
+    }
+
+    const both = [...teamSaid.entries()]
+      .filter(([key]) => teamReally.has(key));
+    console.log(
+      "per game: the week's team points ordered at " +
+        spearman(
+          both.map(([, p]) => p),
+          both.map(([key]) => teamReally.get(key)!),
+        ).toFixed(3) + " over " + both.length + " team games",
+    );
+  }
+
+  if (onlyWeek && !process.env["MERGED"]) {
+    // the box score itself, component by component against the week
+    const boxReal = new Map<string, {
+      passYds: number; rushYds: number; receptions: number; recYds: number;
+      tds: number;
+    }>();
+
+    for (const s2 of await loadPlayerStats(SCORE_ON)) {
+      if (s2.week !== onlyWeek) {
+        continue;
+      }
+
+      boxReal.set(s2.playerId, {
+        passYds: s2.statLine.passYds ?? 0,
+        rushYds: s2.statLine.rushYds ?? 0,
+        receptions: s2.statLine.receptions ?? 0,
+        recYds: s2.statLine.recYds ?? 0,
+        tds: (s2.statLine.rushTd ?? 0) + (s2.statLine.recTd ?? 0) +
+          (s2.statLine.passTd ?? 0),
+      });
+    }
+
+    const pieces: ["passYds" | "rushYds" | "receptions" | "recYds" | "tds",
+      string, number][] = [
+      ["passYds", "passing yards", 50],
+      ["rushYds", "rushing yards", 15],
+      ["receptions", "catches", 1],
+      ["recYds", "receiving yards", 15],
+      ["tds", "touchdowns", 0.1],
+    ];
+
+    console.log("the box score, over men either side put in it");
+
+    for (const [key, label, atLeast] of pieces) {
+      const pairs = [...boxSaid.entries()]
+        .filter(([id, said]) =>
+          said[key] >= atLeast || (boxReal.get(id)?.[key] ?? 0) >= atLeast)
+        .map(([id, said]) => ({
+          said: said[key], real: boxReal.get(id)?.[key] ?? 0,
+        }));
+
+      if (pairs.length < 15) {
+        continue;
+      }
+
+      const mae = pairs.reduce((a, x) => a + Math.abs(x.said - x.real), 0) /
+        pairs.length;
+      console.log(
+        "  " + label.padEnd(17) + String(pairs.length).padStart(4) + " men" +
+          "   off by " + mae.toFixed(1) +
+          "   ordered " + spearman(
+            pairs.map((x) => x.said), pairs.map((x) => x.real),
+          ).toFixed(3),
+      );
     }
   }
 
