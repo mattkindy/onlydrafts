@@ -521,10 +521,16 @@ export function fitPlayFactors(
    * quietly mixing the two.
    */
   const sideRemembered = new Map<string, Counted>();
+  const forgetsAt = () => {
+    if (sideRemembered.size > REMEMBERS) {
+      sideRemembered.clear();
+    }
+  };
   const forSide = (
     from: Map<string, Counted>, who: string, state: PlayState,
     least: number, call?: Call,
   ) => {
+    forgetsAt();
     const key = `${who}|${call ?? "both"}|${stateKey(
       state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
     )}|${least}`;
@@ -579,8 +585,21 @@ export function fitPlayFactors(
   const average = (cell: Counted) =>
     cell.plays === 0 ? 0 : cell.yards.reduce((a, b) => a + b, 0) / cell.plays;
 
+  /**
+   * Remembering every widened lookup was fine while every drive was
+   * asked about at nil apiece with half the clock left, which is a
+   * few thousand keys. A game played out sweeps the clock and the
+   * score, which is hundreds of thousands, each holding a pooled cell
+   * of arrays, and the cache became the reason long runs died at
+   * eight gigabytes. Letting it go now and then keeps the speed where
+   * the same states repeat and the memory flat.
+   */
+  const REMEMBERS = 30000;
   const remembered = new Map<string, Counted>();
   const at = (state: PlayState, least: number, call?: Call) => {
+    if (remembered.size > REMEMBERS) {
+      remembered.clear();
+    }
     const key = `${call ?? "both"}|${stateKey(
       state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
     )}|${least}`;
