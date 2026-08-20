@@ -10,7 +10,7 @@
  * Run: npx tsx scripts/gamePlayerEval.ts
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
 import { rmse, spearman } from "../src/backtest/metrics.js";
@@ -49,7 +49,24 @@ const middle = (values: number[]) =>
   values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
 
 async function main(): Promise<void> {
-  const raw = parseCsv(await readFile(
+  const positions = new Map<string, string>();
+  const played = new Map<string, number>();
+
+  for (const s of await loadPlayerStats(SCORE_ON - 1)) {
+    positions.set(s.playerId, s.position);
+    played.set(s.playerId, (played.get(s.playerId) ?? 0) + 1);
+  }
+
+  const total = new Map<string, number>();
+  const games = new Map<string, number>();
+
+  /**
+   * The scoring pass needs none of the fitting, so it skips all of
+   * it. Running the full setup only to replace the totals with the
+   * merged file cost a serial minute per season.
+   */
+  if (!process.env["MERGED"]) {
+  const raw = parseCsv(await readFile( 
     join(import.meta.dirname, "..", "data", "curated", "touches.csv"), "utf8",
   ));
   const learnRows = timeBetween(
@@ -70,13 +87,6 @@ async function main(): Promise<void> {
   );
   const ticking = fitPlayClock(learnRows);
 
-  const positions = new Map<string, string>();
-  const played = new Map<string, number>();
-
-  for (const s of await loadPlayerStats(SCORE_ON - 1)) {
-    positions.set(s.playerId, s.position);
-    played.set(s.playerId, (played.get(s.playerId) ?? 0) + 1);
-  }
 
   /**
    * The cast comes from week one of the season being played, which a
@@ -138,16 +148,30 @@ async function main(): Promise<void> {
       .filter((p) => SHARING_POSITIONS.includes(p.position))
       .map((p) => ({ playerId: p.playerId, position: p.position, team })),
   );
-  const split = projectSplitShares({
-    season: SCORE_ON,
-    roster,
-    past: await pastShares(
-      [SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1],
-      (s, team) => teamPlays.get(`${s}|${team}`) ?? 1000,
-    ),
-    picks: await loadDraftPicks(),
-    experience: await experienceBefore(SCORE_ON),
-  });
+  // deterministic per season, so it is worked out once and kept
+  const splitAt = join(
+    import.meta.dirname, "..", "data", "kept", `split-${SCORE_ON}.json`,
+  );
+  const splitKept = await readFile(splitAt, "utf8").catch(() => "");
+  const split = splitKept
+    ? new Map<string, { carries: number; targets: number }>(
+        JSON.parse(splitKept) as [string, { carries: number; targets: number }][],
+      )
+    : projectSplitShares({
+        season: SCORE_ON,
+        roster,
+        past: await pastShares(
+          [SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1],
+          (s, team) => teamPlays.get(`${s}|${team}`) ?? 1000,
+        ),
+        picks: await loadDraftPicks(),
+        experience: await experienceBefore(SCORE_ON),
+      });
+
+  if (!splitKept) {
+    await writeFile(splitAt, JSON.stringify([...split.entries()]))
+      .catch(() => undefined);
+  }
 
   const depth = fitTargetDepth(learnRows);
   /**
@@ -279,8 +303,6 @@ async function main(): Promise<void> {
     .filter((g) => g.season === SCORE_ON && g.week <= 17);
   const mine = myShare(schedule);
   const rng = seededRng(Number(process.env["SEED"] ?? 23));
-  const total = new Map<string, number>();
-  const games = new Map<string, number>();
 
   for (const fixture of
     process.env["MERGED"] || process.env["PREWARM"] ? [] : mine) {
@@ -322,12 +344,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (process.env["MERGED"]) {
+  } else {
     const merged = JSON.parse(
       await readFile(process.env["MERGED"], "utf8"),
     ) as { total: [string, number][]; games: [string, number][] };
-    total.clear();
-    games.clear();
 
     for (const [playerId, points] of merged.total) {
       total.set(playerId, points);
