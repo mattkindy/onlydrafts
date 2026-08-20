@@ -490,16 +490,42 @@ async function main(): Promise<void> {
     })
     .sort((a, b) => b.vor - a.vor);
 
+  /**
+   * The games played out, when a season of them has been kept. Absent
+   * men keep their weight with the other opinions, the way every
+   * silent opinion is treated.
+   */
+  const playedFile = await readFile(
+    join(import.meta.dirname, "..", "data", "kept", `played-${season}.json`),
+    "utf8",
+  ).catch(() => "");
+  const walkSays = playedFile
+    ? new Map<string, number>(
+        (JSON.parse(playedFile) as { total: [string, number][] }).total,
+      )
+    : new Map<string, number>();
+  const idOf = new Map(world.players.map((p) => [normalizeName(p.name), p.playerId]));
+
   const keyOf = (p: (typeof board)[number]) => p.key;
   const modelPlace = placesBy(board, keyOf, (p) => p.vor);
   const sharePlace = placesBy(board, keyOf, (p) => p.touches);
   const adpPlace = placesBy(board, keyOf, (p) => (p.adp === null ? null : -p.adp));
+  const walkPlace = placesBy(board, keyOf, (p) => {
+    const id = idOf.get(p.key);
+    const says = id === undefined ? undefined : walkSays.get(id);
+    return says === undefined ? null : says;
+  });
+
+  if (walkSays.size) {
+    console.log(`the played games speak for ${walkPlace.size} of the board`);
+  }
 
   for (const p of board) {
     (p as unknown as { blend: number }).blend = blendedPlace({
       model: modelPlace.get(p.key)!,
       share: sharePlace.get(p.key),
       adp: adpPlace.get(p.key),
+      walk: walkPlace.get(p.key),
     });
   }
 

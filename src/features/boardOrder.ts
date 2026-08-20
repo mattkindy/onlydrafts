@@ -18,19 +18,26 @@ export interface Opinion {
   share?: number;
   /** where adp has him, absent if nobody has priced him */
   adp?: number;
+  /** his place by the games played out, absent if they never saw him */
+  walk?: number;
 }
 
 export interface BoardLean {
   model: number;
   share: number;
   adp: number;
+  walk: number;
 }
 
 /**
  * Swept on a grid rather than fitted, and taken from the middle of the
- * plateau rather than its highest cell.
+ * plateau rather than its highest cell. The walk's seat came from its
+ * own sweep: fifteen percent improves the blend on both targets and
+ * more starts to cost.
  */
-export const BOARD_LEAN: BoardLean = { model: 0.125, share: 0.375, adp: 0.5 };
+export const BOARD_LEAN: BoardLean = {
+  model: 0.106, share: 0.319, adp: 0.425, walk: 0.15,
+};
 
 /**
  * Where a player lands, lower being earlier.
@@ -51,6 +58,10 @@ export function blendedPlace(
 
   if (opinion.adp !== undefined) {
     parts.push([lean.adp, opinion.adp]);
+  }
+
+  if (opinion.walk !== undefined) {
+    parts.push([lean.walk, opinion.walk]);
   }
 
   const weight = parts.reduce((sum, [w]) => sum + w, 0);
