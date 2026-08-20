@@ -242,7 +242,7 @@ async function main(): Promise<void> {
   const total = new Map<string, number>();
   const games = new Map<string, number>();
 
-  for (const fixture of mine) {
+  for (const fixture of process.env["MERGED"] ? [] : mine) {
     const home = sideFor(fixture.homeTeamId);
     const away = sideFor(fixture.awayTeamId);
 
@@ -275,8 +275,26 @@ async function main(): Promise<void> {
   }
 
   if (process.env["SHARES"]) {
-    console.log(JSON.stringify([...total.entries()]));
+    console.log(JSON.stringify({
+      total: [...total.entries()], games: [...games.entries()],
+    }));
     return;
+  }
+
+  if (process.env["MERGED"]) {
+    const merged = JSON.parse(
+      await readFile(process.env["MERGED"], "utf8"),
+    ) as { total: [string, number][]; games: [string, number][] };
+    total.clear();
+    games.clear();
+
+    for (const [playerId, points] of merged.total) {
+      total.set(playerId, points);
+    }
+
+    for (const [playerId, n] of merged.games) {
+      games.set(playerId, n);
+    }
   }
 
   // what they really scored, with the same rules

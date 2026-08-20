@@ -521,11 +521,7 @@ export function fitPlayFactors(
    * quietly mixing the two.
    */
   const sideRemembered = new Map<string, Counted>();
-  const forgetsAt = () => {
-    if (sideRemembered.size > REMEMBERS) {
-      sideRemembered.clear();
-    }
-  };
+  const forgetsAt = () => makeRoom(sideRemembered);
   const forSide = (
     from: Map<string, Counted>, who: string, state: PlayState,
     least: number, call?: Call,
@@ -596,10 +592,29 @@ export function fitPlayFactors(
    */
   const REMEMBERS = 30000;
   const remembered = new Map<string, Counted>();
-  const at = (state: PlayState, least: number, call?: Call) => {
-    if (remembered.size > REMEMBERS) {
-      remembered.clear();
+  /**
+   * Half goes rather than all of it: clearing everything made every
+   * following lookup a fresh gather, and a map iterates in insertion
+   * order, so dropping the older half keeps what the walk is asking
+   * about right now.
+   */
+  const makeRoom = (cache: Map<string, Counted>) => {
+    if (cache.size <= REMEMBERS) {
+      return;
     }
+
+    let toGo = cache.size >> 1;
+
+    for (const key of cache.keys()) {
+      if (toGo-- <= 0) {
+        break;
+      }
+
+      cache.delete(key);
+    }
+  };
+  const at = (state: PlayState, least: number, call?: Call) => {
+    makeRoom(remembered);
     const key = `${call ?? "both"}|${stateKey(
       state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
     )}|${least}`;
