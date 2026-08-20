@@ -104,6 +104,8 @@ interface Row {
   position: string;
   adp: number;
   model: number;
+  /** what the played-out games say he scores, absent if they never saw him */
+  walked: number | null;
   touches: number;
   /** those targets at what his own depth is worth a target */
   atHisDepth: number;
@@ -275,6 +277,13 @@ async function rowsFor(
     replacementAt.set(position, sorted[Math.min(last, sorted.length) - 1] ?? 0);
   }
 
+  // what the played out games said, kept from the simulation runs
+  const walkFile = JSON.parse(await readFile(
+    join(import.meta.dirname, "..", "data", "kept", `played-${season}.json`),
+    "utf8",
+  ).catch(() => '{"total":[]}')) as { total: [string, number][] };
+  const walkSays = new Map<string, number>(walkFile.total);
+
   const rows: Row[] = [];
 
   for (const e of projected) {
@@ -321,6 +330,7 @@ async function rowsFor(
 
         return halves.carries * ran * 4.4 + halves.targets * ran * perTarget;
       })(),
+      walked: walkSays.get(e.playerId) ?? null,
       atPosition: touches * perGroupTouch,
       atHisOwn: touches * perTouch(before.get(e.playerId), perGroupTouch),
       points: scored.get(e.playerId) ?? 0,
@@ -350,6 +360,17 @@ async function main(): Promise<void> {
     const byGroup = placeOf(rows.map((r) => r.atPosition));
     const byOwn = placeOf(rows.map((r) => r.atHisOwn));
     const byDepth = placeOf(rows.map((r) => r.atHisDepth));
+    /**
+     * A man the simulation never saw keeps his regression place in
+     * its vote, the way the board treats any silent opinion, rather
+     * than being ranked last for the crime of being missing.
+     */
+    const seen = rows
+      .map((r, i) => ({ i, walked: r.walked }))
+      .filter((r) => r.walked !== null);
+    const seenPlace = placeOf(seen.map((r) => r.walked!));
+    const walk = [...model];
+    seen.forEach((r, k) => { walk[r.i] = seenPlace[k]!; });
 
     for (const [truth, into] of [
       [rows.map((r) => r.points), onPoints],
@@ -372,6 +393,22 @@ async function main(): Promise<void> {
       note("touches at his position's points", alone(byGroup));
       note("touches at his own points", alone(byOwn));
       note("his carries and his targets, each at what they make", alone(byDepth));
+      note("the played out games, silent men at their regression", alone(walk));
+
+      // the four opinions together, swept where the walk leads
+      for (const onWalk of [0.4, 0.5, 0.6, 0.7]) {
+        for (const onAdp of [0.15, 0.25, 0.35]) {
+          const rest = Math.max(0, 1 - onWalk - onAdp);
+          note(
+            `walk ${(100 * onWalk).toFixed(0)}%, adp ${(100 * onAdp).toFixed(0)}%, ` +
+              "the rest split on the models",
+            mix(
+              [walk, byAdp, model, share],
+              [onWalk, onAdp, rest / 2, rest / 2],
+            ),
+          );
+        }
+      }
       note("regression and adp, the board today", mix([model, byAdp], [0.5, 0.5]));
 
       // and the whole grid for each way of voting, so the weighting
