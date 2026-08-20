@@ -32,7 +32,7 @@ const BANDS: [string, number][] = [
 
 async function main(): Promise<void> {
   const plays = parseCsv(await readFile(
-    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+    join(import.meta.dirname, "..", "data", "curated", "fourths.csv"), "utf8",
   ));
   const asRow = (r: Record<string, string>): FourthRow => ({
     toGo: Number(r["togo"]), yardline: Number(r["yardline"]),

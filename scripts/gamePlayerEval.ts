@@ -85,7 +85,7 @@ async function main(): Promise<void> {
   const kicking = await fitEndings(LEARN);
 
   const fourths = parseCsv(await readFile(
-    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+    join(import.meta.dirname, "..", "data", "curated", "fourths.csv"), "utf8",
   )).filter((r) =>
     Number(r["season"]) < SCORE_ON && Number(r["down"]) === 4 &&
     DECIDED.includes(r["playType"] ?? ""));

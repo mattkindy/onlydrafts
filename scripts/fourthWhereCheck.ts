@@ -18,7 +18,7 @@ const middle = (values: number[]) =>
 
 async function main(): Promise<void> {
   const fourths = parseCsv(await readFile(
-    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+    join(import.meta.dirname, "..", "data", "curated", "fourths.csv"), "utf8",
   )).filter((r) => Number(r["down"]) === 4 && Number(r["season"]) === 2025);
 
   const where = fourths.map((r) => Number(r["yardline"])).filter(Number.isFinite);

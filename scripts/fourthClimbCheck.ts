@@ -16,7 +16,7 @@ import { parseCsv } from "../src/data/csv.js";
 
 async function main(): Promise<void> {
   const rows = parseCsv(await readFile(
-    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
+    join(import.meta.dirname, "..", "data", "curated", "fourths.csv"), "utf8",
   )).filter((r) => Number(r["down"]) === 4);
   const bySeason = new Map<number, { all: number; went: number }>();
 
