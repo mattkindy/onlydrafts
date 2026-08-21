@@ -52,6 +52,7 @@ export interface PlayFactors {
    */
   hisOwnPlay?: (
     state: PlayState, call: Call, player: string, uniform: () => number,
+    passer?: string,
   ) => { yards: number; caught: boolean } | undefined;
 }
 

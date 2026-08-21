@@ -284,6 +284,8 @@ export interface PlayStore {
   caught: Uint8Array;
   /** `${player}|${call}` to the rows that were his */
   ofMan: Map<string, number[]>;
+  /** `${player}|${passer}` to the throws between exactly those two */
+  ofPair: Map<string, number[]>;
 }
 
 export function storePlays(rows: PlayRow[]): PlayStore {
@@ -294,6 +296,7 @@ export function storePlays(rows: PlayRow[]): PlayStore {
   const yards = new Int16Array(kept.length);
   const caught = new Uint8Array(kept.length);
   const ofMan = new Map<string, number[]>();
+  const ofPair = new Map<string, number[]>();
 
   kept.forEach((r, i) => {
     down[i] = r.down;
@@ -303,9 +306,14 @@ export function storePlays(rows: PlayRow[]): PlayStore {
     caught[i] = r.call === "run" || r.caught ? 1 : 0;
     const key = `${r.player}|${r.call}`;
     ofMan.set(key, [...(ofMan.get(key) ?? []), i]);
+
+    if (r.call === "pass" && r.passer) {
+      const pair = `${r.player}|${r.passer}`;
+      ofPair.set(pair, [...(ofPair.get(pair) ?? []), i]);
+    }
   });
 
-  return { down, toGo, yardline, yards, caught, ofMan };
+  return { down, toGo, yardline, yards, caught, ofMan, ofPair };
 }
 
 export interface CountedPlays {
@@ -791,8 +799,20 @@ export function fitPlayFactors(
   const hisOwnPlay = plays
     ? (
         state: PlayState, call: Call, player: string, uniform: () => number,
+        passer?: string,
       ) => {
-        let his = plays.ofMan.get(`${player}|${call}`) ?? [];
+        /**
+         * A throw between these exact two men first, when they have
+         * enough between them. The pairing the multiplier interface
+         * could never carry comes out of joint sampling instead: what
+         * Chase does with Burrow throwing is what those plays were.
+         */
+        const together = call === "pass" && passer
+          ? plays.ofPair.get(`${player}|${passer}`) ?? []
+          : [];
+        let his = together.length >= 25
+          ? together
+          : plays.ofMan.get(`${player}|${call}`) ?? [];
 
         if (his.length < 25 && alike) {
           for (const twin of alike.get(player) ?? []) {
