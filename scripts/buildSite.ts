@@ -42,7 +42,7 @@ import {
   SHARING_POSITIONS,
 } from "../src/features/projectedShares.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
-import { blendedPlace, placesBy } from "../src/features/boardOrder.js";
+import { blendedPlace, leanFor, placesBy } from "../src/features/boardOrder.js";
 
 const DOCS = join(import.meta.dirname, "..", "docs", "weekly");
 
@@ -526,7 +526,7 @@ async function main(): Promise<void> {
       share: sharePlace.get(p.key),
       adp: adpPlace.get(p.key),
       walk: walkPlace.get(p.key),
-    });
+    }, leanFor(p.position));
   }
 
   board.sort(

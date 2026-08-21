@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { blendedPlace, placesBy, BOARD_LEAN } from "./boardOrder.js";
+import {
+  blendedPlace, leanFor, placesBy, BOARD_LEAN, QB_LEAN,
+} from "./boardOrder.js";
 
 describe("blendedPlace", () => {
   it("puts a man the three agree on where they all had him", () => {
@@ -31,6 +33,23 @@ describe("blendedPlace", () => {
 
   it("leaves a man nobody priced where the models put him", () => {
     expect(blendedPlace({ model: 30, share: 30 })).toBeCloseTo(30);
+  });
+});
+
+describe("leanFor", () => {
+  it("orders a quarterback mostly by the walk", () => {
+    const place = blendedPlace(
+      { model: 30, adp: 30, walk: 10 }, leanFor("QB"),
+    );
+    const spoke = QB_LEAN.model + QB_LEAN.adp + QB_LEAN.walk;
+
+    expect(place).toBeCloseTo(
+      (QB_LEAN.walk * 10 + (QB_LEAN.model + QB_LEAN.adp) * 30) / spoke,
+    );
+  });
+
+  it("leaves everyone else on the board's lean", () => {
+    expect(leanFor("RB")).toBe(BOARD_LEAN);
   });
 });
 

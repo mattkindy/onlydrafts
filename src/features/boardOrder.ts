@@ -40,6 +40,27 @@ export const BOARD_LEAN: BoardLean = {
 };
 
 /**
+ * Quarterbacks are ordered mostly by the walk. Once sampled draws
+ * could hear the opponent, the walk alone ordered the position better
+ * than adp in all three test seasons (.73, .50 and .47 against .28,
+ * .38 and .08), and every mix in between scored between the two. The
+ * fifteen percent left with adp and the regression is for what the
+ * simulation cannot see at draft time, a benching battle or an
+ * injury the market has heard about.
+ */
+export const QB_LEAN: BoardLean = {
+  model: 0.03, share: 0, adp: 0.12, walk: 0.85,
+};
+
+export function leanFor(position: string): BoardLean {
+  if (position === "QB") {
+    return QB_LEAN;
+  }
+
+  return BOARD_LEAN;
+}
+
+/**
  * Where a player lands, lower being earlier.
  *
  * An opinion with nothing to say about him does not drag him toward
