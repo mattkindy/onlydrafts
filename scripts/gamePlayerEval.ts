@@ -231,7 +231,7 @@ async function main(): Promise<void> {
     }
 
     const perWeekPlays = Math.max(30, playsSoFar / (32 * Math.max(1, teamWeeks)));
-    const trust = teamWeeks / (teamWeeks + 4);
+    const trust = teamWeeks / (teamWeeks + Number(process.env["TRUST_AT"] ?? 4));
 
     for (const [playerId, shown] of soFar) {
       const august = split.get(playerId) ?? { carries: 0, targets: 0 };
