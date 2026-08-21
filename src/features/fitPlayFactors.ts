@@ -347,6 +347,12 @@ export interface FactorExtras {
   counted?: CountedPlays;
   /** the plays kept whole, which turns the draw personal */
   plays?: PlayStore;
+  /**
+   * Who resembles whom, nearest first, so a man too thin to sample
+   * borrows plays from men like him before falling to the crowd. A
+   * possession receiver widens to possession receivers.
+   */
+  alike?: Map<string, string[]>;
 }
 
 /**
@@ -526,6 +532,7 @@ export function fitPlayFactors(
 ): PlayFactors {
   const {
     projected, split, pairing, runParts, playLevel, depth, people, plays,
+    alike,
   } = extras;
   const {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
@@ -785,9 +792,19 @@ export function fitPlayFactors(
     ? (
         state: PlayState, call: Call, player: string, uniform: () => number,
       ) => {
-        const his = plays.ofMan.get(`${player}|${call}`);
+        let his = plays.ofMan.get(`${player}|${call}`) ?? [];
 
-        if (!his || his.length < 25) {
+        if (his.length < 25 && alike) {
+          for (const twin of alike.get(player) ?? []) {
+            his = his.concat(plays.ofMan.get(`${twin}|${call}`) ?? []);
+
+            if (his.length >= 60) {
+              break;
+            }
+          }
+        }
+
+        if (his.length < 25) {
           return undefined;
         }
 

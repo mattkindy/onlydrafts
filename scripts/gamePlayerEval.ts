@@ -37,6 +37,7 @@ import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
 import { myShare } from "../src/sim/acrossCores.js";
 import { buildMatchupTable } from "../src/features/matchupTable.js";
 import { countsFor } from "../src/features/countsCache.js";
+import { buildPlayerVectors } from "../src/features/playerVector.js";
 import type { Call } from "../src/model/playFactors.js";
 
 /** the fourth downs where a side actually chose, so not the flags */
@@ -259,6 +260,42 @@ async function main(): Promise<void> {
     depth: process.env["NO_DEPTH"] ? undefined : depth,
     plays: process.env["NO_SAMPLE"]
       ? undefined : storePlays(learnRows as PlayRow[]),
+    alike: process.env["NO_SAMPLE"] || process.env["NO_ALIKE"]
+      ? undefined
+      : await (async () => {
+          /**
+           * Nearest men of the same position by the attribute vectors,
+           * so a thin man samples from his own kind. Rookies have no
+           * vector yet and stay on the pooled path.
+           */
+          const described = await buildPlayerVectors(SCORE_ON - 1);
+          const ids = [...described.keys()];
+          const nearest = new Map<string, string[]>();
+
+          for (const id of ids) {
+            const me = described.get(id)!;
+            const mine = positions.get(id);
+            const close = ids
+              .filter((other) =>
+                other !== id && positions.get(other) === mine)
+              .map((other) => {
+                const them = described.get(other)!.values;
+                let apart = 0;
+
+                for (let i = 0; i < me.values.length; i++) {
+                  apart += (me.values[i]! - them[i]!) ** 2;
+                }
+
+                return { other, apart };
+              })
+              .sort((a, b) => a.apart - b.apart)
+              .slice(0, 8)
+              .map((x) => x.other);
+            nearest.set(id, close);
+          }
+
+          return nearest;
+        })(),
   });
 
   /**
