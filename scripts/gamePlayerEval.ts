@@ -112,8 +112,29 @@ async function main(): Promise<void> {
    * who mopped up while Prescott was hurt.
    */
   const castWeek = live ? onlyWeek : 1;
+
+  /**
+   * The week's injury report, which anyone setting a lineup has read.
+   * A man ruled Out or Doubtful leaves the cast; a Questionable man
+   * stays, since most of them play. Only the live walk reads it: in
+   * August nobody knows who will be hurt in December.
+   */
+  const ruledOut = new Set<string>();
+
+  if (live && !process.env["NO_INJURY"]) {
+    for (const r of parseCsv(await readFile(
+      join(import.meta.dirname, "..", "data", "raw", `injuries_${SCORE_ON}.csv`),
+      "utf8",
+    ).catch(() => ""))) {
+      if (Number(r["week"]) === onlyWeek &&
+          ["Out", "Doubtful"].includes(r["report_status"] ?? "")) {
+        ruledOut.add(r["gsis_id"] ?? "");
+      }
+    }
+  }
+
   const openingWeek = (await loadWeeklyRosters(SCORE_ON))
-    .filter((row) => row.week === castWeek);
+    .filter((row) => row.week === castWeek && !ruledOut.has(row.playerId));
   const onTeam = new Map<string, { playerId: string; position: string }[]>();
 
   for (const row of openingWeek) {
