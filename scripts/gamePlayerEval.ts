@@ -299,6 +299,10 @@ async function main(): Promise<void> {
         })(),
   });
 
+  if (process.env["NO_MATCHUP"]) {
+    delete factors.matchup;
+  }
+
   /**
    * Who throws for each side: whoever took the throws in the opening
    * fortnight of the season being played. A drafter in August knows

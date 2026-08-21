@@ -54,6 +54,13 @@ export interface PlayFactors {
     state: PlayState, call: Call, player: string, uniform: () => number,
     passer?: string,
   ) => { yards: number; caught: boolean } | undefined;
+  /**
+   * What this matchup does to a carry or a throw, near one. The
+   * sampled path draws a man's own plays against every defence he
+   * ever faced, so without this the walk cannot tell this week's
+   * opponent from an average one.
+   */
+  matchup?: (offence: string, defence: string, call: Call) => number;
 }
 
 /**

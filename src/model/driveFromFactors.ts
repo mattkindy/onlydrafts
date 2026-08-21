@@ -232,9 +232,26 @@ export function walkDrive(
 
     // his own play when he has enough behind him, whole, and the
     // pooled draw with its multipliers when he does not
-    const own = factors.hisOwnPlay
+    let own = factors.hisOwnPlay
       ? factors.hisOwnPlay(state, call, player, uniform, sides.passer)
       : undefined;
+
+    /**
+     * The opponent, heard on the sampled path. A man's own plays were
+     * made against every defence he faced, so this week's matchup
+     * bends them: a strong pass defence mostly causes incompletions
+     * rather than shorter completions, so on a throw the bend flips
+     * some catches to nothing, and everywhere else it scales yards.
+     */
+    if (own && factors.matchup && sides.offence && sides.defence) {
+      const bend = factors.matchup(sides.offence, sides.defence, call);
+
+      if (call === "pass" && own.caught && bend < 1 && uniform() > bend) {
+        own = { yards: 0, caught: false };
+      } else if (own.yards > 0) {
+        own = { ...own, yards: Math.round(own.yards * Math.min(bend, 1.2)) };
+      }
+    }
     const drawn = own
       ? own.yards
       : Math.round(factors.gains(state, call, player, uniform, sides));

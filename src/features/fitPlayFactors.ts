@@ -860,6 +860,7 @@ export function fitPlayFactors(
 
   return {
     hisOwnPlay,
+    matchup: pairing,
     caught: wasCaught,
     runs: (state, offence) => {
       const league = at(state, settings.leastForCall);
