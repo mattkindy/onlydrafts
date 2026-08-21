@@ -26,6 +26,7 @@ import { divideAmong } from "../src/features/shareCompetition.js";
 import { buildMatchupTable } from "../src/features/matchupTable.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import { loadCoaches } from "../src/data/coaches.js";
+import { sizeOf } from "../src/features/gameSize.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
 import { walkDrive } from "../src/model/driveFromFactors.js";
 import {
@@ -246,6 +247,27 @@ async function main(): Promise<void> {
 
     if (!home || !away) {
       continue;
+    }
+
+    /**
+     * The market's afternoon for each side, bent toward with an
+     * exponent swept rather than assumed. At nothing the walk stands
+     * alone; at one it takes the line's word for the size whole.
+     */
+    const alpha = Number(process.env["ALPHA"] ?? 0);
+
+    if (alpha > 0) {
+      home.lift = Math.pow(
+        sizeOf({
+          total: 2 * ((line.get(key) ?? 22.4)),
+          favouredBy: 0,
+        }), alpha,
+      );
+      const theirKey = `${truth.week}|${truth.against}`;
+      away.lift = Math.pow(
+        sizeOf({ total: 2 * (line.get(theirKey) ?? 22.4), favouredBy: 0 }),
+        alpha,
+      );
     }
 
     seen.add(key);

@@ -28,6 +28,8 @@ export interface Side {
   factors: PlayFactors;
   /** who is throwing, when anyone knows */
   passer?: string;
+  /** the market's read on this side's afternoon, near one */
+  lift?: number;
 }
 
 export interface GameRules {
@@ -191,6 +193,7 @@ export function playGame(
       {
         offence: withBall.team, defence: against.team,
         passer: withBall.passer, season: rules.season, week: rules.week,
+        lift: withBall.lift,
       },
       rules.ticking,
       opening,

@@ -102,6 +102,13 @@ export function walkDrive(
   sides: {
     offence?: string; defence?: string;
     passer?: string; season?: number; week?: number;
+    /**
+     * What the market says this side's afternoon is worth, as a
+     * multiplier near one. The line orders team points at .39 where
+     * the walk alone manages .15, and it knows things no simulation
+     * ingests, so the walk bends toward it rather than arguing.
+     */
+    lift?: number;
   } = {},
   /**
    * How long each snap takes. Without one the drive has no length in
@@ -228,12 +235,13 @@ export function walkDrive(
     const own = factors.hisOwnPlay
       ? factors.hisOwnPlay(state, call, player, uniform, sides.passer)
       : undefined;
-    const gained = own
+    const drawn = own
       ? own.yards
-      : Math.min(
-          state.yardline,
-          Math.round(factors.gains(state, call, player, uniform, sides)),
-        );
+      : Math.round(factors.gains(state, call, player, uniform, sides));
+    const gained = Math.min(
+      state.yardline,
+      sides.lift && drawn > 0 ? Math.round(drawn * sides.lift) : drawn,
+    );
     const scored = state.yardline - gained <= 0;
     const caught = own
       ? own.caught
