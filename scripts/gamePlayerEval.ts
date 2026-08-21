@@ -32,6 +32,7 @@ import {
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import { loadAdp } from "../src/data/adp.js";
 import { normalizeName } from "../src/data/names.js";
+import { sizeOf } from "../src/features/gameSize.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
 import { myShare } from "../src/sim/acrossCores.js";
@@ -431,6 +432,26 @@ async function main(): Promise<void> {
 
     if (!home || !away) {
       continue;
+    }
+
+    /**
+     * The betting line orders team points at .39 where the walk alone
+     * manages .135, so each side bends toward its implied total.
+     * Seven tenths took back most of that ordering (.35) and was the
+     * only strength that also improved the points error; a full
+     * bend kept buying ordering by inflating scoring until the error
+     * was worse than not listening at all.
+     */
+    const alpha = Number(process.env["ALPHA"] ?? 0.7);
+
+    if (alpha > 0 &&
+        fixture.totalLine !== undefined && fixture.spreadLine !== undefined) {
+      home.lift = Math.pow(sizeOf(
+        { total: fixture.totalLine, favouredBy: fixture.spreadLine },
+      ), alpha);
+      away.lift = Math.pow(sizeOf(
+        { total: fixture.totalLine, favouredBy: -fixture.spreadLine },
+      ), alpha);
     }
 
     const meanFor = new Map<string, number>();

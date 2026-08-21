@@ -250,11 +250,13 @@ async function main(): Promise<void> {
     }
 
     /**
-     * The market's afternoon for each side, bent toward with an
-     * exponent swept rather than assumed. At nothing the walk stands
-     * alone; at one it takes the line's word for the size whole.
+     * How far the walk bends toward the market's implied total.
+     * Seven tenths won the sweep: most of the line's ordering (.35 of
+     * its .39, from .135 unbent) and the only strength that also
+     * improved the points error. A full bend inflated scoring until
+     * the error was worse than not listening at all.
      */
-    const alpha = Number(process.env["ALPHA"] ?? 0);
+    const alpha = Number(process.env["ALPHA"] ?? 0.7);
 
     if (alpha > 0) {
       home.lift = Math.pow(
