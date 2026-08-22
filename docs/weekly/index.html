@@ -876,10 +876,9 @@ function seasonCard(p, opts = {}) {
         }
       : undefined,
     note: '<span class="facts">' + [
-      p.rank
-        ? '<span class="f"><i>ours</i>' + asRound(p.rank) +
-          '<small>' + p.rank + "</small></span>"
-        : "",
+      // no raw number beside ours: a rank is a whole pick, so the round
+      // and the pick say the same thing twice
+      p.rank ? '<span class="f"><i>ours</i>' + asRound(p.rank) + "</span>" : "",
       '<span class="f"' +
         (p.adp
           ? ' title="taken at pick ' + p.adp.toFixed(1) + " on average" +
