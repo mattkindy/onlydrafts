@@ -5,9 +5,10 @@
   "type": "module",
   "description": "Graph-based fantasy football draft analysis and backtesting",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run && tsx scripts/checkUi.ts",
     "typecheck": "tsc --noEmit",
-    "fetch": "tsx scripts/fetchData.ts"
+    "fetch": "tsx scripts/fetchData.ts",
+    "check:ui": "tsx scripts/checkUi.ts"
   },
   "devDependencies": {
     "@types/jsdom": "^30.0.0",

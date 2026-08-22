@@ -75,9 +75,9 @@
     gap: 1.1rem; }
   .card { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; padding: .75rem .95rem; }
-  .more { flex: 0 0 auto; align-self: center; margin-left: .5rem;
+  .more { flex: 0 0 auto; margin-left: .4rem; vertical-align: middle;
     background: var(--chip); border: 1px solid var(--edge); color: var(--muted);
-    cursor: pointer; padding: .3rem; line-height: 0; border-radius: 999px; }
+    cursor: pointer; padding: .22rem; line-height: 0; border-radius: 999px; }
   .more:hover { color: var(--ink); border-color: var(--muted); }
   .more:focus-visible { outline: 2px solid var(--go); outline-offset: 1px; }
   .card.plain { cursor: default; }
@@ -90,8 +90,8 @@
     border-radius: 999px; padding: .1rem .45rem; margin-left: .4rem;
     vertical-align: .1em; }
   .card .top { display: flex; justify-content: space-between; align-items: baseline; }
-  .card .nm { font-weight: 700; font-size: .92rem; white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis; }
+  .card .nm { font-weight: 700; font-size: .92rem; display: flex;
+    align-items: center; gap: .1rem; min-width: 0; flex-wrap: wrap; }
   .card .big { font-size: 1.35rem; font-weight: 800;
     font-variant-numeric: tabular-nums; display: flex; flex-direction: column;
     align-items: flex-end; line-height: 1.1; }
@@ -764,9 +764,10 @@ function card(p, opts) {
       'stroke-width="1.6"/><path d="M10 9v5M10 6.2v.1" stroke="currentColor" ' +
       'stroke-width="1.8" stroke-linecap="round"/></svg></button>';
   div.innerHTML =
-    '<div class="top"><span class="nm">' + p.name + badge + '</span>' +
+    '<div class="top"><span class="nm"><span class="who">' + p.name +
+    "</span>" + badge + more + "</span>" +
     '<span class="big">' + opts.value.toFixed(1) +
-    '<em class="unit">' + opts.unit + "</em></span>" + more + "</div>" +
+    '<em class="unit">' + opts.unit + "</em></span></div>" +
     '<div class="sub"><span>' + p.position + " &middot; " + (p.team ?? "") +
     (p.opponent ? " &middot; " + p.opponent : "") + "</span>" + aside + "</div>" +
     range + (opts.note ? '<div class="note">' + opts.note + "</div>" : "") + tag;
@@ -2060,7 +2061,6 @@ async function renderKeepers() {
         )
       : null;
     const holdsIt = !cost || !active.myPicks || active.myPicks.includes(cost);
-    const beaten = costPick ? betterLater(p, costPick, mineToo) : [];
     // the chip says what the net says, so the card cannot argue with
     // itself the way it did when the two were worked out apart
     /**
@@ -2075,6 +2075,7 @@ async function renderKeepers() {
       ...(listed ?? []).map((e) => e.key),
     ]);
     mineToo.delete(p.key);
+    const beaten = costPick ? betterLater(p, costPick, mineToo) : [];
     const sums = costPick ? keeperSums(p, costPick, teams, mineToo) : null;
     const call = !sums ? null
       : sums.net > CLOSE_SEASON ? { word: "keep", how: "up" }

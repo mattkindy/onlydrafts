@@ -3,6 +3,7 @@
 // Run: npx tsx scripts/buildSite.ts --league <sleeper id> --weeks 10-12
 
 import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
 import {
@@ -672,6 +673,14 @@ async function main(): Promise<void> {
     join(DOCS, "data", "index.json"),
     JSON.stringify({ weeks: index, boardSeason: season, adpFormat }),
   );
+  /**
+   * The page ships only if its script would run. Two crashes went out
+   * in one afternoon because nothing ever looked at it.
+   */
+  execFileSync("npx", ["tsx", join(import.meta.dirname, "checkUi.ts")], {
+    stdio: "inherit",
+  });
+
   await writeFile(
     join(DOCS, "index.html"),
     await readFile(join(import.meta.dirname, "..", "tools", "ui", "index.html"), "utf8"),

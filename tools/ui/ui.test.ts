@@ -168,7 +168,7 @@ describe("the weekly page", () => {
 
     // the sheet decides who is eligible, so a man it leaves out must
     // not turn up on the page at all
-    const shown = [...window.document.querySelectorAll(".nm")]
+    const shown = [...window.document.querySelectorAll(".who")]
       .map((n) => n.textContent ?? "");
     const eligible = new Set(
       keepers.entries.filter((e) => e.team === "kindy").map((e) => e.player),
