@@ -116,6 +116,11 @@
     letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
   .fig.up { color: var(--go); }
   .fig.down { color: var(--mark); }
+  .beaten i { display: block; font-style: normal; font-size: .62rem;
+    font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); margin-bottom: .2rem; }
+  .beaten .f { display: inline-block; margin-right: .8rem;
+    font-variant-numeric: tabular-nums; }
   .beaten { margin-top: .55rem; font-size: .8rem; color: var(--ink);
     background: color-mix(in srgb, var(--mark) 12%, transparent);
     border-left: 2px solid var(--mark); padding: .35rem .5rem;
@@ -864,8 +869,8 @@ function usuallyAt(p) {
 
   const spread = late - early;
 
-  return "#" + p.adp.toFixed(1) + " &middot; there at " +
-    Math.round(early + 0.25 * spread) + ", gone by " +
+  return "#" + p.adp.toFixed(1) + " " +
+    Math.round(early + 0.25 * spread) + "-" +
     Math.round(early + 0.75 * spread);
 }
 
@@ -903,10 +908,10 @@ function seasonCard(p, opts = {}) {
       p.rank ? '<span class="f"><i>ours</i>' + asRound(p.rank) + "</span>" : "",
       '<span class="f"' +
         (p.adp
-          ? ' title="taken at pick ' + p.adp.toFixed(1) + " overall on average" +
-            (p.adpHigh ? ", from " + p.adpHigh + " to " + p.adpLow : "") +
-            '. A slot can be empty or hold two men, since this is an ' +
-            'average rather than a pick"'
+          ? ' title="pick ' + p.adp.toFixed(1) + " overall on average. The " +
+            "two picks after it are where he is still on the board three " +
+            "times in four, and where he is gone three times in four" +
+            '"'
           : "") +
         '><i>adp</i>' + (p.adpRank ? asRound(p.adpRank) : "&mdash;") +
         // marked as an overall pick, since 3.8 beside 1.03 otherwise
@@ -2026,7 +2031,7 @@ function keeperFigures(p, cost, costPick, teams, taken) {
   if (makesItUp.length) {
     const who = document.createElement("div");
     who.className = "madeof";
-    who.innerHTML = "<i>" + asRound(costPick) + " usually lands on</i> " +
+    who.innerHTML = "<i>" + asRound(costPick) + " lands on</i> " +
       makesItUp.map((o) =>
         o.who.name + " <b>" + Math.round(100 * o.odds) + "%</b>").join(", ");
     box.appendChild(who);
@@ -2305,14 +2310,12 @@ async function renderKeepers() {
       if (beaten.length) {
         const worse = document.createElement("div");
         worse.className = "beaten";
-        const first = beaten[0];
-        worse.innerHTML = "<b>" + first.who.name + "</b> is worth " +
-          first.better.toFixed(0) + " more over a season and is still there " +
-          "at " + asRound(costPick) + " " + Math.round(100 * first.odds) +
-          "% of the time" +
-          (beaten.length > 1
-            ? ", and so are " + (beaten.length - 1) + " others"
-            : "");
+        worse.innerHTML = '<i>better and likely there at ' +
+          asRound(costPick) + "</i>" +
+          beaten.map((o) =>
+            '<span class="f"><b>' + o.who.name + "</b> +" +
+            o.better.toFixed(0) + " &middot; " +
+            Math.round(100 * o.odds) + "%</span>").join("");
         card.appendChild(worse);
       }
 
