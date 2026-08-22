@@ -112,7 +112,9 @@ async function openPage(withLeague: boolean) {
   // the page keeps its own names to itself, so hand out the few this
   // needs rather than reaching into a scope that is not ours
   window.eval(
-    script + "\nwindow.__page = { ready, setView, renderView };",
+    script +
+      "\nwindow.__page = { ready, setView, renderView, " +
+      "theBoard: () => board };",
   );
   // boot() is started at the end of the script and the page is not
   // usable until it settles
@@ -183,5 +185,28 @@ describe("the weekly page", () => {
     const bare = await openPage(false);
     expect(bare.failures).toEqual([]);
     expect(bare.window.document.getElementById("subnav")!.hidden).toBe(true);
+  });
+
+  it("gives the best value to whoever the board has first", async () => {
+    const { window } = page;
+    const ui = (window as any).__page;
+    ui.setView("draft");
+    await ui.renderView();
+    await new Promise((done) => window.setTimeout(done, 400));
+
+    /**
+     * Value must fall as the board goes on. It did not: the list of
+     * men to read the value curve against was taken before the board
+     * was sorted, so Jonathan Taylor was shown worth more than Bijan
+     * Robinson while sitting below him.
+     */
+    const skill = ui.theBoard().players
+      .filter((p: { position: string }) => !["K", "DEF"].includes(p.position));
+
+    expect(skill.length).toBeGreaterThan(20);
+
+    for (let i = 1; i < Math.min(80, skill.length); i++) {
+      expect(skill[i].vor).toBeLessThanOrEqual(skill[i - 1].vor + 0.001);
+    }
   });
 });
