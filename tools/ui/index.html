@@ -956,13 +956,20 @@ function worthAtPick(pick) {
   }
 
   const around = priced.filter((p) => Math.abs(p.adp - pick) <= 12)
-    .map((p) => p.vor).sort((a, b) => a - b);
+    .map((p) => p.vor);
 
   if (!around.length) {
     return Math.max(0, priced[priced.length - 1].vor);
   }
 
-  return around[Math.floor(around.length / 2)];
+  /**
+   * The mean, because it is compared against a man's own expected
+   * value. Taking the middle of this pool and calling it the going
+   * rate flattered every keeper: the pool runs long to the right, so
+   * its middle is well under its average, and the gap to it was
+   * counted as profit.
+   */
+  return around.reduce((sum, v) => sum + v, 0) / around.length;
 }
 
 /**
@@ -1379,9 +1386,20 @@ function rescoreBoard() {
   const bar = lastStarter((p) => p.ppg);
   const modelBar = lastStarter((p) => p.modelPpg);
 
+  /**
+   * What he adds over a season, not over a game.
+   *
+   * A man who misses four weeks gives you thirteen weeks of the gap
+   * to a replacement and nothing for the other four, since you start
+   * somebody else those weeks. Per game alone, a fragile player and a
+   * durable one with the same average look identical, which is how a
+   * back who plays eight games can price like one who plays sixteen.
+   */
   for (const p of board.players) {
-    p.vor = Number((p.ppg - (bar[p.position] ?? 0)).toFixed(1));
-    p.modelVor = p.modelPpg - (modelBar[p.position] ?? 0);
+    const plays = p.sim && p.sim.games ? p.sim.games : 17;
+    p.perGameVor = Number((p.ppg - (bar[p.position] ?? 0)).toFixed(1));
+    p.vor = Number((plays * (p.ppg - (bar[p.position] ?? 0))).toFixed(1));
+    p.modelVor = plays * (p.modelPpg - (modelBar[p.position] ?? 0));
   }
 
   const placesBy = (by) => {
