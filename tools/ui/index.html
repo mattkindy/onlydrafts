@@ -1764,8 +1764,16 @@ function rescoreBoard() {
   const modelAt = placesBy((p) => p.modelVor);
   const shareAt = placesBy((p) => p.touches);
   const adpAt = placesBy((p) => (p.adp === null || p.adp === undefined ? null : -p.adp));
+  /**
+   * The played out games say nothing about a rookie, and saying
+   * nothing is not the same as saying nothing much. The walk gave
+   * Jeremiyah Love a third of a point a game, which is what a man
+   * with no plays to draw from comes out at, and that vote dragged
+   * every rookie to the bottom of the board. It keeps quiet on them
+   * and its weight goes to the opinions that have something to say.
+   */
   const walkAt = placesBy((p) =>
-    p.made ? payFor(p.made) - (bar[p.position] ?? 0) : null);
+    p.made && !p.rookie ? payFor(p.made) - (bar[p.position] ?? 0) : null);
   // the same weights the board is built with, quarterbacks apart
   const LEAN = { model: 0.106, share: 0.319, adp: 0.425, walk: 0.15 };
   const QB_LEAN = { model: 0.03, share: 0, adp: 0.12, walk: 0.85 };

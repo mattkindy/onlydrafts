@@ -22,9 +22,10 @@ import {
   type SeasonNoise,
 } from "../backtest/intervals.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
+import { PART_NAMES, type StatParts } from "./seasonSummary.js";
 import { scoring } from "../scoring/active.js";
 import {
-  fitPartsModel, predictParts, partsByPosition,
+  fitPartsModel, predictParts, partsByPosition, blankParts,
 } from "./partsModel.js";
 import { fitAvailability, predictAvailability } from "./gamesPlayed.js";
 import { readAvailability } from "./availabilityData.js";
@@ -86,11 +87,24 @@ export async function buildPreseasonWorld(
 
   const bucketOf = (gamesPrev: number) =>
     gamesPrev >= 14 ? "durable" : gamesPrev >= 9 ? "spotty" : "thin";
+  /**
+   * How many games a man plays, from men like him last year.
+   *
+   * Rookies were one pool, and most rookies never play, so a first
+   * round back came out at three games. Where he was drafted says
+   * most of it, so they are split by that.
+   */
+  const rookieBucket = (overall: number) =>
+    overall <= 64 ? "rookie-early"
+      : overall <= 150 ? "rookie-middle"
+      : "rookie-late";
   const gamesPools = new Map<string, number[]>([
     ["durable", []],
     ["spotty", []],
     ["thin", []],
-    ["rookie", []],
+    ["rookie-early", []],
+    ["rookie-middle", []],
+    ["rookie-late", []],
   ]);
 
   for (const target of seasons.filter((s) => s >= 2017 && s < season)) {
@@ -109,7 +123,7 @@ export async function buildPreseasonWorld(
   }
 
   for (const r of rookieTrain) {
-    gamesPools.get("rookie")!.push(r.actualGames);
+    gamesPools.get(rookieBucket(r.overall))!.push(r.actualGames);
   }
 
   const weeklyTrain: WeeklyExample[] = [];
@@ -271,13 +285,34 @@ export async function buildPreseasonWorld(
       continue;
     }
 
+    /**
+     * A rookie in yards and catches, from what his position does,
+     * scaled until it scores what the rookie model says he scores.
+     *
+     * Without this he shipped no parts at all, and a page that scores
+     * the parts itself fell back to the played out games, which barely
+     * know a man who has never taken a snap: Jeremiyah Love came out
+     * at a third of a point a game where the model has him at thirteen.
+     */
+    const says = predictRookie(rookieWeights, r);
+    const shape = partFloors.get(r.position) ?? blankParts();
+    const worth = fantasyPoints(
+      { ...shape, fumblesLost: 0, twoPointConversions: 0 }, scoring(),
+    );
+    const scale = worth > 0 ? says / worth : 0;
+
     players.push({
       playerId: r.playerId,
       name: r.name,
       position: r.position,
       teamId: team,
-      projectedPpg: predictRookie(rookieWeights, r),
-      gamesPool: gamesPools.get("rookie")!,
+      projectedPpg: says,
+      projectedParts: PART_NAMES.reduce((out: StatParts, part) => {
+        out[part] = shape[part] * scale;
+
+        return out;
+      }, blankParts()),
+      gamesPool: gamesPools.get(rookieBucket(r.overall))!,
       rookie: true,
     });
   }
