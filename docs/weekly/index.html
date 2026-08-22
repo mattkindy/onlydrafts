@@ -1057,8 +1057,11 @@ const CLOSE_SEASON = 8;
  * against the middle of the round instead of your own seat.
  */
 function mySlot() {
+  const saved = store_get("draftState", null);
+
   return (active && active.draftSlot) ||
     (draftState && draftState.grid && draftState.grid.mySlot) ||
+    (saved && saved.grid && saved.grid.mySlot) ||
     null;
 }
 
@@ -1951,14 +1954,13 @@ async function renderKeepers() {
       if (beaten.length) {
         const worse = document.createElement("div");
         worse.className = "beaten";
-        const samePosition = beaten.filter((o) => o.position === p.position);
-        const who = (samePosition.length ? samePosition : beaten)[0];
+        const who = beaten[0];
         worse.innerHTML = "<b>" + who.name + "</b> is worth " +
-          ((who.vor ?? 0) - (p.vor ?? 0)).toFixed(0) +
-          " more over a season and the room takes him at " + asRound(who.adp) +
-          ", after this pick" +
+          ((who.vor ?? 0) - (p.vor ?? 0)).toFixed(0) + " more over a season " +
+          "and is still there at " + asRound(costPick) + " " +
+          Math.round(100 * who.odds) + "% of the time" +
           (beaten.length > 1
-            ? ", and " + (beaten.length - 1) + " more like him"
+            ? ", and so are " + (beaten.length - 1) + " others"
             : "");
         card.appendChild(worse);
       }
