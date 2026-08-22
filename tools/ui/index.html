@@ -114,6 +114,8 @@
   .costrow b { font-size: .8rem; }
   .badge.up { background: var(--go); color: #0C1117; }
   .badge.down { background: var(--mark); color: #0C1117; }
+  .badge.even { background: var(--chip); color: var(--muted);
+    border: 1px solid var(--edge); }
   .facts { display: flex; flex-wrap: wrap; gap: .1rem .9rem; align-items: baseline;
     font-variant-numeric: tabular-nums; }
   .facts .f { color: var(--ink); font-size: .8rem; font-weight: 600; }
@@ -628,14 +630,27 @@ function openDetail(p, slatePlayer) {
   sheet.innerHTML =
     "<h3>" + (b.name ?? p.name) + '</h3><div class="sub">' + (b.position ?? p.position) +
     " &middot; " + (b.team ?? p.team ?? "") +
-    (b.ppg ? " &middot; " + b.ppg.toFixed(1) + " a game projected" : "") +
-    (b.adp ? " &middot; usually goes at pick " + b.adp.toFixed(0) +
-      (b.adpLow ? ", as early as " + b.adpHigh + " and as late as " + b.adpLow : "") : " &middot; undrafted in mocks") + "</div>" +
+    (b.ppg
+      ? " &middot; " + b.ppg.toFixed(1) + " a game" +
+        (b.game
+          ? " (median " + b.game.mid.toFixed(1) + ", eight weeks in ten " +
+            b.game.low.toFixed(1) + " to " + b.game.high.toFixed(1) + ")"
+          : "")
+      : "") +
+    (b.adp
+      ? " &middot; adp " + asRound(b.adp) +
+        (b.adpLow
+          ? " (" + asRound(b.adpHigh) + " to " + asRound(b.adpLow) + ")"
+          : "")
+      : " &middot; undrafted") + "</div>" +
     (b.sim
       ? "<h2>season total, 2000 simulations</h2>" +
-        '<div class="fact">expected ' + b.sim.ev + " points</div>" +
-        '<div class="fact">middle half of seasons ' + b.sim.q1 + " to " + b.sim.q3 + "</div>" +
-        '<div class="fact">median ' + b.sim.mid + ", tails " + b.sim.low + " and " + b.sim.high + "</div>" +
+        '<div class="fact">expected <b>' + b.sim.ev + "</b> points, median <b>" +
+          b.sim.mid + "</b></div>" +
+        '<div class="fact">eight seasons in ten between <b>' + b.sim.low +
+          "</b> and <b>" + b.sim.high + "</b></div>" +
+        '<div class="fact">the middle half between <b>' + b.sim.q1 +
+          "</b> and <b>" + b.sim.q3 + "</b></div>" +
         '<div class="fact">about ' + b.sim.games + " games played</div>"
       : "") +
     (plus || minus ? "<h2>factors vs past years</h2>" + plus + minus : "") +
@@ -1541,10 +1556,13 @@ function keeperFigures(p, cost, costPick, teams) {
     (value > 0 && how ? "+" : "") + value.toFixed(0) + "</span>";
   box.innerHTML =
     cell("him", p.vor) +
-    cell("pick " + costPick + " buys", rate) +
+    cell(asRound(costPick) + " buys", rate) +
     cell("keep", roi, roi >= 0 ? "up" : "down") +
     (wait.atPick && wait.chance > 0.1 && wait.chance < 0.98
-      ? cell(Math.round(100 * wait.chance) + "% back at " + wait.atPick, wait.gain)
+      ? cell(
+          Math.round(100 * wait.chance) + "% back at " + asRound(wait.atPick),
+          wait.gain,
+        )
       : "") +
     cell("net", net, net >= 0 ? "up" : "down");
 
@@ -1571,7 +1589,8 @@ function instead(p, costPick, taken) {
 
     return '<div class="scroll"><table class="ranks">' +
       "<thead><tr><th>" + title + "</th><th>adp</th><th>a game</th>" +
-      "<th>value</th><th>vs him</th></tr></thead><tbody>" +
+      "<th>over " + p.position + startedHere()[p.position] + "</th>" +
+      "<th>vs him</th></tr></thead><tbody>" +
       men.map((o) => {
         const gap = his(o);
 
@@ -1590,7 +1609,7 @@ function instead(p, costPick, taken) {
     .slice(0, 3);
 
   box.innerHTML =
-    table("other " + p.position + "s near pick " + costPick, samePosition) +
+    table("other " + p.position + "s near " + asRound(costPick), samePosition) +
     (anybody.length
       ? '<div class="alsoat">' + table("anyone else there", anybody) + "</div>"
       : "");
@@ -1773,7 +1792,7 @@ async function renderKeepers() {
     const call = !at ? null
       : at.margin > CLOSE_ENOUGH ? { word: "keep", how: "up" }
       : at.margin < -CLOSE_ENOUGH ? { word: "let go", how: "down" }
-      : { word: "close", how: "" };
+      : { word: "close", how: "even" };
 
     const card = seasonCard(p, {
       max: seasonMax,
@@ -1787,12 +1806,12 @@ async function renderKeepers() {
       warn: !holdsIt,
     });
 
+    card.appendChild(costRow(p, cost, listed, atMarket));
+
     if (costPick) {
       card.appendChild(keeperFigures(p, cost, costPick, teams));
       card.appendChild(instead(p, costPick, taken));
     }
-
-    card.appendChild(costRow(p, cost, listed, atMarket));
     grid.appendChild(card);
   }
 
@@ -2173,7 +2192,7 @@ function renderDraft(staleAt) {
       ? '<div class="big">Draft complete</div>'
       : started
         ? '<div class="big">' + (s.clock.mine ? "You are on the clock" : s.clock.who + " is picking") +
-          '</div><div class="sub">round ' + s.clock.round + ", pick " + s.clock.overall +
+          '</div><div class="sub">' + asRound(s.clock.overall) +
           (s.clock.untilMine !== null && !s.clock.mine ? " &middot; " + s.clock.untilMine + " until your turn" : "") + "</div>"
         : '<div class="big">Draft has not started</div><div class="sub">' +
           (s.clock && s.clock.mine !== undefined && s.grid && s.grid.mySlot ? "you pick from slot " + s.grid.mySlot : "waiting for the commissioner") + "</div>";
@@ -2223,8 +2242,7 @@ function renderDraft(staleAt) {
            shown >= Math.max(0, upcoming[nextPick].overall - 1 - s.taken.size)) {
       const line = document.createElement("div");
       line.className = "pickline";
-      line.innerHTML = "<span>your " + upcoming[nextPick].label +
-        ", pick " + upcoming[nextPick].overall + "</span>";
+      line.innerHTML = "<span>your " + upcoming[nextPick].label + "</span>";
       grid.appendChild(line);
       nextPick++;
     }
