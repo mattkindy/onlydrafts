@@ -84,6 +84,11 @@
     cursor: pointer; padding: .22rem; line-height: 0; border-radius: 999px; }
   .more:hover { color: var(--ink); border-color: var(--muted); }
   .more:focus-visible { outline: 2px solid var(--go); outline-offset: 1px; }
+  .keepbtn { margin-top: .5rem; font: inherit; font-size: .72rem; font-weight: 700;
+    padding: .25rem .6rem; border-radius: 999px; cursor: pointer;
+    background: var(--chip); color: var(--muted); border: 1px solid var(--edge); }
+  .keepbtn:hover { color: var(--ink); border-color: var(--muted); }
+  .keepbtn.on { background: var(--go); color: #0C1117; border-color: var(--go); }
   .card.plain { cursor: default; }
   .card.mine { border-color: var(--go); }
   /* a keeper is a ticket you are holding, so its edge is perforated */
@@ -775,6 +780,26 @@ function card(p, opts) {
     '<div class="sub"><span>' + p.position + " &middot; " + (p.team ?? "") +
     (p.opponent ? " &middot; " + p.opponent : "") + "</span>" + aside + "</div>" +
     range + (opts.note ? '<div class="note">' + opts.note + "</div>" : "") + tag;
+  if (opts.keeper) {
+    const mark = document.createElement("button");
+    mark.className = "keepbtn" + (opts.keeper.on ? " on" : "");
+    mark.textContent = opts.keeper.on ? "kept" : "mark keeper";
+    mark.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const marked = markedKeepers();
+
+      if (opts.keeper.on) {
+        delete marked[opts.keeper.key];
+      } else {
+        marked[opts.keeper.key] = active ? active.team : true;
+      }
+
+      saveMarkedKeepers(marked);
+      renderView();
+    });
+    div.appendChild(mark);
+  }
+
   const button = div.querySelector(".more");
 
   if (button) {
@@ -2190,7 +2215,7 @@ async function renderRoster() {
         kept: isKept,
         badge: isKept ? "keeper" : "",
         tag: isKept ? "counts against your " + $("keepn").value + " keeper slots" : "",
-        hint: isKept ? "" : "tap to mark as a keeper",
+        keeper: { on: isKept, key: p.key },
       }));
     }
 
@@ -2606,7 +2631,7 @@ function renderDraft(staleAt) {
     out.appendChild(mh);
     const note = document.createElement("div");
     note.className = "empty";
-    note.innerHTML = "Nothing yet. Mark keepers from <b>my roster</b> or tap a player here, and your picks land here as the draft runs.";
+    note.innerHTML = "Nothing yet. Mark keepers from <b>my roster</b> or from the cards here, and your picks land here as the draft runs.";
     out.appendChild(note);
   }
 
@@ -2634,7 +2659,7 @@ function renderDraft(staleAt) {
         kept: isKept,
         badge: isKept ? "keeper" : "",
         aside: { label: "over replacement", value: p.vor },
-        hint: isKept ? "" : "tap to mark as a keeper",
+        keeper: { on: isKept, key: p.key },
       }));
     }
 
