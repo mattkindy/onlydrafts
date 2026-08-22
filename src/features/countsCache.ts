@@ -28,6 +28,10 @@ interface Flat {
   caughtAt: [number, number, number][];
   overall: [string, number][];
   everyTouch: number;
+  inScript: [string, number][];
+  scriptPlays: [string, number][];
+  onCall: [string, number][];
+  callPlays: [string, number][];
 }
 
 const flatten = (counted: CountedPlays): Flat => ({
@@ -43,6 +47,10 @@ const flatten = (counted: CountedPlays): Flat => ({
   caughtAt: [...counted.caughtAt.entries()].map(([k, o]) => [k, o.threw, o.caught]),
   overall: [...counted.overall.entries()],
   everyTouch: counted.everyTouch,
+  inScript: [...counted.inScript.entries()],
+  scriptPlays: [...counted.scriptPlays.entries()],
+  onCall: [...counted.onCall.entries()],
+  callPlays: [...counted.callPlays.entries()],
 });
 
 const raise = (flat: Flat): CountedPlays => ({
@@ -63,6 +71,10 @@ const raise = (flat: Flat): CountedPlays => ({
   caughtAt: new Map(flat.caughtAt.map(([k, threw, caught]) => [k, { threw, caught }])),
   overall: new Map(flat.overall),
   everyTouch: flat.everyTouch,
+  inScript: new Map(flat.inScript),
+  scriptPlays: new Map(flat.scriptPlays),
+  onCall: new Map(flat.onCall),
+  callPlays: new Map(flat.callPlays),
 });
 
 /**
@@ -75,7 +87,9 @@ export async function countsFor(
   settings?: FactorSettings,
 ): Promise<CountedPlays> {
   const stamp = await stat(TOUCHES).then((s) => s.mtimeMs).catch(() => 0);
-  const at = join(KEPT, `counts-${maxSeason}-${Math.round(stamp)}.json`);
+  // the counting changes shape sometimes, and an older file would come
+  // back missing whatever was added since
+  const at = join(KEPT, `counts2-${maxSeason}-${Math.round(stamp)}.json`);
   const already = await readFile(at, "utf8").catch(() => "");
 
   if (already) {

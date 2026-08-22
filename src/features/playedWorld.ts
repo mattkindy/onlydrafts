@@ -20,7 +20,7 @@ import { loadWeeklyRosters } from "../data/nflverse.js";
 import { fitDriveRules } from "./driveRules.js";
 import { fitEndings } from "./fitEndings.js";
 import {
-  fitPlayFactors, countPlays, storePlays, type PlayRow,
+  fitPlayFactors, countPlays, storePlays, FACTOR_DEFAULTS, type PlayRow,
 } from "./fitPlayFactors.js";
 import { fitFourthDown, climbTo, type FourthRow } from "./fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "./fitPlayClock.js";
@@ -108,10 +108,14 @@ export async function buildWorld(
       join(import.meta.dirname, "..", "..", "data", "raw", `injuries_${SCORE_ON}.csv`),
       "utf8",
     ).catch(() => ""))) {
-      if (Number(r["week"]) === onlyWeek &&
-          ["Out", "Doubtful"].includes(r["report_status"] ?? "")) {
+      if (Number(r["week"]) !== onlyWeek) {
+        continue;
+      }
+
+      if (["Out", "Doubtful"].includes(r["report_status"] ?? "")) {
         ruledOut.add(r["gsis_id"] ?? "");
       }
+
     }
   }
 
@@ -259,7 +263,10 @@ export async function buildWorld(
   const counted = live
     ? countPlays(learnRows as PlayRow[], undefined, false)
     : await countsFor(SCORE_ON, () => learnRows as PlayRow[]);
-  const factors = fitPlayFactors([], undefined, {
+  const factors = fitPlayFactors([], {
+    ...FACTOR_DEFAULTS,
+    readsTheScript: !process.env["NO_SCRIPT"],
+  }, {
     split, pairing: pairing.bend, counted,
     depth: process.env["NO_DEPTH"] ? undefined : depth,
     plays: process.env["NO_SAMPLE"]

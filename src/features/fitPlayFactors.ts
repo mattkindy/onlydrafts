@@ -43,6 +43,11 @@ export interface FactorSettings {
   /** plays needed before a state speaks for itself */
   least: number;
   /**
+   * Whether who gets the ball moves with how the game is going.
+   * Only for turning it off in a comparison; it is on otherwise.
+   */
+  readsTheScript?: boolean;
+  /**
    * And how many the call needs, which is fewer. A run rate is one
    * number and eighty plays place it within about six points; a
    * distribution of yards wants far more. Asking both for three
@@ -316,12 +321,37 @@ export function storePlays(rows: PlayRow[]): PlayStore {
   return { down, toGo, yardline, yards, caught, ofMan, ofPair };
 }
 
+/**
+ * How the afternoon is going for the side with the ball, which
+ * changes who gets it.
+ *
+ * A team down two scores throws to different men than one protecting
+ * a lead, and a third and long is a different play from a first down.
+ * The full state cells know this but never have enough plays to say
+ * so about one man, so the same question is asked again in six coarse
+ * buckets where everybody has hundreds.
+ */
+export const scriptOf = (margin: number, down: number, toGo: number) => {
+  const how = margin <= -9 ? "chasing" : margin >= 9 ? "ahead" : "level";
+  const mustThrow = down >= 3 && toGo >= 4;
+
+  return `${how}|${mustThrow ? "long" : "normal"}`;
+};
+
 export interface CountedPlays {
   cells: Map<string, Counted>;
   byOffence: Map<string, Counted>;
   byDefence: Map<string, Counted>;
   byMan: Map<string, Rate>;
   leagueOn: Map<string, Rate>;
+  /** `${script}|${call}|${player}` to how often he took it there */
+  inScript: Map<string, number>;
+  /** and `${script}|${call}` to how often anybody did */
+  scriptPlays: Map<string, number>;
+  /** `${player}|${call}` to how often he took it anywhere */
+  onCall: Map<string, number>;
+  /** and how often anybody did, by call */
+  callPlays: Map<string, number>;
   caughtAt: Map<number, { threw: number; caught: number }>;
   overall: Map<string, number>;
   everyTouch: number;
@@ -411,6 +441,10 @@ export function countPlays(
   // how much of the ball each man took overall, so his usage at one
   // state can be read as a leaning rather than a level
   const overall = new Map<string, number>();
+  const inScript = new Map<string, number>();
+  const scriptPlays = new Map<string, number>();
+  const onCall = new Map<string, number>();
+  const callPlays = new Map<string, number>();
   let everyTouch = 0;
 
   for (const row of rows) {
@@ -427,6 +461,18 @@ export function countPlays(
       everyTouch++;
       addTo(byMan, `${row.player}|${row.call}`, row.yards);
       addTo(leagueOn, row.call, row.yards);
+
+      const script = scriptOf(row.margin, row.down, row.toGo);
+      const inHere = `${script}|${row.call}`;
+      inScript.set(
+        `${inHere}|${row.player}`, (inScript.get(`${inHere}|${row.player}`) ?? 0) + 1,
+      );
+      scriptPlays.set(inHere, (scriptPlays.get(inHere) ?? 0) + 1);
+      onCall.set(
+        `${row.player}|${row.call}`,
+        (onCall.get(`${row.player}|${row.call}`) ?? 0) + 1,
+      );
+      callPlays.set(row.call, (callPlays.get(row.call) ?? 0) + 1);
     }
   }
 
@@ -529,7 +575,7 @@ export function countPlays(
   }
   return {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
-    everyTouch,
+    everyTouch, inScript, scriptPlays, onCall, callPlays,
   };
 }
 
@@ -544,8 +590,35 @@ export function fitPlayFactors(
   } = extras;
   const {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
-    everyTouch,
+    everyTouch, inScript, scriptPlays, onCall, callPlays,
   } = extras.counted ?? countPlays(rows, settings, !pairing);
+
+  /**
+   * How much more of the work a man takes when the game is going this
+   * way than he takes on that call in general.
+   *
+   * Trailing teams throw to their best receiver and stop handing off,
+   * and a third and long belongs to whoever can win it. His own
+   * numbers are pulled toward taking no view until he has been in the
+   * situation enough, since a man with nine catches while behind
+   * should not have his afternoon decided by them.
+   */
+  const scriptLeaning = (player: string, call: Call, state: PlayState) => {
+    const script = scriptOf(state.margin, state.down, state.toGo);
+    const here = inScript.get(`${script}|${call}|${player}`) ?? 0;
+    const anybodyHere = scriptPlays.get(`${script}|${call}`) ?? 0;
+    const his = onCall.get(`${player}|${call}`) ?? 0;
+    const anybody = callPlays.get(call) ?? 0;
+
+    if (!here || !anybodyHere || !his || !anybody) {
+      return 1;
+    }
+
+    const leaning = (here / anybodyHere) / (his / anybody);
+    const trust = here / (here + 40);
+
+    return trust * leaning + (1 - trust);
+  };
 
   /**
    * The states around this one, taken until there are enough plays.
@@ -906,7 +979,10 @@ export function fitPlayFactors(
         const projectedShare = half
           ? (call === "run" ? half.carries : half.targets)
           : projected?.get(player) ?? 0;
-        const weight = projectedShare * leaning;
+        const weight = projectedShare * leaning *
+          (settings.readsTheScript === false
+            ? 1
+            : scriptLeaning(player, call, state));
         shares.set(player, weight);
         total += weight;
       }
