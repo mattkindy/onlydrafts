@@ -143,6 +143,8 @@
   .facts { display: flex; flex-wrap: wrap; gap: .1rem .9rem; align-items: baseline;
     font-variant-numeric: tabular-nums; }
   .facts .f { color: var(--ink); font-size: .8rem; font-weight: 600; }
+  .facts .f small { color: var(--faint); font-size: .62rem; font-weight: 600;
+    margin-left: .28rem; }
   .facts .f i { color: var(--faint); font-style: normal; font-size: .62rem;
     font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
     margin-right: .3rem; }
@@ -874,7 +876,10 @@ function seasonCard(p, opts = {}) {
         }
       : undefined,
     note: '<span class="facts">' + [
-      p.rank ? '<span class="f"><i>ours</i>' + asRound(p.rank) + "</span>" : "",
+      p.rank
+        ? '<span class="f"><i>ours</i>' + asRound(p.rank) +
+          '<small>' + p.rank + "</small></span>"
+        : "",
       '<span class="f"' +
         (p.adp
           ? ' title="taken at pick ' + p.adp.toFixed(1) + " on average" +
@@ -882,7 +887,8 @@ function seasonCard(p, opts = {}) {
             '. A slot can be empty or hold two men, since this is an ' +
             'average rather than a pick"'
           : "") +
-        '><i>adp</i>' + (p.adp ? asRound(p.adp) : "&mdash;") + "</span>",
+        '><i>adp</i>' + (p.adp ? asRound(p.adp) : "&mdash;") +
+        (p.adp ? '<small>' + p.adp.toFixed(1) + "</small>" : "") + "</span>",
       opts.costs
         ? '<span class="f"><i>costs</i>' + ordinal(opts.costs) + "</span>"
         : "",
