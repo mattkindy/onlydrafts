@@ -33,6 +33,7 @@ import { loadDraftPicks } from "../src/data/draftPicks.js";
 import { loadAdp } from "../src/data/adp.js";
 import { normalizeName } from "../src/data/names.js";
 import { sizeOf } from "../src/features/gameSize.js";
+import { kickingVenue } from "../src/features/kickingVenue.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
 import { myShare } from "../src/sim/acrossCores.js";
@@ -159,6 +160,11 @@ async function main(): Promise<void> {
       ), alpha);
     }
 
+    const venue = {
+      indoors: fixture.indoors,
+      temperature: fixture.temp,
+      wind: fixture.wind,
+    };
     const meanFor = new Map<string, number>();
     const madeThisGame = new Map<string, StatTotals>();
 
@@ -166,7 +172,13 @@ async function main(): Promise<void> {
 
     for (let run = 0; run < RUNS; run++) {
       const game = playGame(home, away, {
-        rules: { ...rules, kickSucceeds: kicking.kickSucceeds },
+        rules: {
+          ...rules, kickSucceeds: kicking.kickSucceeds,
+          // the ground this fixture is played on, which changes both
+          // the kick and whether they try one
+          kickHere: (yardline: number) => kickingVenue.bend(yardline, venue),
+          kickAppetite: kickingVenue.appetite(venue),
+        },
         fourth,
         clock: { isLast: kicking.isLast, lastLength: kicking.lastLength },
         ticking, season: SCORE_ON, week: fixture.week,
