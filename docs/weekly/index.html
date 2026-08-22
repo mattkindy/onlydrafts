@@ -74,7 +74,13 @@
   .cards.wide { grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
     gap: .9rem; }
   .card { background: var(--panel); border: 1px solid var(--edge);
-    border-radius: 12px; padding: .75rem .95rem; cursor: pointer; }
+    border-radius: 12px; padding: .75rem .95rem; }
+  .card .top { position: relative; }
+  .more { position: absolute; top: -.15rem; right: -.25rem; background: none;
+    border: 0; color: var(--faint); cursor: pointer; padding: .25rem;
+    line-height: 0; border-radius: 6px; }
+  .more:hover { color: var(--ink); background: var(--chip); }
+  .more:focus-visible { outline: 2px solid var(--go); outline-offset: 1px; }
   .card.plain { cursor: default; }
   .card.mine { border-color: var(--go); }
   /* a keeper is a ticket you are holding, so its edge is perforated */
@@ -102,9 +108,14 @@
     letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
   .fig.up { color: var(--go); }
   .fig.down { color: var(--mark); }
+  .beaten { margin-top: .55rem; font-size: .8rem; color: var(--ink);
+    background: color-mix(in srgb, var(--mark) 12%, transparent);
+    border-left: 2px solid var(--mark); padding: .35rem .5rem;
+    border-radius: 0 4px 4px 0; }
   .instead { margin-top: .6rem; }
   .alsoat { margin-top: .5rem; }
   .instead table.ranks th { position: static; }
+  .instead tr.faded td { opacity: .5; }
   .instead td.up { color: var(--go); }
   .instead td.down { color: var(--mark); }
   .costrow { flex-wrap: wrap; }
@@ -733,14 +744,34 @@ function card(p, opts) {
   const badge = opts.badge
     ? '<span class="badge ' + (opts.badgeHow ?? "") + '">' + opts.badge + "</span>"
     : "";
+  /**
+   * Opening the detail belongs on its own control. The whole card used
+   * to take the click, so typing a keeper price opened the overlay
+   * on top of the input.
+   */
+  const more = opts.plain
+    ? ""
+    : '<button class="more" title="more about him" aria-label="more">' +
+      '<svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true">' +
+      '<circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.6"/><path d="M10 9v5M10 6.2v.1" stroke="currentColor" ' +
+      'stroke-width="1.8" stroke-linecap="round"/></svg></button>';
   div.innerHTML =
     '<div class="top"><span class="nm">' + p.name + badge + '</span>' +
     '<span class="big">' + opts.value.toFixed(1) +
-    '<em class="unit">' + opts.unit + "</em></span></div>" +
+    '<em class="unit">' + opts.unit + "</em></span>" + more + "</div>" +
     '<div class="sub"><span>' + p.position + " &middot; " + (p.team ?? "") +
     (p.opponent ? " &middot; " + p.opponent : "") + "</span>" + aside + "</div>" +
     range + (opts.note ? '<div class="note">' + opts.note + "</div>" : "") + tag;
-  div.addEventListener("click", () => openDetail(p));
+  const button = div.querySelector(".more");
+
+  if (button) {
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openDetail(p);
+    });
+  }
+
   return div;
 }
 
@@ -791,7 +822,7 @@ function seasonCard(p, opts = {}) {
   return card(p, {
     ...opts,
     value: g ? g.ev : p.ppg,
-    unit: "a game",
+    unit: "pts/g",
     range: g
       ? {
           low: g.q1, mid: g.ev, high: g.q3,
@@ -1009,6 +1040,20 @@ const CLOSE_ENOUGH = 1;
  * middle of the round instead was off by up to half a round, which
  * matters most at the top where the board moves fastest.
  */
+/**
+ * Where you sit in the order.
+ *
+ * Sleeper only fills in the draft order once the commissioner sets
+ * it, so before that the league object has nothing and the pick grid
+ * is the only thing that knows. Without this a keeper was priced
+ * against the middle of the round instead of your own seat.
+ */
+function mySlot() {
+  return (active && active.draftSlot) ||
+    (draftState && draftState.grid && draftState.grid.mySlot) ||
+    null;
+}
+
 function pickForRound(round, teams, slot, snake) {
   if (!slot) {
     return (round - 1) * teams + Math.ceil(teams / 2);
@@ -1067,7 +1112,7 @@ function redraftWorth(player, teams) {
 
   const early = player.adpHigh || player.adp;
   const late = player.adpLow || player.adp;
-  const slot = active ? active.draftSlot : null;
+  const slot = mySlot();
   const snake = !active || active.snake;
 
   for (let round = 1; round <= 16; round++) {
@@ -1095,7 +1140,7 @@ function redraftWorth(player, teams) {
 
 function marginAt(player, round, teams, taken) {
   const pick = pickForRound(
-    round, teams, active ? active.draftSlot : null, !active || active.snake,
+    round, teams, mySlot(), !active || active.snake,
   );
   const instead = bestLeftAt(pick, taken, player.key, player.position, false);
   /**
@@ -1543,6 +1588,37 @@ function saveKeeperCost(key, round) {
 }
 
 
+/**
+ * Men worth more than him who the room takes after the pick he costs.
+ *
+ * If somebody better is still on the board when your keeper pick comes
+ * round, keeping is beaten outright: pay the pick for the better man
+ * and you have both the player and the surplus. His own position
+ * counts double here, since that is the swap that needs no thought.
+ */
+function betterLater(p, costPick, taken) {
+  if (!board || !board.players || !costPick) {
+    return [];
+  }
+
+  return board.players
+    .filter((o) => {
+      if (o.key === p.key || taken.has(o.key) || !o.adp) {
+        return false;
+      }
+
+      // even at his earliest he goes after your pick, so he is likely
+      // to be sitting there when it comes round
+      const surely = (o.adpHigh ?? o.adp) > costPick;
+      const better = (o.vor ?? 0) - (p.vor ?? 0);
+
+      // a season, so the threshold is a season of being better
+      return surely && better > CLOSE_ENOUGH * 10;
+    })
+    .sort((a, b) => (b.perGameVor ?? 0) - (a.perGameVor ?? 0))
+    .slice(0, 3);
+}
+
 /** the keep as figures: what he is worth, what the pick buys, the balance */
 function keeperFigures(p, cost, costPick, teams) {
   const rate = worthAtPick(costPick);
@@ -1551,20 +1627,28 @@ function keeperFigures(p, cost, costPick, teams) {
   const net = roi - wait.gain;
   const box = document.createElement("div");
   box.className = "figures";
-  const cell = (label, value, how) =>
-    '<span class="fig ' + (how ?? "") + '"><i>' + label + "</i>" +
+  const cell = (label, value, how, tip) =>
+    '<span class="fig ' + (how ?? "") + '"' +
+    (tip ? ' title="' + tip + '"' : "") + "><i>" + label + "</i>" +
     (value > 0 && how ? "+" : "") + value.toFixed(0) + "</span>";
   box.innerHTML =
-    cell("him", p.vor) +
-    cell(asRound(costPick) + " buys", rate) +
-    cell("keep", roi, roi >= 0 ? "up" : "down") +
+    cell("he is worth", p.vor, "",
+      "points over a season above the last man this league starts at his " +
+      "position, counting the games he is expected to miss") +
+    cell(asRound(costPick) + " buys", rate, "",
+      "what a typical player taken around that pick is worth") +
+    cell("keeping gains", roi, roi >= 0 ? "up" : "down",
+      "his value less what the pick would have bought") +
     (wait.atPick && wait.chance > 0.1 && wait.chance < 0.98
       ? cell(
-          Math.round(100 * wait.chance) + "% back at " + asRound(wait.atPick),
-          wait.gain,
+          "or draft him at " + asRound(wait.atPick), wait.gain, "",
+          Math.round(100 * wait.chance) + "% of the time he is still on the " +
+          "board at your " + asRound(wait.atPick) + " pick, so letting him go " +
+          "and taking him there is worth this much anyway",
         )
       : "") +
-    cell("net", net, net >= 0 ? "up" : "down");
+    cell("net", net, net >= 0 ? "up" : "down",
+      "what keeping gains, less what you could have had by waiting for him");
 
   return box;
 }
@@ -1581,30 +1665,57 @@ function keeperFigures(p, cost, costPick, teams) {
 function instead(p, costPick, taken) {
   const box = document.createElement("div");
   box.className = "instead";
-  const his = (o) => (o.perGameVor ?? 0) - (p.perGameVor ?? 0);
+  const his = (o) => (o.vor ?? 0) - (p.vor ?? 0);
+  /**
+   * How likely he is to still be sitting there at that pick, from his
+   * own draft position and how far it swings. Without this the table
+   * kept offering men who go before the pick it is comparing against.
+   */
+  const stillThere = (o) => {
+    const early = o.adpHigh ?? o.adp;
+    const late = o.adpLow ?? o.adp;
+
+    if (costPick <= early) {
+      return 1;
+    }
+
+    if (costPick >= late) {
+      return 0.05;
+    }
+
+    return 1 - (costPick - early) / Math.max(1, late - early);
+  };
   const table = (title, men) => {
     if (!men.length) {
       return '<div class="hint">nobody ' + title + "</div>";
     }
 
     return '<div class="scroll"><table class="ranks">' +
-      "<thead><tr><th>" + title + "</th><th>adp</th><th>a game</th>" +
-      "<th>over " + p.position + startedHere()[p.position] + "</th>" +
-      "<th>vs him</th></tr></thead><tbody>" +
+      "<thead><tr><th>" + title + "</th><th>adp</th>" +
+      '<th title="how often he is still on the board at this pick">there</th>' +
+      '<th title="fantasy points in a typical game">pts/g</th>' +
+      '<th title="points over a season above the last ' + p.position +
+        " this league starts, its " + p.position + startedHere()[p.position] +
+        ", counting the games he is expected to miss. Positions only " +
+        'compare this way">vor</th>' +
+      '<th title="his value less the keeper\'s, over a season">vs him</th>' +
+      "</tr></thead><tbody>" +
       men.map((o) => {
         const gap = his(o);
+        const odds = stillThere(o);
 
-        return "<tr><td>" + o.name + ' <span class="pos">' + o.position +
-          "</span></td>" +
+        return '<tr class="' + (odds < 0.35 ? "faded" : "") + '"><td>' +
+          o.name + ' <span class="pos">' + o.position + "</span></td>" +
           '<td class="n">' + asRound(o.adp) + "</td>" +
+          '<td class="n">' + Math.round(100 * odds) + "%</td>" +
           '<td class="n">' + (o.ppg ?? 0).toFixed(1) + "</td>" +
-          '<td class="n">' + (o.perGameVor ?? 0).toFixed(1) + "</td>" +
+          '<td class="n">' + (o.vor ?? 0).toFixed(0) + "</td>" +
           '<td class="n ' + (gap > 0 ? "down" : "up") + '">' +
-          (gap > 0 ? "+" : "") + gap.toFixed(1) + "</td></tr>";
+          (gap > 0 ? "+" : "") + gap.toFixed(0) + "</td></tr>";
       }).join("") + "</tbody></table></div>";
   };
-  const samePosition = optionsAt(costPick, taken, p.key, p.position, 4);
-  const anybody = optionsAt(costPick, taken, p.key, null, 8)
+  const samePosition = optionsAt(costPick, taken, p.key, p.position, 5);
+  const anybody = optionsAt(costPick, taken, p.key, null, 10)
     .filter((o) => o.position !== p.position)
     .slice(0, 3);
 
@@ -1738,7 +1849,7 @@ async function renderKeepers() {
     "<br>Assuming every other team keeps its " + perTeam +
     " best it can pay for, which takes " + taken.size + " players out of the draft." +
     (active.myPicks
-      ? "<br>You pick " + (active.draftSlot ? ordinal(active.draftSlot) + " and " : "") +
+      ? "<br>You pick " + (mySlot() ? ordinal(mySlot()) + " and " : "") +
         "have rounds " + active.myPicks.join(", ") + "."
       : "");
   if (drawing !== keeperDraw) {
@@ -1757,7 +1868,7 @@ async function renderKeepers() {
     }
 
     const costPick = pickForRound(
-      cost, teams, active ? active.draftSlot : null, !active || active.snake,
+      cost, teams, mySlot(), !active || active.snake,
     );
     const rate = worthAtPick(costPick);
     const roi = p.vor - rate;
@@ -1784,12 +1895,14 @@ async function renderKeepers() {
     const cost = Number(costs[p.key]) || 0;
     const costPick = cost
       ? pickForRound(
-          cost, teams, active ? active.draftSlot : null, !active || active.snake,
+          cost, teams, mySlot(), !active || active.snake,
         )
       : null;
     const at = cost ? marginAt(p, cost, teams, taken) : null;
     const holdsIt = !cost || !active.myPicks || active.myPicks.includes(cost);
+    const beaten = costPick ? betterLater(p, costPick, taken) : [];
     const call = !at ? null
+      : beaten.length ? { word: "let go", how: "down" }
       : at.margin > CLOSE_ENOUGH ? { word: "keep", how: "up" }
       : at.margin < -CLOSE_ENOUGH ? { word: "let go", how: "down" }
       : { word: "close", how: "even" };
@@ -1810,6 +1923,22 @@ async function renderKeepers() {
 
     if (costPick) {
       card.appendChild(keeperFigures(p, cost, costPick, teams));
+
+      if (beaten.length) {
+        const worse = document.createElement("div");
+        worse.className = "beaten";
+        const samePosition = beaten.filter((o) => o.position === p.position);
+        const who = (samePosition.length ? samePosition : beaten)[0];
+        worse.innerHTML = "<b>" + who.name + "</b> is worth " +
+          ((who.vor ?? 0) - (p.vor ?? 0)).toFixed(0) +
+          " more over a season and the room takes him at " + asRound(who.adp) +
+          ", after this pick" +
+          (beaten.length > 1
+            ? ", and " + (beaten.length - 1) + " more like him"
+            : "");
+        card.appendChild(worse);
+      }
+
       card.appendChild(instead(p, costPick, taken));
     }
     grid.appendChild(card);
