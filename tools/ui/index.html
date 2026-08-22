@@ -934,14 +934,12 @@ function stillThereAt(o, pick) {
   }
 
   /**
-   * Past the latest anyone has taken him he is gone, near enough. The
-   * old floor of one in twenty looked harmless on a single player and
-   * was not: forty men who are certainly gone, each keeping a sliver
-   * of a chance, added thirty points to what a third round pick
-   * looked like it would buy.
+   * Past the latest anyone has taken him, one draft in ten still lets
+   * him slide. Rooms differ and the range comes from other people's
+   * drafts, so nobody is ever truly certain to be gone.
    */
   if (pick >= late) {
-    return 0.02;
+    return 0.1;
   }
 
   return 1 - (pick - early) / Math.max(1, late - early);
