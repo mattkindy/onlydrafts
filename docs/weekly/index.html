@@ -2384,11 +2384,54 @@ function dropOffBy(taken, nextTurn) {
   };
 }
 
-function needFactor(position, count) {
-  const starters = STARTERS[position] ?? 0;
-  if (count < starters) return 1;
-  if (position === "RB" || position === "WR") return count < starters + 2 ? 0.6 : 0.35;
-  return 0.2;
+/**
+ * The lineup this league starts, split into the slots that name a
+ * position and the flex ones that take several.
+ */
+function lineupNow() {
+  const slots = (active && active.slots) || [
+    "QB", "RB", "RB", "WR", "WR", "TE", "FLEX",
+  ];
+  const named = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  let flex = 0;
+
+  for (const slot of slots) {
+    if (named[slot] !== undefined) {
+      named[slot]++;
+    } else if (["FLEX", "WRRB_FLEX", "REC_FLEX", "SUPER_FLEX"].includes(slot)) {
+      flex++;
+    }
+  }
+
+  return { named, flex };
+}
+
+/**
+ * How much another man at this position is worth to you.
+ *
+ * A back you would start is worth all of what he scores. One who fills
+ * a flex is worth less, since he only plays when the flex is his to
+ * fill. Past that he is a bench player who covers a bye or an injury.
+ * The lineup comes from the league rather than from a guess: yours
+ * starts one back and two flexes, so a second back is flex value, not
+ * a starter's.
+ */
+function needFactor(position, count, flexUsed = 0) {
+  const { named, flex } = lineupNow();
+  const starters = named[position] ?? 0;
+
+  if (count < starters) {
+    return 1;
+  }
+
+  const canFlex = ["RB", "WR", "TE"].includes(position) ||
+    (active && (active.slots ?? []).includes("SUPER_FLEX"));
+
+  if (canFlex && flexUsed < flex) {
+    return 0.75;
+  }
+
+  return position === "RB" || position === "WR" ? 0.35 : 0.2;
 }
 
 async function pollDraft() {
@@ -2573,6 +2616,13 @@ function renderDraft(staleAt) {
   out.appendChild(h);
 
   const byAdp = $("sortby") && $("sortby").value === "adp";
+  // how many of your flex slots the men you already have would fill
+  const lineup = lineupNow();
+  const flexUsed = ["RB", "WR", "TE"].reduce(
+    (sum, where) =>
+      sum + Math.max(0, (counts[where] ?? 0) - (lineup.named[where] ?? 0)),
+    0,
+  );
   /**
    * Your turn after this one. Everything at a position can be had
    * until then, so what a man is worth taking now is the gap between
@@ -2587,7 +2637,7 @@ function renderDraft(staleAt) {
     .filter((p) => !query || p.key.includes(query))
     .map((p) => ({
       p,
-      score: p.vor * needFactor(p.position, counts[p.position] ?? 0),
+      score: p.vor * needFactor(p.position, counts[p.position] ?? 0, flexUsed),
       // and what waiting a turn would cost you at his position
       drop: dropOff(p),
     }))
