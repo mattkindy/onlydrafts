@@ -1552,7 +1552,7 @@ function startedHere() {
   const slots = (active && active.slots) || [
     "QB", "RB", "RB", "WR", "WR", "TE", "FLEX",
   ];
-  const started = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  const started = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 };
   const FLEX_SPLIT = { RB: 0.45, WR: 0.4, TE: 0.15 };
 
   for (const slot of slots) {
@@ -1664,7 +1664,7 @@ function rescoreBoard() {
   const lastStarter = (of) => {
     const bar = {};
 
-    for (const where of ["QB", "RB", "WR", "TE"]) {
+    for (const where of ["QB", "RB", "WR", "TE", "K", "DEF"]) {
       const ranked = board.players
         .filter((p) => p.position === where)
         .map(of)
@@ -1718,14 +1718,32 @@ function rescoreBoard() {
   const QB_LEAN = { model: 0.03, share: 0, adp: 0.12, walk: 0.85 };
 
   /**
-   * Defences go where the room takes them, kickers do not.
+   * Kickers and defences are ours to order and the room's to place.
    *
-   * A kicker given the attempts his side's drives actually produce
-   * orders the next season at .36 over 2023 to 2025, where his draft
-   * position manages .20 and what he kicked last season .10. So the
-   * walk decides kickers. A defence has no such model yet.
+   * We order them better than the room does: giving a kicker the
+   * attempts his side's drives produce beats his draft position .38
+   * to .20 over three seasons. Where the group belongs is another
+   * question, and value over replacement answers it badly for these
+   * two, since both are replaced off the waiver wire in a week and
+   * the gap between the best and the twelfth is under a point a game.
+   * So the group takes the picks the room spends on it, and we say
+   * which of them to take first.
    */
-  const marketOnly = new Set(["DEF"]);
+  const ownOrder = new Set(["K", "DEF"]);
+  const placeIn = new Map();
+
+  for (const where of ownOrder) {
+    const its = board.players.filter((p) => p.position === where);
+    const picks = its
+      .map((p) => p.adp)
+      .filter((adp) => adp)
+      .sort((a, b) => a - b);
+    its
+      .sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0))
+      .forEach((p, i) => {
+        placeIn.set(p.key, picks[i] ?? (picks[picks.length - 1] ?? 300) + i);
+      });
+  }
 
   /**
    * Kickers stand against each other, not against the field.
@@ -1735,19 +1753,10 @@ function rescoreBoard() {
    * weight and a kicker's is late by definition. They are ordered by
    * what the walk gives them and placed where the room takes kickers.
    */
-  const kickerOrder = board.players
-    .filter((p) => p.position === "K")
-    .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))
-    .map((p) => p.key);
-
   board.players.forEach((p, i) => {
-    if (marketOnly.has(p.position)) {
-      p.blend = p.adp ?? 400;
-      return;
-    }
-
-    if (p.position === "K") {
-      p.blend = 200 + kickerOrder.indexOf(p.key);
+    if (ownOrder.has(p.position)) {
+      // where his value falls among everyone else's
+      p.blend = placeIn.get(p.key) ?? 400;
       return;
     }
 
@@ -2296,7 +2305,11 @@ async function renderRoster() {
       if (!p) {
         const div = document.createElement("div");
         div.className = "card plain";
-        div.innerHTML = '<div class="nm">' + r.name + '</div><div class="sub"><span>no projection</span></div>';
+        // he is on last season's roster and nobody has signed him for
+        // this one, which is worth saying rather than leaving blank
+        div.innerHTML = '<div class="nm"><span class="who">' + r.name +
+          '</span></div><div class="sub"><span>no club for ' +
+          meta.boardSeason + ", so no projection</span></div>";
         grid.appendChild(div);
         continue;
       }
