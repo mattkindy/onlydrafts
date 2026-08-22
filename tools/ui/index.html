@@ -1180,7 +1180,7 @@ function redraftWorth(player, teams, taken) {
       ? bestLeftAt(pick, taken, player.key, null, false)
       : null;
     const rate = taken
-      ? expectedBestAt(pick, taken, player.key)
+      ? expectedBestAt(pick, taken, player.key, null, player.position)
       : worthAtPick(pick);
     const gain = Math.max(0, player.vor - rate);
 
@@ -1248,7 +1248,8 @@ function marginAt(player, round, teams, taken) {
 function worthUpTo(player, teams, taken) {
   for (let round = 1; round <= 15; round++) {
     const pick = pickForRound(round, teams, mySlot(), !active || active.snake);
-    const margin = (player.vor ?? 0) - expectedBestAt(pick, taken, player.key);
+    const margin = (player.vor ?? 0) -
+      expectedBestAt(pick, taken, player.key, null, player.position);
 
     if (margin > -CLOSE_SEASON) {
       return { round, margin, instead: bestLeftAt(pick, taken, player.key, null, false) };
@@ -1716,14 +1717,14 @@ function betterLater(p, costPick, taken) {
  * that everyone better is already gone, which is exactly the man you
  * would end up taking.
  */
-function expectedBestAt(pick, taken, exclude, showing) {
+function expectedBestAt(pick, taken, exclude, showing, position) {
   if (!board || !board.players) {
     return 0;
   }
 
   const candidates = board.players
     .filter((o) => o.key !== exclude && !taken.has(o.key) && o.adp &&
-      o.adp >= pick - 12)
+      o.adp >= pick - 12 && (!position || o.position === position))
     .sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0))
     .slice(0, 40);
   let stillGone = 1;
@@ -1762,9 +1763,15 @@ function keeperSums(p, costPick, teams, taken) {
    * certain; taking the middle of everyone going near it held him
    * against a player nobody would choose.
    */
-  const best = bestLeftAt(costPick, taken, p.key, null, false);
+  /**
+   * What the pick buys at his own position, which is the swap you are
+   * actually making: keeping a back means drafting one fewer back.
+   * The other positions are on the card to be looked at, not to decide
+   * it.
+   */
+  const best = bestLeftAt(costPick, taken, p.key, p.position, false);
   const makesItUp = [];
-  const rate = expectedBestAt(costPick, taken, p.key, makesItUp);
+  const rate = expectedBestAt(costPick, taken, p.key, makesItUp, p.position);
   const roi = p.vor - rate;
   const wait = redraftWorth(p, teams, taken);
 
@@ -2061,7 +2068,12 @@ async function renderKeepers() {
      * against a pick that might buy Brock Purdy is wrong when Purdy is
      * one of the men you are keeping.
      */
-    const mineToo = new Set([...taken, ...keeping]);
+    const mineToo = new Set([
+      ...taken, ...keeping,
+      // and everyone else you could keep: you either keep them or let
+      // them go, so a pick cannot buy them either way
+      ...(listed ?? []).map((e) => e.key),
+    ]);
     mineToo.delete(p.key);
     const sums = costPick ? keeperSums(p, costPick, teams, mineToo) : null;
     const call = !sums ? null
@@ -2089,7 +2101,8 @@ async function renderKeepers() {
       if (beaten.length) {
         const worse = document.createElement("div");
         worse.className = "beaten";
-        const first = beaten[0];
+        const samePosition = beaten.filter((o) => o.who.position === p.position);
+        const first = (samePosition.length ? samePosition : beaten)[0];
         worse.innerHTML = "<b>" + first.who.name + "</b> is worth " +
           first.better.toFixed(0) + " more over a season and is still there " +
           "at " + asRound(costPick) + " " + Math.round(100 * first.odds) +
@@ -2135,10 +2148,6 @@ async function renderRoster() {
   head.className = "empty";
   head.innerHTML = "<b>" + mine.length + " players</b> on " + active.team + " in " + active.name +
     (keeperCount ? ", " + keeperCount + " marked as keepers" : ", none marked as keepers yet");
-  if (drawing !== keeperDraw) {
-    return;
-  }
-
   out.appendChild(head);
 
   const byPosition = new Map();
