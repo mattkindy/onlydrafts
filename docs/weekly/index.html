@@ -274,7 +274,6 @@
     <label id="keepwrap" hidden>keepers per team
       <input id="keepn" type="number" value="3" min="0" max="6" style="width:3.2rem"></label>
     <span id="posfilter" hidden></span>
-    <label id="listwrap" hidden><input type="checkbox" id="fulllist"> full rankings</label>
     <label id="sortwrap" hidden>order by <select id="sortby">
       <option value="value">our value</option>
       <option value="adp">adp</option>
@@ -451,7 +450,7 @@ const TOOLBARS = {
     action: "work it out again",
   },
   draft: {
-    fields: ["keepwrap", "posfilter", "searchwrap", "listwrap", "sortwrap"],
+    fields: ["keepwrap", "posfilter", "searchwrap", "sortwrap"],
     action: null,
     manual: "extra names to mark as taken, one per line",
   },
@@ -468,8 +467,7 @@ const TOOLBARS = {
 };
 
 const TOOLBAR_FIELDS = [
-  "userwrap", "weekwrap", "keepwrap", "posfilter", "searchwrap", "listwrap",
-  "sortwrap",
+  "userwrap", "weekwrap", "keepwrap", "posfilter", "searchwrap", "sortwrap",
 ];
 
 function applyToolbar(next) {
@@ -847,6 +845,30 @@ function weekCard(p, opts = {}) {
  * Adp is an overall pick and our rank is a place in the same order, so
  * the two subtract. Under a round either way is noise in mock drafts.
  */
+/**
+ * The picks a drafter can plan around: where he is still on the board
+ * three times in four, and where he is gone three times in four.
+ *
+ * The earliest and latest anyone has taken him are the two ends of
+ * everything ever seen, which is far wider than a draft feels. Read
+ * off the same slide the rest of the page uses for whether a man
+ * lasts, the quarter points say when to stop counting on him.
+ */
+function usuallyAt(p) {
+  const early = p.adpHigh;
+  const late = p.adpLow;
+
+  if (!early || !late || late <= early) {
+    return "#" + p.adp.toFixed(1);
+  }
+
+  const spread = late - early;
+
+  return "#" + p.adp.toFixed(1) + " &middot; there at " +
+    Math.round(early + 0.25 * spread) + ", gone by " +
+    Math.round(early + 0.75 * spread);
+}
+
 function gapChip(p) {
   if (!p.rank || !p.adp) {
     return "";
@@ -891,12 +913,7 @@ function seasonCard(p, opts = {}) {
         // reads as the third round
         // the pick and the spread the room has shown, since a place
         // alone says nothing about how firmly it is held
-        (p.adp
-          ? '<small>#' + p.adp.toFixed(1) +
-            (p.adpHigh && p.adpLow
-              ? ", " + p.adpHigh + " to " + p.adpLow
-              : "") + "</small>"
-          : "") + "</span>",
+        (p.adp ? '<small>' + usuallyAt(p) + "</small>" : "") + "</span>",
       opts.costs
         ? '<span class="f"><i>costs</i>' + ordinal(opts.costs) + "</span>"
         : "",
@@ -2651,14 +2668,20 @@ async function pollDraft() {
  * took him, so the order still reads the way it did before the draft
  * started.
  */
-function fullRankings(out, s) {
+function fullRankings(out, s, order) {
   const query = norm($("search").value ?? "");
-  const men = board.players
-    .filter((p) => matchesFilter(p))
-    .filter((p) => !query || p.key.includes(query));
+  const stillHere = new Set((order ?? []).map((p) => p.key));
+  const men = [
+    ...(order ?? []),
+    // the ones already gone keep their place, after the men you can have
+    ...board.players
+      .filter((p) => !stillHere.has(p.key))
+      .filter((p) => matchesFilter(p))
+      .filter((p) => !query || p.key.includes(query)),
+  ];
 
   const h = document.createElement("h2");
-  h.textContent = "full rankings" +
+  h.textContent = "the whole board" +
     (posFilter === "ALL" ? "" : ", " + posFilter.toLowerCase() + " only");
   out.appendChild(h);
 
@@ -2733,11 +2756,6 @@ function renderDraft(staleAt) {
         : '<div class="big">Draft has not started</div><div class="sub">' +
           (s.clock && s.clock.mine !== undefined && s.grid && s.grid.mySlot ? "you pick from slot " + s.grid.mySlot : "waiting for the commissioner") + "</div>";
     out.appendChild(banner);
-  }
-
-  if ($("fulllist") && $("fulllist").checked) {
-    fullRankings(out, s);
-    return;
   }
 
   const h = document.createElement("h2");
@@ -2819,13 +2837,8 @@ function renderDraft(staleAt) {
 
   out.appendChild(grid);
 
-  if (scored.length > MOST_SHOWN) {
-    const more = document.createElement("p");
-    more.className = "hint";
-    more.textContent = "the best " + MOST_SHOWN + " of " + scored.length +
-      " still on the board. Tick full rankings above for the rest.";
-    out.appendChild(more);
-  }
+  // and then everyone, in the same order, so the two never disagree
+  fullRankings(out, s, scored.map(({ p }) => p));
 
   if (s.grid) {
     const gh = document.createElement("h2");
@@ -2952,7 +2965,6 @@ for (const label of ["ALL", ...POSITIONS]) {
 }
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
-$("fulllist").addEventListener("change", () => { if (view === "draft") renderDraft(); });
 $("sortby").addEventListener("change", () => { if (view === "draft") renderDraft(); });
 
 /**
