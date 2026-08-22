@@ -1798,12 +1798,17 @@ function rescoreBoard() {
    * buys. Reading the value curve in board order settles it, and every
    * number on a card then agrees with where the board has him.
    */
-  // and their value comes off the same curve, so a receiver is never
-  // priced off what a kicker is worth
-  const curve = onTheCurve
+  /**
+   * Read in board order, which means after the sort. Taking the list
+   * before it handed the best value to whoever happened to be first in
+   * the file, so Jonathan Taylor was shown as worth more than Bijan
+   * Robinson while the board had Bijan ahead of him.
+   */
+  const inOrder = board.players.filter((p) => !ownOrder.has(p.position));
+  const curve = inOrder
     .map((p) => p.vor ?? 0)
     .sort((a, b) => b - a);
-  onTheCurve.forEach((p, i) => {
+  inOrder.forEach((p, i) => {
     p.modelVorOwn = p.vor;
     p.vor = Number((curve[i] ?? 0).toFixed(1));
   });
