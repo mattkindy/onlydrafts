@@ -103,6 +103,7 @@
   .fig.up { color: var(--go); }
   .fig.down { color: var(--mark); }
   .instead { margin-top: .6rem; }
+  .alsoat { margin-top: .5rem; }
   .instead table.ranks th { position: static; }
   .instead td.up { color: var(--go); }
   .instead td.down { color: var(--mark); }
@@ -786,6 +787,9 @@ function seasonCard(p, opts = {}) {
       p.rank ? '<span class="f"><i>ours</i>' + asRound(p.rank) + "</span>" : "",
       '<span class="f"><i>adp</i>' +
         (p.adp ? asRound(p.adp) : "&mdash;") + "</span>",
+      opts.costs
+        ? '<span class="f"><i>costs</i>' + ordinal(opts.costs) + "</span>"
+        : "",
       gapChip(p),
       p.bye ? '<span class="f"><i>bye</i>' + p.bye + "</span>" : "",
     ].filter(Boolean).join("") + "</span>",
@@ -1547,32 +1551,49 @@ function keeperFigures(p, cost, costPick, teams) {
   return box;
 }
 
-/** the men who could be there instead, and how they compare a game */
+/**
+ * Who else that pick could buy, and how they compare.
+ *
+ * Two lists: the men at his own position, which is the swap a drafter
+ * pictures, and the best of anybody, since a pick spent on him is a
+ * pick not spent on a tight end either. Both compare on value over
+ * the last man the league would start at that position, which is the
+ * only way a quarterback and a receiver can be put side by side.
+ */
 function instead(p, costPick, taken) {
-  const others = optionsAt(costPick, taken, p.key, p.position, 4);
   const box = document.createElement("div");
   box.className = "instead";
+  const his = (o) => (o.perGameVor ?? 0) - (p.perGameVor ?? 0);
+  const table = (title, men) => {
+    if (!men.length) {
+      return '<div class="hint">nobody ' + title + "</div>";
+    }
 
-  if (!others.length) {
-    box.innerHTML = '<div class="hint">no other ' + p.position +
-      " the room takes near that pick</div>";
-    return box;
-  }
+    return '<div class="scroll"><table class="ranks">' +
+      "<thead><tr><th>" + title + "</th><th>adp</th><th>a game</th>" +
+      "<th>value</th><th>vs him</th></tr></thead><tbody>" +
+      men.map((o) => {
+        const gap = his(o);
 
-  box.innerHTML = '<div class="scroll"><table class="ranks">' +
-    "<thead><tr><th>other " + p.position + "s near pick " + costPick +
-      "</th><th>adp</th>" +
-    "<th>a game</th><th>vs him</th></tr></thead><tbody>" +
-    others.map((o) => {
-      const gap = (o.perGameVor ?? 0) - (p.perGameVor ?? 0);
+        return "<tr><td>" + o.name + ' <span class="pos">' + o.position +
+          "</span></td>" +
+          '<td class="n">' + asRound(o.adp) + "</td>" +
+          '<td class="n">' + (o.ppg ?? 0).toFixed(1) + "</td>" +
+          '<td class="n">' + (o.perGameVor ?? 0).toFixed(1) + "</td>" +
+          '<td class="n ' + (gap > 0 ? "down" : "up") + '">' +
+          (gap > 0 ? "+" : "") + gap.toFixed(1) + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  };
+  const samePosition = optionsAt(costPick, taken, p.key, p.position, 4);
+  const anybody = optionsAt(costPick, taken, p.key, null, 8)
+    .filter((o) => o.position !== p.position)
+    .slice(0, 3);
 
-      return "<tr><td>" + o.name + ' <span class="pos">' + o.position +
-        "</span></td>" +
-        '<td class="n">' + asRound(o.adp) + "</td>" +
-        '<td class="n">' + (o.ppg ?? 0).toFixed(1) + "</td>" +
-        '<td class="n ' + (gap > 0 ? "down" : "up") + '">' +
-        (gap > 0 ? "+" : "") + gap.toFixed(1) + "</td></tr>";
-    }).join("") + "</tbody></table></div>";
+  box.innerHTML =
+    table("other " + p.position + "s near pick " + costPick, samePosition) +
+    (anybody.length
+      ? '<div class="alsoat">' + table("anyone else there", anybody) + "</div>"
+      : "");
 
   return box;
 }
@@ -1752,11 +1773,12 @@ async function renderKeepers() {
     const call = !at ? null
       : at.margin > CLOSE_ENOUGH ? { word: "keep", how: "up" }
       : at.margin < -CLOSE_ENOUGH ? { word: "let go", how: "down" }
-      : { word: "line ball", how: "" };
+      : { word: "close", how: "" };
 
     const card = seasonCard(p, {
       max: seasonMax,
       aside: { label: "worth a", value: round, asRound: true },
+      costs: cost || null,
       badge: call ? call.word : "",
       badgeHow: call ? call.how : "",
       tag: !holdsIt
