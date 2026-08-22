@@ -75,11 +75,10 @@
     gap: 1.1rem; }
   .card { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; padding: .75rem .95rem; }
-  .card .top { position: relative; }
-  .more { position: absolute; top: -.15rem; right: -.25rem; background: none;
-    border: 0; color: var(--faint); cursor: pointer; padding: .25rem;
-    line-height: 0; border-radius: 6px; }
-  .more:hover { color: var(--ink); background: var(--chip); }
+  .more { flex: 0 0 auto; align-self: center; margin-left: .5rem;
+    background: var(--chip); border: 1px solid var(--edge); color: var(--muted);
+    cursor: pointer; padding: .3rem; line-height: 0; border-radius: 999px; }
+  .more:hover { color: var(--ink); border-color: var(--muted); }
   .more:focus-visible { outline: 2px solid var(--go); outline-offset: 1px; }
   .card.plain { cursor: default; }
   .card.mine { border-color: var(--go); }
@@ -169,6 +168,9 @@
   .hint { color: var(--faint); font-size: .78rem; }
   #explain h1 { font-size: 1.25rem; margin: .2rem 0 .15rem; }
   #explain p { color: var(--muted); font-size: .85rem; margin: 0 0 .9rem; }
+  /* the view stacks headings, notes and grids, and they need air */
+  #out { display: flex; flex-direction: column; gap: .9rem; }
+  #out > h2:not(:first-child) { margin-top: .3rem; }
   .empty { background: var(--panel); border: 1px dashed var(--edge);
     border-radius: 12px; padding: 1.2rem; color: var(--muted); font-size: .88rem; }
   .empty b { color: var(--ink); }
