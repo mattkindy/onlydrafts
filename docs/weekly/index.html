@@ -210,6 +210,8 @@
     position: sticky; top: 0; background: var(--bg); }
   table.ranks td { padding: .3rem .5rem; border-bottom: 1px solid var(--edge); }
   table.ranks td.n { text-align: right; }
+  table.ranks td.mark { text-align: center; font-size: 1rem; width: 1.6rem; }
+  table.ranks th:last-child { width: 1.6rem; }
   table.ranks tr { cursor: pointer; }
   table.ranks tr:hover td { background: var(--panel); }
   table.ranks tr.gone td { opacity: .45; }
@@ -2352,6 +2354,36 @@ function myUpcomingPicks(grid, fromOverall) {
   return picks;
 }
 
+/**
+ * What taking him now is worth over waiting a turn.
+ *
+ * Value over replacement does not move as a draft runs: the last back
+ * this league starts is the same man whether or not the ten above him
+ * have gone. What moves is how far the position falls before your
+ * next turn. When backs are flying off, the best one left when you
+ * pick again is much worse, and taking one now is worth that gap. On
+ * a position nobody is touching the gap is nearly nothing, so waiting
+ * costs you nothing.
+ */
+function dropOffBy(taken, nextTurn) {
+  if (!nextTurn) {
+    return () => 0;
+  }
+
+  const atPosition = new Map();
+
+  return (p) => {
+    if (!atPosition.has(p.position)) {
+      atPosition.set(
+        p.position,
+        expectedBestAt(nextTurn, taken, null, null, p.position),
+      );
+    }
+
+    return (p.vor ?? 0) - atPosition.get(p.position);
+  };
+}
+
 function needFactor(position, count) {
   const starters = STARTERS[position] ?? 0;
   if (count < starters) return 1;
@@ -2469,7 +2501,7 @@ function fullRankings(out, s) {
   const table = document.createElement("table");
   table.className = "ranks";
   table.innerHTML = "<thead><tr><th>ours</th><th>player</th><th>pts</th>" +
-    "<th>value</th><th>adp</th><th>bye</th><th>status</th>" +
+    "<th>value</th><th>adp</th><th>bye</th><th></th>" +
     "</tr></thead>";
   const body = document.createElement("tbody");
 
@@ -2487,11 +2519,13 @@ function fullRankings(out, s) {
       "<td class=\"n\">" + (p.vor ?? "") + "</td>" +
       "<td class=\"n\">" + (p.adp ? asRound(p.adp) : "&mdash;") + "</td>" +
       "<td class=\"n\">" + (p.bye ?? "") + "</td>" +
-      "<td>" + (mine
-        ? "<b class=\"up\">yours</b>"
+      '<td class="mark">' + (mine
+        ? '<span class="up" title="yours">&#9733;</span>'
         : gone
-          ? "<span class=\"pos\">" + (who ? "taken by " + who : "taken") + "</span>"
-          : "<b class=\"up\">available</b>") + "</td>";
+          ? '<span class="pos" title="' + (who ? "taken by " + who : "taken") +
+            '">&times;</span>'
+          : '<span class="up" title="still on the board">&check;</span>') +
+      "</td>";
     row.addEventListener("click", () => openDetail(p));
     body.appendChild(row);
   }
@@ -2539,12 +2573,24 @@ function renderDraft(staleAt) {
   out.appendChild(h);
 
   const byAdp = $("sortby") && $("sortby").value === "adp";
+  /**
+   * Your turn after this one. Everything at a position can be had
+   * until then, so what a man is worth taking now is the gap between
+   * him and whoever is left when you come back.
+   */
+  const mine = myUpcomingPicks(s.grid, s.clock ? s.clock.overall : 1);
+  const dropOff = dropOffBy(s.taken, mine[1] ? mine[1].overall : null);
   const query = norm($("search").value ?? "");
   const scored = board.players
     .filter((p) => !s.taken.has(p.key))
     .filter((p) => posFilter === "ALL" || p.position === posFilter)
     .filter((p) => !query || p.key.includes(query))
-    .map((p) => ({ p, score: p.vor * needFactor(p.position, counts[p.position] ?? 0) }))
+    .map((p) => ({
+      p,
+      score: p.vor * needFactor(p.position, counts[p.position] ?? 0),
+      // and what waiting a turn would cost you at his position
+      drop: dropOff(p),
+    }))
     .sort((a, b) => byAdp
       ? (a.p.adp ?? 999) - (b.p.adp ?? 999)
       : b.score - a.score);
@@ -2555,10 +2601,10 @@ function renderDraft(staleAt) {
   const seasonMax = seasonScale(scored.slice(0, 20).map(({ p }) => p));
   // Where your own picks fall in this list. Everyone above a line is
   // expected to be gone by the time that pick comes around.
-  const upcoming = myUpcomingPicks(s.grid, s.clock ? s.clock.overall : 1);
+  const upcoming = mine;
   let nextPick = 0;
 
-  for (const { p, score } of scored) {
+  for (const { p, score, drop } of scored) {
     if (shown >= 20) break;
 
     /**
@@ -2589,6 +2635,9 @@ function renderDraft(staleAt) {
     grid.appendChild(seasonCard(p, {
       max: seasonMax,
       aside: { label: "value here", value: score },
+      hint: drop > 8
+        ? "waiting a turn costs " + drop.toFixed(0) + " at " + p.position
+        : "",
       tag: shown <= 3
         ? "fills " + p.position
         : lastYear ? "was on " + lastYear + " last season" : "",
