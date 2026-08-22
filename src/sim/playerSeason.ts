@@ -4,6 +4,8 @@ import type { GameRow } from "../data/nflverse.js";
 import { drawWeekOutcomes, type PlayerWeek } from "./season.js";
 
 /** what the season simulator needs to know about one player */
+import type { StatParts } from "../features/seasonSummary.js";
+
 export interface SeasonPlayer {
   playerId: string;
   name: string;
@@ -11,6 +13,11 @@ export interface SeasonPlayer {
   teamId: string;
   /** projected points per game from the season model */
   projectedPpg: number;
+  /**
+   * And the same projection in yards and catches, which no league has
+   * scored yet, so a page can apply its own rules to it.
+   */
+  projectedParts?: StatParts;
   /** historical games-played outcomes for players like him, sampled per sim */
   gamesPool: number[];
 }

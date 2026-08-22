@@ -151,27 +151,6 @@ async function main(): Promise<void> {
   // season draft board with replacement value, for the draft view
   const world = await buildPreseasonWorld(season);
 
-  /**
-   * The regression again under each of the three common scorings.
-   *
-   * It is trained to predict fantasy points, so unlike the walk and
-   * the share model it has to know the rules before it can speak, and
-   * a page serving more than one league cannot ask it later. Nearly
-   * every league is one of these three, and a run takes seconds.
-   */
-  const underScoring = new Map<string, Map<string, number>>();
-  const askedFor = scoring();
-
-  for (const named of ["standard", "half", "ppr"] as ScoringFormat[]) {
-    setScoring(scoringRules(named));
-    const its = await buildPreseasonWorld(season);
-    underScoring.set(
-      named,
-      new Map(its.players.map((p) => [p.playerId, p.projectedPpg])),
-    );
-  }
-
-  setScoring(askedFor);
   const { projectDraftExamples } = await import("../src/features/seasonModel.js");
   const draftExamples = await projectDraftExamples(season, world.data);
   const exampleById = new Map(draftExamples.map((e) => [e.playerId, e]));
@@ -469,13 +448,12 @@ async function main(): Promise<void> {
         position: p.position,
         team: p.teamId,
         ppg: Number(p.projectedPpg.toFixed(1)),
-        // the same projection under each common scoring, so a page can
-        // order the board for whichever league is connected
-        ppgUnder: Object.fromEntries(
-          [...underScoring.entries()].map(([named, its]) => [
-            named, Number((its.get(p.playerId) ?? p.projectedPpg).toFixed(1)),
-          ]),
-        ),
+        // what the regression expects him to do in a game, for the page
+        // to score by whatever the connected league pays
+        modelMade: p.projectedParts
+          ? Object.fromEntries(Object.entries(p.projectedParts)
+              .map(([part, n]) => [part, Number(n.toFixed(2))]))
+          : null,
         vor: Number(
           (p.projectedPpg - (replacement.get(p.position) ?? 0)).toFixed(1),
         ),

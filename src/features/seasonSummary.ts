@@ -22,7 +22,31 @@ export interface SeasonSummary {
   latePpg: number;
   /** the team this player logged the most weeks for */
   primaryTeamId: string;
+  /**
+   * What he did in a game, before anybody scores it.
+   *
+   * Points per game only mean something in one league's rules, so the
+   * parts are kept beside them and anything that wants to be scored
+   * later reads these instead.
+   */
+  perGame: StatParts;
 }
+
+export interface StatParts {
+  passYds: number; passTd: number; interceptions: number;
+  rushYds: number; rushTd: number;
+  receptions: number; recYds: number; recTd: number;
+}
+
+export const PART_NAMES: (keyof StatParts)[] = [
+  "passYds", "passTd", "interceptions", "rushYds", "rushTd",
+  "receptions", "recYds", "recTd",
+];
+
+const noParts = (): StatParts => ({
+  passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
+  receptions: 0, recYds: 0, recTd: 0,
+});
 
 export function summarizeSeason(
   weeks: PlayerWeekStats[],
@@ -33,6 +57,7 @@ export function summarizeSeason(
   const totals = new Map<string, number>();
   const tdTotals = new Map<string, number>();
   const volumes = new Map<string, { targets: number; carries: number; airYards: number }>();
+  const parts = new Map<string, StatParts>();
   const byWeek = new Map<string, { week: number; points: number }[]>();
 
   for (const week of weeks) {
@@ -55,6 +80,14 @@ export function summarizeSeason(
     volume.airYards += week.airYards;
     volumes.set(week.playerId, volume);
 
+    const his = parts.get(week.playerId) ?? noParts();
+
+    for (const part of PART_NAMES) {
+      his[part] += week.statLine[part] ?? 0;
+    }
+
+    parts.set(week.playerId, his);
+
     const existing = summaries.get(week.playerId);
 
     if (existing) {
@@ -74,6 +107,7 @@ export function summarizeSeason(
         earlyPpg: 0,
         latePpg: 0,
         primaryTeamId: week.teamId,
+        perGame: noParts(),
       });
     }
 
@@ -85,6 +119,12 @@ export function summarizeSeason(
   for (const [playerId, summary] of summaries) {
     const total = totals.get(playerId) ?? 0;
     summary.pointsPerGame = Math.round((total / summary.games) * 100) / 100;
+    const his = parts.get(playerId) ?? noParts();
+
+    for (const part of PART_NAMES) {
+      summary.perGame[part] = his[part] / summary.games;
+    }
+
     summary.tdPointShare = total > 0 ? (tdTotals.get(playerId) ?? 0) / total : 0;
 
     const line = (byWeek.get(playerId) ?? []).sort((a, b) => a.week - b.week);

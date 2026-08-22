@@ -61,7 +61,11 @@ describe("projectedQbByTeam", () => {
         airYardsPerGame: 0,
         earlyPpg: 0,
         latePpg: 0,
-        primaryTeamId: "DET",
+        perGame: {
+        passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
+        receptions: 0, recYds: 0, recTd: 0,
+      },
+      primaryTeamId: "DET",
       },
     ];
   }

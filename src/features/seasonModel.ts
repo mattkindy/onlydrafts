@@ -6,7 +6,9 @@ import {
 import { normalizeName } from "../data/names.js";
 import { mapPosition } from "../graph/build.js";
 import { scoring } from "../scoring/active.js";
-import { summarizeSeason, type SeasonSummary } from "./seasonSummary.js";
+import {
+  summarizeSeason, type SeasonSummary, type StatParts,
+} from "./seasonSummary.js";
 import { primaryQbByTeam, projectedQbByTeam } from "./teamQb.js";
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
 import { fitGbm, predictGbm, type GbmModel } from "../backtest/gbm.js";
@@ -32,6 +34,10 @@ export interface SeasonExample {
   playerId: string;
   position: string;
   prevPpg: number;
+  /** the same three seasons in yards and catches, which no league scores */
+  prevParts?: StatParts;
+  prev2Parts?: StatParts;
+  actualParts?: StatParts;
   prev2Ppg?: number;
   actualPpg: number;
   moved: boolean;
@@ -534,6 +540,9 @@ export async function examplesForTransition(
       prevPpg: was.pointsPerGame,
       prev2Ppg: prev2?.summaries.get(playerId)?.pointsPerGame,
       actualPpg: is.pointsPerGame,
+      prevParts: was.perGame,
+      prev2Parts: prev2?.summaries.get(playerId)?.perGame,
+      actualParts: is.perGame,
       moved,
       group: groupOf(was.position, moved, qbChanged),
       expYears: entered === undefined ? undefined : target - entered,
@@ -876,6 +885,8 @@ export async function projectDraftExamples(
       prevPpg: was.pointsPerGame,
       prev2Ppg: prev2?.summaries.get(playerId)?.pointsPerGame,
       actualPpg: 0,
+      prevParts: was.perGame,
+      prev2Parts: prev2?.summaries.get(playerId)?.perGame,
       moved,
       group: groupOf(was.position, moved, qbChanged),
       expYears: entered === undefined ? undefined : target - entered,

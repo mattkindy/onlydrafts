@@ -452,6 +452,10 @@ async function loadLeagues() {
     leagues.push({
       members: Object.fromEntries(users.map((u) => [u.user_id, u.display_name])),
       leagueId: lg.league_id, name: lg.name, size: lg.total_rosters,
+      // what this league pays and who it starts, so the board can be
+      // scored here rather than at build time
+      scoring: lg.scoring_settings ?? null,
+      slots: lg.roster_positions ?? null,
       userId: user.user_id, team: nameOf.get(user.user_id) ?? username,
       myRoster: (mine && mine.players ? mine.players : [])
         .map((id) => playerMap[id]).filter((p) => p && p.n).map((p) => ({ name: p.n, key: norm(p.n) })),
@@ -501,6 +505,9 @@ function renderLeagues() {
     div.addEventListener("click", async () => {
       active = lg;
       store_set("active", active);
+      // a different league pays differently and starts a different
+      // lineup, so the board is put back in order for it
+      rescoreBoard();
       setView(meta.weeks.length ? "start" : "draft");
       if (meta.weeks.length) await renderStart();
       else await renderDraftView();
@@ -1126,6 +1133,171 @@ function likelyKept(perTeam, eligible) {
   return gone;
 }
 
+
+/**
+ * What this league pays for the things a player does.
+ *
+ * The board ships what the walk says a man does in a game and leaves
+ * the scoring to whoever reads it, so one board serves every league.
+ * Sleeper spells the categories its own way; these are the ones that
+ * decide a skill player's afternoon.
+ */
+const PAYS = {
+  passYds: "pass_yd", passTd: "pass_td", interceptions: "int",
+  rushYds: "rush_yd", rushTd: "rush_td",
+  receptions: "rec", recYds: "rec_yd", recTd: "rec_td",
+  fumblesLost: "fum_lost",
+};
+
+const STANDARD_PAY = {
+  pass_yd: 0.04, pass_td: 4, int: -2, rush_yd: 0.1, rush_td: 6,
+  rec: 0, rec_yd: 0.1, rec_td: 6, fum_lost: -2,
+};
+
+function leaguePay() {
+  return (active && active.scoring) ? active.scoring : STANDARD_PAY;
+}
+
+/** the closest of the three scorings the regression was fitted under */
+function payPreset() {
+  const perCatch = leaguePay().rec ?? 0;
+
+  return perCatch >= 0.75 ? "ppr" : perCatch >= 0.25 ? "half" : "standard";
+}
+
+/** what a man scores in a typical game under this league's rules */
+function scoredHere(p) {
+  if (!p.made) {
+    return p.ppgUnder ? p.ppgUnder[payPreset()] : p.ppg;
+  }
+
+  const pays = leaguePay();
+  let points = 0;
+
+  for (const [part, category] of Object.entries(PAYS)) {
+    points += (p.made[part] ?? 0) * (pays[category] ?? STANDARD_PAY[category] ?? 0);
+  }
+
+  return points;
+}
+
+/**
+ * How many of each position the league starts, flex included.
+ *
+ * What a man is worth is the gap to the last starter at his position,
+ * so a league starting three receivers values them differently from
+ * one starting two. A flex is shared out among the positions that can
+ * fill it, which is how many of each actually get started.
+ */
+function startedHere() {
+  const teams = (active && active.size) || 12;
+  const slots = (active && active.slots) || [
+    "QB", "RB", "RB", "WR", "WR", "TE", "FLEX",
+  ];
+  const started = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  const FLEX_SPLIT = { RB: 0.45, WR: 0.4, TE: 0.15 };
+
+  for (const slot of slots) {
+    if (started[slot] !== undefined) {
+      started[slot]++;
+      continue;
+    }
+
+    if (slot === "FLEX" || slot === "WRRB_FLEX" || slot === "REC_FLEX") {
+      for (const [where, part] of Object.entries(FLEX_SPLIT)) {
+        started[where] += part;
+      }
+    }
+
+    if (slot === "SUPER_FLEX") {
+      started.QB += 0.6;
+      started.RB += 0.15;
+      started.WR += 0.15;
+      started.TE += 0.1;
+    }
+  }
+
+  const out = {};
+
+  for (const [where, n] of Object.entries(started)) {
+    out[where] = Math.max(1, Math.round(n * teams));
+  }
+
+  return out;
+}
+
+/**
+ * The board in this league's terms.
+ *
+ * Every player is scored by the league's own rules, valued against the
+ * last man it would start at his position, and the four opinions are
+ * put back in order. Nothing here needs the model to have been run for
+ * the league, since the parts travel with the board.
+ */
+function rescoreBoard() {
+  if (!board || !board.players.length) {
+    return;
+  }
+
+  const preset = payPreset();
+
+  for (const p of board.players) {
+    p.ppg = Number(scoredHere(p).toFixed(1));
+    p.modelPpg = p.ppgUnder ? p.ppgUnder[preset] : p.ppg;
+  }
+
+  const started = startedHere();
+  const replacement = {};
+
+  for (const where of ["QB", "RB", "WR", "TE"]) {
+    const ranked = board.players
+      .filter((p) => p.position === where)
+      .map((p) => p.ppg)
+      .sort((a, b) => b - a);
+    replacement[where] = ranked[Math.min(ranked.length - 1, started[where])] ?? 0;
+  }
+
+  for (const p of board.players) {
+    p.vor = Number((p.ppg - (replacement[p.position] ?? 0)).toFixed(1));
+  }
+
+  const placesBy = (by) => {
+    const ranked = board.players
+      .map((p, i) => ({ i, v: by(p) }))
+      .filter((r) => r.v !== null && r.v !== undefined)
+      .sort((a, b) => b.v - a.v);
+    const at = new Map();
+    ranked.forEach((r, k) => at.set(r.i, k + 1));
+
+    return at;
+  };
+
+  const modelAt = placesBy((p) => p.modelPpg);
+  const shareAt = placesBy((p) => p.touches);
+  const adpAt = placesBy((p) => (p.adp === null || p.adp === undefined ? null : -p.adp));
+  const walkAt = placesBy((p) => (p.made ? scoredHere(p) : null));
+  // the same weights the board is built with, quarterbacks apart
+  const LEAN = { model: 0.106, share: 0.319, adp: 0.425, walk: 0.15 };
+  const QB_LEAN = { model: 0.03, share: 0, adp: 0.12, walk: 0.85 };
+
+  board.players.forEach((p, i) => {
+    const lean = p.position === "QB" ? QB_LEAN : LEAN;
+    const parts = [
+      [lean.model, modelAt.get(i)],
+      [lean.share, shareAt.get(i)],
+      [lean.adp, adpAt.get(i)],
+      [lean.walk, walkAt.get(i)],
+    ].filter(([w, place]) => w > 0 && place !== undefined);
+    const weight = parts.reduce((sum, [w]) => sum + w, 0);
+    p.blend = weight > 0
+      ? parts.reduce((sum, [w, place]) => sum + w * place, 0) / weight
+      : board.players.length;
+  });
+
+  board.players.sort((a, b) => a.blend - b.blend);
+  boardByKey = new Map(board.players.map((p) => [p.key, p]));
+}
+
 function keeperCosts() {
   return store_get("keeperCost." + (active ? active.leagueId : "none"), {});
 }
@@ -1141,6 +1313,7 @@ async function renderKeepers() {
   if (!board) {
     board = await (await fetch("data/board-" + meta.boardSeason + ".json" + (window.__bust ?? ""))).json();
     boardByKey = new Map(board.players.map((p) => [p.key, p]));
+    rescoreBoard();
   }
 
   const out = $("out");
@@ -1346,6 +1519,7 @@ async function renderRoster() {
   if (!board) {
     board = await (await fetch("data/board-" + meta.boardSeason + ".json" + (window.__bust ?? ""))).json();
     boardByKey = new Map(board.players.map((p) => [p.key, p]));
+    rescoreBoard();
   }
 
   const out = $("out");
@@ -1790,6 +1964,7 @@ async function renderDraftView() {
   if (!board) {
     board = await (await fetch("data/board-" + meta.boardSeason + ".json" + (window.__bust ?? ""))).json();
     boardByKey = new Map(board.players.map((p) => [p.key, p]));
+    rescoreBoard();
   }
 
   if (active) {

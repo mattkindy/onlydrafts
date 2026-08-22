@@ -1158,27 +1158,25 @@ function leaguePay() {
   return (active && active.scoring) ? active.scoring : STANDARD_PAY;
 }
 
-/** the closest of the three scorings the regression was fitted under */
-function payPreset() {
-  const perCatch = leaguePay().rec ?? 0;
-
-  return perCatch >= 0.75 ? "ppr" : perCatch >= 0.25 ? "half" : "standard";
-}
-
-/** what a man scores in a typical game under this league's rules */
-function scoredHere(p) {
-  if (!p.made) {
-    return p.ppgUnder ? p.ppgUnder[payPreset()] : p.ppg;
-  }
-
+/** a game of his, scored by what this league pays */
+function payFor(made) {
   const pays = leaguePay();
   let points = 0;
 
   for (const [part, category] of Object.entries(PAYS)) {
-    points += (p.made[part] ?? 0) * (pays[category] ?? STANDARD_PAY[category] ?? 0);
+    points += (made[part] ?? 0) * (pays[category] ?? STANDARD_PAY[category] ?? 0);
   }
 
   return points;
+}
+
+/** what the walk says he scores here, or the regression when it never saw him */
+function scoredHere(p) {
+  if (p.made) {
+    return payFor(p.made);
+  }
+
+  return p.modelMade ? payFor(p.modelMade) : p.ppg;
 }
 
 /**
@@ -1239,11 +1237,9 @@ function rescoreBoard() {
     return;
   }
 
-  const preset = payPreset();
-
   for (const p of board.players) {
     p.ppg = Number(scoredHere(p).toFixed(1));
-    p.modelPpg = p.ppgUnder ? p.ppgUnder[preset] : p.ppg;
+    p.modelPpg = p.modelMade ? payFor(p.modelMade) : p.ppg;
   }
 
   const started = startedHere();

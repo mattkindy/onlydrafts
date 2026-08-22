@@ -23,6 +23,9 @@ import {
 } from "../backtest/intervals.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { scoring } from "../scoring/active.js";
+import {
+  fitPartsModel, predictParts, partsByPosition,
+} from "./partsModel.js";
 import type { SeasonPlayer } from "../sim/playerSeason.js";
 import type { GameRow } from "../data/nflverse.js";
 
@@ -61,6 +64,12 @@ export async function buildPreseasonWorld(
   }
 
   const fit = fitSeasonModel(train);
+  /**
+   * The same model again, part by part, so what it says can be scored
+   * by any league rather than only the one this run was told about.
+   */
+  const partsFit = fitPartsModel(train);
+  const partFloors = partsByPosition(train);
   const board = await projectDraftExamples(season, data);
   const rookieTrain = [];
 
@@ -210,6 +219,7 @@ export async function buildPreseasonWorld(
       position: e.position,
       teamId: team,
       projectedPpg: predictSeasonBlend(fit, e),
+      projectedParts: predictParts(partsFit, e, partFloors),
       gamesPool: gamesPools.get(bucketOf(e.gamesPrev))!,
     });
   }
