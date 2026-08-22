@@ -13,6 +13,9 @@
  */
 
 import { spearman } from "../src/backtest/metrics.js";
+import { loadSleeperAdp } from "../src/data/adp.js";
+import { loadPlayerStats } from "../src/data/nflverse.js";
+import { normalizeName } from "../src/data/names.js";
 import { setScoring } from "../src/scoring/active.js";
 import { presets, fantasyPoints } from "../src/scoring/fantasyPoints.js";
 import { PART_NAMES } from "../src/features/seasonSummary.js";
@@ -42,10 +45,18 @@ const scoreParts = (
 
 async function main(): Promise<void> {
   const data = await buildSeasonData(ALL);
+  const nameOf = new Map<string, string>();
+
+  for (const at of TEST) {
+    for (const w of await loadPlayerStats(at - 1)) {
+      nameOf.set(w.playerId, w.playerName);
+    }
+  }
+
   const rows: {
     season: number; named: string; men: number;
-    points: number; parts: number; adp: number;
-    topPoints: number; topParts: number; topAdp: number;
+    points: number; parts: number; adp: number; sleeper: number;
+    topPoints: number; topParts: number; topAdp: number; topSleeper: number;
   }[] = [];
 
   for (const named of ["standard", "ppr"] as const) {
@@ -88,28 +99,39 @@ async function main(): Promise<void> {
        * going undrafted is itself an opinion.
        */
       const saidAdp = test.map((e) => -(e.adp ?? 250));
+      // and the room the league actually drafts in
+      const onSleeper = await loadSleeperAdp(season, named).catch(() => new Map());
+      const saidSleeper = test.map((e) => {
+        const his = onSleeper.get(`${normalizeName(nameOf.get(e.playerId) ?? "")}|${e.position}`);
+
+        return -(his?.adp ?? 250);
+      });
 
       rows.push({
         season, named, men: test.length,
         points: spearman(saidPoints, truth),
         parts: spearman(saidParts, truth),
         adp: spearman(saidAdp, truth),
+        sleeper: spearman(saidSleeper, truth),
         topPoints: cut(saidPoints),
         topParts: cut(saidParts),
         topAdp: cut(saidAdp),
+        topSleeper: cut(saidSleeper),
       });
     }
   }
 
   console.log("ordering a season's points, the parts model against the points one");
-  console.log("                     everybody          the 40 taken earliest");
-  console.log("scoring    season   points  parts    adp     points  parts    adp");
+  console.log("                    everybody                     the 40 taken earliest");
+  console.log("scoring   season  points  parts    ffc  sleeper   points  parts    ffc  sleeper");
 
   for (const r of rows) {
     console.log(
-      `${r.named.padEnd(10)} ${r.season}    ` +
+      `${r.named.padEnd(9)} ${r.season}   ` +
         `${r.points.toFixed(3)}  ${r.parts.toFixed(3)}  ${r.adp.toFixed(3)}   ` +
-        `${r.topPoints.toFixed(3)}  ${r.topParts.toFixed(3)}  ${r.topAdp.toFixed(3)}`,
+        `${r.sleeper.toFixed(3)}    ` +
+        `${r.topPoints.toFixed(3)}  ${r.topParts.toFixed(3)}  ${r.topAdp.toFixed(3)}` +
+        `   ${r.topSleeper.toFixed(3)}`,
     );
   }
 
@@ -118,11 +140,13 @@ async function main(): Promise<void> {
     const mean = (of: (r: typeof rows[number]) => number) =>
       mine.reduce((s, r) => s + of(r), 0) / mine.length;
     console.log(
-      `${named.padEnd(10)} average  ${mean((r) => r.points).toFixed(3)}  ` +
+      `${named.padEnd(9)} mean    ${mean((r) => r.points).toFixed(3)}  ` +
         `${mean((r) => r.parts).toFixed(3)}  ${mean((r) => r.adp).toFixed(3)}   ` +
+        `${mean((r) => r.sleeper).toFixed(3)}    ` +
         `${mean((r) => r.topPoints).toFixed(3)}  ` +
         `${mean((r) => r.topParts).toFixed(3)}  ` +
-        `${mean((r) => r.topAdp).toFixed(3)}`,
+        `${mean((r) => r.topAdp).toFixed(3)}` +
+        `   ${mean((r) => r.topSleeper).toFixed(3)}`,
     );
   }
 

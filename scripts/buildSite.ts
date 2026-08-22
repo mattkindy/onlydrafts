@@ -31,7 +31,7 @@ import {
 import { buildPreseasonWorld } from "../src/features/preseason.js";
 import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
 import { seededRng } from "../src/sim/rng.js";
-import { loadAdp, type AdpFormat } from "../src/data/adp.js";
+import { loadAdp, loadSleeperAdp, type AdpFormat } from "../src/data/adp.js";
 import { fitRoles } from "../src/features/fitRoles.js";
 import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
 import { normalDraw } from "../src/sim/normal.js";
@@ -308,12 +308,38 @@ async function main(): Promise<void> {
    */
   const adpBoth = new Map<string, Record<string, unknown>>();
 
-  for (const named of ["standard", "ppr"] as AdpFormat[]) {
-    const its = await loadAdp(season, named).catch(() => new Map());
+  for (const named of ["standard", "half", "ppr"] as const) {
+    // the mocks, for their spread; they have no half point set of
+    // their own, so the full point one is used for it
+    const mocks = await loadAdp(
+      season, (named === "ppr" ? "ppr" : "standard") as AdpFormat,
+    ).catch(() => new Map());
+    const room = await loadSleeperAdp(season, named).catch(() => new Map());
 
-    for (const [key, row] of its) {
+    for (const key of new Set([...room.keys(), ...mocks.keys()])) {
+      const his = room.get(key);
+      const mocked = mocks.get(key);
+      const at = his?.adp ?? mocked?.adp;
+
+      if (!at) {
+        continue;
+      }
+
+      /**
+       * Sleeper says where he goes and says nothing about how much
+       * that moves, so the mocks' own spread is carried across as a
+       * share of their number.
+       */
+      const spread = mocked && mocked.adp > 0
+        ? { high: mocked.high / mocked.adp, low: mocked.low / mocked.adp }
+        : { high: 0.75, low: 1.25 };
       const already = adpBoth.get(key) ?? {};
-      already[named] = { adp: row.adp, low: row.low, high: row.high };
+      already[named] = {
+        adp: Number(at.toFixed(1)),
+        high: Math.max(1, Math.round(at * spread.high)),
+        low: Math.round(at * spread.low),
+        from: his ? "sleeper" : "mocks",
+      };
       adpBoth.set(key, already);
     }
   }

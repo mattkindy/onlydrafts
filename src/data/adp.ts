@@ -58,3 +58,48 @@ export async function loadAdp(
 
   return result;
 }
+
+/**
+ * Where Sleeper's drafters took people, which is a different room.
+ *
+ * The mocks above come from a public site; Sleeper's number comes
+ * from drafts on Sleeper itself, and the two disagree by rounds on
+ * some players. A league that drafts on Sleeper should be priced
+ * against Sleeper. There is no range with it, so the spread comes
+ * from whatever the mocks say about the same man.
+ */
+export async function loadSleeperAdp(
+  season: number,
+  format: "standard" | "half" | "ppr" = "standard",
+): Promise<Map<string, AdpEntry>> {
+  const text = await readFile(
+    join(RAW_DIR, `adp_sleeper_${season}.json`), "utf8",
+  ).catch(() => "");
+
+  if (!text) {
+    return new Map();
+  }
+
+  const parsed = JSON.parse(text) as {
+    players: {
+      name: string; position: string;
+      standard: number; half: number; ppr: number;
+    }[];
+  };
+  const out = new Map<string, AdpEntry>();
+
+  for (const player of parsed.players) {
+    const at = player[format];
+
+    if (!at || at >= 999) {
+      continue;
+    }
+
+    out.set(`${normalizeName(player.name)}|${player.position}`, {
+      name: player.name, position: player.position,
+      adp: at, high: at, low: at,
+    });
+  }
+
+  return out;
+}

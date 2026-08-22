@@ -220,6 +220,10 @@
       <input id="keepn" type="number" value="3" min="0" max="6" style="width:3.2rem"></label>
     <span id="posfilter" hidden></span>
     <label id="listwrap" hidden><input type="checkbox" id="fulllist"> full rankings</label>
+    <label id="sortwrap" hidden>order by <select id="sortby">
+      <option value="value">our value</option>
+      <option value="adp">adp</option>
+    </select></label>
     <label id="searchwrap" hidden>find <input id="search" size="12" placeholder="a name"></label>
     <button class="act" id="go">find my leagues</button>
     <span id="status"></span>
@@ -387,7 +391,7 @@ const TOOLBARS = {
     action: "work it out again",
   },
   draft: {
-    fields: ["keepwrap", "posfilter", "searchwrap", "listwrap"],
+    fields: ["keepwrap", "posfilter", "searchwrap", "listwrap", "sortwrap"],
     action: null,
     manual: "extra names to mark as taken, one per line",
   },
@@ -405,6 +409,7 @@ const TOOLBARS = {
 
 const TOOLBAR_FIELDS = [
   "userwrap", "weekwrap", "keepwrap", "posfilter", "searchwrap", "listwrap",
+  "sortwrap",
 ];
 
 function applyToolbar(next) {
@@ -1299,7 +1304,8 @@ function rescoreBoard() {
    * reading standard mocks is reading the wrong room. Both sets ship
    * with the board and the league picks.
    */
-  const room = (leaguePay().rec ?? 0) >= 0.5 ? "ppr" : "standard";
+  const perCatch = leaguePay().rec ?? 0;
+  const room = perCatch >= 0.75 ? "ppr" : perCatch >= 0.25 ? "half" : "standard";
 
   for (const p of board.players) {
     if (p.adpBy && p.adpBy[room]) {
@@ -2021,13 +2027,16 @@ function renderDraft(staleAt) {
   h.textContent = "best available for your draft roster" + (staleAt ? " as of " + staleAt : "");
   out.appendChild(h);
 
+  const byAdp = $("sortby") && $("sortby").value === "adp";
   const query = norm($("search").value ?? "");
   const scored = board.players
     .filter((p) => !s.taken.has(p.key))
     .filter((p) => posFilter === "ALL" || p.position === posFilter)
     .filter((p) => !query || p.key.includes(query))
     .map((p) => ({ p, score: p.vor * needFactor(p.position, counts[p.position] ?? 0) }))
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => byAdp
+      ? (a.p.adp ?? 999) - (b.p.adp ?? 999)
+      : b.score - a.score);
 
   const grid = document.createElement("div");
   grid.className = "cards";
@@ -2041,7 +2050,15 @@ function renderDraft(staleAt) {
   for (const { p, score } of scored) {
     if (shown >= 20) break;
 
-    while (nextPick < upcoming.length && p.adp && p.adp > upcoming[nextPick].overall) {
+    /**
+     * Your turn drawn where it falls.
+     *
+     * Everyone above a line is expected to be gone by then, so the
+     * line comes after as many cards as there are picks before yours,
+     * less whoever has already been taken.
+     */
+    while (nextPick < upcoming.length &&
+           shown >= Math.max(0, upcoming[nextPick].overall - 1 - s.taken.size)) {
       const line = document.createElement("div");
       line.className = "pickline";
       line.innerHTML = "<span>your " + upcoming[nextPick].label +
@@ -2190,6 +2207,7 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 $("fulllist").addEventListener("change", () => { if (view === "draft") renderDraft(); });
+$("sortby").addEventListener("change", () => { if (view === "draft") renderDraft(); });
 
 /**
  * What draws each view. The nav and the go button both used to carry
