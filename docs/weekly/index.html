@@ -889,7 +889,14 @@ function seasonCard(p, opts = {}) {
         '><i>adp</i>' + (p.adpRank ? asRound(p.adpRank) : "&mdash;") +
         // marked as an overall pick, since 3.8 beside 1.03 otherwise
         // reads as the third round
-        (p.adp ? '<small>#' + p.adp.toFixed(1) + "</small>" : "") + "</span>",
+        // the pick and the spread the room has shown, since a place
+        // alone says nothing about how firmly it is held
+        (p.adp
+          ? '<small>#' + p.adp.toFixed(1) +
+            (p.adpHigh && p.adpLow
+              ? ", " + p.adpHigh + " to " + p.adpLow
+              : "") + "</small>"
+          : "") + "</span>",
       opts.costs
         ? '<span class="f"><i>costs</i>' + ordinal(opts.costs) + "</span>"
         : "",
@@ -1115,6 +1122,8 @@ function saveAdpAt(key, pick) {
  * past the tenth round, where only a couple of hundred players carry a
  * draft position at all, so a late alternative is a flier.
  */
+/** how many the shortlist shows before the full rankings take over */
+const MOST_SHOWN = 24;
 const CLOSE_ENOUGH = 1;
 /**
  * Near enough to level over a season, in points. Half a point a game
@@ -2761,14 +2770,14 @@ function renderDraft(staleAt) {
   const grid = document.createElement("div");
   grid.className = "cards";
   let shown = 0;
-  const seasonMax = seasonScale(scored.slice(0, 20).map(({ p }) => p));
+  const seasonMax = seasonScale(scored.slice(0, MOST_SHOWN).map(({ p }) => p));
   // Where your own picks fall in this list. Everyone above a line is
   // expected to be gone by the time that pick comes around.
   const upcoming = mine;
   let nextPick = 0;
 
   for (const { p, score, drop } of scored) {
-    if (shown >= 20) break;
+    if (shown >= MOST_SHOWN) break;
 
     /**
      * Your turn drawn where it falls.
@@ -2809,6 +2818,14 @@ function renderDraft(staleAt) {
   }
 
   out.appendChild(grid);
+
+  if (scored.length > MOST_SHOWN) {
+    const more = document.createElement("p");
+    more.className = "hint";
+    more.textContent = "the best " + MOST_SHOWN + " of " + scored.length +
+      " still on the board. Tick full rankings above for the rest.";
+    out.appendChild(more);
+  }
 
   if (s.grid) {
     const gh = document.createElement("h2");
