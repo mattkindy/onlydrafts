@@ -295,6 +295,23 @@ async function main(): Promise<void> {
   }
 
   const adp = await loadAdp(season, adpFormat).catch(() => new Map());
+  /**
+   * Both sets of mocks, since a page serving more than one league
+   * cannot know at build time which one the room is drafting from. A
+   * point a catch moves receivers up the order, so a ppr league
+   * reading standard mocks is reading the wrong draft.
+   */
+  const adpBoth = new Map<string, Record<string, unknown>>();
+
+  for (const named of ["standard", "ppr"] as AdpFormat[]) {
+    const its = await loadAdp(season, named).catch(() => new Map());
+
+    for (const [key, row] of its) {
+      const already = adpBoth.get(key) ?? {};
+      already[named] = { adp: row.adp, low: row.low, high: row.high };
+      adpBoth.set(key, already);
+    }
+  }
 
   /**
    * How much of his offence each man is projected to touch.
@@ -463,6 +480,8 @@ async function main(): Promise<void> {
         adp: adp.get(`${normalizeName(p.name)}|${p.position}`)?.adp ?? null,
         adpLow: adp.get(`${normalizeName(p.name)}|${p.position}`)?.low ?? null,
         adpHigh: adp.get(`${normalizeName(p.name)}|${p.position}`)?.high ?? null,
+        // and where each kind of room takes him, for the page to pick
+        adpBy: adpBoth.get(`${normalizeName(p.name)}|${p.position}`) ?? null,
         bye: world.byeWeek.get(p.teamId) ?? null,
         game: {
           ev: Number(p.projectedPpg.toFixed(1)),

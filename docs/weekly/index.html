@@ -144,6 +144,23 @@
     display: none; align-items: flex-start; justify-content: center;
     padding: 2rem 1rem; overflow-y: auto; z-index: 10; }
   #overlay.open { display: flex; }
+  table.ranks { border-collapse: collapse; width: 100%; font-size: .85rem;
+    font-variant-numeric: tabular-nums; }
+  table.ranks th { text-align: left; font-size: .68rem; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--faint); font-weight: 600;
+    border-bottom: 1px solid var(--edge); padding: .35rem .5rem;
+    position: sticky; top: 0; background: var(--bg); }
+  table.ranks td { padding: .3rem .5rem; border-bottom: 1px solid var(--edge); }
+  table.ranks td.n { text-align: right; }
+  table.ranks tr { cursor: pointer; }
+  table.ranks tr:hover td { background: var(--panel); }
+  table.ranks tr.gone td { opacity: .45; }
+  table.ranks tr.mine td { background: rgba(88, 166, 255, .08); }
+  table.ranks .pos { color: var(--faint); font-size: .75rem; }
+  .up { color: var(--go); }
+  .down { color: var(--mark); }
+  .hint { color: var(--faint); font-size: .82rem; margin: .2rem 0 .6rem; }
+  .scroll { overflow-x: auto; }
   .sheet { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 14px; padding: 1.2rem 1.4rem; max-width: 34rem; width: 100%; }
   .sheet h3 { margin: 0; font-size: 1.15rem; }
@@ -195,6 +212,7 @@
     <label id="keepwrap" hidden>keepers per team
       <input id="keepn" type="number" value="3" min="0" max="6" style="width:3.2rem"></label>
     <span id="posfilter" hidden></span>
+    <label id="listwrap" hidden><input type="checkbox" id="fulllist"> full rankings</label>
     <label id="searchwrap" hidden>find <input id="search" size="12" placeholder="a name"></label>
     <button class="act" id="go">find my leagues</button>
     <span id="status"></span>
@@ -362,7 +380,7 @@ const TOOLBARS = {
     action: "work it out again",
   },
   draft: {
-    fields: ["keepwrap", "posfilter", "searchwrap"],
+    fields: ["keepwrap", "posfilter", "searchwrap", "listwrap"],
     action: null,
     manual: "extra names to mark as taken, one per line",
   },
@@ -378,7 +396,9 @@ const TOOLBARS = {
   },
 };
 
-const TOOLBAR_FIELDS = ["userwrap", "weekwrap", "keepwrap", "posfilter", "searchwrap"];
+const TOOLBAR_FIELDS = [
+  "userwrap", "weekwrap", "keepwrap", "posfilter", "searchwrap", "listwrap",
+];
 
 function applyToolbar(next) {
   const bar = TOOLBARS[next] ?? { fields: [], action: null };
@@ -690,6 +710,33 @@ function weekCard(p, opts = {}) {
 }
 
 /** the season: what he scores in a typical game, and how those vary */
+/**
+ * How far apart we are from the room, when it is far enough to act on.
+ *
+ * Adp is an overall pick and our rank is a place in the same order, so
+ * the two subtract. A round either way is noise in mock drafts, so
+ * only wider gaps are called out.
+ */
+function gapNote(p) {
+  if (!p.rank || !p.adp) {
+    return "";
+  }
+
+  const teams = (active && active.size) || 12;
+  const gap = p.adp - p.rank;
+
+  if (Math.abs(gap) < teams) {
+    return "";
+  }
+
+  const rounds = Math.round(Math.abs(gap) / teams);
+  const many = rounds === 1 ? "a round" : rounds + " rounds";
+
+  return gap > 0
+    ? "<b class=\"up\">" + many + " cheaper than we price him</b>"
+    : "<b class=\"down\">" + many + " dearer than we price him</b>";
+}
+
 function seasonCard(p, opts = {}) {
   const g = p.game;
   return card(p, {
@@ -704,10 +751,14 @@ function seasonCard(p, opts = {}) {
         }
       : undefined,
     note: [
+      p.rank ? "<b>we have him " + ordinal(p.rank) + "</b>" : "",
       p.adp
-        ? "goes " + asRound(p.adp) +
-          (p.adpHigh ? " in PPR mocks, " + asRound(p.adpHigh) + " to " + asRound(p.adpLow) : " in PPR mocks")
-        : "undrafted in mocks",
+        ? "the room takes him " + asRound(p.adp) +
+          (p.adpHigh
+            ? " (" + asRound(p.adpHigh) + " to " + asRound(p.adpLow) + ")"
+            : "")
+        : "the room leaves him undrafted",
+      gapNote(p),
       p.bye ? "bye " + p.bye : "",
     ].filter(Boolean).join(" &middot; "),
   });
@@ -1170,13 +1221,20 @@ function payFor(made) {
   return points;
 }
 
-/** what the walk says he scores here, or the regression when it never saw him */
+/**
+ * What he scores in a game here.
+ *
+ * The regression's own projection, scored by this league. The spread
+ * of his weeks on the card was worked out around that projection, so
+ * taking the walk's number instead would leave the two describing
+ * different players. The walk still votes on the order.
+ */
 function scoredHere(p) {
-  if (p.made) {
-    return payFor(p.made);
+  if (p.modelMade) {
+    return payFor(p.modelMade);
   }
 
-  return p.modelMade ? payFor(p.modelMade) : p.ppg;
+  return p.made ? payFor(p.made) : p.ppg;
 }
 
 /**
@@ -1237,9 +1295,58 @@ function rescoreBoard() {
     return;
   }
 
+  /**
+   * Which mock drafts to read.
+   *
+   * A point a catch moves receivers up the order, so a ppr league
+   * reading standard mocks is reading the wrong room. Both sets ship
+   * with the board and the league picks.
+   */
+  const room = (leaguePay().rec ?? 0) >= 0.5 ? "ppr" : "standard";
+
   for (const p of board.players) {
+    if (p.adpBy && p.adpBy[room]) {
+      p.adp = p.adpBy[room].adp;
+      p.adpLow = p.adpBy[room].low;
+      p.adpHigh = p.adpBy[room].high;
+    }
+
+    /**
+     * What the file said, kept aside the first time through.
+     *
+     * The spread of his weeks and his season total were worked out
+     * under whatever the build was told to score, so they move with
+     * him when the league pays differently. Rescoring twice must not
+     * compound, so everything is scaled from the file's numbers
+     * rather than from the last pass.
+     */
+    if (!p.asBuilt) {
+      p.asBuilt = {
+        ppg: p.ppg, game: p.game, sim: p.sim, weeks: p.weeks,
+      };
+    }
+
+    const was = p.asBuilt;
     p.ppg = Number(scoredHere(p).toFixed(1));
     p.modelPpg = p.modelMade ? payFor(p.modelMade) : p.ppg;
+
+    const moved = was.ppg > 0 ? p.ppg / was.ppg : 1;
+
+    if (was.game) {
+      p.game = Object.fromEntries(Object.entries(was.game)
+        .map(([at, n]) => [at, Number((n * moved).toFixed(1))]));
+    }
+
+    if (was.sim) {
+      p.sim = Object.fromEntries(Object.entries(was.sim)
+        .map(([at, n]) => [at, at === "games" ? n : Math.round(n * moved)]));
+    }
+
+    if (was.weeks) {
+      p.weeks = was.weeks.map((w) => ({
+        ...w, pts: Number((w.pts * moved).toFixed(1)),
+      }));
+    }
   }
 
   /**
@@ -1311,6 +1418,8 @@ function rescoreBoard() {
   });
 
   board.players.sort((a, b) => a.blend - b.blend);
+  // where we have him, which is what the cards compare against adp
+  board.players.forEach((p, i) => { p.rank = i + 1; });
   boardByKey = new Map(board.players.map((p) => [p.key, p]));
 }
 
@@ -1814,6 +1923,70 @@ async function pollDraft() {
   renderDraft();
 }
 
+
+/**
+ * The whole board in order, with who is left.
+ *
+ * The cards above show the handful worth taking next; this is for
+ * looking someone up, or seeing how far the run at a position has
+ * gone. A man already drafted stays in place, greyed, with whoever
+ * took him, so the order still reads the way it did before the draft
+ * started.
+ */
+function fullRankings(out, s) {
+  const query = norm($("search").value ?? "");
+  const men = board.players
+    .filter((p) => posFilter === "ALL" || p.position === posFilter)
+    .filter((p) => !query || p.key.includes(query));
+
+  const h = document.createElement("h2");
+  h.textContent = "full rankings" +
+    (posFilter === "ALL" ? "" : ", " + posFilter.toLowerCase() + " only");
+  out.appendChild(h);
+
+  const left = men.filter((p) => !s.taken.has(p.key)).length;
+  const note = document.createElement("p");
+  note.className = "hint";
+  note.textContent = left + " of " + men.length + " still on the board";
+  out.appendChild(note);
+
+  const wrap = document.createElement("div");
+  wrap.className = "scroll";
+  const table = document.createElement("table");
+  table.className = "ranks";
+  table.innerHTML = "<thead><tr><th>ours</th><th>player</th><th>pts</th>" +
+    "<th>value</th><th>the room</th><th>bye</th><th>where he is</th>" +
+    "</tr></thead>";
+  const body = document.createElement("tbody");
+
+  for (const p of men) {
+    const row = document.createElement("tr");
+    const gone = s.taken.has(p.key);
+    const mine = s.mine.has(p.key);
+    const who = s.teams && s.teams[p.key];
+    row.className = mine ? "mine" : gone ? "gone" : "";
+    row.innerHTML =
+      "<td class=\"n\">" + (p.rank ?? "") + "</td>" +
+      "<td><b>" + p.name + "</b> <span class=\"pos\">" +
+        p.position + " &middot; " + (p.team ?? "") + "</span></td>" +
+      "<td class=\"n\">" + (p.ppg ?? "") + "</td>" +
+      "<td class=\"n\">" + (p.vor ?? "") + "</td>" +
+      "<td class=\"n\">" + (p.adp ? asRound(p.adp) : "&mdash;") + "</td>" +
+      "<td class=\"n\">" + (p.bye ?? "") + "</td>" +
+      "<td>" + (mine
+        ? "<b class=\"up\">yours</b>"
+        : gone
+          ? "<span class=\"pos\">" + (who ? "taken by " + who : "taken") + "</span>"
+          : "<b class=\"up\">available</b>") + "</td>";
+    row.addEventListener("click", () => openDetail(p));
+    body.appendChild(row);
+  }
+
+  table.appendChild(body);
+  wrap.appendChild(table);
+  out.appendChild(wrap);
+}
+
 function renderDraft(staleAt) {
   if (!board) return;
   const out = $("out");
@@ -1840,6 +2013,11 @@ function renderDraft(staleAt) {
         : '<div class="big">Draft has not started</div><div class="sub">' +
           (s.clock && s.clock.mine !== undefined && s.grid && s.grid.mySlot ? "you pick from slot " + s.grid.mySlot : "waiting for the commissioner") + "</div>";
     out.appendChild(banner);
+  }
+
+  if ($("fulllist") && $("fulllist").checked) {
+    fullRankings(out, s);
+    return;
   }
 
   const h = document.createElement("h2");
@@ -2014,6 +2192,7 @@ for (const label of ["ALL", ...POSITIONS]) {
 }
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
+$("fulllist").addEventListener("change", () => { if (view === "draft") renderDraft(); });
 
 /**
  * What draws each view. The nav and the go button both used to carry
