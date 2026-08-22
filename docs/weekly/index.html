@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- the page changes far more often than a browser expects, and a
+     stale copy shows errors that were fixed hours ago -->
+<meta http-equiv="cache-control" content="no-cache, must-revalidate">
+<meta http-equiv="pragma" content="no-cache">
 <title>depthchart</title>
 <style>
   :root {
@@ -2538,8 +2542,15 @@ function renderDraft(staleAt) {
      * line comes after as many cards as there are picks before yours,
      * less whoever has already been taken.
      */
+    /**
+     * How many of these will be gone before your turn: every pick made
+     * between now and then. Keepers are already off the list, so they
+     * are not counted again.
+     */
     while (nextPick < upcoming.length &&
-           shown >= Math.max(0, upcoming[nextPick].overall - 1 - s.taken.size)) {
+           shown >= Math.max(
+             0, upcoming[nextPick].overall - 1 - (s.pickCount ?? 0),
+           )) {
       const line = document.createElement("div");
       line.className = "pickline";
       line.innerHTML = "<span>your " + upcoming[nextPick].label + "</span>";
