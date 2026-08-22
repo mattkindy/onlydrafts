@@ -26,6 +26,10 @@ const THROWS = new Set([
   "TS2393", // duplicate function
   "TS1005", // syntax
   "TS1128",
+  "TS1308", // await outside an async function
+  "TS2304",
+  "TS2552", // cannot find name, did you mean
+  "TS7027", // unreachable
 ]);
 
 async function main(): Promise<void> {

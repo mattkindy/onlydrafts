@@ -278,6 +278,7 @@ export async function buildPreseasonWorld(
       teamId: team,
       projectedPpg: predictRookie(rookieWeights, r),
       gamesPool: gamesPools.get("rookie")!,
+      rookie: true,
     });
   }
 

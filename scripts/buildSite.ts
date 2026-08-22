@@ -15,6 +15,7 @@ import type { WeeklyExample } from "../src/features/weekly.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
+import { parseCsv } from "../src/data/csv.js";
 import {
   fetchLeagueScoring,
   fetchStarterSlots,
@@ -562,6 +563,7 @@ async function main(): Promise<void> {
         // and where each kind of room takes him, for the page to pick
         adpBy: adpBoth.get(`${normalizeName(p.name)}|${p.position}`) ?? null,
         bye: world.byeWeek.get(p.teamId) ?? null,
+        rookie: p.rookie ?? false,
         game: {
           ev: Number(p.projectedPpg.toFixed(1)),
           q1: perGame(0.25, shape?.q1),
@@ -593,6 +595,169 @@ async function main(): Promise<void> {
       };
     })
     .sort((a, b) => b.vor - a.vor);
+
+  /**
+   * Kickers and defences, which the rest of the model has nothing to
+   * say about.
+   *
+   * A kicker is scored from what he actually kicked last season, by
+   * distance, under the usual rules. A defence is ordered by the
+   * points it gave up, since sacks and takeaways would need the play
+   * by play and it is a last round pick either way. Both carry their
+   * draft position, which is what most rooms go by anyway.
+   */
+  const lastSeason = parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "raw", `stats_player_week_${season - 1}.csv`),
+    "utf8",
+  ).catch(() => ""));
+  interface Tally { [part: string]: number }
+  const kicked = new Map<string, {
+    name: string; team: string; games: number; parts: Tally;
+  }>();
+  const defended = new Map<string, { games: Set<string>; parts: Tally }>();
+  const num = (row: Record<string, string | undefined>, key: string) =>
+    Number(row[key] ?? 0) || 0;
+
+  for (const row of lastSeason) {
+    if (Number(row["week"]) > 18) {
+      continue;
+    }
+
+    const team = row["team"] ?? "";
+
+    if (row["position"] === "K") {
+      const id = row["player_id"] ?? "";
+      const his = kicked.get(id) ?? {
+        name: row["player_display_name"] ?? id, team, games: 0,
+        parts: {} as Tally,
+      };
+      his.games++;
+      his.team = team;
+      const add = (part: string, n: number) => {
+        his.parts[part] = (his.parts[part] ?? 0) + n;
+      };
+      add("fgmYds", num(row, "fg_made_distance"));
+      add("xpm", num(row, "pat_made"));
+      add("xpmiss", num(row, "pat_missed"));
+
+      for (const band of ["0_19", "20_29", "30_39", "40_49", "50_59"]) {
+        add(`fgm_${band}`, num(row, `fg_made_${band}`));
+        add(`fgmiss_${band}`, num(row, `fg_missed_${band}`));
+      }
+
+      add("fgm_60p", num(row, "fg_made_60_"));
+      add("fgmiss_60p", num(row, "fg_missed_60_"));
+      kicked.set(id, his);
+    }
+
+    if (!team) {
+      continue;
+    }
+
+    const its = defended.get(team) ??
+      { games: new Set<string>(), parts: {} as Tally };
+    its.games.add(row["week"] ?? "");
+    const add = (part: string, n: number) => {
+      its.parts[part] = (its.parts[part] ?? 0) + n;
+    };
+    add("sack", num(row, "def_sacks"));
+    add("int", num(row, "def_interceptions"));
+    add("fum_rec", num(row, "def_fumbles"));
+    add("def_td", num(row, "def_tds"));
+    add("safe", num(row, "def_safeties"));
+    add("blk_kick",
+      num(row, "def_punt_blocks") + num(row, "def_fg_blocks") +
+      num(row, "def_pat_blocks"));
+    defended.set(team, its);
+  }
+
+  const allowed = new Map<string, { points: number[]; }>();
+
+  for (const g of world.games) {
+    if (g.season !== season - 1 || g.homeScore === undefined) {
+      continue;
+    }
+
+    for (const [team, got] of [
+      [g.homeTeamId, g.awayScore ?? 0], [g.awayTeamId, g.homeScore ?? 0],
+    ] as [string, number][]) {
+      const seen = allowed.get(team) ?? { points: [] };
+      seen.points.push(got);
+      allowed.set(team, seen);
+    }
+  }
+
+  /**
+   * Sleeper drafts a defence under the club's full name, so the rows
+   * are found by the code at the end of it rather than by a name we
+   * would have to keep a table of.
+   */
+  const byTeamCode = new Map<string, unknown>();
+
+  for (const [key, at] of adpBoth) {
+    if (!key.endsWith("|DEF")) {
+      continue;
+    }
+
+    const said = key.slice(0, -4);
+
+    for (const team of allowed.keys()) {
+      if (normalizeName(team) === said) {
+        byTeamCode.set(team, at);
+      }
+    }
+  }
+
+  const others: Record<string, unknown>[] = [];
+
+  for (const [, his] of kicked) {
+    if (his.games < 6) {
+      continue;
+    }
+
+    const key = normalizeName(his.name);
+    others.push({
+      name: his.name, key, position: "K", team: his.team,
+      made: Object.fromEntries(Object.entries(his.parts)
+        .map(([part, n]) => [part, Number((n / his.games).toFixed(3))])),
+      adpBy: adpBoth.get(`${key}|K`) ?? null,
+      bye: world.byeWeek.get(his.team) ?? null,
+    });
+  }
+
+  /**
+   * How often a defence held a side to each bracket, since the ladder
+   * pays by bracket and an average would land in the wrong one.
+   */
+  const bracketOf = (points: number) =>
+    points < 1 ? "pts_allow_0" : points <= 6 ? "pts_allow_1_6"
+      : points <= 13 ? "pts_allow_7_13" : points <= 20 ? "pts_allow_14_20"
+      : points <= 27 ? "pts_allow_21_27" : points <= 34 ? "pts_allow_28_34"
+      : "pts_allow_35p";
+
+  for (const [team, its] of defended) {
+    const games = Math.max(1, its.games.size);
+    const gave = allowed.get(team)?.points ?? [];
+    const made: Record<string, number> = Object.fromEntries(
+      Object.entries(its.parts).map(([part, n]) => [part, n / games]),
+    );
+
+    for (const got of gave) {
+      made[bracketOf(got)] = (made[bracketOf(got)] ?? 0) + 1 / gave.length;
+    }
+
+    others.push({
+      name: team, key: normalizeName(team), position: "DEF", team,
+      made,
+      adpBy: byTeamCode.get(team) ?? null,
+      bye: world.byeWeek.get(team) ?? null,
+    });
+  }
+
+  console.log(
+    `and ${others.filter((o) => o["position"] === "K").length} kickers, ` +
+      `${others.filter((o) => o["position"] === "DEF").length} defences`,
+  );
 
   /**
    * The games played out, when a season of them has been kept. Absent
@@ -665,7 +830,7 @@ async function main(): Promise<void> {
 
   await writeFile(
     join(DOCS, "data", `board-${season}.json`),
-    JSON.stringify({ season, players: board }),
+    JSON.stringify({ season, players: [...board, ...others] }),
   );
   console.log(`board: ${board.length} players`);
 

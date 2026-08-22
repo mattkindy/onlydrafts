@@ -295,7 +295,12 @@
 <div id="overlay"><div class="sheet" id="sheet"></div></div>
 
 <script>
-const POSITIONS = ["QB", "RB", "WR", "TE"];
+/**
+ * The filters over the board. Flex is whoever can fill one, and
+ * rookies are the men nobody has seen play, which is a different
+ * question from what position they are.
+ */
+const POSITIONS = ["QB", "RB", "WR", "TE", "FLEX", "K", "DEF", "ROOKIES"];
 const STARTERS = { QB: 1, RB: 2, WR: 2, TE: 1 };
 let view = "leagues";
 let meta = null, board = null, boardByKey = null;
@@ -1149,6 +1154,23 @@ function pickForRound(round, teams, slot, snake) {
  * return on a keep can be read as his value over the going rate at
  * his cost.
  */
+/** whether a man belongs under the filter that is on */
+function matchesFilter(p) {
+  if (posFilter === "ALL") {
+    return true;
+  }
+
+  if (posFilter === "FLEX") {
+    return ["RB", "WR", "TE"].includes(p.position);
+  }
+
+  if (posFilter === "ROOKIES") {
+    return Boolean(p.rookie);
+  }
+
+  return p.position === posFilter;
+}
+
 function worthAtPick(pick) {
   const men = board && board.players ? board.players : [];
   const priced = men.filter((p) => p.adp).sort((a, b) => a.adp - b.adp);
@@ -1456,12 +1478,46 @@ function leaguePay() {
 }
 
 /** a game of his, scored by what this league pays */
+/**
+ * A kicker and a defence are paid by their own categories, and the
+ * board keeps those parts under the names the league already uses:
+ * a field goal by how far it went, a defence by what it did and by
+ * how often it held a side to each bracket.
+ */
+const THEIR_OWN = [
+  "fgmYds", "xpm", "xpmiss", "fgm_0_19", "fgm_20_29", "fgm_30_39",
+  "fgm_40_49", "fgm_50_59", "fgm_60p", "fgmiss_0_19", "fgmiss_20_29",
+  "fgmiss_30_39", "fgmiss_40_49", "fgmiss_50_59", "fgmiss_60p",
+  "sack", "int", "fum_rec", "def_td", "safe", "blk_kick",
+  "pts_allow_0", "pts_allow_1_6", "pts_allow_7_13", "pts_allow_14_20",
+  "pts_allow_21_27", "pts_allow_28_34", "pts_allow_35p",
+];
+
+/** what the same categories pay where a league has not said */
+const THEIR_OWN_PAY = {
+  fgmYds: 0.1, xpm: 1, xpmiss: -1,
+  fgm_0_19: 0, fgm_20_29: 0, fgm_30_39: 0, fgm_40_49: 0, fgm_50_59: 0,
+  fgm_60p: 0,
+  fgmiss_0_19: -3, fgmiss_20_29: -2, fgmiss_30_39: -2, fgmiss_40_49: -1,
+  fgmiss_50_59: -1, fgmiss_60p: 0,
+  sack: 1, int: 2, fum_rec: 2, def_td: 6, safe: 2, blk_kick: 2,
+  pts_allow_0: 10, pts_allow_1_6: 7, pts_allow_7_13: 4, pts_allow_14_20: 1,
+  pts_allow_21_27: 0, pts_allow_28_34: -1, pts_allow_35p: -4,
+};
+
 function payFor(made) {
   const pays = leaguePay();
   let points = 0;
 
   for (const [part, category] of Object.entries(PAYS)) {
     points += (made[part] ?? 0) * (pays[category] ?? STANDARD_PAY[category] ?? 0);
+  }
+
+  for (const part of THEIR_OWN) {
+    if (made[part] !== undefined) {
+      points += made[part] *
+        (pays[part] ?? THEIR_OWN_PAY[part] ?? 0);
+    }
   }
 
   return points;
@@ -2406,34 +2462,6 @@ function lineupNow() {
   return { named, flex };
 }
 
-/**
- * How much another man at this position is worth to you.
- *
- * A back you would start is worth all of what he scores. One who fills
- * a flex is worth less, since he only plays when the flex is his to
- * fill. Past that he is a bench player who covers a bye or an injury.
- * The lineup comes from the league rather than from a guess: yours
- * starts one back and two flexes, so a second back is flex value, not
- * a starter's.
- */
-function needFactor(position, count, flexUsed = 0) {
-  const { named, flex } = lineupNow();
-  const starters = named[position] ?? 0;
-
-  if (count < starters) {
-    return 1;
-  }
-
-  const canFlex = ["RB", "WR", "TE"].includes(position) ||
-    (active && (active.slots ?? []).includes("SUPER_FLEX"));
-
-  if (canFlex && flexUsed < flex) {
-    return 0.75;
-  }
-
-  return position === "RB" || position === "WR" ? 0.35 : 0.2;
-}
-
 async function pollDraft() {
   const playerMap = await sleeperPlayers();
   const marked = markedKeepers();
@@ -2525,7 +2553,7 @@ async function pollDraft() {
 function fullRankings(out, s) {
   const query = norm($("search").value ?? "");
   const men = board.players
-    .filter((p) => posFilter === "ALL" || p.position === posFilter)
+    .filter((p) => matchesFilter(p))
     .filter((p) => !query || p.key.includes(query));
 
   const h = document.createElement("h2");
@@ -2616,13 +2644,6 @@ function renderDraft(staleAt) {
   out.appendChild(h);
 
   const byAdp = $("sortby") && $("sortby").value === "adp";
-  // how many of your flex slots the men you already have would fill
-  const lineup = lineupNow();
-  const flexUsed = ["RB", "WR", "TE"].reduce(
-    (sum, where) =>
-      sum + Math.max(0, (counts[where] ?? 0) - (lineup.named[where] ?? 0)),
-    0,
-  );
   /**
    * Your turn after this one. Everything at a position can be had
    * until then, so what a man is worth taking now is the gap between
@@ -2633,11 +2654,11 @@ function renderDraft(staleAt) {
   const query = norm($("search").value ?? "");
   const scored = board.players
     .filter((p) => !s.taken.has(p.key))
-    .filter((p) => posFilter === "ALL" || p.position === posFilter)
+    .filter((p) => matchesFilter(p))
     .filter((p) => !query || p.key.includes(query))
     .map((p) => ({
       p,
-      score: p.vor * needFactor(p.position, counts[p.position] ?? 0, flexUsed),
+      score: p.vor,
       // and what waiting a turn would cost you at his position
       drop: dropOff(p),
     }))
@@ -2689,7 +2710,7 @@ function renderDraft(staleAt) {
         ? "waiting a turn costs " + drop.toFixed(0) + " at " + p.position
         : "",
       tag: shown <= 3
-        ? "fills " + p.position
+        ? "best left at " + p.position
         : lastYear ? "was on " + lastYear + " last season" : "",
       warn: shown > 3 && !!lastYear,
     }));

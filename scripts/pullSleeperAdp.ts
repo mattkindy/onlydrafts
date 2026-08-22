@@ -15,7 +15,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const WANTED = ["QB", "RB", "WR", "TE"];
+const WANTED = ["QB", "RB", "WR", "TE", "K", "DEF"];
 
 interface Row {
   player?: {
@@ -57,7 +57,11 @@ async function pull(season: number): Promise<void> {
     }
 
     out.push({
-      name: `${who.first_name} ${who.last_name ?? ""}`.trim(),
+      // a defence is drafted under the club's full name, and everything
+      // else here goes by the code on its shirt
+      name: who.position === "DEF"
+        ? who.team ?? ""
+        : `${who.first_name} ${who.last_name ?? ""}`.trim(),
       position: who.position,
       team: who.team ?? "",
       ...at,

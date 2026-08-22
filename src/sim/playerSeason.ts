@@ -26,6 +26,8 @@ export interface SeasonPlayer {
    * middle.
    */
   expectedGames?: number;
+  /** nobody has seen him play, so the board says so */
+  rookie?: boolean;
   /** historical games-played outcomes for players like him, sampled per sim */
   gamesPool: number[];
 }
