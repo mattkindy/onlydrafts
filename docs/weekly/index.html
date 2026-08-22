@@ -875,8 +875,14 @@ function seasonCard(p, opts = {}) {
       : undefined,
     note: '<span class="facts">' + [
       p.rank ? '<span class="f"><i>ours</i>' + asRound(p.rank) + "</span>" : "",
-      '<span class="f"><i>adp</i>' +
-        (p.adp ? asRound(p.adp) : "&mdash;") + "</span>",
+      '<span class="f"' +
+        (p.adp
+          ? ' title="taken at pick ' + p.adp.toFixed(1) + " on average" +
+            (p.adpHigh ? ", from " + p.adpHigh + " to " + p.adpLow : "") +
+            '. A slot can be empty or hold two men, since this is an ' +
+            'average rather than a pick"'
+          : "") +
+        '><i>adp</i>' + (p.adp ? asRound(p.adp) : "&mdash;") + "</span>",
       opts.costs
         ? '<span class="f"><i>costs</i>' + ordinal(opts.costs) + "</span>"
         : "",
