@@ -50,6 +50,23 @@ const LEARN = [SCORE_ON - 4, SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1];
 const RUNS = Number(process.env["RUNS"] ?? 20);
 const RULES = presets.standard;
 
+/**
+ * The parts of a line every scoring system is built out of. Kept as
+ * the names the stat line already uses, so applying a league's rules
+ * to them is a lookup rather than a translation.
+ */
+const PARTS = [
+  "passYds", "passTd", "interceptions", "rushYds", "rushTd",
+  "receptions", "recYds", "recTd", "fumblesLost", "twoPointConversions",
+] as const;
+
+type StatTotals = Record<typeof PARTS[number], number>;
+
+const blankTotals = (): StatTotals => ({
+  passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
+  receptions: 0, recYds: 0, recTd: 0, fumblesLost: 0, twoPointConversions: 0,
+});
+
 const middle = (values: number[]) =>
   values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
 
@@ -64,6 +81,14 @@ async function main(): Promise<void> {
 
   const total = new Map<string, number>();
   const games = new Map<string, number>();
+  /**
+   * What each man actually did, before anybody scores it.
+   *
+   * A league that pays a point a catch orders receivers differently
+   * from one that pays nothing, so the walk keeps the yards and the
+   * catches and lets whoever reads the file apply their own rules.
+   */
+  const madeOf = new Map<string, StatTotals>();
   const onlyWeek = Number(process.env["WEEK"] ?? 0);
   const endings = new Map<string, number>();
   const boxSaid = new Map<string, {
@@ -127,6 +152,7 @@ async function main(): Promise<void> {
     }
 
     const meanFor = new Map<string, number>();
+    const madeThisGame = new Map<string, StatTotals>();
 
     const saidPoints = new Map<string, number>();
 
@@ -143,6 +169,14 @@ async function main(): Promise<void> {
           playerId,
           (meanFor.get(playerId) ?? 0) + fantasyPoints(line, RULES) / RUNS,
         );
+
+        const made = madeThisGame.get(playerId) ?? blankTotals();
+
+        for (const part of PARTS) {
+          made[part] += (line[part] ?? 0) / RUNS;
+        }
+
+        madeThisGame.set(playerId, made);
 
         if (onlyWeek) {
           const box = boxSaid.get(playerId) ??
@@ -180,6 +214,16 @@ async function main(): Promise<void> {
     for (const [playerId, points] of meanFor) {
       total.set(playerId, (total.get(playerId) ?? 0) + points);
       games.set(playerId, (games.get(playerId) ?? 0) + 1);
+    }
+
+    for (const [playerId, made] of madeThisGame) {
+      const so_far = madeOf.get(playerId) ?? blankTotals();
+
+      for (const part of PARTS) {
+        so_far[part] += made[part];
+      }
+
+      madeOf.set(playerId, so_far);
     }
   }
 
@@ -345,6 +389,7 @@ async function main(): Promise<void> {
   if (process.env["SHARES"]) {
     console.log(JSON.stringify({
       total: [...total.entries()], games: [...games.entries()],
+      made: [...madeOf.entries()],
     }));
     return;
   }
@@ -352,7 +397,10 @@ async function main(): Promise<void> {
   } else {
     const merged = JSON.parse(
       await readFile(process.env["MERGED"], "utf8"),
-    ) as { total: [string, number][]; games: [string, number][] };
+    ) as {
+      total: [string, number][]; games: [string, number][];
+      made?: [string, StatTotals][];
+    };
 
     for (const [playerId, points] of merged.total) {
       total.set(playerId, points);
@@ -360,6 +408,10 @@ async function main(): Promise<void> {
 
     for (const [playerId, n] of merged.games) {
       games.set(playerId, n);
+    }
+
+    for (const [playerId, made] of merged.made ?? []) {
+      madeOf.set(playerId, made);
     }
   }
 
@@ -422,7 +474,15 @@ async function main(): Promise<void> {
   };
 
   for (const [playerId, points] of total) {
-    total.set(playerId, onlyWeek ? points : points * availOf(playerId));
+    const plays = onlyWeek ? 1 : availOf(playerId);
+    total.set(playerId, points * plays);
+    const made = madeOf.get(playerId);
+
+    if (made) {
+      for (const part of PARTS) {
+        made[part] *= plays;
+      }
+    }
   }
 
   // what they really scored, with the same rules

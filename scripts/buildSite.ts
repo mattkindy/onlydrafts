@@ -150,6 +150,28 @@ async function main(): Promise<void> {
 
   // season draft board with replacement value, for the draft view
   const world = await buildPreseasonWorld(season);
+
+  /**
+   * The regression again under each of the three common scorings.
+   *
+   * It is trained to predict fantasy points, so unlike the walk and
+   * the share model it has to know the rules before it can speak, and
+   * a page serving more than one league cannot ask it later. Nearly
+   * every league is one of these three, and a run takes seconds.
+   */
+  const underScoring = new Map<string, Map<string, number>>();
+  const askedFor = scoring();
+
+  for (const named of ["standard", "half", "ppr"] as ScoringFormat[]) {
+    setScoring(scoringRules(named));
+    const its = await buildPreseasonWorld(season);
+    underScoring.set(
+      named,
+      new Map(its.players.map((p) => [p.playerId, p.projectedPpg])),
+    );
+  }
+
+  setScoring(askedFor);
   const { projectDraftExamples } = await import("../src/features/seasonModel.js");
   const draftExamples = await projectDraftExamples(season, world.data);
   const exampleById = new Map(draftExamples.map((e) => [e.playerId, e]));
@@ -447,6 +469,13 @@ async function main(): Promise<void> {
         position: p.position,
         team: p.teamId,
         ppg: Number(p.projectedPpg.toFixed(1)),
+        // the same projection under each common scoring, so a page can
+        // order the board for whichever league is connected
+        ppgUnder: Object.fromEntries(
+          [...underScoring.entries()].map(([named, its]) => [
+            named, Number((its.get(p.playerId) ?? p.projectedPpg).toFixed(1)),
+          ]),
+        ),
         vor: Number(
           (p.projectedPpg - (replacement.get(p.position) ?? 0)).toFixed(1),
         ),
@@ -499,11 +528,16 @@ async function main(): Promise<void> {
     join(import.meta.dirname, "..", "data", "kept", `played-${season}.json`),
     "utf8",
   ).catch(() => "");
-  const walkSays = playedFile
-    ? new Map<string, number>(
-        (JSON.parse(playedFile) as { total: [string, number][] }).total,
-      )
-    : new Map<string, number>();
+  const played = playedFile
+    ? JSON.parse(playedFile) as {
+        total: [string, number][];
+        games: [string, number][];
+        made?: [string, Record<string, number>][];
+      }
+    : { total: [], games: [], made: [] };
+  const walkSays = new Map<string, number>(played.total);
+  const walkGames = new Map<string, number>(played.games);
+  const walkMade = new Map<string, Record<string, number>>(played.made ?? []);
   const idOf = new Map(world.players.map((p) => [normalizeName(p.name), p.playerId]));
 
   const keyOf = (p: (typeof board)[number]) => p.key;
@@ -518,6 +552,25 @@ async function main(): Promise<void> {
 
   if (walkSays.size) {
     console.log(`the played games speak for ${walkPlace.size} of the board`);
+  }
+
+  /**
+   * What the walk says he does in a game, before anybody scores it.
+   *
+   * A league paying a point a catch orders receivers differently from
+   * one paying nothing, so the parts travel and the page applies its
+   * own rules to them.
+   */
+  for (const p of board) {
+    const id = idOf.get(p.key);
+    const made = id === undefined ? undefined : walkMade.get(id);
+    const played = id === undefined ? 0 : walkGames.get(id) ?? 0;
+
+    if (made && played > 0) {
+      (p as unknown as { made: Record<string, number> }).made =
+        Object.fromEntries(Object.entries(made)
+          .map(([part, n]) => [part, Number((n / played).toFixed(2))]));
+    }
   }
 
   for (const p of board) {

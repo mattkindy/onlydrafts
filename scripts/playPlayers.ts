@@ -42,10 +42,12 @@ async function oneSeason(season: number): Promise<void> {
 
   const total = new Map<string, number>();
   const games = new Map<string, number>();
+  const made = new Map<string, Record<string, number>>();
 
   for (const line of printed) {
     const from = JSON.parse(line) as {
       total: [string, number][]; games: [string, number][];
+      made: [string, Record<string, number>][];
     };
 
     for (const [playerId, points] of from.total) {
@@ -55,6 +57,16 @@ async function oneSeason(season: number): Promise<void> {
     for (const [playerId, n] of from.games) {
       games.set(playerId, (games.get(playerId) ?? 0) + n);
     }
+
+    for (const [playerId, his] of from.made ?? []) {
+      const already = made.get(playerId) ?? {};
+
+      for (const [part, n] of Object.entries(his)) {
+        already[part] = (already[part] ?? 0) + n;
+      }
+
+      made.set(playerId, already);
+    }
   }
 
   const at = join(
@@ -62,6 +74,7 @@ async function oneSeason(season: number): Promise<void> {
   );
   await writeFile(at, JSON.stringify({
     total: [...total.entries()], games: [...games.entries()],
+    made: [...made.entries()],
   }));
 
   // the scoring pass, which needs no simulating
