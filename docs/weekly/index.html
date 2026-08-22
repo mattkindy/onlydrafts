@@ -72,7 +72,7 @@
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
     gap: .7rem; align-items: start; }
   .cards.wide { grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
-    gap: .9rem; }
+    gap: 1.1rem; }
   .card { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; padding: .75rem .95rem; }
   .card .top { position: relative; }
@@ -1031,6 +1031,12 @@ function saveAdpAt(key, pick) {
  * draft position at all, so a late alternative is a flier.
  */
 const CLOSE_ENOUGH = 1;
+/**
+ * Near enough to level over a season, in points. Half a point a game
+ * across the sixteen a fantasy season runs, which is inside what any
+ * projection can tell apart.
+ */
+const CLOSE_SEASON = 8;
 
 /**
  * The overall pick a round costs you.
@@ -1142,7 +1148,15 @@ function marginAt(player, round, teams, taken) {
   const pick = pickForRound(
     round, teams, mySlot(), !active || active.snake,
   );
-  const instead = bestLeftAt(pick, taken, player.key, player.position, false);
+  /**
+   * The best man there, whatever he plays.
+   *
+   * Spending a second round pick on a quarterback costs you a running
+   * back, not another quarterback, so comparing him with the next
+   * quarterback said every one was worth a second. Value over the last
+   * starter at each position is what makes the two comparable.
+   */
+  const instead = bestLeftAt(pick, taken, player.key, null, false);
   /**
    * His good week measured against the man who would start at his
    * position anyway, the same baseline the expectation uses. Comparing
@@ -1155,7 +1169,7 @@ function marginAt(player, round, teams, taken) {
     return high - (p.ppg - (p.perGameVor ?? 0));
   };
 
-  const ourInstead = bestLeftAt(pick, taken, player.key, player.position, true);
+  const ourInstead = bestLeftAt(pick, taken, player.key, null, true);
 
   return {
     instead,
@@ -1180,7 +1194,7 @@ function marginAt(player, round, teams, taken) {
 function worthUpTo(player, teams, taken) {
   for (let round = 1; round <= 15; round++) {
     const at = marginAt(player, round, teams, taken);
-    if (at.margin > -CLOSE_ENOUGH) return { round, ...at };
+    if (at.margin > -CLOSE_SEASON) return { round, ...at };
   }
 
   return { round: 16, instead: null, margin: 0, thin: true };
@@ -1613,15 +1627,21 @@ function betterLater(p, costPick, taken) {
       const better = (o.vor ?? 0) - (p.vor ?? 0);
 
       // a season, so the threshold is a season of being better
-      return surely && better > CLOSE_ENOUGH * 10;
+      return surely && better > CLOSE_SEASON;
     })
     .sort((a, b) => (b.perGameVor ?? 0) - (a.perGameVor ?? 0))
     .slice(0, 3);
 }
 
 /** the keep as figures: what he is worth, what the pick buys, the balance */
-function keeperFigures(p, cost, costPick, teams) {
-  const rate = worthAtPick(costPick);
+function keeperFigures(p, cost, costPick, teams, taken) {
+  /**
+   * What the pick actually buys: the best man our board says is still
+   * on it, since that is who you would take. The middle of the players
+   * going near a pick is what you get by accident, not by choosing.
+   */
+  const best = bestLeftAt(costPick, taken, p.key, null, false);
+  const rate = best ? best.vor : worthAtPick(costPick);
   const roi = p.vor - rate;
   const wait = redraftWorth(p, teams);
   const net = roi - wait.gain;
@@ -1636,7 +1656,9 @@ function keeperFigures(p, cost, costPick, teams) {
       "points over a season above the last man this league starts at his " +
       "position, counting the games he is expected to miss") +
     cell(asRound(costPick) + " buys", rate, "",
-      "what a typical player taken around that pick is worth") +
+      best
+        ? "the best man our board says is still there, " + best.name
+        : "what a player taken around that pick is worth") +
     cell("keeping gains", roi, roi >= 0 ? "up" : "down",
       "his value less what the pick would have bought") +
     (wait.atPick && wait.chance > 0.1 && wait.chance < 0.98
@@ -1903,8 +1925,8 @@ async function renderKeepers() {
     const beaten = costPick ? betterLater(p, costPick, taken) : [];
     const call = !at ? null
       : beaten.length ? { word: "let go", how: "down" }
-      : at.margin > CLOSE_ENOUGH ? { word: "keep", how: "up" }
-      : at.margin < -CLOSE_ENOUGH ? { word: "let go", how: "down" }
+      : at.margin > CLOSE_SEASON ? { word: "keep", how: "up" }
+      : at.margin < -CLOSE_SEASON ? { word: "let go", how: "down" }
       : { word: "close", how: "even" };
 
     const card = seasonCard(p, {
@@ -1922,7 +1944,7 @@ async function renderKeepers() {
     card.appendChild(costRow(p, cost, listed, atMarket));
 
     if (costPick) {
-      card.appendChild(keeperFigures(p, cost, costPick, teams));
+      card.appendChild(keeperFigures(p, cost, costPick, teams, taken));
 
       if (beaten.length) {
         const worse = document.createElement("div");
