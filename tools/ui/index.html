@@ -111,6 +111,12 @@
     background: color-mix(in srgb, var(--mark) 12%, transparent);
     border-left: 2px solid var(--mark); padding: .35rem .5rem;
     border-radius: 0 4px 4px 0; }
+  .madeof { flex-basis: 100%; font-size: .78rem; color: var(--muted);
+    margin-top: .15rem; }
+  .madeof i { font-style: normal; font-size: .62rem; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint);
+    margin-right: .35rem; }
+  .madeof b { color: var(--ink); font-weight: 700; }
   .instead { margin-top: .6rem; }
   .alsoat { margin-top: .5rem; }
   .instead table.ranks th { position: static; }
@@ -1639,6 +1645,24 @@ function rescoreBoard() {
   board.players.sort((a, b) => a.blend - b.blend);
   // where we have him, which is what the cards compare against adp
   board.players.forEach((p, i) => { p.rank = i + 1; });
+
+  /**
+   * What our own order says he is worth.
+   *
+   * The board is ordered by four opinions together while value over
+   * replacement comes from the projection alone, so the two could say
+   * different things about the same man: we had Jaylen Warren
+   * thirty first and then priced him below what a third round pick
+   * buys. Reading the value curve in board order settles it, and every
+   * number on a card then agrees with where the board has him.
+   */
+  const curve = board.players
+    .map((p) => p.vor ?? 0)
+    .sort((a, b) => b - a);
+  board.players.forEach((p, i) => {
+    p.modelVorOwn = p.vor;
+    p.vor = Number((curve[i] ?? 0).toFixed(1));
+  });
   boardByKey = new Map(board.players.map((p) => [p.key, p]));
 }
 
@@ -1692,7 +1716,7 @@ function betterLater(p, costPick, taken) {
  * that everyone better is already gone, which is exactly the man you
  * would end up taking.
  */
-function expectedBestAt(pick, taken, exclude) {
+function expectedBestAt(pick, taken, exclude, showing) {
   if (!board || !board.players) {
     return 0;
   }
@@ -1707,7 +1731,15 @@ function expectedBestAt(pick, taken, exclude) {
 
   for (const o of candidates) {
     const there = stillThereAt(o, pick);
-    worth += (o.vor ?? 0) * there * stillGone;
+    // the chance he is the one you end up taking: he lasts, and
+    // everyone better than him has gone
+    const takesHim = there * stillGone;
+    worth += (o.vor ?? 0) * takesHim;
+
+    if (showing && takesHim > 0.02) {
+      showing.push({ who: o, odds: takesHim });
+    }
+
     stillGone *= 1 - there;
 
     if (stillGone < 0.01) {
@@ -1731,11 +1763,15 @@ function keeperSums(p, costPick, teams, taken) {
    * against a player nobody would choose.
    */
   const best = bestLeftAt(costPick, taken, p.key, null, false);
-  const rate = expectedBestAt(costPick, taken, p.key);
+  const makesItUp = [];
+  const rate = expectedBestAt(costPick, taken, p.key, makesItUp);
   const roi = p.vor - rate;
   const wait = redraftWorth(p, teams, taken);
 
-  return { best, rate, roi, wait, net: roi - wait.gain };
+  return {
+    best, rate, roi, wait, net: roi - wait.gain,
+    makesItUp: makesItUp.sort((a, b) => b.odds - a.odds).slice(0, 4),
+  };
 }
 
 /** the keep as figures: what he is worth, what the pick buys, the balance */
@@ -1745,7 +1781,9 @@ function keeperFigures(p, cost, costPick, teams, taken) {
    * on it, since that is who you would take. The middle of the players
    * going near a pick is what you get by accident, not by choosing.
    */
-  const { best, rate, roi, wait, net } = keeperSums(p, costPick, teams, taken);
+  const {
+    best, rate, roi, wait, net, makesItUp,
+  } = keeperSums(p, costPick, teams, taken);
   const box = document.createElement("div");
   box.className = "figures";
   const cell = (label, value, how, tip) =>
@@ -1754,8 +1792,8 @@ function keeperFigures(p, cost, costPick, teams, taken) {
     (value > 0 && how ? "+" : "") + value.toFixed(0) + "</span>";
   box.innerHTML =
     cell("he is worth", p.vor, "",
-      "points over a season above the last man this league starts at his " +
-      "position, counting the games he is expected to miss") +
+      "what his place on our board is worth over a season, above the last " +
+      "man this league starts at his position") +
     cell(asRound(costPick) + " buys", rate, "",
       "what the best man still on the board is worth there, with every " +
       "candidate weighed by how often he lasts that long" +
@@ -1773,6 +1811,15 @@ function keeperFigures(p, cost, costPick, teams, taken) {
     cell("worth keeping", net, net >= 0 ? "up" : "down",
       "what keeping gains, less what waiting for him would have gained. " +
       "Above zero, keep him");
+
+  if (makesItUp.length) {
+    const who = document.createElement("div");
+    who.className = "madeof";
+    who.innerHTML = "<i>" + asRound(costPick) + " usually lands on</i> " +
+      makesItUp.map((o) =>
+        o.who.name + " <b>" + Math.round(100 * o.odds) + "%</b>").join(", ");
+    box.appendChild(who);
+  }
 
   return box;
 }
@@ -1800,10 +1847,9 @@ function instead(p, costPick, taken) {
       "<thead><tr><th>" + title + "</th><th>adp</th>" +
       '<th title="how often he is still on the board at this pick">there</th>' +
       '<th title="fantasy points in a typical game">pts/g</th>' +
-      '<th title="points over a season above the last ' + p.position +
-        " this league starts, its " + p.position + startedHere()[p.position] +
-        ", counting the games he is expected to miss. Positions only " +
-        'compare this way">vor</th>' +
+      '<th title="what a man in his place on our board is worth over a ' +
+        "season, above the last one this league starts at his position. " +
+        'Positions only compare this way">vor</th>' +
       '<th title="his value less the keeper\'s, over a season">vs him</th>' +
       "</tr></thead><tbody>" +
       men.map((o) => {
@@ -2007,10 +2053,17 @@ async function renderKeepers() {
         )
       : null;
     const holdsIt = !cost || !active.myPicks || active.myPicks.includes(cost);
-    const beaten = costPick ? betterLater(p, costPick, taken) : [];
+    const beaten = costPick ? betterLater(p, costPick, mineToo) : [];
     // the chip says what the net says, so the card cannot argue with
     // itself the way it did when the two were worked out apart
-    const sums = costPick ? keeperSums(p, costPick, teams, taken) : null;
+    /**
+     * Your own keepers are off the board as well. Weighing Henderson
+     * against a pick that might buy Brock Purdy is wrong when Purdy is
+     * one of the men you are keeping.
+     */
+    const mineToo = new Set([...taken, ...keeping]);
+    mineToo.delete(p.key);
+    const sums = costPick ? keeperSums(p, costPick, teams, mineToo) : null;
     const call = !sums ? null
       : sums.net > CLOSE_SEASON ? { word: "keep", how: "up" }
       : sums.net < -CLOSE_SEASON ? { word: "let go", how: "down" }
@@ -2031,7 +2084,7 @@ async function renderKeepers() {
     card.appendChild(costRow(p, cost, listed, atMarket));
 
     if (costPick) {
-      card.appendChild(keeperFigures(p, cost, costPick, teams, taken));
+      card.appendChild(keeperFigures(p, cost, costPick, teams, mineToo));
 
       if (beaten.length) {
         const worse = document.createElement("div");
@@ -2047,7 +2100,7 @@ async function renderKeepers() {
         card.appendChild(worse);
       }
 
-      card.appendChild(instead(p, costPick, taken));
+      card.appendChild(instead(p, costPick, mineToo));
     }
     grid.appendChild(card);
   }
