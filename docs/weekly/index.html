@@ -813,6 +813,13 @@ function bestLeftAt(pick, taken, exclude, position, byRanking) {
  * third is worth nothing at all.
  */
 function costOf(entry, player, teams = 12) {
+  // what you typed beats the sheet, which is often out of date
+  const yours = keeperCosts()[entry.key];
+
+  if (yours) {
+    return yours;
+  }
+
   if (!entry.marketPriced) {
     return entry.cost;
   }
@@ -1088,14 +1095,19 @@ function likelyKept(perTeam, eligible) {
       const spent = new Set();
 
       for (const entry of listed
-        .map((e) => ({ ...e, player: boardLookup(e.key) }))
+        .map((e) => ({
+          ...e,
+          player: boardLookup(e.key),
+          // a price you corrected counts for their team too
+          round: keeperCosts()[e.key] ?? e.cost,
+        }))
         .filter((e) => e.player)
         .sort((a, b) => b.player.vor - a.player.vor)) {
         if (spent.size >= canAfford) break;
-        if (spent.has(entry.cost)) continue;
-        if ((roster.picks ?? []).length && !roster.picks.includes(entry.cost)) continue;
+        if (spent.has(entry.round)) continue;
+        if ((roster.picks ?? []).length && !roster.picks.includes(entry.round)) continue;
 
-        spent.add(entry.cost);
+        spent.add(entry.round);
         gone.add(entry.key);
       }
 
@@ -1293,7 +1305,14 @@ async function renderKeepers() {
 
     if (listed) {
       if (!atMarket.has(p.key)) {
-        row.innerHTML = "costs your <b>" + ordinal(cost) + "</b> round pick";
+        const yours = keeperCosts()[p.key];
+        row.innerHTML = "costs your <input type=\"number\" min=\"1\" max=\"15\" " +
+          "value=\"" + (cost || "") + "\" placeholder=\"?\"> round pick" +
+          (yours ? " <span class=\"tag hint\">yours, not the sheet's</span>" : "");
+        row.querySelector("input").addEventListener("change", (e) => {
+          saveKeeperCost(p.key, Number(e.target.value));
+          renderKeepers();
+        });
       } else {
         // his price is wherever the room takes him, so the pick is the
         // number to correct, not the round
