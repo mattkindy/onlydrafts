@@ -1226,10 +1226,22 @@ function marginAt(player, round, teams, taken) {
 }
 
 /** the earliest round he is not clearly worse than the alternative */
+/**
+ * The earliest round where keeping him still beats using the pick.
+ *
+ * Measured the same way the card is: what he is worth over a season
+ * against what that pick is likely to buy. It used to compare a per
+ * game margin with a season's threshold, which nothing could fail, so
+ * every man came out worth a first or a second.
+ */
 function worthUpTo(player, teams, taken) {
   for (let round = 1; round <= 15; round++) {
-    const at = marginAt(player, round, teams, taken);
-    if (at.margin > -CLOSE_SEASON) return { round, ...at };
+    const pick = pickForRound(round, teams, mySlot(), !active || active.snake);
+    const margin = (player.vor ?? 0) - expectedBestAt(pick, taken, player.key);
+
+    if (margin > -CLOSE_SEASON) {
+      return { round, margin, instead: bestLeftAt(pick, taken, player.key, null, false) };
+    }
   }
 
   return { round: 16, instead: null, margin: 0, thin: true };
