@@ -25,6 +25,7 @@ import {
 import { setScoring } from "../src/scoring/active.js";
 import {
   scoringRules,
+  fantasyPoints,
   type ScoringFormat,
 } from "../src/scoring/fantasyPoints.js";
 import { buildPreseasonWorld } from "../src/features/preseason.js";
@@ -35,6 +36,10 @@ import { fitRoles } from "../src/features/fitRoles.js";
 import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
 import { normalDraw } from "../src/sim/normal.js";
 import { scoring } from "../src/scoring/active.js";
+import { loadTendencies } from "../src/data/tendencies.js";
+import {
+  preseasonWeekly, anchorToSeason, type WeeklyProjection,
+} from "../src/features/preseasonWeekly.js";
 import {
   experienceBefore,
   pastShares,
@@ -429,6 +434,53 @@ async function main(): Promise<void> {
     console.warn("no simulated shapes, falling back to the pooled bands: " + error);
   }
 
+  /**
+   * Each man's weeks from the weekly model rather than from his
+   * season average times a blunted opponent. The two order a week
+   * about equally well, but this one is the model that was measured,
+   * and it says what it thinks of a matchup rather than what a
+   * constant chosen by hand says.
+   */
+  const teamScored = new Map<string, { points: number; weeks: Set<number> }>();
+
+  for (const w of await loadPlayerStats(season - 1)) {
+    const entry = teamScored.get(w.teamId) ?? { points: 0, weeks: new Set<number>() };
+    entry.points += fantasyPoints(w.statLine, scoring());
+    entry.weeks.add(w.week);
+    teamScored.set(w.teamId, entry);
+  }
+
+  const passRate = new Map<string, number>();
+
+  for (const [key, tendency] of await loadTendencies()) {
+    const [team, at] = key.split("|");
+
+    if (Number(at) === season - 1) {
+      passRate.set(team!, tendency.neutralPassRate);
+    }
+  }
+
+  const weeklyByPlayer = new Map<string, WeeklyProjection[]>();
+  const saidWeekly = preseasonWeekly({
+    season, games: world.games, weeklyWeights: world.weeklyWeights,
+    projectedPpg: new Map(world.players.map((p) => [p.playerId, p.projectedPpg])),
+    exampleById,
+    positionById: new Map(world.players.map((p) => [p.playerId, p.position])),
+    teamById: new Map(world.players.map((p) => [p.playerId, p.teamId])),
+    oppAdjust: world.oppAdjust, oppIndex: world.oppIndex,
+    teamScoring: new Map([...teamScored].map(([team, e]) =>
+      [team, e.points / Math.max(1, e.weeks.size)])),
+    passRate,
+  });
+
+  for (const p of world.players) {
+    const his = saidWeekly.get(p.playerId);
+
+    if (his) {
+      weeklyByPlayer.set(p.playerId, anchorToSeason(his, p.projectedPpg));
+    }
+  }
+
   console.log("simulating seasons for the board...");
   const sims = simulatePlayerSeasons(
     world.players,
@@ -505,12 +557,11 @@ async function main(): Promise<void> {
           : null,
         plus: f.plus,
         minus: f.minus,
-        weeks: (weekOpp.get(p.teamId) ?? [])
-          .sort((a, b) => a.week - b.week)
-          .map((g) => ({
-            w: g.week,
-            opp: (g.home ? "v " : "@ ") + g.opponent,
-            pts: Number((p.projectedPpg * world.oppAdjust(p.position, g.opponent)).toFixed(1)),
+        weeks: (weeklyByPlayer.get(p.playerId) ?? [])
+          .map((w) => ({
+            w: w.week,
+            opp: (w.home ? "v " : "@ ") + w.opponent,
+            pts: Number(w.points.toFixed(1)),
           })),
       };
     })

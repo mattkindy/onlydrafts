@@ -57,7 +57,8 @@ async function main(): Promise<void> {
   const weekly = preseasonWeekly({
     season, games: world.games, weeklyWeights: world.weeklyWeights,
     projectedPpg, exampleById, positionById, teamById,
-    oppAdjust: world.oppAdjust, teamScoring, passRate,
+    oppAdjust: world.oppAdjust, oppIndex: world.oppIndex,
+    teamScoring, passRate,
   });
 
   // what actually happened

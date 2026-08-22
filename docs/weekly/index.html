@@ -75,9 +75,8 @@
     border-radius: 12px; padding: .75rem .95rem; cursor: pointer; }
   .card.plain { cursor: default; }
   .card.mine { border-color: var(--go); }
-  .card.kept { border-color: var(--go);
-    background: color-mix(in srgb, var(--go) 9%, var(--panel));
-    box-shadow: inset 4px 0 0 var(--go); }
+  /* a keeper is a ticket you are holding, so its edge is perforated */
+  .card.kept { border-color: var(--go); border-left-style: dashed; }
   .card.gone { opacity: .45; }
   .badge { font-size: .6rem; font-weight: 800; letter-spacing: .08em;
     text-transform: uppercase; color: #0C1117; background: var(--go);
@@ -93,11 +92,19 @@
     color: var(--faint); letter-spacing: .06em; text-transform: uppercase; }
   .card .val { color: var(--muted); font-weight: 700; white-space: nowrap; }
   .card .note { color: var(--faint); font-size: .72rem; margin-top: .35rem; }
+  .facts { display: flex; flex-wrap: wrap; gap: .1rem .9rem; align-items: baseline;
+    font-variant-numeric: tabular-nums; }
+  .facts .f { color: var(--ink); font-size: .8rem; font-weight: 600; }
+  .facts .f i { color: var(--faint); font-style: normal; font-size: .62rem;
+    font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    margin-right: .3rem; }
+  .chip { font-size: .68rem; font-weight: 700; padding: .05rem .35rem;
+    border-radius: 3px; letter-spacing: .02em; }
+  .chip.up { color: var(--go); background: color-mix(in srgb, var(--go) 14%, transparent); }
+  .chip.down { color: var(--mark); background: color-mix(in srgb, var(--mark) 14%, transparent); }
   .rangenum { display: flex; justify-content: space-between; align-items: baseline;
-    font-size: .78rem; font-weight: 700; color: var(--ink);
-    font-variant-numeric: tabular-nums; margin-top: .3rem; }
-  .rangenum span:nth-child(2) { color: var(--faint); font-size: .62rem;
-    font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+    font-size: .72rem; font-weight: 600; color: var(--faint);
+    font-variant-numeric: tabular-nums; margin-top: .2rem; }
   .card .sub { color: var(--faint); font-size: .74rem;
     display: flex; justify-content: space-between; margin-top: .1rem; gap: .5rem; }
   .range { position: relative; height: 14px; background: var(--chip);
@@ -337,13 +344,13 @@ function setView(next) {
       ""],
     roster: ["My roster",
       "Everyone Sleeper currently has on your team, with this season's projection for each.",
-      "Before a keeper draft this is last season's roster until the league clears it. Each card shows points in a typical game and the middle half of his weeks. Tap a player for the season distribution and to mark a keeper."],
+      "Before a keeper draft this is last season's roster until the league clears it. Tap a player for the season distribution and to mark a keeper."],
     keepers: ["Keeper value",
       "The most a player is worth keeping for. Paying a round for him means giving up that pick, so he is worth it only while he beats whoever you could take with it.",
       "Type what your league charges and each card says whether to keep him. A player worth a 5th and costing a 9th is a bargain; one costing a 2nd is not."],
     draft: ["Draft help",
       "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
-      "The big number is value over a replacement starter, weighted by the slots your draft roster still needs. Underneath is what he scores in a typical game and the middle half of his weeks. Players stay on the board until they are actually kept or drafted."],
+      "The big number is value over a replacement starter, weighted by the slots your draft roster still needs. Players stay on the board until they are actually kept or drafted."],
     start: ["Who to start",
       "Your roster for one week, ranked by projected points, so you can set a lineup.",
       "The bar shows the range from a bad week to a great one; the gold mark is the projection. Tap a card for the week-by-week season and what is helping or hurting."],
@@ -666,7 +673,7 @@ function card(p, opts) {
       '<span class="mark" style="left:' + span(r.mid) + '%"></span></div>' +
       '<div class="rangenum"><span>' +
       (r.tailLow !== undefined ? r.tailLow.toFixed(1) : r.low.toFixed(1)) +
-      "</span><span>" + r.label + "</span><span>" +
+      "</span><span>" +
       (r.tailHigh !== undefined ? r.tailHigh.toFixed(1) : r.high.toFixed(1)) +
       "</span></div>"
     : "";
@@ -703,7 +710,7 @@ function weekCard(p, opts = {}) {
     ...opts,
     value: p.predicted,
     unit: "this week",
-    range: { low: p.floor, mid: p.predicted, high: p.ceiling, label: "floor to ceiling" },
+    range: { low: p.floor, mid: p.predicted, high: p.ceiling },
     aside: opts.aside ?? { label: "at best", value: p.ceiling },
     note: p.snaps + "% of snaps recently",
   });
@@ -711,30 +718,25 @@ function weekCard(p, opts = {}) {
 
 /** the season: what he scores in a typical game, and how those vary */
 /**
- * How far apart we are from the room, when it is far enough to act on.
+ * How many rounds of value the room is handing you, or charging you.
  *
  * Adp is an overall pick and our rank is a place in the same order, so
- * the two subtract. A round either way is noise in mock drafts, so
- * only wider gaps are called out.
+ * the two subtract. Under a round either way is noise in mock drafts.
  */
-function gapNote(p) {
+function gapChip(p) {
   if (!p.rank || !p.adp) {
     return "";
   }
 
   const teams = (active && active.size) || 12;
-  const gap = p.adp - p.rank;
+  const rounds = Math.round((p.adp - p.rank) / teams);
 
-  if (Math.abs(gap) < teams) {
+  if (rounds === 0) {
     return "";
   }
 
-  const rounds = Math.round(Math.abs(gap) / teams);
-  const many = rounds === 1 ? "a round" : rounds + " rounds";
-
-  return gap > 0
-    ? "<b class=\"up\">" + many + " cheaper than we price him</b>"
-    : "<b class=\"down\">" + many + " dearer than we price him</b>";
+  return '<span class="chip ' + (rounds > 0 ? "up" : "down") + '">' +
+    (rounds > 0 ? "+" : "") + rounds + " rd</span>";
 }
 
 function seasonCard(p, opts = {}) {
@@ -747,20 +749,15 @@ function seasonCard(p, opts = {}) {
       ? {
           low: g.q1, mid: g.ev, high: g.q3,
           tailLow: g.low, tailHigh: g.high,
-          label: "middle half, and a bad to a good week",
         }
       : undefined,
-    note: [
-      p.rank ? "<b>we have him " + ordinal(p.rank) + "</b>" : "",
-      p.adp
-        ? "the room takes him " + asRound(p.adp) +
-          (p.adpHigh
-            ? " (" + asRound(p.adpHigh) + " to " + asRound(p.adpLow) + ")"
-            : "")
-        : "the room leaves him undrafted",
-      gapNote(p),
-      p.bye ? "bye " + p.bye : "",
-    ].filter(Boolean).join(" &middot; "),
+    note: '<span class="facts">' + [
+      p.rank ? '<span class="f"><i>ours</i>' + p.rank + "</span>" : "",
+      '<span class="f"><i>adp</i>' +
+        (p.adp ? asRound(p.adp) : "&mdash;") + "</span>",
+      gapChip(p),
+      p.bye ? '<span class="f"><i>bye</i>' + p.bye + "</span>" : "",
+    ].filter(Boolean).join("") + "</span>",
   });
 }
 

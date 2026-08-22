@@ -39,6 +39,8 @@ export interface PreseasonWorld {
   residuals: ResidualModel;
   seasonNoise: SeasonNoise;
   oppAdjust: (position: string, opponent: string) => number;
+  /** the same before it is pulled back toward level, which one week wants */
+  oppIndex: (position: string, opponent: string) => number;
   catcherLoading: Map<string, number>;
   /** bye week per NFL team, for roster construction logic */
   byeWeek: Map<string, number>;
@@ -171,7 +173,11 @@ export async function buildPreseasonWorld(
     leaguePerTeamGame.set(position, points / (32 * 17));
   }
 
-  const oppAdjust = (position: string, opponent: string): number => {
+  /**
+   * What a defence gave up at this position against what everybody
+   * gave up, as a ratio. Around 0.7 for the best and 1.3 for the worst.
+   */
+  const oppIndex = (position: string, opponent: string): number => {
     const entry = allowed.get(`${opponent}|${position}`);
     const mean = leaguePerTeamGame.get(position);
 
@@ -179,9 +185,18 @@ export async function buildPreseasonWorld(
       return 1;
     }
 
-    const index = entry.points / entry.games.size / mean;
-    return 1 + 0.12 * (index - 1);
+    return entry.points / entry.games.size / mean;
   };
+
+  /**
+   * The same, pulled most of the way back toward level.
+   *
+   * Last season's numbers overstate how much of a defence carries
+   * into the next one, and this scales a whole season's projection,
+   * where a schedule of hard weeks and easy ones mostly cancels.
+   */
+  const oppAdjust = (position: string, opponent: string): number =>
+    1 + 0.12 * (oppIndex(position, opponent) - 1);
 
   const roster = await loadWeeklyRosters(season);
   const teamOf = new Map<string, string>();
@@ -269,6 +284,7 @@ export async function buildPreseasonWorld(
     residuals: seasonNoise.within,
     seasonNoise,
     oppAdjust,
+    oppIndex,
     catcherLoading,
     byeWeek,
     weeklyWeights,

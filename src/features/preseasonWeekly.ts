@@ -33,6 +33,15 @@ export interface PreseasonWeeklyInput {
   teamById: Map<string, string>;
   /** how soft each defence was against a position, 1 is average */
   oppAdjust: (position: string, opponent: string) => number;
+  /**
+   * The same before it is pulled back toward level.
+   *
+   * The weekly model was trained on defences as they actually were,
+   * so handing it the blunted number made every matchup look alike
+   * and a receiver's seventeen weeks came out within half a point of
+   * each other.
+   */
+  oppIndex: (position: string, opponent: string) => number;
   /** points a team scored per game last season, for the implied total */
   teamScoring: Map<string, number>;
   /** each team's neutral pass rate last season */
@@ -128,7 +137,7 @@ export function preseasonWeekly(
         recYdsRecent: 0,
         rushYdsRecent: 0,
         snapRecent: e?.snapPct ?? 0,
-        oppIndex: input.oppAdjust(position, slot.opponent),
+        oppIndex: input.oppIndex(position, slot.opponent),
         home: slot.home,
         impliedTotal: impliedTotal(team, slot.opponent, input.teamScoring, input.oppAdjust),
         passTendency: input.passRate.get(team) ?? NEUTRAL_PASS_RATE,
