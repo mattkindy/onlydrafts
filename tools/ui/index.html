@@ -933,8 +933,15 @@ function stillThereAt(o, pick) {
     return 1;
   }
 
+  /**
+   * Past the latest anyone has taken him he is gone, near enough. The
+   * old floor of one in twenty looked harmless on a single player and
+   * was not: forty men who are certainly gone, each keeping a sliver
+   * of a chance, added thirty points to what a third round pick
+   * looked like it would buy.
+   */
   if (pick >= late) {
-    return 0.05;
+    return 0.02;
   }
 
   return 1 - (pick - early) / Math.max(1, late - early);
@@ -1694,7 +1701,7 @@ function expectedBestAt(pick, taken, exclude) {
 
   const candidates = board.players
     .filter((o) => o.key !== exclude && !taken.has(o.key) && o.adp &&
-      o.adp >= pick - 24)
+      o.adp >= pick - 12)
     .sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0))
     .slice(0, 40);
   let stillGone = 1;
