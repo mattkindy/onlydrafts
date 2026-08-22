@@ -866,17 +866,29 @@ function ordinal(n) {
  * before the pick, since draft position is an average and the men
  * who go a touch earlier are sometimes still sitting there.
  */
-function optionsAt(pick, taken, exclude, howMany = 4) {
+function optionsAt(pick, taken, exclude, position, howMany = 4) {
   if (!board || !board.players) {
     return [];
   }
 
   const from = pick - 6;
   const to = pick + 24;
+  const near = (p) =>
+    p.key !== exclude && !taken.has(p.key) && p.adp &&
+    p.adp >= from && p.adp <= to && (!position || p.position === position);
+  const found = board.players.filter(near);
 
-  return board.players
-    .filter((p) => p.key !== exclude && !taken.has(p.key) &&
-      p.adp && p.adp >= from && p.adp <= to)
+  /**
+   * The window widens rather than coming back empty, since late in a
+   * draft a position can have nobody at all inside twenty picks.
+   */
+  const wider = found.length >= 2
+    ? found
+    : board.players.filter((p) =>
+        p.key !== exclude && !taken.has(p.key) && p.adp && p.adp >= pick - 12 &&
+        (!position || p.position === position));
+
+  return wider
     .sort((a, b) => (b.perGameVor ?? 0) - (a.perGameVor ?? 0))
     .slice(0, howMany);
 }
@@ -1537,17 +1549,19 @@ function keeperFigures(p, cost, costPick, teams) {
 
 /** the men who could be there instead, and how they compare a game */
 function instead(p, costPick, taken) {
-  const others = optionsAt(costPick, taken, p.key, 4);
+  const others = optionsAt(costPick, taken, p.key, p.position, 4);
   const box = document.createElement("div");
   box.className = "instead";
 
   if (!others.length) {
-    box.innerHTML = '<div class="hint">nobody the room takes near that pick</div>';
+    box.innerHTML = '<div class="hint">no other ' + p.position +
+      " the room takes near that pick</div>";
     return box;
   }
 
   box.innerHTML = '<div class="scroll"><table class="ranks">' +
-    "<thead><tr><th>instead, near pick " + costPick + "</th><th>adp</th>" +
+    "<thead><tr><th>other " + p.position + "s near pick " + costPick +
+      "</th><th>adp</th>" +
     "<th>a game</th><th>vs him</th></tr></thead><tbody>" +
     others.map((o) => {
       const gap = (o.perGameVor ?? 0) - (p.perGameVor ?? 0);
