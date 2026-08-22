@@ -18,6 +18,18 @@ import type { FourthDown } from "../features/fitFourthDown.js";
 
 export interface EndingRules {
   kickSucceeds: (yardline: number) => number;
+  /**
+   * What this ground does to a kick, near one. A roof helps a long
+   * one and a cold afternoon costs one, and neither touches a chip
+   * shot, so it comes in per kick rather than per season.
+   */
+  kickHere?: (yardline: number) => number;
+  /**
+   * And how willing the staff is to send him out here at all, which
+   * moves more than the kick does: in the cold they go for it instead
+   * about a fifth of the time they would otherwise have kicked.
+   */
+  kickAppetite?: number;
   puntLands: (yardline: number, uniform: () => number) => number;
   turnoverRate: (call: Call) => number;
   /** and the same off the state, where it is known */
@@ -95,6 +107,11 @@ export interface Opening {
   margin: number;
   secondsLeft: number;
 }
+
+/** the seconds inside which a side kicks whatever the down */
+const LAST_GASP = 10;
+/** and how far out it will still try from, in yards to the goal */
+const IN_RANGE = 45;
 
 export function walkDrive(
   startAt: number,
@@ -181,16 +198,49 @@ export function walkDrive(
       return ended("clock", 75);
     }
 
+    /**
+     * A kick with the half running out, whatever the down.
+     *
+     * Nearly one attempt in ten comes on a first, second or third
+     * down, and nine in ten of those are inside the last ten seconds
+     * of a half, from a median of forty three yards out. Without this
+     * the walk never takes them and a kicker loses that tenth.
+     */
+    const expiring = state.secondsLeft <= LAST_GASP &&
+      state.down < 4 && state.yardline <= IN_RANGE;
+
+    if (expiring) {
+      kickedFrom = state.yardline;
+      const goesOver = rules.kickSucceeds(state.yardline) *
+        (rules.kickHere ? rules.kickHere(state.yardline) : 1);
+
+      return uniform() < goesOver
+        ? ended("fieldGoal", 75)
+        : ended("missedKick", 100 - Math.min(92, state.yardline + 8));
+    }
+
     if (state.down === 4) {
       facedAt.push(state.yardline);
       const choice = fourth.choose(state, uniform);
 
-      if (choice === "kick") {
+      /**
+       * Whether the staff actually sends him out. In the cold they go
+       * for it instead about a fifth of the time they would otherwise
+       * have kicked, which moves a kicker's season more than the
+       * weather moves the kick itself.
+       */
+      const sendsHim = rules.kickAppetite === undefined ||
+        rules.kickAppetite >= 1 || uniform() < rules.kickAppetite;
+
+      if (choice === "kick" && sendsHim) {
         // a made kick is followed by a kickoff, a missed one hands the
         // ball over where it was taken from
         kickedFrom = state.yardline;
 
-        return uniform() < rules.kickSucceeds(state.yardline)
+        const goesOver = rules.kickSucceeds(state.yardline) *
+          (rules.kickHere ? rules.kickHere(state.yardline) : 1);
+
+        return uniform() < goesOver
           ? ended("fieldGoal", 75)
           : ended("missedKick", 100 - Math.min(92, state.yardline + 8));
       }
