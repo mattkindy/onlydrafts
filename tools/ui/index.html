@@ -1695,8 +1695,17 @@ function rescoreBoard() {
     p.modelVor = plays * (p.modelPpg - (modelBar[p.position] ?? 0));
   }
 
+  /**
+   * The men the four opinions rank against each other. Kickers and
+   * defences stay out: they are ordered among themselves and placed
+   * where the room drafts them, and leaving them in moved a receiver
+   * by a place or two for no reason anybody could explain.
+   */
+  const ownOrder = new Set(["K", "DEF"]);
+  const onTheCurve = board.players.filter((p) => !ownOrder.has(p.position));
+
   const placesBy = (by) => {
-    const ranked = board.players
+    const ranked = onTheCurve
       .map((p, i) => ({ i, v: by(p) }))
       .filter((r) => r.v !== null && r.v !== undefined)
       .sort((a, b) => b.v - a.v);
@@ -1729,7 +1738,6 @@ function rescoreBoard() {
    * So the group takes the picks the room spends on it, and we say
    * which of them to take first.
    */
-  const ownOrder = new Set(["K", "DEF"]);
   const placeIn = new Map();
 
   for (const where of ownOrder) {
@@ -1753,12 +1761,15 @@ function rescoreBoard() {
    * weight and a kicker's is late by definition. They are ordered by
    * what the walk gives them and placed where the room takes kickers.
    */
-  board.players.forEach((p, i) => {
+  const atIndex = new Map(onTheCurve.map((p, i) => [p.key, i]));
+
+  board.players.forEach((p) => {
     if (ownOrder.has(p.position)) {
-      // where his value falls among everyone else's
       p.blend = placeIn.get(p.key) ?? 400;
       return;
     }
+
+    const i = atIndex.get(p.key);
 
     const lean = p.position === "QB" ? QB_LEAN : LEAN;
     const parts = [
@@ -1787,10 +1798,12 @@ function rescoreBoard() {
    * buys. Reading the value curve in board order settles it, and every
    * number on a card then agrees with where the board has him.
    */
-  const curve = board.players
+  // and their value comes off the same curve, so a receiver is never
+  // priced off what a kicker is worth
+  const curve = onTheCurve
     .map((p) => p.vor ?? 0)
     .sort((a, b) => b - a);
-  board.players.forEach((p, i) => {
+  onTheCurve.forEach((p, i) => {
     p.modelVorOwn = p.vor;
     p.vor = Number((curve[i] ?? 0).toFixed(1));
   });
