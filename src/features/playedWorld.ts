@@ -102,6 +102,7 @@ export async function buildWorld(
    * August nobody knows who will be hurt in December.
    */
   const ruledOut = new Set<string>();
+  const questionable = new Set<string>();
 
   if (live && !process.env["NO_INJURY"]) {
     for (const r of parseCsv(await readFile(
@@ -114,6 +115,10 @@ export async function buildWorld(
 
       if (["Out", "Doubtful"].includes(r["report_status"] ?? "")) {
         ruledOut.add(r["gsis_id"] ?? "");
+      }
+
+      if (r["report_status"] === "Questionable") {
+        questionable.add(r["gsis_id"] ?? "");
       }
 
     }
@@ -405,6 +410,28 @@ export async function buildWorld(
 
   for (const [passer, share] of qbCarries) {
     split.set(passer, { carries: share, targets: 0 });
+  }
+
+  /**
+   * A man listed questionable gets less of the work, and his
+   * teammates take the rest.
+   *
+   * Over 2025, a questionable skill player took the field 57% of the
+   * time, and when he did he saw 94% of the touches he usually sees,
+   * so about half an afternoon in expectation. Giving him a whole one
+   * both overstated him and starved whoever actually covers for him.
+   */
+  const stillPlays = Number(process.env["QUESTIONABLE_AT"] ?? 0.54);
+
+  for (const playerId of questionable) {
+    const his = split.get(playerId);
+
+    if (his) {
+      split.set(playerId, {
+        carries: his.carries * stillPlays,
+        targets: his.targets * stillPlays,
+      });
+    }
   }
 
   const sideFor = (team: string): Side | undefined => {
