@@ -1208,10 +1208,10 @@ function startedHere() {
     }
 
     if (slot === "SUPER_FLEX") {
-      started.QB += 0.6;
-      started.RB += 0.15;
-      started.WR += 0.15;
-      started.TE += 0.1;
+      // nearly every team starts a second quarterback where it can
+      started.QB += 0.9;
+      started.RB += 0.05;
+      started.WR += 0.05;
     }
   }
 
@@ -1242,19 +1242,36 @@ function rescoreBoard() {
     p.modelPpg = p.modelMade ? payFor(p.modelMade) : p.ppg;
   }
 
+  /**
+   * What the last man the league would start at each position scores.
+   *
+   * This is where the lineup enters: a league starting two
+   * quarterbacks has a far better one left over than a league starting
+   * one, so the gap to him is smaller and every quarterback is worth
+   * less against it.
+   */
   const started = startedHere();
-  const replacement = {};
+  const lastStarter = (of) => {
+    const bar = {};
 
-  for (const where of ["QB", "RB", "WR", "TE"]) {
-    const ranked = board.players
-      .filter((p) => p.position === where)
-      .map((p) => p.ppg)
-      .sort((a, b) => b - a);
-    replacement[where] = ranked[Math.min(ranked.length - 1, started[where])] ?? 0;
-  }
+    for (const where of ["QB", "RB", "WR", "TE"]) {
+      const ranked = board.players
+        .filter((p) => p.position === where)
+        .map(of)
+        .filter((v) => v !== null && v !== undefined)
+        .sort((a, b) => b - a);
+      bar[where] = ranked[Math.min(ranked.length - 1, started[where])] ?? 0;
+    }
+
+    return bar;
+  };
+
+  const bar = lastStarter((p) => p.ppg);
+  const modelBar = lastStarter((p) => p.modelPpg);
 
   for (const p of board.players) {
-    p.vor = Number((p.ppg - (replacement[p.position] ?? 0)).toFixed(1));
+    p.vor = Number((p.ppg - (bar[p.position] ?? 0)).toFixed(1));
+    p.modelVor = p.modelPpg - (modelBar[p.position] ?? 0);
   }
 
   const placesBy = (by) => {
@@ -1268,10 +1285,13 @@ function rescoreBoard() {
     return at;
   };
 
-  const modelAt = placesBy((p) => p.modelPpg);
+  // the model votes on value over replacement, so the lineup the
+  // league starts reaches the order and not only the cards
+  const modelAt = placesBy((p) => p.modelVor);
   const shareAt = placesBy((p) => p.touches);
   const adpAt = placesBy((p) => (p.adp === null || p.adp === undefined ? null : -p.adp));
-  const walkAt = placesBy((p) => (p.made ? scoredHere(p) : null));
+  const walkAt = placesBy((p) =>
+    p.made ? payFor(p.made) - (bar[p.position] ?? 0) : null);
   // the same weights the board is built with, quarterbacks apart
   const LEAN = { model: 0.106, share: 0.319, adp: 0.425, walk: 0.15 };
   const QB_LEAN = { model: 0.03, share: 0, adp: 0.12, walk: 0.85 };
