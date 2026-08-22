@@ -18,6 +18,7 @@ import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
 import { parseCsv } from "../src/data/csv.js";
+import { kickerParts, BANDS } from "../src/features/kickerFromWalk.js";
 import {
   fetchLeagueScoring,
   fetchStarterSlots,
@@ -727,16 +728,76 @@ async function main(): Promise<void> {
 
   const others: Record<string, unknown>[] = [];
 
+  /**
+   * The kicks each side is expected to take, from the season played
+   * out. A drive that stalls in range is an attempt from where it
+   * stalled, and one that scores is a conversion instead.
+   */
+  const walkFile = await readFile(
+    join(import.meta.dirname, "..", "data", "kept", `played-${season}.json`),
+    "utf8",
+  ).catch(() => "");
+  const kicksOf = new Map(
+    (walkFile
+      ? (JSON.parse(walkFile) as {
+          kicks?: [string, { from: number[]; conversions: number }][];
+        }).kicks ?? []
+      : []),
+  );
+  const runsOver = 17 * 40;
+
+  /**
+   * One kicker a side. Where two are on the roster the one who took
+   * more of them last season gets the attempts, since a club does not
+   * split them.
+   */
+  const kicksHere = new Map<string, typeof kicked extends Map<string, infer V> ? V : never>();
+
   for (const [, his] of kicked) {
-    if (his.games < 6) {
+    const already = kicksHere.get(his.team);
+
+    if (!already || (his.parts["xpm"] ?? 0) + (his.parts["fgmYds"] ?? 0) >
+        (already.parts["xpm"] ?? 0) + (already.parts["fgmYds"] ?? 0)) {
+      kicksHere.set(his.team, his);
+    }
+  }
+
+  for (const [, his] of kicked) {
+    if (his.games < 6 || kicksHere.get(his.team) !== his) {
       continue;
     }
 
     const key = normalizeName(his.name);
+    const its = kicksOf.get(his.team);
+    const asKicked = its
+      ? kickerParts(
+          {
+            attempts: his.parts["attempts"] ?? 0,
+            made: his.parts["made"] ?? 0,
+            byBand: BANDS.map((band) => ({
+              attempts: (his.parts[`fgm_${band.name}`] ?? 0) +
+                (his.parts[`fgmiss_${band.name}`] ?? 0),
+              made: his.parts[`fgm_${band.name}`] ?? 0,
+            })),
+            extraPointRate: (his.parts["xpm"] ?? 0) > 0
+              ? (his.parts["xpm"] ?? 0) /
+                Math.max(1, (his.parts["xpm"] ?? 0) + (his.parts["xpmiss"] ?? 0))
+              : 0.96,
+          },
+          its.from.map((yardline) => yardline + 17),
+          its.conversions * 40,
+          runsOver,
+        )
+      : null;
+
     others.push({
       name: his.name, key, position: "K", team: his.team,
-      made: Object.fromEntries(Object.entries(his.parts)
+      // what the walk hands him, with what he did last season beside it
+      made: asKicked ?? Object.fromEntries(Object.entries(his.parts)
         .map(([part, n]) => [part, Number((n / his.games).toFixed(3))])),
+      lastYear: Object.fromEntries(Object.entries(his.parts)
+        .map(([part, n]) => [part, Number((n / his.games).toFixed(3))])),
+      fromWalk: Boolean(asKicked),
       adpBy: adpBoth.get(`${key}|K`) ?? null,
       bye: world.byeWeek.get(his.team) ?? null,
     });

@@ -89,6 +89,14 @@ async function main(): Promise<void> {
    * catches and lets whoever reads the file apply their own rules.
    */
   const madeOf = new Map<string, StatTotals>();
+  /**
+   * What each side's kicker was handed: every attempt the drives
+   * produced, by distance, and a conversion for every touchdown. A
+   * kicker's season is his own accuracy over these, and this is where
+   * the situation enters, since a drive that stalls on the twenty
+   * from behind late is a kick and one that scores is a conversion.
+   */
+  const kicksFor = new Map<string, { from: number[]; conversions: number }>();
   const onlyWeek = Number(process.env["WEEK"] ?? 0);
   const endings = new Map<string, number>();
   const boxSaid = new Map<string, {
@@ -189,6 +197,20 @@ async function main(): Promise<void> {
             (line.passTd ?? 0)) / RUNS;
           boxSaid.set(playerId, box);
         }
+      }
+
+      for (const one of game.possessions) {
+        const its = kicksFor.get(one.team) ?? { from: [], conversions: 0 };
+
+        if (one.drive.kickedFrom !== undefined) {
+          its.from.push(one.drive.kickedFrom);
+        }
+
+        if (one.drive.ending === "touchdown") {
+          its.conversions += 1 / RUNS;
+        }
+
+        kicksFor.set(one.team, its);
       }
 
       if (onlyWeek) {
@@ -390,6 +412,11 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({
       total: [...total.entries()], games: [...games.entries()],
       made: [...madeOf.entries()],
+      kicks: [...kicksFor.entries()].map(([team, its]) => [team, {
+        // the attempts as distances, kept whole so a kicker's own
+        // accuracy can be applied band by band
+        from: its.from, conversions: its.conversions,
+      }]),
     }));
     return;
   }
