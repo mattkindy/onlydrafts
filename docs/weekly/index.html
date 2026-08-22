@@ -698,7 +698,7 @@ function card(p, opts) {
 }
 
 /** pick 44 in a 12-team draft is how everyone says it: 4.08 */
-function asRound(pick, teams = 12) {
+function asRound(pick, teams = (active && active.size) || 12) {
   const overall = Math.max(1, Math.round(pick));
   const round = Math.ceil(overall / teams);
   return round + "." + String(overall - (round - 1) * teams).padStart(2, "0");
@@ -752,7 +752,7 @@ function seasonCard(p, opts = {}) {
         }
       : undefined,
     note: '<span class="facts">' + [
-      p.rank ? '<span class="f"><i>ours</i>' + p.rank + "</span>" : "",
+      p.rank ? '<span class="f"><i>ours</i>' + asRound(p.rank) + "</span>" : "",
       '<span class="f"><i>adp</i>' +
         (p.adp ? asRound(p.adp) : "&mdash;") + "</span>",
       gapChip(p),
@@ -1952,7 +1952,7 @@ function fullRankings(out, s) {
   const table = document.createElement("table");
   table.className = "ranks";
   table.innerHTML = "<thead><tr><th>ours</th><th>player</th><th>pts</th>" +
-    "<th>value</th><th>the room</th><th>bye</th><th>where he is</th>" +
+    "<th>value</th><th>adp</th><th>bye</th><th>status</th>" +
     "</tr></thead>";
   const body = document.createElement("tbody");
 
@@ -1963,7 +1963,7 @@ function fullRankings(out, s) {
     const who = s.teams && s.teams[p.key];
     row.className = mine ? "mine" : gone ? "gone" : "";
     row.innerHTML =
-      "<td class=\"n\">" + (p.rank ?? "") + "</td>" +
+      "<td class=\"n\">" + (p.rank ? asRound(p.rank) : "") + "</td>" +
       "<td><b>" + p.name + "</b> <span class=\"pos\">" +
         p.position + " &middot; " + (p.team ?? "") + "</span></td>" +
       "<td class=\"n\">" + (p.ppg ?? "") + "</td>" +
