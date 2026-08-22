@@ -853,7 +853,7 @@ function gapChip(p) {
   }
 
   const teams = (active && active.size) || 12;
-  const rounds = Math.round((p.adp - p.rank) / teams);
+  const rounds = Math.round(((p.adpRank ?? p.adp) - p.rank) / teams);
 
   if (rounds === 0) {
     return "";
@@ -886,7 +886,7 @@ function seasonCard(p, opts = {}) {
             '. A slot can be empty or hold two men, since this is an ' +
             'average rather than a pick"'
           : "") +
-        '><i>adp</i>' + (p.adp ? asRound(p.adp) : "&mdash;") +
+        '><i>adp</i>' + (p.adpRank ? asRound(p.adpRank) : "&mdash;") +
         (p.adp ? '<small>' + p.adp.toFixed(1) + "</small>" : "") + "</span>",
       opts.costs
         ? '<span class="f"><i>costs</i>' + ordinal(opts.costs) + "</span>"
@@ -1800,6 +1800,21 @@ function rescoreBoard() {
   board.players.forEach((p, i) => { p.rank = i + 1; });
 
   /**
+   * Where the room takes him, as a place rather than an average.
+   *
+   * Writing an average as a round and a pick left 1.02 empty and put
+   * two men on 1.05, since nobody averages between 1.5 and 2.4.
+   * Ordering by adp and reading off the place gives one man a slot,
+   * the same way our own order does, so the two can be set side by
+   * side. The average itself stays on the card, since it says how
+   * strongly the room agrees with itself.
+   */
+  [...board.players]
+    .filter((p) => p.adp)
+    .sort((a, b) => a.adp - b.adp)
+    .forEach((p, i) => { p.adpRank = i + 1; });
+
+  /**
    * What our own order says he is worth.
    *
    * The board is ordered by four opinions together while value over
@@ -2028,7 +2043,7 @@ function instead(p, costPick, taken) {
 
         return "<tr><td>" +
           o.name + ' <span class="pos">' + o.position + "</span></td>" +
-          '<td class="n">' + asRound(o.adp) + "</td>" +
+          '<td class="n">' + asRound(o.adpRank ?? o.adp) + "</td>" +
           '<td class="n ' + howLikely + '">' + Math.round(100 * odds) + "%</td>" +
           '<td class="n">' + (o.ppg ?? 0).toFixed(1) + "</td>" +
           '<td class="n">' + (o.vor ?? 0).toFixed(0) + "</td>" +
