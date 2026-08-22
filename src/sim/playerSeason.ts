@@ -18,6 +18,14 @@ export interface SeasonPlayer {
    * scored yet, so a page can apply its own rules to it.
    */
   projectedParts?: StatParts;
+  /**
+   * How many games he is expected to be available for, when a model
+   * has an opinion about him. The pool says how much a season varies;
+   * this says where his own lands, so a back coming back from a knee
+   * and one who has never missed a week stop drawing from the same
+   * middle.
+   */
+  expectedGames?: number;
   /** historical games-played outcomes for players like him, sampled per sim */
   gamesPool: number[];
 }
@@ -87,10 +95,20 @@ export function simulatePlayerSeasons(
       }
 
       const pool = player.gamesPool;
-      const target =
+      const drawn =
         pool.length === 0
           ? weekNumbers.length
           : pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
+      // the pool's shape, moved to his own expectation
+      const poolMean = pool.length
+        ? pool.reduce((sum, n) => sum + n, 0) / pool.length
+        : weekNumbers.length;
+      const target = player.expectedGames && poolMean > 0
+        ? Math.max(0, Math.min(
+            weekNumbers.length,
+            Math.round(drawn * (player.expectedGames / poolMean)),
+          ))
+        : drawn;
       const order = [...weekNumbers];
 
       for (let i = order.length - 1; i > 0; i--) {

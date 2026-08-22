@@ -26,6 +26,8 @@ import { scoring } from "../scoring/active.js";
 import {
   fitPartsModel, predictParts, partsByPosition,
 } from "./partsModel.js";
+import { fitAvailability, predictAvailability } from "./gamesPlayed.js";
+import { readAvailability } from "./availabilityData.js";
 import type { SeasonPlayer } from "../sim/playerSeason.js";
 import type { GameRow } from "../data/nflverse.js";
 
@@ -218,6 +220,28 @@ export async function buildPreseasonWorld(
     }
   }
 
+  /**
+   * How many games each man is likely to be available for.
+   *
+   * Four buckets of last season's games gave everyone in a bucket the
+   * same answer. A fitted model reads his last three seasons, his age,
+   * how much he was given, what the injury report said and whether he
+   * finished the year on it, and lands 4.3 games out against the
+   * buckets' 4.7, ordering them .58 against .48.
+   */
+  const availability = await readAvailability(
+    seasons.filter((s) => s >= 2018 && s <= season),
+  );
+  const availabilityFit = fitAvailability(
+    seasons.filter((s) => s >= 2018 && s < season)
+      .flatMap((s) => availability.rowsFor(s)),
+  );
+  const expectedGames = new Map<string, number>();
+
+  for (const row of availability.rowsFor(season)) {
+    expectedGames.set(row.playerId, predictAvailability(availabilityFit, row));
+  }
+
   const summaries = data.get(season - 1)!.summaries;
   const players: SeasonPlayer[] = [];
 
@@ -236,6 +260,7 @@ export async function buildPreseasonWorld(
       projectedPpg: predictSeasonBlend(fit, e),
       projectedParts: predictParts(partsFit, e, partFloors),
       gamesPool: gamesPools.get(bucketOf(e.gamesPrev))!,
+      expectedGames: expectedGames.get(e.playerId),
     });
   }
 
