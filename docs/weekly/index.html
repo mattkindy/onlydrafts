@@ -114,7 +114,6 @@
   .instead { margin-top: .6rem; }
   .alsoat { margin-top: .5rem; }
   .instead table.ranks th { position: static; }
-  .instead tr.faded td { opacity: .5; }
   .instead td.up { color: var(--go); }
   .instead td.down { color: var(--mark); }
   .costrow { flex-wrap: wrap; }
@@ -918,6 +917,29 @@ function ordinal(n) {
  * before the pick, since draft position is an average and the men
  * who go a touch earlier are sometimes still sitting there.
  */
+/**
+ * How often he is still on the board at a pick, from his own draft
+ * position and how far it swings either way.
+ */
+function stillThereAt(o, pick) {
+  const early = o.adpHigh ?? o.adp;
+  const late = o.adpLow ?? o.adp;
+
+  if (!o.adp) {
+    return 0;
+  }
+
+  if (pick <= early) {
+    return 1;
+  }
+
+  if (pick >= late) {
+    return 0.05;
+  }
+
+  return 1 - (pick - early) / Math.max(1, late - early);
+}
+
 function optionsAt(pick, taken, exclude, position, howMany = 4) {
   if (!board || !board.players) {
     return [];
@@ -1116,7 +1138,7 @@ function worthAtPick(pick) {
  * chance: certainly there before his early end, certainly gone past
  * his late end, sliding in between.
  */
-function redraftWorth(player, teams) {
+function redraftWorth(player, teams, taken) {
   if (!player.adp) {
     return { chance: 0, gain: 0, atPick: null };
   }
@@ -1141,7 +1163,15 @@ function redraftWorth(player, teams) {
     const chance = pick <= early ? 1
       : pick >= late ? 0.05
       : 1 - (pick - early) / Math.max(1, late - early);
-    const gain = Math.max(0, player.vor - worthAtPick(pick));
+    // measured against the same thing the rest of the card measures
+    // against: the best man our board says is still there
+    const best = taken
+      ? bestLeftAt(pick, taken, player.key, null, false)
+      : null;
+    const rate = taken
+      ? expectedBestAt(pick, taken, player.key)
+      : worthAtPick(pick);
+    const gain = Math.max(0, player.vor - rate);
 
     return { chance, gain: chance * gain, atPick: pick, round };
   }
@@ -1621,21 +1651,74 @@ function betterLater(p, costPick, taken) {
   }
 
   return board.players
-    .filter((o) => {
-      if (o.key === p.key || taken.has(o.key) || !o.adp) {
-        return false;
-      }
-
-      // even at his earliest he goes after your pick, so he is likely
-      // to be sitting there when it comes round
-      const surely = (o.adpHigh ?? o.adp) > costPick;
-      const better = (o.vor ?? 0) - (p.vor ?? 0);
-
-      // a season, so the threshold is a season of being better
-      return surely && better > CLOSE_SEASON;
-    })
-    .sort((a, b) => (b.perGameVor ?? 0) - (a.perGameVor ?? 0))
+    .filter((o) =>
+      o.key !== p.key && !taken.has(o.key) && o.adp &&
+      (o.vor ?? 0) - (p.vor ?? 0) > CLOSE_SEASON &&
+      stillThereAt(o, costPick) >= 0.25)
+    .map((o) => ({
+      who: o,
+      odds: stillThereAt(o, costPick),
+      better: (o.vor ?? 0) - (p.vor ?? 0),
+      // how much better he is, weighed by how often he is there to take
+      gain: stillThereAt(o, costPick) * ((o.vor ?? 0) - (p.vor ?? 0)),
+    }))
+    .sort((a, b) => b.gain - a.gain)
     .slice(0, 3);
+}
+
+/**
+ * What the best man still on the board at a pick is worth, on average.
+ *
+ * Taking the best name near a pick assumes he lasts, and taking the
+ * middle of everyone assumes you draft at random. Neither is what
+ * happens. Each candidate is weighted by the chance he is there and
+ * that everyone better is already gone, which is exactly the man you
+ * would end up taking.
+ */
+function expectedBestAt(pick, taken, exclude) {
+  if (!board || !board.players) {
+    return 0;
+  }
+
+  const candidates = board.players
+    .filter((o) => o.key !== exclude && !taken.has(o.key) && o.adp &&
+      o.adp >= pick - 24)
+    .sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0))
+    .slice(0, 40);
+  let stillGone = 1;
+  let worth = 0;
+
+  for (const o of candidates) {
+    const there = stillThereAt(o, pick);
+    worth += (o.vor ?? 0) * there * stillGone;
+    stillGone *= 1 - there;
+
+    if (stillGone < 0.01) {
+      break;
+    }
+  }
+
+  // and the tail, where every one of them has gone
+  return worth + (candidates.length
+    ? (candidates[candidates.length - 1].vor ?? 0) * stillGone
+    : 0);
+}
+
+/** the keep as one sum, which both the chip and the figures read */
+function keeperSums(p, costPick, teams, taken) {
+  /**
+   * What the pick buys: the best few men our board says are still on
+   * it, averaged. Taking only the very best held every keeper against
+   * the model's boldest call at that pick, which is also its least
+   * certain; taking the middle of everyone going near it held him
+   * against a player nobody would choose.
+   */
+  const best = bestLeftAt(costPick, taken, p.key, null, false);
+  const rate = expectedBestAt(costPick, taken, p.key);
+  const roi = p.vor - rate;
+  const wait = redraftWorth(p, teams, taken);
+
+  return { best, rate, roi, wait, net: roi - wait.gain };
 }
 
 /** the keep as figures: what he is worth, what the pick buys, the balance */
@@ -1645,11 +1728,7 @@ function keeperFigures(p, cost, costPick, teams, taken) {
    * on it, since that is who you would take. The middle of the players
    * going near a pick is what you get by accident, not by choosing.
    */
-  const best = bestLeftAt(costPick, taken, p.key, null, false);
-  const rate = best ? best.vor : worthAtPick(costPick);
-  const roi = p.vor - rate;
-  const wait = redraftWorth(p, teams);
-  const net = roi - wait.gain;
+  const { best, rate, roi, wait, net } = keeperSums(p, costPick, teams, taken);
   const box = document.createElement("div");
   box.className = "figures";
   const cell = (label, value, how, tip) =>
@@ -1661,21 +1740,22 @@ function keeperFigures(p, cost, costPick, teams, taken) {
       "points over a season above the last man this league starts at his " +
       "position, counting the games he is expected to miss") +
     cell(asRound(costPick) + " buys", rate, "",
-      best
-        ? "the best man our board says is still there, " + best.name
-        : "what a player taken around that pick is worth") +
+      "what the best man still on the board is worth there, with every " +
+      "candidate weighed by how often he lasts that long" +
+      (best ? ". Today that is usually " + best.name : "")) +
     cell("keeping gains", roi, roi >= 0 ? "up" : "down",
-      "his value less what the pick would have bought") +
+      "his value less what that pick would have bought instead") +
     (wait.atPick && wait.chance > 0.1 && wait.chance < 0.98
       ? cell(
-          "or draft him at " + asRound(wait.atPick), wait.gain, "",
-          Math.round(100 * wait.chance) + "% of the time he is still on the " +
-          "board at your " + asRound(wait.atPick) + " pick, so letting him go " +
-          "and taking him there is worth this much anyway",
+          "waiting gains", wait.gain, "",
+          "let him go and he is still on the board at your " +
+          asRound(wait.atPick) + " pick " + Math.round(100 * wait.chance) +
+          "% of the time, so you might have him and the pick both",
         )
       : "") +
-    cell("net", net, net >= 0 ? "up" : "down",
-      "what keeping gains, less what you could have had by waiting for him");
+    cell("worth keeping", net, net >= 0 ? "up" : "down",
+      "what keeping gains, less what waiting for him would have gained. " +
+      "Above zero, keep him");
 
   return box;
 }
@@ -1693,25 +1773,7 @@ function instead(p, costPick, taken) {
   const box = document.createElement("div");
   box.className = "instead";
   const his = (o) => (o.vor ?? 0) - (p.vor ?? 0);
-  /**
-   * How likely he is to still be sitting there at that pick, from his
-   * own draft position and how far it swings. Without this the table
-   * kept offering men who go before the pick it is comparing against.
-   */
-  const stillThere = (o) => {
-    const early = o.adpHigh ?? o.adp;
-    const late = o.adpLow ?? o.adp;
-
-    if (costPick <= early) {
-      return 1;
-    }
-
-    if (costPick >= late) {
-      return 0.05;
-    }
-
-    return 1 - (costPick - early) / Math.max(1, late - early);
-  };
+  const stillThere = (o) => stillThereAt(o, costPick);
   const table = (title, men) => {
     if (!men.length) {
       return '<div class="hint">nobody ' + title + "</div>";
@@ -1731,10 +1793,12 @@ function instead(p, costPick, taken) {
         const gap = his(o);
         const odds = stillThere(o);
 
-        return '<tr class="' + (odds < 0.35 ? "faded" : "") + '"><td>' +
+        const howLikely = odds >= 0.7 ? "up" : odds >= 0.3 ? "" : "down";
+
+        return "<tr><td>" +
           o.name + ' <span class="pos">' + o.position + "</span></td>" +
           '<td class="n">' + asRound(o.adp) + "</td>" +
-          '<td class="n">' + Math.round(100 * odds) + "%</td>" +
+          '<td class="n ' + howLikely + '">' + Math.round(100 * odds) + "%</td>" +
           '<td class="n">' + (o.ppg ?? 0).toFixed(1) + "</td>" +
           '<td class="n">' + (o.vor ?? 0).toFixed(0) + "</td>" +
           '<td class="n ' + (gap > 0 ? "down" : "up") + '">' +
@@ -1899,7 +1963,7 @@ async function renderKeepers() {
     );
     const rate = worthAtPick(costPick);
     const roi = p.vor - rate;
-    const wait = redraftWorth(p, teams);
+    const wait = redraftWorth(p, teams, taken);
     const net = roi - wait.gain;
     let out = " &middot; the pick buys " + rate.toFixed(1) +
       " there, so keeping him is +" + roi.toFixed(1);
@@ -1925,13 +1989,14 @@ async function renderKeepers() {
           cost, teams, mySlot(), !active || active.snake,
         )
       : null;
-    const at = cost ? marginAt(p, cost, teams, taken) : null;
     const holdsIt = !cost || !active.myPicks || active.myPicks.includes(cost);
     const beaten = costPick ? betterLater(p, costPick, taken) : [];
-    const call = !at ? null
-      : beaten.length ? { word: "let go", how: "down" }
-      : at.margin > CLOSE_SEASON ? { word: "keep", how: "up" }
-      : at.margin < -CLOSE_SEASON ? { word: "let go", how: "down" }
+    // the chip says what the net says, so the card cannot argue with
+    // itself the way it did when the two were worked out apart
+    const sums = costPick ? keeperSums(p, costPick, teams, taken) : null;
+    const call = !sums ? null
+      : sums.net > CLOSE_SEASON ? { word: "keep", how: "up" }
+      : sums.net < -CLOSE_SEASON ? { word: "let go", how: "down" }
       : { word: "close", how: "even" };
 
     const card = seasonCard(p, {
@@ -1954,11 +2019,11 @@ async function renderKeepers() {
       if (beaten.length) {
         const worse = document.createElement("div");
         worse.className = "beaten";
-        const who = beaten[0];
-        worse.innerHTML = "<b>" + who.name + "</b> is worth " +
-          ((who.vor ?? 0) - (p.vor ?? 0)).toFixed(0) + " more over a season " +
-          "and is still there at " + asRound(costPick) + " " +
-          Math.round(100 * who.odds) + "% of the time" +
+        const first = beaten[0];
+        worse.innerHTML = "<b>" + first.who.name + "</b> is worth " +
+          first.better.toFixed(0) + " more over a season and is still there " +
+          "at " + asRound(costPick) + " " + Math.round(100 * first.odds) +
+          "% of the time" +
           (beaten.length > 1
             ? ", and so are " + (beaten.length - 1) + " others"
             : "");
