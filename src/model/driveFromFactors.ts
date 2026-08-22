@@ -78,6 +78,12 @@ export interface FactorDrive {
    * the choices were made.
    */
   facedAt: number[];
+  /**
+   * Where a kick was taken from, when the drive ended in one. The
+   * distance decides whether it is a chip shot or a fifty yarder, and
+   * a kicker's season is the sum of those.
+   */
+  kickedFrom?: number;
   /** when it ended in a turnover, whether that was an interception */
   thrownAway: boolean;
 }
@@ -154,11 +160,15 @@ export function walkDrive(
   const ENDS_A_DRIVE = 20;
   const facedAt: number[] = [];
   let thrownAway = false;
+  let kickedFrom: number | undefined;
   const ended = (ending: DriveEnd, handsOverAt: number): FactorDrive => {
     const forReal = Math.max(ENDS_A_DRIVE, took - sinceLastSnap + ENDS_A_DRIVE);
     state.secondsLeft = Math.max(0, state.secondsLeft + sinceLastSnap - ENDS_A_DRIVE);
 
-    return { plays, ending, handsOverAt, took: forReal, facedAt, thrownAway };
+    return {
+      plays, ending, handsOverAt, took: forReal, facedAt, thrownAway,
+      kickedFrom,
+    };
   };
   // how many snaps there is time for, when this is the last drive of a
   // half. Drawn once, so a drive either has a clock on it or does not.
@@ -178,6 +188,8 @@ export function walkDrive(
       if (choice === "kick") {
         // a made kick is followed by a kickoff, a missed one hands the
         // ball over where it was taken from
+        kickedFrom = state.yardline;
+
         return uniform() < rules.kickSucceeds(state.yardline)
           ? ended("fieldGoal", 75)
           : ended("missedKick", 100 - Math.min(92, state.yardline + 8));

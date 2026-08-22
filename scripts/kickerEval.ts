@@ -40,6 +40,14 @@ interface Kicker {
   team: string;
   games: number;
   points: number;
+  /** what he was given and what he did with it */
+  attempts: number;
+  made: number;
+  longAttempts: number;
+  longMade: number;
+  madeYards: number;
+  extraPoints: number;
+  clutch: number;
 }
 
 async function kickersIn(season: number): Promise<Map<string, Kicker>> {
@@ -55,11 +63,24 @@ async function kickersIn(season: number): Promise<Map<string, Kicker>> {
     }
 
     const id = r["player_id"] ?? "";
-    const his = out.get(id) ??
-      { id, name: r["player_display_name"] ?? id, team: r["team"] ?? "", games: 0, points: 0 };
+    const n = (key: string) => Number(r[key] ?? 0) || 0;
+    const his = out.get(id) ?? {
+      id, name: r["player_display_name"] ?? id, team: r["team"] ?? "",
+      games: 0, points: 0, attempts: 0, made: 0, longAttempts: 0,
+      longMade: 0, madeYards: 0, extraPoints: 0, clutch: 0,
+    };
     his.games++;
     his.team = r["team"] ?? his.team;
     his.points += scored(r);
+    his.attempts += n("fg_att");
+    his.made += n("fg_made");
+    his.longAttempts += n("fg_made_50_59") + n("fg_missed_50_59") +
+      n("fg_made_60_") + n("fg_missed_60_");
+    his.longMade += n("fg_made_50_59") + n("fg_made_60_");
+    his.madeYards += n("fg_made_distance");
+    his.extraPoints += n("pat_att");
+    // kicks that decided a game, which is a leg the staff trusts
+    his.clutch += n("gwfg_att");
     out.set(id, his);
   }
 
@@ -112,9 +133,36 @@ async function offences(season: number): Promise<Map<string, {
   return out;
 }
 
-const row = (
-  hisPpg: number, plays: number, redZone: number, stallRate: number,
-) => [1, hisPpg, plays, redZone, stallRate];
+interface Signals {
+  hisPpg: number;
+  attemptsPerGame: number;
+  accuracy: number;
+  longRate: number;
+  longAccuracy: number;
+  averageMade: number;
+  extraPerGame: number;
+  clutchPerGame: number;
+  playsPerGame: number;
+  redZonePerGame: number;
+  stallRate: number;
+  indoors: number;
+}
+
+const row = (s: Signals) => [
+  1,
+  s.hisPpg,
+  s.attemptsPerGame,
+  s.accuracy,
+  s.longRate,
+  s.longAccuracy,
+  s.averageMade / 40,
+  s.extraPerGame,
+  s.clutchPerGame,
+  s.playsPerGame / 60,
+  s.redZonePerGame / 8,
+  s.stallRate,
+  s.indoors,
+];
 
 async function main(): Promise<void> {
   const byYear = new Map<number, Map<string, Kicker>>();
@@ -123,6 +171,22 @@ async function main(): Promise<void> {
   for (const s of SEASONS) {
     byYear.set(s, await kickersIn(s));
     offenceBy.set(s, await offences(s));
+  }
+
+  /** how much of a club's home schedule is out of the weather */
+  const inside = new Map<string, number>();
+
+  for (const g of parseCsv(await readFile(join(RAW, "games.csv"), "utf8"))) {
+    const home = g["home_team"] ?? "";
+
+    if (!home) {
+      continue;
+    }
+
+    const roof = (g["roof"] ?? "").replace(/"/g, "");
+    const seen = inside.get(home);
+    const shut = roof === "dome" || roof === "closed" ? 1 : 0;
+    inside.set(home, seen === undefined ? shut : (seen + shut) / 2);
   }
 
   const rowsFor = async (season: number) => {
@@ -157,12 +221,22 @@ async function main(): Promise<void> {
         : 0.5;
       out.push({
         name: his.name,
-        his: row(
-          his.points / his.games,
-          its ? its.plays / its.games : 60,
-          its ? its.redZone / its.games : 8,
-          stalls,
-        ),
+        his: row({
+          hisPpg: his.points / his.games,
+          attemptsPerGame: his.attempts / his.games,
+          accuracy: his.attempts > 0 ? his.made / his.attempts : 0.85,
+          longRate: his.attempts > 0 ? his.longAttempts / his.attempts : 0.2,
+          longAccuracy: his.longAttempts > 0
+            ? his.longMade / his.longAttempts
+            : 0.6,
+          averageMade: his.made > 0 ? his.madeYards / his.made : 38,
+          extraPerGame: his.extraPoints / his.games,
+          clutchPerGame: his.clutch / his.games,
+          playsPerGame: its ? its.plays / its.games : 60,
+          redZonePerGame: its ? its.redZone / its.games : 8,
+          stallRate: stalls,
+          indoors: inside.get(team) ?? 0,
+        }),
         adp: adp.get(`${normalizeName(his.name)}|K`)?.adp ?? 250,
         truth: now.points / now.games,
       });
