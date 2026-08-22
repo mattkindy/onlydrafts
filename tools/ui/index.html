@@ -1727,9 +1727,27 @@ function rescoreBoard() {
    */
   const marketOnly = new Set(["DEF"]);
 
+  /**
+   * Kickers stand against each other, not against the field.
+   *
+   * Blending a kicker with the rest put an undrafted one above a
+   * better one who had a draft position, since adp carries most of the
+   * weight and a kicker's is late by definition. They are ordered by
+   * what the walk gives them and placed where the room takes kickers.
+   */
+  const kickerOrder = board.players
+    .filter((p) => p.position === "K")
+    .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))
+    .map((p) => p.key);
+
   board.players.forEach((p, i) => {
     if (marketOnly.has(p.position)) {
       p.blend = p.adp ?? 400;
+      return;
+    }
+
+    if (p.position === "K") {
+      p.blend = 200 + kickerOrder.indexOf(p.key);
       return;
     }
 

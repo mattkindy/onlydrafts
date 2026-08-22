@@ -1718,19 +1718,36 @@ function rescoreBoard() {
   const QB_LEAN = { model: 0.03, share: 0, adp: 0.12, walk: 0.85 };
 
   /**
-   * Kickers and defences go where the room takes them.
+   * Defences go where the room takes them, kickers do not.
    *
-   * Ordering kickers by what they kicked last season scores .10
-   * against the next season, where their draft position scores .19,
-   * and a model over their side's pace and how often it stalled
-   * inside the twenty came out worse than saying nothing at all. So
-   * the market decides these two and we show what they did.
+   * A kicker given the attempts his side's drives actually produce
+   * orders the next season at .36 over 2023 to 2025, where his draft
+   * position manages .20 and what he kicked last season .10. So the
+   * walk decides kickers. A defence has no such model yet.
    */
-  const marketOnly = new Set(["K", "DEF"]);
+  const marketOnly = new Set(["DEF"]);
+
+  /**
+   * Kickers stand against each other, not against the field.
+   *
+   * Blending a kicker with the rest put an undrafted one above a
+   * better one who had a draft position, since adp carries most of the
+   * weight and a kicker's is late by definition. They are ordered by
+   * what the walk gives them and placed where the room takes kickers.
+   */
+  const kickerOrder = board.players
+    .filter((p) => p.position === "K")
+    .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))
+    .map((p) => p.key);
 
   board.players.forEach((p, i) => {
     if (marketOnly.has(p.position)) {
       p.blend = p.adp ?? 400;
+      return;
+    }
+
+    if (p.position === "K") {
+      p.blend = 200 + kickerOrder.indexOf(p.key);
       return;
     }
 
