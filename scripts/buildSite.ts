@@ -5,7 +5,9 @@
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
+import {
+  loadGames, loadPlayerStats, loadWeeklyRosters,
+} from "../src/data/nflverse.js";
 import {
   weeklyExamplesForSeason,
   weeklyProspectiveForWeek,
@@ -614,9 +616,22 @@ async function main(): Promise<void> {
   const kicked = new Map<string, {
     name: string; team: string; games: number; parts: Tally;
   }>();
-  const defended = new Map<string, { games: Set<string>; parts: Tally }>();
+  const defended = new Map<string, { parts: Tally }>();
   const num = (row: Record<string, string | undefined>, key: string) =>
     Number(row[key] ?? 0) || 0;
+
+  /**
+   * Who is on each defence this year, so last season's work follows
+   * the man rather than the shirt. A club that lost its pass rush
+   * should not be projected to rush the passer.
+   */
+  const playsFor = new Map<string, string>();
+
+  for (const row of await loadWeeklyRosters(season).catch(() => [])) {
+    if (!playsFor.has(row.playerId)) {
+      playsFor.set(row.playerId, row.teamId);
+    }
+  }
 
   for (const row of lastSeason) {
     if (Number(row["week"]) > 18) {
@@ -632,7 +647,7 @@ async function main(): Promise<void> {
         parts: {} as Tally,
       };
       his.games++;
-      his.team = team;
+      his.team = playsFor.get(id) ?? team;
       const add = (part: string, n: number) => {
         his.parts[part] = (his.parts[part] ?? 0) + n;
       };
@@ -650,13 +665,15 @@ async function main(): Promise<void> {
       kicked.set(id, his);
     }
 
-    if (!team) {
+    // his work counts for whoever he plays for now
+    const now = playsFor.get(row["player_id"] ?? "") ?? team;
+
+    if (!now) {
       continue;
     }
 
-    const its = defended.get(team) ??
-      { games: new Set<string>(), parts: {} as Tally };
-    its.games.add(row["week"] ?? "");
+    const its = defended.get(now) ?? { parts: {} as Tally };
+
     const add = (part: string, n: number) => {
       its.parts[part] = (its.parts[part] ?? 0) + n;
     };
@@ -668,7 +685,7 @@ async function main(): Promise<void> {
     add("blk_kick",
       num(row, "def_punt_blocks") + num(row, "def_fg_blocks") +
       num(row, "def_pat_blocks"));
-    defended.set(team, its);
+    defended.set(now, its);
   }
 
   const allowed = new Map<string, { points: number[]; }>();
@@ -736,7 +753,8 @@ async function main(): Promise<void> {
       : "pts_allow_35p";
 
   for (const [team, its] of defended) {
-    const games = Math.max(1, its.games.size);
+    // a season's work from the men who play there now, over a season
+    const games = 17;
     const gave = allowed.get(team)?.points ?? [];
     const made: Record<string, number> = Object.fromEntries(
       Object.entries(its.parts).map(([part, n]) => [part, n / games]),

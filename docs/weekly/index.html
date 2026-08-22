@@ -1717,7 +1717,23 @@ function rescoreBoard() {
   const LEAN = { model: 0.106, share: 0.319, adp: 0.425, walk: 0.15 };
   const QB_LEAN = { model: 0.03, share: 0, adp: 0.12, walk: 0.85 };
 
+  /**
+   * Kickers and defences go where the room takes them.
+   *
+   * Ordering kickers by what they kicked last season scores .10
+   * against the next season, where their draft position scores .19,
+   * and a model over their side's pace and how often it stalled
+   * inside the twenty came out worse than saying nothing at all. So
+   * the market decides these two and we show what they did.
+   */
+  const marketOnly = new Set(["K", "DEF"]);
+
   board.players.forEach((p, i) => {
+    if (marketOnly.has(p.position)) {
+      p.blend = p.adp ?? 400;
+      return;
+    }
+
     const lean = p.position === "QB" ? QB_LEAN : LEAN;
     const parts = [
       [lean.model, modelAt.get(i)],
