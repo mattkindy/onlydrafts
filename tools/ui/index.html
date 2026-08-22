@@ -70,7 +70,9 @@
     font-family: ui-monospace, Menlo, monospace; letter-spacing: .12em;
     text-transform: uppercase; }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-    gap: .7rem; }
+    gap: .7rem; align-items: start; }
+  .cards.wide { grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
+    gap: .9rem; }
   .card { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; padding: .75rem .95rem; cursor: pointer; }
   .card.plain { cursor: default; }
@@ -92,6 +94,25 @@
     color: var(--faint); letter-spacing: .06em; text-transform: uppercase; }
   .card .val { color: var(--muted); font-weight: 700; white-space: nowrap; }
   .card .note { color: var(--faint); font-size: .72rem; margin-top: .35rem; }
+  .figures { display: flex; flex-wrap: wrap; gap: .35rem .9rem; margin-top: .5rem;
+    padding-top: .5rem; border-top: 1px solid var(--edge);
+    font-variant-numeric: tabular-nums; }
+  .fig { font-size: .85rem; font-weight: 700; color: var(--ink); }
+  .fig i { display: block; font-style: normal; font-size: .6rem; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .fig.up { color: var(--go); }
+  .fig.down { color: var(--mark); }
+  .instead { margin-top: .6rem; }
+  .instead table.ranks th { position: static; }
+  .instead td.up { color: var(--go); }
+  .instead td.down { color: var(--mark); }
+  .costrow { flex-wrap: wrap; }
+  .costrow i { font-style: normal; font-size: .62rem; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .costrow input { width: 4rem; flex: 0 0 auto; }
+  .costrow b { font-size: .8rem; }
+  .badge.up { background: var(--go); color: #0C1117; }
+  .badge.down { background: var(--mark); color: #0C1117; }
   .facts { display: flex; flex-wrap: wrap; gap: .1rem .9rem; align-items: baseline;
     font-variant-numeric: tabular-nums; }
   .facts .f { color: var(--ink); font-size: .8rem; font-weight: 600; }
@@ -683,14 +704,19 @@ function card(p, opts) {
       "</span></div>"
     : "";
   const aside = opts.aside
-    ? '<span class="val">' + opts.aside.label + " " + opts.aside.value.toFixed(1) + "</span>"
+    ? '<span class="val">' + opts.aside.label + " " +
+      (opts.aside.asRound
+        ? ordinal(Math.round(opts.aside.value))
+        : opts.aside.value.toFixed(1)) + "</span>"
     : "";
   const tag = opts.tag
     ? '<div class="tag' + (opts.warn ? " warn" : "") + '">' + opts.tag + "</div>"
     : opts.hint
       ? '<div class="tag hint">' + opts.hint + "</div>"
       : "";
-  const badge = opts.badge ? '<span class="badge">' + opts.badge + "</span>" : "";
+  const badge = opts.badge
+    ? '<span class="badge ' + (opts.badgeHow ?? "") + '">' + opts.badge + "</span>"
+    : "";
   div.innerHTML =
     '<div class="top"><span class="nm">' + p.name + badge + '</span>' +
     '<span class="big">' + opts.value.toFixed(1) +
@@ -831,6 +857,30 @@ function ordinal(n) {
  * different baseline for every position and the numbers do not mean the
  * same thing across them.
  */
+/**
+ * Who else could be there at that pick.
+ *
+ * Not one reference man but the few worth weighing him against:
+ * anyone the room takes near this pick and might last to it, best
+ * first by what we think they are worth. The window opens a little
+ * before the pick, since draft position is an average and the men
+ * who go a touch earlier are sometimes still sitting there.
+ */
+function optionsAt(pick, taken, exclude, howMany = 4) {
+  if (!board || !board.players) {
+    return [];
+  }
+
+  const from = pick - 6;
+  const to = pick + 24;
+
+  return board.players
+    .filter((p) => p.key !== exclude && !taken.has(p.key) &&
+      p.adp && p.adp >= from && p.adp <= to)
+    .sort((a, b) => (b.perGameVor ?? 0) - (a.perGameVor ?? 0))
+    .slice(0, howMany);
+}
+
 function bestLeftAt(pick, taken, exclude, position, byRanking) {
   const free = board.players.filter((p) =>
     p.key !== exclude && !taken.has(p.key) && (!position || p.position === position));
@@ -1025,18 +1075,24 @@ function marginAt(player, round, teams, taken) {
    */
   const overReplacement = (p) => {
     const high = (p.game ? p.game.high : p.ppg) ?? p.ppg;
-    return high - (p.ppg - p.vor);
+    // a game, so the replacement's own per game number is the baseline
+    return high - (p.ppg - (p.perGameVor ?? 0));
   };
 
   const ourInstead = bestLeftAt(pick, taken, player.key, player.position, true);
 
   return {
     instead,
-    margin: instead ? player.vor - instead.vor : player.vor,
+    // a game, which is what the card shows and what the words say
+    margin: instead
+      ? (player.perGameVor ?? 0) - (instead.perGameVor ?? 0)
+      : player.perGameVor ?? 0,
     // the same sum against the man our own order says is there, which
     // is worth seeing when it disagrees with the room
     ourInstead,
-    ourMargin: ourInstead ? player.vor - ourInstead.vor : player.vor,
+    ourMargin: ourInstead
+      ? (player.perGameVor ?? 0) - (ourInstead.perGameVor ?? 0)
+      : player.perGameVor ?? 0,
     upside: instead
       ? overReplacement(player) - overReplacement(instead)
       : overReplacement(player),
@@ -1455,7 +1511,95 @@ function saveKeeperCost(key, round) {
   store_set("keeperCost." + (active ? active.leagueId : "none"), all);
 }
 
+
+/** the keep as figures: what he is worth, what the pick buys, the balance */
+function keeperFigures(p, cost, costPick, teams) {
+  const rate = worthAtPick(costPick);
+  const roi = p.vor - rate;
+  const wait = redraftWorth(p, teams);
+  const net = roi - wait.gain;
+  const box = document.createElement("div");
+  box.className = "figures";
+  const cell = (label, value, how) =>
+    '<span class="fig ' + (how ?? "") + '"><i>' + label + "</i>" +
+    (value > 0 && how ? "+" : "") + value.toFixed(0) + "</span>";
+  box.innerHTML =
+    cell("him", p.vor) +
+    cell("pick " + costPick + " buys", rate) +
+    cell("keep", roi, roi >= 0 ? "up" : "down") +
+    (wait.atPick && wait.chance > 0.1 && wait.chance < 0.98
+      ? cell(Math.round(100 * wait.chance) + "% back at " + wait.atPick, wait.gain)
+      : "") +
+    cell("net", net, net >= 0 ? "up" : "down");
+
+  return box;
+}
+
+/** the men who could be there instead, and how they compare a game */
+function instead(p, costPick, taken) {
+  const others = optionsAt(costPick, taken, p.key, 4);
+  const box = document.createElement("div");
+  box.className = "instead";
+
+  if (!others.length) {
+    box.innerHTML = '<div class="hint">nobody the room takes near that pick</div>';
+    return box;
+  }
+
+  box.innerHTML = '<div class="scroll"><table class="ranks">' +
+    "<thead><tr><th>instead, near pick " + costPick + "</th><th>adp</th>" +
+    "<th>a game</th><th>vs him</th></tr></thead><tbody>" +
+    others.map((o) => {
+      const gap = (o.perGameVor ?? 0) - (p.perGameVor ?? 0);
+
+      return "<tr><td>" + o.name + ' <span class="pos">' + o.position +
+        "</span></td>" +
+        '<td class="n">' + asRound(o.adp) + "</td>" +
+        '<td class="n">' + (o.ppg ?? 0).toFixed(1) + "</td>" +
+        '<td class="n ' + (gap > 0 ? "down" : "up") + '">' +
+        (gap > 0 ? "+" : "") + gap.toFixed(1) + "</td></tr>";
+    }).join("") + "</tbody></table></div>";
+
+  return box;
+}
+
+/** what the league charges for him, which you can correct */
+function costRow(p, cost, listed, atMarket) {
+  const row = document.createElement("label");
+  row.className = "costrow";
+  const market = listed && atMarket.has(p.key);
+
+  if (market) {
+    const goesAt = adpOverrides()[p.key] ?? p.adp ?? "";
+    row.innerHTML = "<i>market price, goes at</i>" +
+      '<input type="number" min="1" max="200" value="' +
+      (goesAt ? Math.round(goesAt) : "") + '" placeholder="?">' +
+      "<b>" + ordinal(cost) + " rd</b>";
+    row.querySelector("input").addEventListener("change", (e) => {
+      saveAdpAt(p.key, Number(e.target.value));
+      renderKeepers();
+    });
+
+    return row;
+  }
+
+  const yours = keeperCosts()[p.key];
+  row.innerHTML = "<i>costs</i>" +
+    '<input type="number" min="1" max="15" value="' + (cost || "") +
+    '" placeholder="?"><b>rd</b>' +
+    (yours ? '<span class="chip up">yours</span>' : "");
+  row.querySelector("input").addEventListener("change", (e) => {
+    saveKeeperCost(p.key, Number(e.target.value));
+    renderKeepers();
+  });
+
+  return row;
+}
+
+let keeperDraw = 0;
+
 async function renderKeepers() {
+  const drawing = ++keeperDraw;
   if (!board) {
     board = await (await fetch("data/board-" + meta.boardSeason + ".json" + (window.__bust ?? ""))).json();
     boardByKey = new Map(board.players.map((p) => [p.key, p]));
@@ -1543,6 +1687,10 @@ async function renderKeepers() {
       ? "<br>You pick " + (active.draftSlot ? ordinal(active.draftSlot) + " and " : "") +
         "have rounds " + active.myPicks.join(", ") + "."
       : "");
+  if (drawing !== keeperDraw) {
+    return;
+  }
+
   out.appendChild(head);
 
   /**
@@ -1574,91 +1722,47 @@ async function renderKeepers() {
   }
 
   const grid = document.createElement("div");
-  grid.className = "cards";
+  grid.className = "cards wide";
   const seasonMax = seasonScale(mine.map((m) => m.p));
 
   for (const m of mine) {
-    const { p, round, instead, thin } = m;
+    const { p, round } = m;
     const cost = Number(costs[p.key]) || 0;
+    const costPick = cost
+      ? pickForRound(
+          cost, teams, active ? active.draftSlot : null, !active || active.snake,
+        )
+      : null;
     const at = cost ? marginAt(p, cost, teams, taken) : null;
-    const who = at && at.instead ? at.instead.name : "what is left";
-    const verdict = !at ? ""
-      : at.margin > CLOSE_ENOUGH
-        ? "keep him, " + at.margin.toFixed(1) + " a game better than " + who
-      : at.margin < -CLOSE_ENOUGH
-        ? "let him go, " + (-at.margin).toFixed(1) + " a game behind " + who
-      : "level with " + who + ", take the pick";
-    // when the two disagree, say so rather than picking one
-    const onUpside = !at ? ""
-      : at.upside > 2 && at.margin <= CLOSE_ENOUGH
-        ? "but his good week beats " + who + " by " + at.upside.toFixed(1)
-      : at.upside < -2 && at.margin >= -CLOSE_ENOUGH
-        ? "and " + who + " has the better week in him by " + (-at.upside).toFixed(1)
-      : "";
-
     const holdsIt = !cost || !active.myPicks || active.myPicks.includes(cost);
+    const call = !at ? null
+      : at.margin > CLOSE_ENOUGH ? { word: "keep", how: "up" }
+      : at.margin < -CLOSE_ENOUGH ? { word: "let go", how: "down" }
+      : { word: "line ball", how: "" };
+
     const card = seasonCard(p, {
       max: seasonMax,
-      aside: { label: "worth a", value: round },
+      aside: { label: "worth a", value: round, asRound: true },
+      badge: call ? call.word : "",
+      badgeHow: call ? call.how : "",
       tag: !holdsIt
         ? "you traded your " + ordinal(cost) + ", so you cannot keep him"
-        : at && at.margin > CLOSE_ENOUGH ? verdict : "",
+        : "",
       warn: !holdsIt,
-      hint: holdsIt && at && at.margin <= CLOSE_ENOUGH ? verdict : "",
-      note: (at && at.ourInstead && at.ourInstead.key !== (at.instead && at.instead.key)
-        ? "our own order has " + at.ourInstead.name + " there instead, " +
-          (at.ourMargin > 0 ? "still keep" : "let go") +
-          " by " + Math.abs(at.ourMargin).toFixed(1) + " &middot; "
-        : "") +
-        (onUpside ? onUpside + " &middot; " : "") +
-        (instead
-          ? "at a " + ordinal(round) + " the other choice is " + instead.name
-          : "nobody left worth the pick") +
-        (thin ? ", who is a flier" : "") +
-        (p.adp ? " &middot; goes " + asRound(p.adp) + " in " + (meta.adpFormat ?? "PPR") + " mocks" : "") +
-        keepEconomics(p, cost, teams),
     });
 
-    const row = document.createElement("label");
-    row.className = "costrow";
-
-    if (listed) {
-      if (!atMarket.has(p.key)) {
-        const yours = keeperCosts()[p.key];
-        row.innerHTML = "costs your <input type=\"number\" min=\"1\" max=\"15\" " +
-          "value=\"" + (cost || "") + "\" placeholder=\"?\"> round pick" +
-          (yours ? " <span class=\"tag hint\">yours, not the sheet's</span>" : "");
-        row.querySelector("input").addEventListener("change", (e) => {
-          saveKeeperCost(p.key, Number(e.target.value));
-          renderKeepers();
-        });
-      } else {
-        // his price is wherever the room takes him, so the pick is the
-        // number to correct, not the round
-        const goesAt = adpOverrides()[p.key] ?? p.adp ?? "";
-        row.innerHTML = "second year running, so he costs market price: " +
-          "goes at pick <input type=\"number\" min=\"1\" max=\"200\" " +
-          "value=\"" + (goesAt ? Math.round(goesAt) : "") + "\" placeholder=\"?\">" +
-          ", a <b>" + ordinal(cost) + "</b>";
-        row.querySelector("input").addEventListener("change", (e) => {
-          saveAdpAt(p.key, Number(e.target.value));
-          renderKeepers();
-        });
-      }
-    } else {
-      row.innerHTML = "costs a <input type=\"number\" min=\"1\" max=\"15\" " +
-        "value=\"" + (cost || "") + "\" placeholder=\"?\"> round";
-      row.querySelector("input").addEventListener("change", (e) => {
-        saveKeeperCost(p.key, Number(e.target.value));
-        renderKeepers();
-      });
+    if (costPick) {
+      card.appendChild(keeperFigures(p, cost, costPick, teams));
+      card.appendChild(instead(p, costPick, taken));
     }
 
-    card.appendChild(row);
+    card.appendChild(costRow(p, cost, listed, atMarket));
     grid.appendChild(card);
   }
 
-  out.appendChild(grid);
+  if (drawing === keeperDraw) {
+    out.appendChild(grid);
+  }
 }
 
 async function renderRoster() {
@@ -1686,6 +1790,10 @@ async function renderRoster() {
   head.className = "empty";
   head.innerHTML = "<b>" + mine.length + " players</b> on " + active.team + " in " + active.name +
     (keeperCount ? ", " + keeperCount + " marked as keepers" : ", none marked as keepers yet");
+  if (drawing !== keeperDraw) {
+    return;
+  }
+
   out.appendChild(head);
 
   const byPosition = new Map();
