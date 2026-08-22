@@ -1725,6 +1725,8 @@ function betterLater(p, costPick, taken) {
   return board.players
     .filter((o) =>
       o.key !== p.key && !taken.has(o.key) && o.adp &&
+      // his own position, since that is the swap being weighed
+      o.position === p.position &&
       (o.vor ?? 0) - (p.vor ?? 0) > CLOSE_SEASON &&
       stillThereAt(o, costPick) >= 0.25)
     .map((o) => ({
@@ -2131,8 +2133,7 @@ async function renderKeepers() {
       if (beaten.length) {
         const worse = document.createElement("div");
         worse.className = "beaten";
-        const samePosition = beaten.filter((o) => o.who.position === p.position);
-        const first = (samePosition.length ? samePosition : beaten)[0];
+        const first = beaten[0];
         worse.innerHTML = "<b>" + first.who.name + "</b> is worth " +
           first.better.toFixed(0) + " more over a season and is still there " +
           "at " + asRound(costPick) + " " + Math.round(100 * first.odds) +
