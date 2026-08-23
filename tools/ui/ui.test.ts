@@ -20,15 +20,19 @@ const ROOT = join(import.meta.dirname, "..", "..");
 const PAGE = join(ROOT, "docs", "weekly", "index.html");
 const DATA = join(ROOT, "docs", "weekly", "data");
 
-const keepers = JSON.parse(
-  readFileSync(join(DATA, "keepers-2026.json"), "utf8"),
-) as { entries: { team: string; player: string; key: string; cost: number }[] };
+const board = JSON.parse(
+  readFileSync(join(DATA, "board-2026.json"), "utf8"),
+) as { players: { name: string; key: string; position: string }[] };
 
-/** the same shape loadLeagues writes, filled from the keeper sheet */
+/**
+ * The same shape a provider hands back, with rosters taken off the top
+ * of the board. It used to be filled from a keeper sheet, which no
+ * longer ships, since prices belong to one league and this serves any.
+ */
 function aLeague() {
-  const mine = keepers.entries.filter((e) => e.team === "kindy");
-  const others = [...new Set(keepers.entries.map((e) => e.team))]
-    .filter((team) => team !== "kindy");
+  const men = board.players.filter((p) => p.position !== "DEF").slice(0, 60);
+  const mine = men.slice(0, 12).map((p) => ({ ...p, player: p.name }));
+  const others = ["tarpey", "brad", "jake", "conti", "brando"];
 
   return {
     leagueId: "1315886179668729856",
@@ -51,8 +55,8 @@ function aLeague() {
       ...others.map((team) => ({
         owner: team,
         picks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-        keys: keepers.entries.filter((e) => e.team === team)
-          .map((e) => ({ name: e.player, key: e.key, pos: "WR" })),
+        keys: men.slice(12 + others.indexOf(team) * 8, 20 + others.indexOf(team) * 8)
+          .map((p) => ({ name: p.name, key: p.key, pos: p.position })),
       })),
     ],
   };
@@ -114,7 +118,8 @@ async function openPage(withLeague: boolean) {
   window.eval(
     script +
       "\nwindow.__page = { ready, setView, renderView, " +
-      "theBoard: () => board };",
+      "theBoard: () => board, setLeague: (lg) => { active = lg; " +
+      "rescoreBoard(); return active; } };",
   );
   // boot() is started at the end of the script and the page is not
   // usable until it settles
@@ -172,12 +177,11 @@ describe("the weekly page", () => {
     // not turn up on the page at all
     const shown = [...window.document.querySelectorAll(".who")]
       .map((n) => n.textContent ?? "");
-    const eligible = new Set(
-      keepers.entries.filter((e) => e.team === "kindy").map((e) => e.player),
-    );
+    // whoever is on your roster is who the keeper page may talk about
+    const onMyRoster = new Set(aLeague().myRoster.map((m) => m.name));
 
     for (const name of shown) {
-      expect(eligible.has(name.replace(/\s*\(.*\)$/, "").trim())).toBe(true);
+      expect(onMyRoster.has(name.replace(/\s*\(.*\)$/, "").trim())).toBe(true);
     }
   });
 
@@ -208,5 +212,30 @@ describe("the weekly page", () => {
     for (let i = 1; i < Math.min(80, skill.length); i++) {
       expect(skill[i].vor).toBeLessThanOrEqual(skill[i - 1].vor + 0.001);
     }
+  });
+
+  it("puts the board back in order when another league is chosen", async () => {
+    const { window } = page;
+    const ui = (window as any).__page;
+    ui.setView("draft");
+    await ui.renderView();
+    await new Promise((done) => window.setTimeout(done, 300));
+
+    const orderNow = () => ui.theBoard().players.slice(0, 40)
+      .map((p: { key: string }) => p.key).join(",");
+    const standard = orderNow();
+
+    // the same board read by a league that pays a point a catch
+    const active = (window as any).__page.setLeague({
+      leagueId: "ppr", name: "ppr", size: 12,
+      scoring: { rec: 1, rec_yd: 0.1, rec_td: 6, rush_yd: 0.1, rush_td: 6 },
+      slots: ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"],
+      team: "me", members: {}, myRoster: [], myPicks: [], allRosters: [],
+    });
+    await ui.renderView();
+    await new Promise((done) => window.setTimeout(done, 300));
+
+    expect(active).not.toBeNull();
+    expect(orderNow()).not.toEqual(standard);
   });
 });
