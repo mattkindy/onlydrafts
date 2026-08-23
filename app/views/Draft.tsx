@@ -13,6 +13,17 @@ import { SeasonCard, seasonScale } from "./Card.tsx";
 /** how many the shortlist shows before the full rankings take over */
 const MOST_SHOWN = 24;
 
+export interface Pick {
+  overall: number;
+  round: number;
+  slot: number;
+  name: string;
+  position: string;
+  who: string;
+  mine: boolean;
+  keeper: boolean;
+}
+
 export interface DraftNow {
   taken: Set<string>;
   mine: Set<string>;
@@ -21,6 +32,8 @@ export interface DraftNow {
   /** and who had him last season */
   rosteredBy: Record<string, string>;
   grid: { teams: number; rounds: number; mySlot: number | null; cells: Record<string, string> } | null;
+  /** every pick so far, in the order they were made */
+  made?: Pick[];
   pickCount?: number;
   status?: string;
   clock?: { who: string; mine: boolean; overall: number; untilMine: number | null };
@@ -212,6 +225,38 @@ function FullRankings(
   );
 }
 
+/** what the room has taken so far, newest first */
+function PicksSoFar({ made, teams }: { made: Pick[]; teams: number }) {
+  if (!made.length) {
+    return null;
+  }
+
+  return (
+    <>
+      <h2>picks so far ({made.length})</h2>
+      <div class="scroll">
+        <table class="ranks">
+          <thead>
+            <tr><th>pick</th><th>player</th><th>to</th></tr>
+          </thead>
+          <tbody>
+            {[...made].reverse().map((p) => (
+              <tr key={p.overall} class={p.mine ? "mine" : ""}>
+                <td class="n">{asRound(p.overall, teams)}</td>
+                <td>
+                  <b>{p.name}</b> <span class="pos">{p.position}</span>
+                  {p.keeper && <span class="chip">keeper</span>}
+                </td>
+                <td>{p.who}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 function PickGrid({ grid }: { grid: NonNullable<DraftNow["grid"]> }) {
   const slots = Array.from({ length: grid.teams }, (_, i) => i + 1);
   const rounds = Array.from({ length: grid.rounds }, (_, i) => i + 1);
@@ -337,6 +382,8 @@ export function DraftView(props: Props) {
         posFilter={posFilter}
         onMore={props.onMore}
       />
+
+      <PicksSoFar made={state.made ?? []} teams={teams} />
 
       {state.grid && <PickGrid grid={state.grid} />}
 

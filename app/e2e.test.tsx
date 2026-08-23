@@ -88,3 +88,49 @@ it("says the same points per game everywhere it says it", async () => {
       .toBeLessThanOrEqual(0.1);
   }
 });
+
+/**
+ * Nothing the board ships may be scored as zero by accident.
+ *
+ * Every category in the file has to reach the scorer. Chris Boswell
+ * came out at 2 points a game because the board writes his field goal
+ * yardage as fgmYds, a league writes it as fgm_yds, and the check for
+ * whether we pay for a category ran against the wrong spelling.
+ */
+it("scores every category the board ships", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { scorable } = await import("./lib/scoring.ts");
+  const file = JSON.parse(
+    readFileSync(join(DATA, "board-2026.json"), "utf8"),
+  ) as { players: { projected?: Record<string, number>; simulated?: Record<string, number> }[] };
+  const unknown = new Set<string>();
+
+  for (const p of file.players) {
+    for (const parts of [p.projected, p.simulated]) {
+      for (const category of Object.keys(parts ?? {})) {
+        if (!scorable(category)) {
+          unknown.add(category);
+        }
+      }
+    }
+  }
+
+  expect([...unknown]).toEqual([]);
+});
+
+it("gives a kicker a sensible afternoon", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { payFor } = await import("./lib/scoring.ts");
+  const file = JSON.parse(
+    readFileSync(join(DATA, "board-2026.json"), "utf8"),
+  ) as { players: { name: string; position: string; simulated?: Record<string, number> }[] };
+  const kickers = file.players.filter((p) => p.position === "K" && p.simulated);
+
+  expect(kickers.length).toBeGreaterThan(20);
+
+  for (const k of kickers) {
+    const scored = payFor(k.simulated!, {});
+    expect(scored, `${k.name} scored ${scored.toFixed(1)}`).toBeGreaterThan(4);
+    expect(scored, `${k.name} scored ${scored.toFixed(1)}`).toBeLessThan(14);
+  }
+});
