@@ -276,7 +276,6 @@
 
   <div class="controls" id="ctl">
     <span id="espnwrap" hidden>
-      <input id="espnworker" size="16" placeholder="worker address">
       <input id="espnswid" size="10" placeholder="SWID">
       <input id="espns2" size="10" placeholder="espn_s2">
     </span>
@@ -417,7 +416,7 @@ function setView(next) {
   }
   const copy = {
     leagues: ["My leagues",
-      "Type your Sleeper username, then tap a league to open it. Draft help, lineups, and waivers all live inside a league.",
+      "Choose where your league lives, name yourself, then tap a league to open it. Draft help, lineups, and waivers all live inside a league.",
       ""],
     roster: ["My roster",
       "Everyone Sleeper currently has on your team, with this season's projection for each.",
@@ -520,6 +519,9 @@ function refreshGoLabel() {
  * whatever can answer that, so adding one is a matter of translating
  * its own words into these.
  */
+/** where the espn requests go, since a browser cannot make them itself */
+const ESPN_WORKER = "https://depth-chart-espn.matt-kindy-ii.workers.dev";
+
 const PROVIDERS = {
   sleeper: {
     label: "Sleeper",
@@ -571,14 +573,16 @@ const ESPN_SLOTS = {
  * are kept in this browser and go nowhere else.
  */
 async function throughTheWorker(leagueId, season) {
-  const where = store_get("espnWorker", "");
+  // ours, unless somebody has put up their own
+  const where = store_get("espnWorker", "") || ESPN_WORKER;
   const swid = store_get("espnSwid", "");
   const s2 = store_get("espnS2", "");
 
-  if (!where) {
+  if (!swid || !s2) {
+    askForEspnAgain();
+
     throw new Error(
-      "That ESPN league is private. Give a worker address and your two " +
-      "espn cookies to read it.",
+      "That ESPN league is private, so it needs your two espn cookies.",
     );
   }
 
@@ -611,8 +615,8 @@ function askForEspnAgain() {
   const box = $("espnwrap");
   box.hidden = false;
   const said = $("status");
-  said.innerHTML = "ESPN turned that away, which usually means the " +
-    "cookies have gone stale. Open " +
+  said.innerHTML = "A private ESPN league needs two cookies, and they go " +
+    "stale. Open " +
     '<a href="https://www.espn.com/fantasy/" target="_blank" ' +
     'rel="noreferrer">espn.com</a>, sign in, copy SWID and espn_s2 ' +
     "from the cookies, and paste them here.";
@@ -635,12 +639,21 @@ async function espnLeagues(leagueId) {
    * not something to build without asking first. A public league
    * opens on its id alone; for a private one, paste the roster.
    */
-  const answered = await fetch(at).catch(() => null);
+  /**
+   * Ask with whatever the browser is willing to send.
+   *
+   * A page here cannot read the cookies espn.com holds, and never
+   * will: that rule is what stops any site reading your bank session.
+   * It can ask the browser to send them, and whether the browser
+   * agrees is ESPN's choice, not ours. So a private league is tried
+   * this way first, in case it opens for nothing, and only then does
+   * it come down to what you paste.
+   */
+  const answered = await fetch(at, { credentials: "include" })
+    .catch(() => null);
   let said = answered && answered.ok ? await answered.json() : null;
 
   if (!said) {
-    // a private league only opens through the worker, the one place
-    // the two cookies can be put on the request
     said = await throughTheWorker(leagueId, season);
   }
 
@@ -3228,9 +3241,7 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 $("sortby").addEventListener("change", () => { if (view === "draft") renderDraft(); });
-for (const [box, kept] of [
-  ["espnworker", "espnWorker"], ["espnswid", "espnSwid"], ["espns2", "espnS2"],
-]) {
+for (const [box, kept] of [["espnswid", "espnSwid"], ["espns2", "espnS2"]]) {
   $(box).value = store_get(kept, "");
   // kept in this browser, which is the only place they go
   $(box).addEventListener("change", () => store_set(kept, $(box).value.trim()));
