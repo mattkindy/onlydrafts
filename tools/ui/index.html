@@ -195,6 +195,7 @@
   .empty { background: var(--panel); border: 1px dashed var(--edge);
     border-radius: 12px; padding: 1.2rem; color: var(--muted); font-size: .88rem; }
   .empty b { color: var(--ink); }
+  #status a { color: var(--go); }
   .step { display: flex; gap: .5rem; align-items: baseline; margin: .35rem 0; }
   .step span:first-child { color: var(--go); font-weight: 700; }
   table.grid { border-collapse: collapse; font-size: .68rem; width: 100%;
@@ -588,10 +589,34 @@ async function throughTheWorker(leagueId, season) {
   ).then((r) => r.json()).catch(() => null);
 
   if (!said || said.error) {
+    // stale cookies look exactly like never having had any, so the page
+    // says what to do rather than what went wrong
+    askForEspnAgain();
     throw new Error((said && said.error) || "the worker could not reach ESPN");
   }
 
+  store_set("espnAsked", new Date().toISOString().slice(0, 10));
+
   return said;
+}
+
+/**
+ * ESPN throws the cookies away when it feels like it, and there is no
+ * way to ask for new ones on your behalf: they belong to espn.com and
+ * a page here cannot read them however it is written. So the page
+ * says which two are wanted, opens the place they live, and takes
+ * them when they are pasted.
+ */
+function askForEspnAgain() {
+  const box = $("espnwrap");
+  box.hidden = false;
+  const said = $("status");
+  said.innerHTML = "ESPN turned that away, which usually means the " +
+    "cookies have gone stale. Open " +
+    '<a href="https://www.espn.com/fantasy/" target="_blank" ' +
+    'rel="noreferrer">espn.com</a>, sign in, copy SWID and espn_s2 ' +
+    "from the cookies, and paste them here.";
+  $("espnswid").focus();
 }
 
 async function espnLeagues(leagueId) {
