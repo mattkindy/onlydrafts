@@ -716,21 +716,6 @@ async function espnLeagues(leagueId) {
    * this way first, in case it opens for nothing, and only then does
    * it come down to what you paste.
    */
-  /**
-   * A league pulled here beforehand, which is how a private one reaches
-   * a phone. Cookies cannot be dug out of a phone browser, so the pull
-   * happens once on a machine that has them and the answer ships with
-   * the site.
-   */
-  const kept = await fetch(
-    "data/league-espn-" + encodeURIComponent(leagueId) + ".json" +
-      (window.__bust ?? ""),
-  ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-
-  if (kept && kept.leagues) {
-    return kept.leagues;
-  }
-
   const answered = await fetch(at, { credentials: "include" })
     .catch(() => null);
   let said = answered && answered.ok ? await answered.json() : null;
