@@ -8,7 +8,7 @@
 
 import { normalizeName, keep } from "./store.ts";
 import { providerOf, type League } from "./providers.ts";
-import type { DraftNow } from "../views/Draft.tsx";
+import type { DraftNow, Pick } from "../views/Draft.tsx";
 
 /** how many picks until it comes back round to you */
 function picksUntil(mySlot: number, overall: number, teams: number, rounds: number) {
@@ -31,6 +31,7 @@ interface Options {
   /** extra names typed in as taken, one per line */
   manual: string;
   nameFor: (key: string) => string;
+  positionFor: (key: string) => string;
 }
 
 export async function draftNow(options: Options): Promise<DraftNow> {
@@ -41,6 +42,7 @@ export async function draftNow(options: Options): Promise<DraftNow> {
     teams: {},
     rosteredBy: {},
     grid: null,
+    made: [],
   };
 
   for (const line of manual.split("\n")) {
@@ -74,7 +76,11 @@ export async function draftNow(options: Options): Promise<DraftNow> {
 
   const { draft, picks } = now;
 
-  for (const pick of picks) {
+  const made: Pick[] = [];
+
+  for (const pick of picks as (typeof picks[number] & {
+    round: number; draft_slot: number; metadata?: { position?: string };
+  })[]) {
     const name = options.nameFor(pick.player_id);
 
     if (!name) {
@@ -82,15 +88,30 @@ export async function draftNow(options: Options): Promise<DraftNow> {
     }
 
     const key = normalizeName(name);
-    state.taken.add(key);
-    state.teams[key] = pick.picked_by === league.userId
+    const mine = pick.picked_by === league.userId;
+    const who = mine
       ? league.team
-      : league.members[pick.picked_by] ?? "another team";
+      : league.members[pick.picked_by] ?? "slot " + pick.draft_slot;
+    state.taken.add(key);
+    state.teams[key] = who;
 
-    if (pick.picked_by === league.userId) {
+    if (mine) {
       state.mine.add(key);
     }
+
+    made.push({
+      overall: pick.pick_no,
+      round: pick.round,
+      slot: pick.draft_slot,
+      name,
+      position: pick.metadata?.position ?? options.positionFor(pick.player_id),
+      who,
+      mine,
+      keeper: Boolean(pick.is_keeper),
+    });
   }
+
+  state.made = made.sort((a, b) => a.overall - b.overall);
 
   const teams = draft.settings?.teams ?? league.size ?? 12;
   const rounds = draft.settings?.rounds ?? 15;

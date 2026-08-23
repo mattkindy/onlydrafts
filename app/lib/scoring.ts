@@ -49,11 +49,14 @@ const SKILL: Record<string, string> = {
   rushYds: "rush_yd", rushTd: "rush_td",
   receptions: "rec", recYds: "rec_yd", recTd: "rec_td",
   fumblesLost: "fum_lost",
+  // the board counts a man's two point plays together; a league prices
+  // running one in and catching one the same, so either rate serves
+  twoPointConversions: "rush_2pt",
 };
 
 const SKILL_FALLBACK: Pays = {
   pass_yd: 0.04, pass_td: 4, int: -2, rush_yd: 0.1, rush_td: 6,
-  rec: 0, rec_yd: 0.1, rec_td: 6, fum_lost: -2,
+  rec: 0, rec_yd: 0.1, rec_td: 6, fum_lost: -2, rush_2pt: 2,
 };
 
 /**
@@ -71,6 +74,18 @@ const THEIR_OWN_FALLBACK: Pays = {
   pts_allow_21_27: 0, pts_allow_28_34: -1, pts_allow_35p: -4,
 };
 
+/**
+ * What the board calls a category against what a league calls it. The
+ * translation happens before anything asks whether we pay for it, since
+ * checking the board's spelling against the league's list silently
+ * dropped every kicker's field goal yardage.
+ */
+const ALSO_CALLED: Record<string, string> = { fgmYds: "fgm_yds" };
+
+/** every category the scorer understands, whatever it pays for it */
+export const scorable = (category: string) =>
+  category in SKILL || (ALSO_CALLED[category] ?? category) in THEIR_OWN_FALLBACK;
+
 /** what one game of his is worth here */
 export function payFor(parts: Parts, pays: Pays): number {
   let points = 0;
@@ -81,12 +96,12 @@ export function payFor(parts: Parts, pays: Pays): number {
   }
 
   for (const [part, value] of Object.entries(parts)) {
-    if (part in SKILL || !(part in THEIR_OWN_FALLBACK)) {
+    const named = ALSO_CALLED[part] ?? part;
+
+    if (part in SKILL || !(named in THEIR_OWN_FALLBACK)) {
       continue;
     }
 
-    // fgmYds is the same thing a league calls fgm_yds
-    const named = part === "fgmYds" ? "fgm_yds" : part;
     points += value * (pays[named] ?? THEIR_OWN_FALLBACK[named] ?? 0);
   }
 

@@ -133,8 +133,13 @@ function App() {
   const byKey = useMemo(() => new Map(men.map((p) => [p.key, p])), [men]);
   const marked = active ? markedKeepers(active.leagueId) : {};
 
+  /**
+   * The draft is read as soon as you open the tab, so the board knows
+   * who is gone without being asked. Watching only decides whether it
+   * keeps asking.
+   */
   useEffect(() => {
-    if (!watching || !active) {
+    if (!active || view !== "draft") {
       return;
     }
 
@@ -145,16 +150,22 @@ function App() {
           marked: markedKeepers(active.leagueId),
           manual,
           nameFor: (id) => all[id]?.n ?? "",
+          positionFor: (id) => all[id]?.p ?? "",
         }))
         .then(setDraft)
         .catch((e: Error) => setStatus(e.message));
     };
 
     look();
+
+    if (!watching) {
+      return;
+    }
+
     const every = setInterval(look, 10000);
 
     return () => clearInterval(every);
-  }, [watching, active, manual, marks]);
+  }, [watching, active, view, manual, marks]);
 
   const findLeagues = async () => {
     setBusy(true);
