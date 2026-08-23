@@ -174,7 +174,9 @@ async function main(): Promise<void> {
   const weekOpp = new Map<string, { week: number; opponent: string; home: boolean }[]>();
 
   for (const game of world.games) {
-    if (game.season !== season || game.week > 17) {
+    // a season runs to week 18 and a side plays seventeen of them, so
+    // cutting at seventeen dropped everyone's last game
+    if (game.season !== season || game.week > 18) {
       continue;
     }
 
@@ -565,11 +567,16 @@ async function main(): Promise<void> {
         // A week as a multiple of his own average, since points here
         // would be points under one league's scoring. The weekly model
         // was fitted on points, so every part of his line moves together.
+        // A man projected at nothing has no average to be a multiple of,
+        // and saying his every week is a flat one is closer than saying
+        // he scores nothing in all of them.
         weeks: (weeklyByPlayer.get(p.playerId) ?? [])
           .map((w) => ({
             w: w.week,
             opp: (w.home ? "v " : "@ ") + w.opponent,
-            of: Number((w.points / Math.max(0.1, p.projectedPpg)).toFixed(3)),
+            of: p.projectedPpg >= 1
+              ? Number((w.points / p.projectedPpg).toFixed(3))
+              : 1,
           })),
       };
     })

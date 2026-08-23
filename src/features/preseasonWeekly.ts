@@ -59,7 +59,8 @@ function scheduleOf(games: GameRow[], season: number) {
   const byTeam = new Map<string, { week: number; opponent: string; home: boolean }[]>();
 
   for (const game of games) {
-    if (game.season !== season || game.week > 17) {
+    // seventeen games across eighteen weeks, so the cut goes at 18
+    if (game.season !== season || game.week > 18) {
       continue;
     }
 
