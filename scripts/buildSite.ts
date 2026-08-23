@@ -19,6 +19,7 @@ import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.j
 import { normalizeName } from "../src/data/names.js";
 import { parseCsv } from "../src/data/csv.js";
 import { kickerParts, BANDS } from "../src/features/kickerFromWalk.js";
+import { kickerSeason } from "../src/features/kickerSeason.js";
 import {
   fetchLeagueScoring,
   fetchStarterSlots,
@@ -745,6 +746,25 @@ async function main(): Promise<void> {
     }
   }
 
+  /**
+   * What a kicker who keeps the job plays. Three seasons of them come
+   * out at a shade over fifteen, and giving him a full seventeen while
+   * every skill player is cut to his own availability made a kicker's
+   * season look worth more than it is.
+   */
+  const KICKER_GAMES = 15.3;
+  /** what a kicker makes from an extra point, and how many settle him */
+  const LEAGUE_EXTRA_POINT = 0.958;
+  const EXTRA_POINTS_SETTLE = 25;
+
+  const extraPointRateOf = (made: number, missed: number) => {
+    const taken = made + missed;
+    const trust = taken / (taken + EXTRA_POINTS_SETTLE);
+
+    return trust * (taken > 0 ? made / taken : LEAGUE_EXTRA_POINT) +
+      (1 - trust) * LEAGUE_EXTRA_POINT;
+  };
+
   for (const [, his] of kicked) {
     if (his.games < 6 || kicksHere.get(his.team) !== his) {
       continue;
@@ -752,6 +772,34 @@ async function main(): Promise<void> {
 
     const key = normalizeName(his.name);
     const its = kicksOf.get(his.team);
+    const asHim = {
+      attempts: his.parts["attempts"] ?? 0,
+      made: his.parts["made"] ?? 0,
+      byBand: BANDS.map((band) => ({
+        attempts: (his.parts[`fgm_${band.name}`] ?? 0) +
+          (his.parts[`fgmiss_${band.name}`] ?? 0),
+        made: his.parts[`fgm_${band.name}`] ?? 0,
+      })),
+      // leaned toward what every kicker makes until he has taken
+      // enough of them, the same way his field goals are. A man who
+      // went thirty from thirty is not a certainty next year.
+      extraPointRate: extraPointRateOf(
+        his.parts["xpm"] ?? 0, his.parts["xpmiss"] ?? 0,
+      ),
+    };
+    // his season played out game by game, so his card carries a spread
+    // and a season total like anybody else's
+    const walked = its
+      ? kickerSeason(
+          asHim,
+          its.from.map((yardline) => yardline + 17),
+          its.conversions * 40,
+          runsOver,
+          KICKER_GAMES,
+          400,
+          seededRng(29),
+        )
+      : null;
     const asKicked = its
       ? kickerParts(
           {
@@ -776,8 +824,15 @@ async function main(): Promise<void> {
     others.push({
       name: his.name, key, position: "K", team: his.team,
       // what the walk hands him, with what he did last season beside it
-      simulated: asKicked ?? Object.fromEntries(Object.entries(his.parts)
-        .map(([part, n]) => [part, Number((n / his.games).toFixed(3))])),
+      simulated: walked?.parts ?? asKicked ?? Object.fromEntries(
+        Object.entries(his.parts)
+          .map(([part, n]) => [part, Number((n / his.games).toFixed(3))]),
+      ),
+      game: walked?.game ?? null,
+      sim: walked?.sim ?? null,
+      weeks: (weekOpp.get(his.team) ?? []).map((w) => ({
+        w: w.week, opp: (w.home ? "v " : "@ ") + w.opponent, of: 1,
+      })),
       lastYear: Object.fromEntries(Object.entries(his.parts)
         .map(([part, n]) => [part, Number((n / his.games).toFixed(3))])),
       fromWalk: Boolean(asKicked),

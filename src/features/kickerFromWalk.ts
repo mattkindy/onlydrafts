@@ -75,6 +75,22 @@ export function kickerParts(
   }
 
   out["xpm"] = (touchdowns / games) * him.extraPointRate;
+  // he misses one now and then, and a league charges him for it
+  out["xpmiss"] = (touchdowns / games) * (1 - him.extraPointRate);
+
+  /**
+   * The same kicks counted the other ways a league counts them.
+   *
+   * Some price every made kick the same, some lump fifty and beyond
+   * together, some charge a flat penalty for a miss. A league that uses
+   * one of those was reading zero off a board that only spoke in bands.
+   * Whichever a league does not use it sets to nothing, so nobody is
+   * paid twice.
+   */
+  out["fgm"] = BANDS.reduce((sum, b) => sum + (out[`fgm_${b.name}`] ?? 0), 0);
+  out["fgmiss"] = BANDS.reduce((sum, b) => sum + (out[`fgmiss_${b.name}`] ?? 0), 0);
+  out["fgm_50p"] = (out["fgm_50_59"] ?? 0) + (out["fgm_60p"] ?? 0);
+  out["fgmiss_50p"] = (out["fgmiss_50_59"] ?? 0) + (out["fgmiss_60p"] ?? 0);
 
   return out;
 }
