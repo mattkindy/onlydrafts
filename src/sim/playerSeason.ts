@@ -53,6 +53,44 @@ export interface SeasonProjection {
  * each player's rate; injuries have no memory here, which understates
  * long absences and is the known simplification.
  */
+/**
+ * How many games he plays this time, keeping the pool's shape.
+ *
+ * The pool is what men like him have done, and it is moved to his own
+ * expectation. Scaling the games he plays and then capping at a full
+ * season took the cap off the top only, which pulled the average down
+ * by more than two games for anyone durable and by nothing at all for
+ * anyone fragile, squashing the difference the model exists to find.
+ *
+ * Scaling the games he misses has no such edge. Missing nothing is
+ * already the best case, so shrinking a man's missed games toward zero
+ * cannot push him past a full season, and his average comes out where
+ * the availability model put it.
+ */
+function drawGames(
+  player: SeasonPlayer, playable: number, rng: () => number,
+): number {
+  const pool = player.gamesPool;
+
+  if (!pool.length || !player.expectedGames) {
+    return Math.min(playable, pool.length
+      ? pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!
+      : playable);
+  }
+
+  const season = Math.max(playable, ...pool);
+  const drawnMissed = season -
+    pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
+  const poolMissed = season -
+    pool.reduce((sum, n) => sum + n, 0) / pool.length;
+  const hisMissed = Math.max(0, playable - player.expectedGames);
+  const missed = poolMissed > 0
+    ? drawnMissed * (hisMissed / poolMissed)
+    : hisMissed;
+
+  return Math.max(0, Math.min(playable, Math.round(playable - missed)));
+}
+
 export function simulatePlayerSeasons(
   players: SeasonPlayer[],
   season: number,
@@ -67,7 +105,7 @@ export function simulatePlayerSeasons(
   const schedule = new Map<number, Map<string, { opponent: string; gameKey: string }>>();
 
   for (const game of games) {
-    if (game.season !== season || game.week > 17) {
+    if (game.season !== season || game.week > 18) {
       continue;
     }
 
@@ -82,6 +120,13 @@ export function simulatePlayerSeasons(
   const gamesPlayed = new Map<string, number>(players.map((p) => [p.playerId, 0]));
 
   const weekNumbers = [...schedule.keys()].sort((a, b) => a - b);
+  const playableWeeks = new Map<string, number[]>();
+
+  for (const week of weekNumbers) {
+    for (const teamId of schedule.get(week)!.keys()) {
+      playableWeeks.set(teamId, [...(playableWeeks.get(teamId) ?? []), week]);
+    }
+  }
 
   for (let sim = 0; sim < sims; sim++) {
     const seasonTotal = new Map<string, number>();
@@ -96,22 +141,12 @@ export function simulatePlayerSeasons(
         );
       }
 
-      const pool = player.gamesPool;
-      const drawn =
-        pool.length === 0
-          ? weekNumbers.length
-          : pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
-      // the pool's shape, moved to his own expectation
-      const poolMean = pool.length
-        ? pool.reduce((sum, n) => sum + n, 0) / pool.length
-        : weekNumbers.length;
-      const target = player.expectedGames && poolMean > 0
-        ? Math.max(0, Math.min(
-            weekNumbers.length,
-            Math.round(drawn * (player.expectedGames / poolMean)),
-          ))
-        : drawn;
-      const order = [...weekNumbers];
+      // the weeks his side is on the field, which is a season less the
+      // bye. Drawing from every week instead lost a man his bye week
+      // roughly one season in seventeen.
+      const his = playableWeeks.get(player.teamId) ?? weekNumbers;
+      const target = drawGames(player, his.length, rng);
+      const order = [...his];
 
       for (let i = order.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
