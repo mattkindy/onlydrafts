@@ -13,6 +13,8 @@ import { emptyStatLine, type StatLine } from "../scoring/fantasyPoints.js";
 
 export const RAW_DIR = join(import.meta.dirname, "..", "..", "data", "raw");
 
+import { HOME } from "../features/climate.js";
+
 export interface GameRow extends Game {
   spreadLine?: number;
   totalLine?: number;
@@ -25,6 +27,8 @@ export interface GameRow extends Game {
   indoors: boolean;
   /** grass or one of the several turfs, as the release writes it */
   surface?: string;
+  /** the hour it kicks off, since an evening in December is colder */
+  hour?: number;
   /** days since each side last played, 7 on a normal week */
   homeRest?: number;
   awayRest?: number;
@@ -110,9 +114,17 @@ export async function loadGames(): Promise<GameRow[]> {
       homeScore: toNumber(row["home_score"]),
       awayScore: toNumber(row["away_score"]),
       wind: toNumber(row["wind"]),
-      temp: toNumber(row["temp"]),
-      indoors: /dome|closed/i.test(row["roof"] ?? ""),
+      // an empty reading turns into nought, which is a freezing day in
+      // Miami rather than a missing one
+      temp: toNumber(row["temp"]) || undefined,
+      // A retractable ground is written as closed once it has been
+      // played and left blank on a fixture nobody has played yet, so
+      // where it is decides it rather than what the release says.
+      indoors: /dome|closed/i.test(row["roof"] ?? "") ||
+        ((row["roof"] ?? "") === "" &&
+          (HOME[row["home_team"] ?? ""]?.indoors ?? false)),
       surface: (row["surface"] ?? "").replace(/"/g, "") || undefined,
+      hour: toNumber((row["gametime"] ?? "").split(":")[0]),
       homeRest: toNumber(row["home_rest"]),
       awayRest: toNumber(row["away_rest"]),
       divisional: row["div_game"] === "1" || row["div_game"] === "TRUE",

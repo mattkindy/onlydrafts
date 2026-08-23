@@ -119,7 +119,10 @@ async function main(): Promise<void> {
     const week = Number(r["week"]);
     const roof = r["roof"] ?? "";
     const indoors = roof === "dome" || roof === "closed";
-    const temp = r["temp"] && r["temp"] !== "NA" ? Number(r["temp"]) : undefined;
+    // a nought is nobody writing it down, not a freezing afternoon in
+    // Miami, and there are 430 of them
+    const said = Number(r["temp"]);
+    const temp = r["temp"] && r["temp"] !== "NA" && said !== 0 ? said : undefined;
     const wind = r["wind"] && r["wind"] !== "NA" ? Number(r["wind"]) : undefined;
 
     for (const [team, points] of [
