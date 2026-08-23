@@ -9,13 +9,17 @@ from here can carry them.
 It keeps nothing. The two cookies arrive on the request, go straight to
 ESPN, and are gone when it answers.
 
-## Putting it up
+## Where it is
+
+    https://depth-chart-espn.matt-kindy-ii.workers.dev
+
+To put a change up:
 
     cd worker
     npx wrangler deploy
 
-Wrangler prints the address it went to, something like
-`https://depth-chart-espn.<you>.workers.dev`.
+The free plan covers this many times over: a hundred thousand requests
+a day, where loading a league takes one.
 
 ## Using it
 
