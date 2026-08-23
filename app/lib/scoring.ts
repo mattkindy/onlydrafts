@@ -1,0 +1,149 @@
+/**
+ * What a league pays, applied to what a player does.
+ *
+ * The board ships what each man does in a game and leaves the scoring
+ * to whoever reads it, so one board serves every league. Sleeper and
+ * ESPN both name their categories, and those names are what a stat
+ * line is kept under.
+ */
+
+export type Parts = Record<string, number>;
+export type Pays = Record<string, number>;
+
+export interface Player {
+  name: string;
+  key: string;
+  position: string;
+  team?: string | null;
+  /** what the regression says he does in a game */
+  projected?: Parts | null;
+  /** and what the played out games say */
+  simulated?: Parts | null;
+  /** how his weeks vary against his own average, one per week */
+  weeks?: { w: number; opp: string; of: number }[];
+  /** the spread of a game of his, as the file scored it */
+  game?: Record<string, number> | null;
+  /** and of a season, with the games he is expected to play */
+  sim?: (Record<string, number> & { games: number }) | null;
+  adp?: number | null;
+  adpLow?: number | null;
+  adpHigh?: number | null;
+  adpBy?: Record<string, { adp: number; low: number; high: number }> | null;
+  bye?: number | null;
+  touches?: number | null;
+  rookie?: boolean;
+  games?: number;
+  /** worked out for the league in front of you */
+  ppg?: number;
+  vor?: number;
+  perGameVor?: number;
+  rank?: number;
+  adpRank?: number;
+  ownPpg?: number;
+  blend?: number;
+}
+
+/** the skill categories, under the names a league already uses */
+const SKILL: Record<string, string> = {
+  passYds: "pass_yd", passTd: "pass_td", interceptions: "int",
+  rushYds: "rush_yd", rushTd: "rush_td",
+  receptions: "rec", recYds: "rec_yd", recTd: "rec_td",
+  fumblesLost: "fum_lost",
+};
+
+const SKILL_FALLBACK: Pays = {
+  pass_yd: 0.04, pass_td: 4, int: -2, rush_yd: 0.1, rush_td: 6,
+  rec: 0, rec_yd: 0.1, rec_td: 6, fum_lost: -2,
+};
+
+/**
+ * A kicker and a defence are paid by their own categories, kept under
+ * the names the leagues use for them so nothing has to be translated.
+ */
+const THEIR_OWN_FALLBACK: Pays = {
+  fgm_yds: 0.1, xpm: 1, xpmiss: -1,
+  fgm_0_19: 0, fgm_20_29: 0, fgm_30_39: 0, fgm_40_49: 0, fgm_50_59: 0,
+  fgm_60p: 0,
+  fgmiss_0_19: -3, fgmiss_20_29: -2, fgmiss_30_39: -2, fgmiss_40_49: -1,
+  fgmiss_50_59: -1, fgmiss_60p: 0,
+  sack: 1, int: 2, fum_rec: 2, def_td: 6, safe: 2, blk_kick: 2,
+  pts_allow_0: 10, pts_allow_1_6: 7, pts_allow_7_13: 4, pts_allow_14_20: 1,
+  pts_allow_21_27: 0, pts_allow_28_34: -1, pts_allow_35p: -4,
+};
+
+/** what one game of his is worth here */
+export function payFor(parts: Parts, pays: Pays): number {
+  let points = 0;
+
+  for (const [part, category] of Object.entries(SKILL)) {
+    points += (parts[part] ?? 0) *
+      (pays[category] ?? SKILL_FALLBACK[category] ?? 0);
+  }
+
+  for (const [part, value] of Object.entries(parts)) {
+    if (part in SKILL || !(part in THEIR_OWN_FALLBACK)) {
+      continue;
+    }
+
+    // fgmYds is the same thing a league calls fgm_yds
+    const named = part === "fgmYds" ? "fgm_yds" : part;
+    points += value * (pays[named] ?? THEIR_OWN_FALLBACK[named] ?? 0);
+  }
+
+  return points;
+}
+
+/**
+ * What he scores in a game here.
+ *
+ * The regression's own projection, since the spread of his weeks was
+ * worked out around it. The played out games answer for anyone it
+ * never saw, which is mostly kickers and defences.
+ */
+export function scoredHere(p: Player, pays: Pays): number {
+  if (p.projected) {
+    return payFor(p.projected, pays);
+  }
+
+  return p.simulated ? payFor(p.simulated, pays) : (p.ppg ?? 0);
+}
+
+export interface Lineup {
+  named: Record<string, number>;
+  flex: number;
+}
+
+const FLEX_SLOTS = ["FLEX", "WRRB_FLEX", "REC_FLEX", "SUPER_FLEX"];
+
+/** the lineup a league starts, split into named slots and flexes */
+export function lineupOf(slots: string[] | null | undefined): Lineup {
+  const named: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 };
+  let flex = 0;
+
+  for (const slot of slots ?? ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"]) {
+    if (slot in named) {
+      named[slot] = (named[slot] ?? 0) + 1;
+    } else if (FLEX_SLOTS.includes(slot)) {
+      flex++;
+    }
+  }
+
+  return { named, flex };
+}
+
+/**
+ * How many of each position the league starts once flexes are shared
+ * out, which is what makes one scarce and another not.
+ */
+export function startedHere(slots: string[] | null | undefined, teams: number) {
+  const { named, flex } = lineupOf(slots);
+  const share: Record<string, number> = { RB: 0.45, WR: 0.4, TE: 0.15 };
+  const out: Record<string, number> = {};
+
+  for (const [where, count] of Object.entries(named)) {
+    const extra = where in share ? (share[where] ?? 0) * flex : 0;
+    out[where] = Math.max(1, Math.round((count + extra) * teams));
+  }
+
+  return out;
+}
