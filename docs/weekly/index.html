@@ -1265,6 +1265,11 @@ function seasonCard(p, opts = {}) {
         ? '<span class="f"><i>costs</i>' + ordinal(opts.costs) + "</span>"
         : "",
       gapChip(p),
+      p.ownPpg !== undefined && Math.abs(p.ownPpg - p.ppg) >= 1.5
+        ? '<span class="f" title="what our own projection says, before the ' +
+          'market and the share model are mixed in">' +
+          "<i>ours alone</i>" + p.ownPpg.toFixed(1) + "</span>"
+        : "",
       p.bye ? '<span class="f"><i>bye</i>' + p.bye + "</span>" : "",
     ].filter(Boolean).join("") + "</span>",
   });
@@ -2204,8 +2209,30 @@ function rescoreBoard() {
     .map((p) => p.vor ?? 0)
     .sort((a, b) => b - a);
   inOrder.forEach((p, i) => {
-    p.modelVorOwn = p.vor;
+    /**
+     * What the board thinks he does, said in points.
+     *
+     * The order comes from four opinions together while the points
+     * came from the projection alone, so a card could show a man at
+     * eighteen a game above one at twenty two and give the first a
+     * bigger number for value. Reading his value off the curve at his
+     * own place and turning it back into points a game makes the card
+     * agree with itself: what he is worth, what he scores and where he
+     * comes on the board are the same claim.
+     */
+    p.ownPpg = p.ppg;
     p.vor = Number((curve[i] ?? 0).toFixed(1));
+    const plays = p.sim && p.sim.games ? p.sim.games : 17;
+    const said = (bar[p.position] ?? 0) + p.vor / Math.max(1, plays);
+    const moved = p.ownPpg > 0 ? said / p.ownPpg : 1;
+    p.ppg = Number(said.toFixed(1));
+    p.perGameVor = Number((said - (bar[p.position] ?? 0)).toFixed(1));
+
+    // and the spread of his weeks moves with him
+    if (p.game) {
+      p.game = Object.fromEntries(Object.entries(p.game)
+        .map(([at, n]) => [at, Number((n * moved).toFixed(1))]));
+    }
   });
   boardByKey = new Map(board.players.map((p) => [p.key, p]));
 }
