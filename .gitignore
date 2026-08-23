@@ -2,3 +2,7 @@ node_modules/
 data/raw/
 dist/
 *.log
+
+# a league pulled from a provider is somebody's private roster, and
+# anything under docs is served to the public
+docs/data/league-*

@@ -38,6 +38,14 @@ doing for a draft board.
 ESPN expires the cookies eventually, so take them again when a league
 stops opening.
 
+## What it can be asked for
+
+Only a league from ESPN. The id has to be digits and the season four
+of them, and the address is built here rather than taken from the
+caller, so there is no way to point it at anything else. It answers
+with what ESPN says to the cookies on that one request, which are the
+caller's own.
+
 ## What it will not do
 
 There is no signing in to ESPN from here. Its accounts are Disney's,
@@ -53,6 +61,14 @@ espn sign in button, and it says where to look.
 
 The short version: sign in at espn.com, open the developer tools,
 Application then Cookies then espn.com, and copy `SWID` and `espn_s2`.
+
+## What it can be asked for
+
+Only a league from ESPN. The id has to be digits and the season four
+of them, and the address is built here rather than taken from the
+caller, so there is no way to point it at anything else. It answers
+with what ESPN says to the cookies on that one request, which are the
+caller's own.
 
 ## What it will not do
 
