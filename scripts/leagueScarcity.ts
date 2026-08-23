@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   const username = process.argv[3]!;
   const board = JSON.parse(
     await readFile(
-      join(import.meta.dirname, "..", "docs", "weekly", "data", "board-2026.json"),
+      join(import.meta.dirname, "..", "docs", "data", "board-2026.json"),
       "utf8",
     ),
   ) as { players: BoardPlayer[] };

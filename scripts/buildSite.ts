@@ -54,7 +54,13 @@ import {
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import { blendedPlace, leanFor, placesBy } from "../src/features/boardOrder.js";
 
-const DOCS = join(import.meta.dirname, "..", "docs", "weekly");
+/**
+ * The site is the site, so it goes at the top rather than down a path
+ * nobody would guess. The old address still works: a page there sends
+ * anyone with the link on.
+ */
+const DOCS = join(import.meta.dirname, "..", "docs");
+const OLD = join(DOCS, "weekly");
 
 /** the season being drafted for; a new one starts in March */
 const CURRENT_SEASON = new Date().getUTCFullYear() -
@@ -891,6 +897,15 @@ async function main(): Promise<void> {
   execFileSync("npx", ["tsx", join(import.meta.dirname, "checkUi.ts")], {
     stdio: "inherit",
   });
+
+  await mkdir(OLD, { recursive: true });
+  await writeFile(
+    join(OLD, "index.html"),
+    '<!doctype html><meta charset="utf-8">' +
+      '<meta http-equiv="refresh" content="0; url=../">' +
+      '<title>moved</title><p>The draft board is <a href="../">up a level' +
+      "</a> now.</p>",
+  );
 
   await writeFile(
     join(DOCS, "index.html"),

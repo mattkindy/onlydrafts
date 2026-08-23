@@ -17,7 +17,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { normalizeName } from "../src/data/names.js";
 
-const WHERE = join(import.meta.dirname, "..", "docs", "weekly", "data");
+const WHERE = join(import.meta.dirname, "..", "docs", "data");
 
 /** what ESPN calls each thing it pays for */
 const STATS: Record<number, string> = {

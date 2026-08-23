@@ -17,8 +17,8 @@ import { JSDOM } from "jsdom";
 import { beforeEach, describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..", "..");
-const PAGE = join(ROOT, "docs", "weekly", "index.html");
-const DATA = join(ROOT, "docs", "weekly", "data");
+const PAGE = join(ROOT, "docs", "index.html");
+const DATA = join(ROOT, "docs", "data");
 
 const board = JSON.parse(
   readFileSync(join(DATA, "board-2026.json"), "utf8"),
