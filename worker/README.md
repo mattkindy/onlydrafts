@@ -46,6 +46,22 @@ to get around that is not worth building.
 
 ## Getting the two cookies out of ESPN
 
+Nothing outside espn.com can read them, and nothing outside a browser
+can use them, which is why both this and a few steps by hand are
+needed. The draft page walks you through it: choose espn, press the
+espn sign in button, and it says where to look.
+
+The short version: sign in at espn.com, open the developer tools,
+Application then Cookies then espn.com, and copy `SWID` and `espn_s2`.
+
+## What it will not do
+
+There is no signing in to ESPN from here. Its accounts are Disney's,
+behind a flow built to keep robots out, and taking somebody's password
+to get around that is not worth building.
+
+## Getting the two cookies out of ESPN
+
 Nothing outside espn.com can read them. That is the rule which stops
 any site reading your bank session, and it holds however the asking is
 done: a worker only ever sees cookies addressed to itself, an iframe

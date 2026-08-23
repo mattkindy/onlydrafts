@@ -195,6 +195,15 @@
   .empty { background: var(--panel); border: 1px dashed var(--edge);
     border-radius: 12px; padding: 1.2rem; color: var(--muted); font-size: .88rem; }
   .empty b { color: var(--ink); }
+  .pastewrap { display: block; margin-top: .9rem; font-size: .72rem;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .pastewrap textarea { display: block; width: 100%; margin-top: .3rem;
+    font: inherit; font-size: .8rem; padding: .5rem; border-radius: 8px;
+    border: 1px solid var(--edge); background: var(--bg); color: var(--ink);
+    text-transform: none; letter-spacing: 0; }
+  #espnhelp { font: inherit; font-size: .78rem; padding: .25rem .7rem;
+    border-radius: 999px; border: 1px solid var(--edge);
+    background: var(--chip); color: var(--muted); cursor: pointer; }
   #status a { color: var(--go); }
   .step { display: flex; gap: .5rem; align-items: baseline; margin: .35rem 0; }
   .step span:first-child { color: var(--go); font-weight: 700; }
@@ -275,9 +284,7 @@
   </div>
 
   <div class="controls" id="ctl">
-    <span id="espnwrap" hidden>
-      <input id="espnpaste" size="18" placeholder="paste espn cookies">
-    </span>
+    <button id="espnhelp" hidden>espn sign in</button>
     <label id="userwrap"><select id="provider">
       <option value="sleeper">sleeper</option>
       <option value="espn">espn</option>
@@ -625,15 +632,60 @@ function espnCookiesFrom(pasted) {
   return { swid: swid ? swid[1] : "", s2: s2 ? s2[1] : "" };
 }
 
+/**
+ * What to do about a private ESPN league, in the order you do it.
+ *
+ * Only espn.com can read the two cookies that open one, and only a
+ * request from outside a browser can use them, so both halves need
+ * you: fetch them from their site, leave them here, and the relay
+ * takes them the rest of the way.
+ */
+function walkThroughEspn() {
+  const sheet = $("sheet");
+  sheet.innerHTML =
+    "<h3>Opening a private ESPN league</h3>" +
+    '<div class="sub">ESPN only lets its own pages read the two cookies ' +
+    "that identify you, so they have to be fetched by hand. This is once " +
+    "a season, until they expire.</div>" +
+    '<div class="step"><span>1</span><span>Sign in at ' +
+    '<a href="https://www.espn.com/fantasy/" target="_blank" ' +
+    'rel="noreferrer">espn.com</a> in this browser.</span></div>' +
+    '<div class="step"><span>2</span><span>Open the developer tools: ' +
+    "F12 on Windows, or option and command and I on a Mac.</span></div>" +
+    '<div class="step"><span>3</span><span>Go to Application, then ' +
+    "Cookies, then espn.com.</span></div>" +
+    '<div class="step"><span>4</span><span>Copy the value of ' +
+    "<b>SWID</b>, which looks like {A1B2-C3D4}, and of <b>espn_s2</b>, " +
+    "which is a long line of letters.</span></div>" +
+    '<div class="step"><span>5</span><span>Paste both below. They stay ' +
+    "in this browser and go nowhere except to ESPN.</span></div>" +
+    '<label class="pastewrap">SWID and espn_s2' +
+    '<textarea id="espnpastebig" rows="3" placeholder="SWID={...}; ' +
+    'espn_s2=..."></textarea></label>' +
+    '<div class="row"><button class="act" id="espnkeep">keep them</button>' +
+    '<button class="act" id="espnshut" ' +
+    'style="background:var(--chip); color:var(--ink)">close</button></div>';
+  $("overlay").classList.add("open");
+  $("espnshut").addEventListener("click", () =>
+    $("overlay").classList.remove("open"));
+  $("espnkeep").addEventListener("click", () => {
+    const found = espnCookiesFrom($("espnpastebig").value);
+
+    if (!found.swid || !found.s2) {
+      $("espnpastebig").value = "";
+      $("espnpastebig").placeholder = "that did not have both in it";
+      return;
+    }
+
+    store_set("espnSwid", found.swid);
+    store_set("espnS2", found.s2);
+    $("overlay").classList.remove("open");
+    $("status").textContent = "kept. Try the league again.";
+  });
+}
+
 function askForEspnAgain() {
-  const box = $("espnwrap");
-  box.hidden = false;
-  const said = $("status");
-  said.innerHTML = "A private ESPN league needs your own two cookies, and " +
-    "only espn.com can give them to you. Sign in there, run the " +
-    "bookmarklet from the readme on any of its pages, and paste what it " +
-    "copies. They stay in this browser.";
-  $("espnpaste").focus();
+  walkThroughEspn();
 }
 
 async function espnLeagues(leagueId) {
@@ -3255,28 +3307,11 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 $("sortby").addEventListener("change", () => { if (view === "draft") renderDraft(); });
-if (store_get("espnSwid", "") && store_get("espnS2", "")) {
-  $("espnpaste").value = "kept in this browser";
-}
-
-$("espnpaste").addEventListener("change", () => {
-  const found = espnCookiesFrom($("espnpaste").value);
-
-  if (!found.swid || !found.s2) {
-    $("status").textContent = "that did not have both cookies in it";
-    return;
-  }
-
-  // they stay in this browser, and go to espn by way of the worker
-  store_set("espnSwid", found.swid);
-  store_set("espnS2", found.s2);
-  $("espnpaste").value = "kept in this browser";
-  $("status").textContent = "";
-});
+$("espnhelp").addEventListener("click", walkThroughEspn);
 
 $("provider").addEventListener("change", () => {
   const it = PROVIDERS[$("provider").value];
-  $("espnwrap").hidden = $("provider").value !== "espn";
+  $("espnhelp").hidden = $("provider").value !== "espn";
   $("username").placeholder = it.wants;
   $("status").textContent = it.draftNow
     ? ""
