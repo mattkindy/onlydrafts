@@ -1633,20 +1633,6 @@ function worthUpTo(player, teams, taken) {
   return { round: 16, instead: null, margin: 0, thin: true };
 }
 
-let keeperSheet;
-
-/** the league's own keeper list, shipped with the board */
-async function loadKeeperSheet() {
-  if (keeperSheet !== undefined) {
-    return keeperSheet;
-  }
-
-  keeperSheet = await fetch(
-    "data/keepers-" + meta.boardSeason + ".json" + (window.__bust ?? ""),
-  ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-
-  return keeperSheet;
-}
 
 /**
  * Which sheet team is whose.
@@ -2435,14 +2421,14 @@ async function renderKeepers() {
 
   const teams = active.size || 12;
   const perTeam = Number($("keepn").value) || 3;
-  const sheet = await loadKeeperSheet();
-  const eligible = sheet ? eligiblePerOwner(sheet) : null;
-  const listed = eligible ? eligible.get(active.team) : null;
+  // no keeper prices ship with the board: they belong to one league and
+  // this serves any. Yours are typed and stay in this browser.
+  const listed = null;
   // Your own marks, plus the men every other team is likely to keep.
   // Everyone else on a roster goes back into the draft, so treating a
   // whole roster as unavailable would empty the board.
   const taken = new Set([
-    ...Object.keys(markedKeepers()), ...likelyKept(perTeam, eligible),
+    ...Object.keys(markedKeepers()), ...likelyKept(perTeam, null),
   ]);
 
   // The league's sheet decides both who you may keep and what he costs.
