@@ -276,8 +276,7 @@
 
   <div class="controls" id="ctl">
     <span id="espnwrap" hidden>
-      <input id="espnswid" size="10" placeholder="SWID">
-      <input id="espns2" size="10" placeholder="espn_s2">
+      <input id="espnpaste" size="18" placeholder="paste espn cookies">
     </span>
     <label id="userwrap"><select id="provider">
       <option value="sleeper">sleeper</option>
@@ -611,15 +610,30 @@ async function throughTheWorker(leagueId, season) {
  * says which two are wanted, opens the place they live, and takes
  * them when they are pasted.
  */
+/**
+ * Take the two cookies out of whatever was pasted.
+ *
+ * Nothing outside espn.com can read them, so they have to come across
+ * by hand. What arrives might be the whole cookie line off the site,
+ * or the two values on their own, and either is fine.
+ */
+function espnCookiesFrom(pasted) {
+  const swid = pasted.match(/SWID=?\s*[:=]?\s*(\{[^;"\s]+\})/i) ||
+    pasted.match(/(\{[0-9A-F-]{30,}\})/i);
+  const s2 = pasted.match(/espn_s2=?\s*[:=]?\s*["']?([A-Za-z0-9%_.-]{80,})/i);
+
+  return { swid: swid ? swid[1] : "", s2: s2 ? s2[1] : "" };
+}
+
 function askForEspnAgain() {
   const box = $("espnwrap");
   box.hidden = false;
   const said = $("status");
-  said.innerHTML = "A private ESPN league needs your own two cookies. Open " +
-    '<a href="https://www.espn.com/fantasy/" target="_blank" ' +
-    'rel="noreferrer">espn.com</a>, sign in, and copy SWID and espn_s2 ' +
-    "from its cookies. They stay in this browser.";
-  $("espnswid").focus();
+  said.innerHTML = "A private ESPN league needs your own two cookies, and " +
+    "only espn.com can give them to you. Sign in there, run the " +
+    "bookmarklet from the readme on any of its pages, and paste what it " +
+    "copies. They stay in this browser.";
+  $("espnpaste").focus();
 }
 
 async function espnLeagues(leagueId) {
@@ -3241,11 +3255,24 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 $("sortby").addEventListener("change", () => { if (view === "draft") renderDraft(); });
-for (const [box, kept] of [["espnswid", "espnSwid"], ["espns2", "espnS2"]]) {
-  $(box).value = store_get(kept, "");
-  // kept in this browser, which is the only place they go
-  $(box).addEventListener("change", () => store_set(kept, $(box).value.trim()));
+if (store_get("espnSwid", "") && store_get("espnS2", "")) {
+  $("espnpaste").value = "kept in this browser";
 }
+
+$("espnpaste").addEventListener("change", () => {
+  const found = espnCookiesFrom($("espnpaste").value);
+
+  if (!found.swid || !found.s2) {
+    $("status").textContent = "that did not have both cookies in it";
+    return;
+  }
+
+  // they stay in this browser, and go to espn by way of the worker
+  store_set("espnSwid", found.swid);
+  store_set("espnS2", found.s2);
+  $("espnpaste").value = "kept in this browser";
+  $("status").textContent = "";
+});
 
 $("provider").addEventListener("change", () => {
   const it = PROVIDERS[$("provider").value];
