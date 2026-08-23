@@ -69,6 +69,9 @@ const THEIR_OWN_FALLBACK: Pays = {
   fgm_60p: 0,
   fgmiss_0_19: -3, fgmiss_20_29: -2, fgmiss_30_39: -2, fgmiss_40_49: -1,
   fgmiss_50_59: -1, fgmiss_60p: 0,
+  // the same kicks as a league that does not count them by band sees
+  // them. Nothing by default, so a league using the bands is unchanged.
+  fgm: 0, fgmiss: 0, fgm_50p: 0, fgmiss_50p: 0,
   sack: 1, int: 2, fum_rec: 2, def_td: 6, safe: 2, blk_kick: 2,
   pts_allow_0: 10, pts_allow_1_6: 7, pts_allow_7_13: 4, pts_allow_14_20: 1,
   pts_allow_21_27: 0, pts_allow_28_34: -1, pts_allow_35p: -4,

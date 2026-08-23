@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadBoard, loadMeta } from "./lib/data.ts";
 import { rescore } from "./lib/board.ts";
 
@@ -133,4 +133,64 @@ it("gives a kicker a sensible afternoon", async () => {
     expect(scored, `${k.name} scored ${scored.toFixed(1)}`).toBeGreaterThan(4);
     expect(scored, `${k.name} scored ${scored.toFixed(1)}`).toBeLessThan(14);
   }
+});
+
+/**
+ * A kicker is a player like any other on the board. He used to arrive
+ * with a stat line and nothing else, so his card had no range, no
+ * season, and a full seventeen games while everyone around him was cut
+ * to what the availability model gave them.
+ */
+describe("a kicker gets what everyone else gets", () => {
+  let kickers: Record<string, unknown>[];
+
+  beforeEach(async () => {
+    const { readFileSync } = await import("node:fs");
+    const file = JSON.parse(
+      readFileSync(join(DATA, "board-2026.json"), "utf8"),
+    ) as { players: Record<string, unknown>[] };
+    kickers = file.players.filter((p) => p["position"] === "K");
+  });
+
+  it("has a spread, a season and a week by week", () => {
+    expect(kickers.length).toBeGreaterThan(20);
+
+    for (const k of kickers) {
+      const game = k["game"] as Record<string, number> | null;
+      const sim = k["sim"] as Record<string, number> | null;
+      const weeks = k["weeks"] as unknown[] | undefined;
+
+      expect(game, String(k["name"])).toBeTruthy();
+      expect(game!["high"]).toBeGreaterThan(game!["low"]!);
+      expect(sim!["games"]).toBeGreaterThan(12);
+      expect(sim!["games"]).toBeLessThanOrEqual(17);
+      expect(weeks!.length).toBe(17);
+    }
+  });
+
+  it("misses an extra point now and then", () => {
+    for (const k of kickers) {
+      const parts = k["simulated"] as Record<string, number>;
+      expect(parts["xpmiss"], String(k["name"])).toBeGreaterThan(0);
+    }
+  });
+
+  it("counts his kicks the other ways a league counts them", async () => {
+    const { payFor } = await import("./lib/scoring.ts");
+
+    for (const k of kickers) {
+      const parts = k["simulated"] as Record<string, number>;
+      // a league paying a flat rate per made kick has to reach the same
+      // kicks as one paying by band
+      const byBand = ["fgm_0_19", "fgm_20_29", "fgm_30_39", "fgm_40_49",
+        "fgm_50_59", "fgm_60p"].reduce((s, b) => s + (parts[b] ?? 0), 0);
+      expect(parts["fgm"]).toBeCloseTo(byBand, 3);
+      expect(parts["fgm_50p"])
+        .toBeCloseTo((parts["fgm_50_59"] ?? 0) + (parts["fgm_60p"] ?? 0), 3);
+
+      // and a league that prices only the flat categories scores him
+      const flat = payFor(parts, { fgm: 3, fgmiss: -1, xpm: 1, xpmiss: -1 });
+      expect(flat, String(k["name"])).toBeGreaterThan(4);
+    }
+  });
 });
