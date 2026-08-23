@@ -44,8 +44,21 @@ There is no signing in to ESPN from here. Its accounts are Disney's,
 behind a flow built to keep robots out, and taking somebody's password
 to get around that is not worth building.
 
-## On a phone
+## Getting the two cookies out of ESPN
 
-A phone browser will not let you at those cookies. Copy them on a
-computer and put them into the draft page there, or send them to
-yourself and paste them in on the phone.
+Nothing outside espn.com can read them. That is the rule which stops
+any site reading your bank session, and it holds however the asking is
+done: a worker only ever sees cookies addressed to itself, an iframe
+cannot read across, and ESPN has no way to hand a token to somebody
+else. So they have to come across by hand, from a page on espn.com.
+
+Save this as a bookmark, with the whole thing as the address, then
+sign in to espn.com and click it there. It copies both cookies, and
+you paste them into the draft page.
+
+```
+javascript:(function(){var c=document.cookie,s=(c.match(/SWID=([^;]+)/)||[])[1],t=(c.match(/espn_s2=([^;]+)/)||[])[1];if(!s||!t){alert('Sign in to espn.com first, then click this there.');return}navigator.clipboard.writeText('SWID='+s+'; espn_s2='+t);alert('Copied. Paste it into the draft page.')})()
+```
+
+On a phone, make the bookmark first on a computer and let the browser
+sync it, or copy the cookies there and send them to yourself.
