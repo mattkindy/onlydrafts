@@ -21,26 +21,22 @@ To put a change up:
 The free plan covers this many times over: a hundred thousand requests
 a day, where loading a league takes one.
 
-## Leaving your sign in with it
+## Using it
 
-Open the worker's own address in a browser and it shows a small page
-asking for three things: the key, and the two cookies. Find the cookies
-on espn.com under application, storage, cookies: `SWID` looks like
-`{AAAA-BBBB}` and `espn_s2` is long. They are kept in the worker's own
-store and used for later requests, so this is done once from a machine
-where you can get at them.
+Anyone can use it, and it keeps nothing for anybody. A public ESPN
+league opens on its id alone. A private one needs the two cookies your
+own sign in leaves on espn.com: find them under application, storage,
+cookies, where `SWID` looks like `{AAAA-BBBB}` and `espn_s2` is long.
+Paste them on the draft page. They stay in your browser, ride along on
+each request, and are gone once ESPN answers.
 
-The key is a secret set on the worker:
+Everyone brings their own. One sign in kept here would mean one
+person's leagues opening for everybody else, and a pile of other
+people's credentials sitting on a server, neither of which is worth
+doing for a draft board.
 
-    npx wrangler secret put PORTAL_KEY
-
-After that, the draft page needs only that key, which is why a phone
-works: nothing there ever sees a cookie.
-
-ESPN expires the cookies eventually. When a league stops opening, go
-back to the worker's page and leave them again.
-
-A public league needs none of this.
+ESPN expires the cookies eventually, so take them again when a league
+stops opening.
 
 ## What it will not do
 
@@ -50,13 +46,6 @@ to get around that is not worth building.
 
 ## On a phone
 
-A phone browser will not let you at the cookies, and it will not send
-espn.com's own to another site either, so neither route works there.
-Pull the league once from a machine that has them and the answer ships
-with the site:
-
-    ESPN_SWID='{...}' ESPN_S2='...' npx tsx scripts/pullEspnLeague.ts 829178711
-
-That writes `docs/weekly/data/league-espn-829178711.json`. Commit it,
-push, and the league opens on any device with nothing typed. Rosters
-are as they were when you pulled, so pull again when they change.
+A phone browser will not let you at those cookies. Copy them on a
+computer and put them into the draft page there, or send them to
+yourself and paste them in on the phone.

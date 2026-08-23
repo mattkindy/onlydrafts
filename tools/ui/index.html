@@ -276,7 +276,8 @@
 
   <div class="controls" id="ctl">
     <span id="espnwrap" hidden>
-      <input id="espnkey" size="14" type="password" placeholder="espn key">
+      <input id="espnswid" size="10" placeholder="SWID">
+      <input id="espns2" size="10" placeholder="espn_s2">
     </span>
     <label id="userwrap"><select id="provider">
       <option value="sleeper">sleeper</option>
@@ -574,18 +575,21 @@ const ESPN_SLOTS = {
 async function throughTheWorker(leagueId, season) {
   // ours, unless somebody has put up their own
   const where = store_get("espnWorker", "") || ESPN_WORKER;
-  const key = store_get("espnKey", "");
+  const swid = store_get("espnSwid", "");
+  const s2 = store_get("espnS2", "");
 
-  if (!key) {
+  if (!swid || !s2) {
     askForEspnAgain();
 
-    throw new Error("That ESPN league is private, so it needs your key.");
+    throw new Error(
+      "That ESPN league is private, so it needs your own two espn cookies.",
+    );
   }
 
   const said = await fetch(
     where.replace(/\/+$/, "") + "/espn/" + encodeURIComponent(leagueId) +
       "?season=" + season,
-    { headers: { "x-key": key } },
+    { headers: { "x-espn-swid": swid, "x-espn-s2": s2 } },
   ).then((r) => r.json()).catch(() => null);
 
   if (!said || said.error) {
@@ -611,11 +615,11 @@ function askForEspnAgain() {
   const box = $("espnwrap");
   box.hidden = false;
   const said = $("status");
-  said.innerHTML = "A private ESPN league is read through the worker. " +
-    'Leave your espn sign in at <a href="' + ESPN_WORKER + '" ' +
-    'target="_blank" rel="noreferrer">the worker</a> once, then put the ' +
-    "same key here.";
-  $("espnkey").focus();
+  said.innerHTML = "A private ESPN league needs your own two cookies. Open " +
+    '<a href="https://www.espn.com/fantasy/" target="_blank" ' +
+    'rel="noreferrer">espn.com</a>, sign in, and copy SWID and espn_s2 ' +
+    "from its cookies. They stay in this browser.";
+  $("espnswid").focus();
 }
 
 async function espnLeagues(leagueId) {
@@ -3251,7 +3255,7 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 $("sortby").addEventListener("change", () => { if (view === "draft") renderDraft(); });
-for (const [box, kept] of [["espnkey", "espnKey"]]) {
+for (const [box, kept] of [["espnswid", "espnSwid"], ["espns2", "espnS2"]]) {
   $(box).value = store_get(kept, "");
   // kept in this browser, which is the only place they go
   $(box).addEventListener("change", () => store_set(kept, $(box).value.trim()));
