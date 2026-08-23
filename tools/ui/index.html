@@ -274,7 +274,10 @@
   </div>
 
   <div class="controls" id="ctl">
-    <label id="userwrap">sleeper user <input id="username" size="12"></label>
+    <label id="userwrap"><select id="provider">
+      <option value="sleeper">sleeper</option>
+      <option value="espn">espn</option>
+    </select> <input id="username" size="12"></label>
     <label id="weekwrap" hidden>week <select id="week"></select></label>
     <label id="keepwrap" hidden>keepers per team
       <input id="keepn" type="number" value="3" min="0" max="6" style="width:3.2rem"></label>
@@ -448,7 +451,7 @@ const TOOLBARS = {
   },
   roster: {
     fields: [],
-    action: "reload from sleeper",
+    action: "reload",
   },
   keepers: {
     fields: ["keepwrap"],
@@ -462,12 +465,12 @@ const TOOLBARS = {
   start: {
     fields: ["weekwrap"],
     action: "load this week",
-    manual: "no sleeper league? paste your roster, one name per line",
+    manual: "no league connected? paste your roster, one name per line",
   },
   waivers: {
     fields: ["weekwrap"],
     action: "load this week",
-    manual: "no sleeper league? paste your roster, one name per line",
+    manual: "no league connected? paste your roster, one name per line",
   },
 };
 
@@ -501,16 +504,157 @@ function refreshGoLabel() {
     : store_get("draftState", null) ? "resume draft" : "start watching the draft";
 }
 
-async function loadLeagues() {
-  const username = $("username").value.trim();
-  if (!username) { $("status").textContent = "type your sleeper username"; return; }
-  $("status").textContent = "finding leagues...";
+
+/**
+ * Where a league lives.
+ *
+ * Everything downstream wants the same few things: who is in the
+ * league, what it pays, who it starts, what is on your roster, which
+ * picks are yours and where you sit in the order. A provider is
+ * whatever can answer that, so adding one is a matter of translating
+ * its own words into these.
+ */
+const PROVIDERS = {
+  sleeper: {
+    label: "Sleeper",
+    asks: "sleeper user",
+    wants: "username",
+    leaguesFor: sleeperLeagues,
+    draftNow: sleeperDraft,
+  },
+  espn: {
+    label: "ESPN",
+    asks: "espn league id",
+    wants: "league id",
+    leaguesFor: espnLeagues,
+    // espn keeps a draft behind its own view and a private league
+    // behind a cookie, so watching one live is not wired up
+    draftNow: null,
+  },
+};
+
+function providerOf(league) {
+  return PROVIDERS[(league && league.provider) || "sleeper"];
+}
+
+/**
+ * What ESPN calls each thing it pays for. Its scoring comes back as
+ * numbered items, so the numbers are named here and anything without a
+ * name is left alone rather than guessed at.
+ */
+const ESPN_STATS = {
+  3: "pass_yd", 4: "pass_td", 20: "int", 24: "rush_yd", 25: "rush_td",
+  42: "rec_yd", 43: "rec_td", 53: "rec", 72: "fum_lost", 74: "xpm",
+  77: "fgm_0_19", 80: "fgm_20_29", 83: "fgm_30_39", 86: "fgm_40_49",
+  88: "fgm_50p", 89: "fgmiss_0_19", 99: "sack", 95: "int", 96: "fum_rec",
+  97: "blk_kick", 98: "safe", 101: "def_td",
+};
+
+/** and what it calls the slots a lineup is made of */
+const ESPN_SLOTS = {
+  0: "QB", 2: "RB", 4: "WR", 6: "TE", 16: "DEF", 17: "K",
+  23: "FLEX", 7: "FLEX",
+};
+
+async function espnLeagues(leagueId) {
+  const at = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/" +
+    (meta.boardSeason ?? new Date().getFullYear()) +
+    "/segments/0/leagues/" + encodeURIComponent(leagueId) +
+    "?view=mTeam&view=mSettings&view=mRoster";
+  const said = await fetch(at, { credentials: "include" })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+
+  if (!said || !said.teams) {
+    throw new Error(
+      "ESPN would not open that league. A private one needs you to be " +
+      "signed in to espn.com in this browser.",
+    );
+  }
+
+  const settings = said.settings ?? {};
+  const scoring = {};
+
+  for (const item of settings.scoringSettings?.scoringItems ?? []) {
+    const named = ESPN_STATS[item.statId];
+
+    if (named) {
+      scoring[named] = item.points ?? 0;
+    }
+  }
+
+  const slots = [];
+  const counts = settings.rosterSettings?.lineupSlotCounts ?? {};
+
+  for (const [slot, howMany] of Object.entries(counts)) {
+    const named = ESPN_SLOTS[Number(slot)];
+
+    for (let i = 0; named && i < howMany; i++) {
+      slots.push(named);
+    }
+  }
+
+  const nameOf = (team) =>
+    (team.name ?? [team.location, team.nickname].filter(Boolean).join(" ")).trim();
+  const menOf = (team) => (team.roster?.entries ?? [])
+    .map((e) => e.playerPoolEntry?.player)
+    .filter((p) => p && p.fullName)
+    .map((p) => ({
+      name: p.fullName, key: norm(p.fullName),
+      pos: ESPN_SLOTS[p.defaultPositionId] ?? "",
+    }));
+  const rounds = settings.draftSettings?.keeperCount !== undefined
+    ? 15
+    : 15;
+
+  // every team is offered, since ESPN will not say which one is yours
+  // unless you are signed in to it
+  return (said.teams ?? []).map((team) => ({
+    provider: "espn",
+    leagueId: String(leagueId),
+    name: (said.settings?.name ?? "ESPN league") + " (" + nameOf(team) + ")",
+    size: said.teams.length,
+    scoring, slots,
+    userId: String(team.id),
+    team: nameOf(team),
+    members: Object.fromEntries(said.teams.map((t) => [String(t.id), nameOf(t)])),
+    myRoster: menOf(team),
+    myPicks: Array.from({ length: rounds }, (_, i) => i + 1),
+    draftSlot: team.draftDayProjectedRank ?? null,
+    snake: true,
+    allRosters: said.teams.map((t) => ({
+      owner: nameOf(t), picks: Array.from({ length: rounds }, (_, i) => i + 1),
+      keys: menOf(t),
+    })),
+  }));
+}
+
+/** the draft as Sleeper has it right now, or nothing before it exists */
+async function sleeperDraft(league) {
+  const drafts = await api("/league/" + league.leagueId + "/drafts");
+
+  if (!drafts || !drafts[0]) {
+    return null;
+  }
+
+  return {
+    draft: await api("/draft/" + drafts[0].draft_id),
+    picks: await api("/draft/" + drafts[0].draft_id + "/picks"),
+  };
+}
+
+/** every league on Sleeper that this user plays in */
+async function sleeperLeagues(username) {
   const user = await api("/user/" + username);
-  if (!user || !user.user_id) { $("status").textContent = "no such user"; return; }
+
+  if (!user || !user.user_id) {
+    throw new Error("Sleeper has no user by that name.");
+  }
+
   const state = await api("/state/nfl");
   const found = await api("/user/" + user.user_id + "/leagues/nfl/" + state.season);
   const playerMap = await sleeperPlayers();
-  leagues = [];
+  const out = [];
 
   for (const lg of found ?? []) {
     const [rosters, users, traded, drafts] = await Promise.all([
@@ -544,7 +688,8 @@ async function loadLeagues() {
         .filter(([, n]) => n > 0).map(([round]) => round).sort((a, b) => a - b);
     const mine = rosters.find((r) => r.owner_id === user.user_id);
     const nameOf = new Map(users.map((u) => [u.user_id, u.display_name]));
-    leagues.push({
+    out.push({
+      provider: "sleeper",
       members: Object.fromEntries(users.map((u) => [u.user_id, u.display_name])),
       leagueId: lg.league_id, name: lg.name, size: lg.total_rosters,
       // what this league pays and who it starts, so the board can be
@@ -570,6 +715,32 @@ async function loadLeagues() {
     });
   }
 
+  return out;
+}
+
+async function loadLeagues() {
+  const who = $("username").value.trim();
+  const provider = PROVIDERS[$("provider") ? $("provider").value : "sleeper"];
+
+  if (!who) {
+    $("status").textContent = "type your " + provider.wants;
+    return;
+  }
+
+  $("status").textContent = "finding leagues...";
+
+  try {
+    leagues = await provider.leaguesFor(who);
+  } catch (error) {
+    $("status").textContent = String(error.message ?? error);
+    return;
+  }
+
+  if (!leagues.length) {
+    $("status").textContent = "no leagues found";
+    return;
+  }
+
   store_set("leagues", leagues);
   $("status").textContent = "";
   renderLeagues();
@@ -581,7 +752,9 @@ function renderLeagues() {
 
   if (!leagues.length) {
     out.innerHTML = '<div class="empty"><b>Start here.</b>' +
-      '<div class="step"><span>1</span><span>Type your Sleeper username above.</span></div>' +
+      '<div class="step"><span>1</span><span>Pick where your league lives, then type your ' +
+        PROVIDERS[$("provider") ? $("provider").value : "sleeper"].wants +
+        " above.</span></div>" +
       '<div class="step"><span>2</span><span>Press load. Your leagues appear as cards.</span></div>' +
       '<div class="step"><span>3</span><span>Tap a league, then use draft help, who to start, or who to add.</span></div></div>';
     return;
@@ -2606,10 +2779,12 @@ async function pollDraft() {
   let draft = null, picks = [];
 
   if (active) {
-    const drafts = await api("/league/" + active.leagueId + "/drafts");
-    if (drafts && drafts[0]) {
-      draft = await api("/draft/" + drafts[0].draft_id);
-      picks = await api("/draft/" + drafts[0].draft_id + "/picks");
+    const watching = providerOf(active).draftNow;
+    const now = watching ? await watching(active) : null;
+
+    if (now) {
+      draft = now.draft;
+      picks = now.picks;
     }
   }
 
@@ -2977,6 +3152,13 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 $("sortby").addEventListener("change", () => { if (view === "draft") renderDraft(); });
+$("provider").addEventListener("change", () => {
+  const it = PROVIDERS[$("provider").value];
+  $("username").placeholder = it.wants;
+  $("status").textContent = it.draftNow
+    ? ""
+    : "ESPN leagues load, but watching the draft live is Sleeper only.";
+});
 
 /**
  * What draws each view. The nav and the go button both used to carry
