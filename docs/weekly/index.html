@@ -561,15 +561,31 @@ async function espnLeagues(leagueId) {
     (meta.boardSeason ?? new Date().getFullYear()) +
     "/segments/0/leagues/" + encodeURIComponent(leagueId) +
     "?view=mTeam&view=mSettings&view=mRoster";
-  const said = await fetch(at, { credentials: "include" })
-    .then((r) => (r.ok ? r.json() : null))
+  /**
+   * Credentials go along in case the browser will send them, but a
+   * private league will mostly refuse.
+   *
+   * A signed in session lives in cookies on espn.com, and a browser
+   * only sends those to a page on espn.com. This page is somewhere
+   * else, so they stay behind. Reading a private league from here
+   * would mean asking for those cookies and keeping them, which is
+   * not something to build without asking first. A public league
+   * opens on its id alone; for a private one, paste the roster.
+   */
+  const answered = await fetch(at, { credentials: "include" })
     .catch(() => null);
 
-  if (!said || !said.teams) {
+  if (answered && answered.status === 401) {
     throw new Error(
-      "ESPN would not open that league. A private one needs you to be " +
-      "signed in to espn.com in this browser.",
+      "That ESPN league is private, and a browser will not send your " +
+      "espn.com sign in to another site. Paste your roster instead.",
     );
+  }
+
+  const said = answered && answered.ok ? await answered.json() : null;
+
+  if (!said || !said.teams) {
+    throw new Error("ESPN has no league with that id for this season.");
   }
 
   const settings = said.settings ?? {};
@@ -3157,7 +3173,7 @@ $("provider").addEventListener("change", () => {
   $("username").placeholder = it.wants;
   $("status").textContent = it.draftNow
     ? ""
-    : "ESPN leagues load, but watching the draft live is Sleeper only.";
+    : "ESPN: public leagues only, and the draft cannot be watched live.";
 });
 
 /**
