@@ -85,6 +85,7 @@ async function main(): Promise<void> {
     "is a back", "is a quarterback", "is a tight end",
     "touches a game", "touches a game, backs",
     "weight", "weeks out", "weeks listed", "ended the year hurt", "plays on turf",
+    "weeks on reserve", "opened the year on reserve",
   ];
   console.log("\nwhat each signal moves a season by, in games:");
   names.forEach((name, i) => {

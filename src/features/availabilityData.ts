@@ -11,6 +11,9 @@ import {
   loadGames, loadPlayerStats, loadWeeklyRosters,
 } from "../data/nflverse.js";
 import type { AvailabilityRow } from "./gamesPlayed.js";
+import {
+  openedOnReserve, readSignals, type SeasonSignals,
+} from "./durabilitySignals.js";
 
 const WANTED = ["QB", "RB", "WR", "TE"];
 const RAW = join(import.meta.dirname, "..", "..", "data", "raw");
@@ -28,6 +31,7 @@ interface Season {
   weeksListed: Map<string, number>;
   endedHurt: Set<string>;
   turf: Map<string, number>;
+  signals: SeasonSignals;
 }
 
 async function readSeason(season: number): Promise<Season> {
@@ -37,6 +41,10 @@ async function readSeason(season: number): Promise<Season> {
     weight: new Map(), height: new Map(),
     weeksOut: new Map(), weeksListed: new Map(), endedHurt: new Set(),
     turf: new Map(),
+    signals: {
+      onReserve: new Map(), inactive: new Map(), activeWeeks: new Map(),
+      snapShare: new Map(), bestSnapShare: new Map(), reserveSpells: new Map(),
+    },
   };
 
   for (const w of await loadPlayerStats(season).catch(() => [])) {
@@ -108,6 +116,8 @@ async function readSeason(season: number): Promise<Season> {
     out.turf.set(team, seen.all > 0 ? seen.turf / seen.all : 0.5);
   }
 
+  out.signals = await readSignals(season);
+
   return out;
 }
 
@@ -135,6 +145,12 @@ export async function readAvailability(
 
   for (const s of [...wanted].sort()) {
     byYear.set(s, await readSeason(s));
+  }
+
+  const openedHurt = new Map<number, Set<string>>();
+
+  for (const s of seasons) {
+    openedHurt.set(s, await openedOnReserve(s));
   }
 
   const rowsFor = (season: number): AvailabilityRow[] => {
@@ -166,6 +182,8 @@ export async function readAvailability(
         weeksListed: was.weeksListed.get(playerId) ?? 0,
         endedHurt: was.endedHurt.has(playerId),
         onTurf: was.turf.get(team) ?? 0.5,
+        weeksOnReserve: was.signals.onReserve.get(playerId) ?? 0,
+        openedOnReserve: openedHurt.get(season)?.has(playerId) ?? false,
         played: is ? is.games.get(playerId) ?? 0 : undefined,
       });
     }

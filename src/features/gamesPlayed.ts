@@ -39,6 +39,17 @@ export interface AvailabilityRow {
   endedHurt: boolean;
   /** share of his team's home games on turf, which is harder on knees */
   onTurf: number;
+  /**
+   * Weeks his club left him on injured reserve last season. A missing
+   * stat line says he did not play; this says his club had stopped
+   * expecting him to, which is a stronger and different thing.
+   */
+  weeksOnReserve?: number;
+  /**
+   * Whether his club had him on reserve when this season opened, which
+   * a drafter can see in August and which no other signal captures.
+   */
+  openedOnReserve?: boolean;
   /** what actually happened, absent when projecting */
   played?: number;
 }
@@ -66,6 +77,8 @@ export function availabilityRow(r: AvailabilityRow): number[] {
     r.weeksListed / ROOM,
     r.endedHurt ? 1 : 0,
     r.onTurf,
+    (r.weeksOnReserve ?? 0) / ROOM,
+    r.openedOnReserve ? 1 : 0,
   ];
 }
 
