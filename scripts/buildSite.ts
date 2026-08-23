@@ -523,7 +523,7 @@ async function main(): Promise<void> {
         ppg: Number(p.projectedPpg.toFixed(1)),
         // what the regression expects him to do in a game, for the page
         // to score by whatever the connected league pays
-        modelMade: p.projectedParts
+        projected: p.projectedParts
           ? Object.fromEntries(Object.entries(p.projectedParts)
               .map(([part, n]) => [part, Number(n.toFixed(2))]))
           : null,
@@ -562,11 +562,14 @@ async function main(): Promise<void> {
           : null,
         plus: f.plus,
         minus: f.minus,
+        // A week as a multiple of his own average, since points here
+        // would be points under one league's scoring. The weekly model
+        // was fitted on points, so every part of his line moves together.
         weeks: (weeklyByPlayer.get(p.playerId) ?? [])
           .map((w) => ({
             w: w.week,
             opp: (w.home ? "v " : "@ ") + w.opponent,
-            pts: Number(w.points.toFixed(1)),
+            of: Number((w.points / Math.max(0.1, p.projectedPpg)).toFixed(3)),
           })),
       };
     })
@@ -766,7 +769,7 @@ async function main(): Promise<void> {
     others.push({
       name: his.name, key, position: "K", team: his.team,
       // what the walk hands him, with what he did last season beside it
-      made: asKicked ?? Object.fromEntries(Object.entries(his.parts)
+      simulated: asKicked ?? Object.fromEntries(Object.entries(his.parts)
         .map(([part, n]) => [part, Number((n / his.games).toFixed(3))])),
       lastYear: Object.fromEntries(Object.entries(his.parts)
         .map(([part, n]) => [part, Number((n / his.games).toFixed(3))])),
@@ -800,7 +803,7 @@ async function main(): Promise<void> {
 
     others.push({
       name: team, key: normalizeName(team), position: "DEF", team,
-      made,
+      simulated: made,
       adpBy: byTeamCode.get(team) ?? null,
       bye: world.byeWeek.get(team) ?? null,
     });
@@ -859,7 +862,7 @@ async function main(): Promise<void> {
     const played = id === undefined ? 0 : walkGames.get(id) ?? 0;
 
     if (made && played > 0) {
-      (p as unknown as { made: Record<string, number> }).made =
+      (p as unknown as { simulated: Record<string, number> }).simulated =
         Object.fromEntries(Object.entries(made)
           .map(([part, n]) => [part, Number((n / played).toFixed(2))]));
     }
@@ -890,14 +893,6 @@ async function main(): Promise<void> {
     join(DOCS, "data", "index.json"),
     JSON.stringify({ weeks: index, boardSeason: season, adpFormat }),
   );
-  /**
-   * The page ships only if its script would run. Two crashes went out
-   * in one afternoon because nothing ever looked at it.
-   */
-  execFileSync("npx", ["tsx", join(import.meta.dirname, "checkUi.ts")], {
-    stdio: "inherit",
-  });
-
   await mkdir(OLD, { recursive: true });
   await writeFile(
     join(OLD, "index.html"),
@@ -907,10 +902,17 @@ async function main(): Promise<void> {
       "</a> now.</p>",
   );
 
-  await writeFile(
-    join(DOCS, "index.html"),
-    await readFile(join(import.meta.dirname, "..", "tools", "ui", "index.html"), "utf8"),
-  );
+  // The page is a Preact app now, so typescript checks it and vite
+  // writes it. A crash used to reach the site because nothing but the
+  // browser ever read the script.
+  execFileSync("npx", ["tsc", "--noEmit", "-p", "app/tsconfig.json"], {
+    cwd: join(import.meta.dirname, ".."),
+    stdio: "inherit",
+  });
+  execFileSync("npx", ["vite", "build"], {
+    cwd: join(import.meta.dirname, ".."),
+    stdio: "inherit",
+  });
   console.log(`site written to ${DOCS}`);
 }
 
