@@ -276,8 +276,7 @@
 
   <div class="controls" id="ctl">
     <span id="espnwrap" hidden>
-      <input id="espnswid" size="10" placeholder="SWID">
-      <input id="espns2" size="10" placeholder="espn_s2">
+      <input id="espnkey" size="14" type="password" placeholder="espn key">
     </span>
     <label id="userwrap"><select id="provider">
       <option value="sleeper">sleeper</option>
@@ -575,21 +574,18 @@ const ESPN_SLOTS = {
 async function throughTheWorker(leagueId, season) {
   // ours, unless somebody has put up their own
   const where = store_get("espnWorker", "") || ESPN_WORKER;
-  const swid = store_get("espnSwid", "");
-  const s2 = store_get("espnS2", "");
+  const key = store_get("espnKey", "");
 
-  if (!swid || !s2) {
+  if (!key) {
     askForEspnAgain();
 
-    throw new Error(
-      "That ESPN league is private, so it needs your two espn cookies.",
-    );
+    throw new Error("That ESPN league is private, so it needs your key.");
   }
 
   const said = await fetch(
     where.replace(/\/+$/, "") + "/espn/" + encodeURIComponent(leagueId) +
       "?season=" + season,
-    { headers: { "x-espn-swid": swid, "x-espn-s2": s2 } },
+    { headers: { "x-key": key } },
   ).then((r) => r.json()).catch(() => null);
 
   if (!said || said.error) {
@@ -615,12 +611,11 @@ function askForEspnAgain() {
   const box = $("espnwrap");
   box.hidden = false;
   const said = $("status");
-  said.innerHTML = "A private ESPN league needs two cookies, and they go " +
-    "stale. Open " +
-    '<a href="https://www.espn.com/fantasy/" target="_blank" ' +
-    'rel="noreferrer">espn.com</a>, sign in, copy SWID and espn_s2 ' +
-    "from the cookies, and paste them here.";
-  $("espnswid").focus();
+  said.innerHTML = "A private ESPN league is read through the worker. " +
+    'Leave your espn sign in at <a href="' + ESPN_WORKER + '" ' +
+    'target="_blank" rel="noreferrer">the worker</a> once, then put the ' +
+    "same key here.";
+  $("espnkey").focus();
 }
 
 async function espnLeagues(leagueId) {
@@ -649,6 +644,21 @@ async function espnLeagues(leagueId) {
    * this way first, in case it opens for nothing, and only then does
    * it come down to what you paste.
    */
+  /**
+   * A league pulled here beforehand, which is how a private one reaches
+   * a phone. Cookies cannot be dug out of a phone browser, so the pull
+   * happens once on a machine that has them and the answer ships with
+   * the site.
+   */
+  const kept = await fetch(
+    "data/league-espn-" + encodeURIComponent(leagueId) + ".json" +
+      (window.__bust ?? ""),
+  ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+
+  if (kept && kept.leagues) {
+    return kept.leagues;
+  }
+
   const answered = await fetch(at, { credentials: "include" })
     .catch(() => null);
   let said = answered && answered.ok ? await answered.json() : null;
@@ -3241,7 +3251,7 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 $("sortby").addEventListener("change", () => { if (view === "draft") renderDraft(); });
-for (const [box, kept] of [["espnswid", "espnSwid"], ["espns2", "espnS2"]]) {
+for (const [box, kept] of [["espnkey", "espnKey"]]) {
   $(box).value = store_get(kept, "");
   // kept in this browser, which is the only place they go
   $(box).addEventListener("change", () => store_set(kept, $(box).value.trim()));
