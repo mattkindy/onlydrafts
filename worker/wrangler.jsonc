@@ -3,9 +3,5 @@
   "name": "depth-chart-espn",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-20",
-  "observability": { "enabled": true },
-  // where the espn session is kept, so a phone never has to hold one
-  "kv_namespaces": [
-    { "binding": "ESPN", "id": "eb8750061cb1441da8b8dd4d34900053" }
-  ]
+  "observability": { "enabled": true }
 }
