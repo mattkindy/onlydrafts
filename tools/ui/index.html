@@ -274,6 +274,11 @@
   </div>
 
   <div class="controls" id="ctl">
+    <span id="espnwrap" hidden>
+      <input id="espnworker" size="16" placeholder="worker address">
+      <input id="espnswid" size="10" placeholder="SWID">
+      <input id="espns2" size="10" placeholder="espn_s2">
+    </span>
     <label id="userwrap"><select id="provider">
       <option value="sleeper">sleeper</option>
       <option value="espn">espn</option>
@@ -556,11 +561,44 @@ const ESPN_SLOTS = {
   23: "FLEX", 7: "FLEX",
 };
 
+/**
+ * A private league, asked for through the worker.
+ *
+ * ESPN keeps one behind the cookies your sign in leaves on espn.com,
+ * a browser sends those only to espn.com, and javascript cannot set
+ * them by hand. The worker can, so its address and the two cookies
+ * are kept in this browser and go nowhere else.
+ */
+async function throughTheWorker(leagueId, season) {
+  const where = store_get("espnWorker", "");
+  const swid = store_get("espnSwid", "");
+  const s2 = store_get("espnS2", "");
+
+  if (!where) {
+    throw new Error(
+      "That ESPN league is private. Give a worker address and your two " +
+      "espn cookies to read it.",
+    );
+  }
+
+  const said = await fetch(
+    where.replace(/\/+$/, "") + "/espn/" + encodeURIComponent(leagueId) +
+      "?season=" + season,
+    { headers: { "x-espn-swid": swid, "x-espn-s2": s2 } },
+  ).then((r) => r.json()).catch(() => null);
+
+  if (!said || said.error) {
+    throw new Error((said && said.error) || "the worker could not reach ESPN");
+  }
+
+  return said;
+}
+
 async function espnLeagues(leagueId) {
+  const season = meta.boardSeason ?? new Date().getFullYear();
   const at = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/" +
-    (meta.boardSeason ?? new Date().getFullYear()) +
-    "/segments/0/leagues/" + encodeURIComponent(leagueId) +
-    "?view=mTeam&view=mSettings&view=mRoster";
+    season + "/segments/0/leagues/" + encodeURIComponent(leagueId) +
+    "?view=mTeam&view=mSettings&view=mRoster&view=mDraftDetail";
   /**
    * Credentials go along in case the browser will send them, but a
    * private league will mostly refuse.
@@ -572,17 +610,14 @@ async function espnLeagues(leagueId) {
    * not something to build without asking first. A public league
    * opens on its id alone; for a private one, paste the roster.
    */
-  const answered = await fetch(at, { credentials: "include" })
-    .catch(() => null);
+  const answered = await fetch(at).catch(() => null);
+  let said = answered && answered.ok ? await answered.json() : null;
 
-  if (answered && answered.status === 401) {
-    throw new Error(
-      "That ESPN league is private, and a browser will not send your " +
-      "espn.com sign in to another site. Paste your roster instead.",
-    );
+  if (!said) {
+    // a private league only opens through the worker, the one place
+    // the two cookies can be put on the request
+    said = await throughTheWorker(leagueId, season);
   }
-
-  const said = answered && answered.ok ? await answered.json() : null;
 
   if (!said || !said.teams) {
     throw new Error("ESPN has no league with that id for this season.");
@@ -3168,12 +3203,21 @@ for (const label of ["ALL", ...POSITIONS]) {
 
 $("search").addEventListener("input", () => { if (view === "draft") renderDraft(); });
 $("sortby").addEventListener("change", () => { if (view === "draft") renderDraft(); });
+for (const [box, kept] of [
+  ["espnworker", "espnWorker"], ["espnswid", "espnSwid"], ["espns2", "espnS2"],
+]) {
+  $(box).value = store_get(kept, "");
+  // kept in this browser, which is the only place they go
+  $(box).addEventListener("change", () => store_set(kept, $(box).value.trim()));
+}
+
 $("provider").addEventListener("change", () => {
   const it = PROVIDERS[$("provider").value];
+  $("espnwrap").hidden = $("provider").value !== "espn";
   $("username").placeholder = it.wants;
   $("status").textContent = it.draftNow
     ? ""
-    : "ESPN: public leagues only, and the draft cannot be watched live.";
+    : "ESPN: a private league needs the worker, and no draft watching.";
 });
 
 /**
