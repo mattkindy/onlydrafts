@@ -27,6 +27,7 @@ import { buildMatchupTable } from "../src/features/matchupTable.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import { loadCoaches } from "../src/data/coaches.js";
 import { sizeOf } from "../src/features/gameSize.js";
+import { weatherLift } from "../src/features/weatherLift.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
 import { walkDrive } from "../src/model/driveFromFactors.js";
 import {
@@ -190,10 +191,14 @@ async function main(): Promise<void> {
 
   const line = new Map<string, number>();
   const homeSide = new Set<string>();
+  // the fixture behind each side's week, so the day can be looked up
+  const fixtureOf = new Map<string, Awaited<ReturnType<typeof loadGames>>[number]>();
 
   for (const game of await loadGames()) {
     if (game.season !== SCORE_ON || game.week > 18) continue;
     homeSide.add(`${game.week}|${game.homeTeamId}`);
+    fixtureOf.set(`${game.week}|${game.homeTeamId}`, game);
+    fixtureOf.set(`${game.week}|${game.awayTeamId}`, game);
     const t = game.totalLine;
     const s = game.spreadLine;
     if (t === undefined || s === undefined) continue;
@@ -270,6 +275,25 @@ async function main(): Promise<void> {
         sizeOf({ total: 2 * (line.get(theirKey) ?? 22.4), favouredBy: 0 }),
         alpha,
       );
+    }
+
+    /**
+     * The day, for a fixture with no line on it. The market prices the
+     * weather already, so bending toward the line and then charging for
+     * the cold on top would count it twice.
+     */
+    if (process.env["WEATHER"]) {
+      const fixture = fixtureOf.get(key);
+      const day = fixture
+        ? {
+            indoors: fixture.indoors,
+            temperature: fixture.temp,
+            wind: fixture.wind,
+          }
+        : { indoors: true };
+      const worth = weatherLift(day);
+      home.lift = (home.lift ?? 1) * worth;
+      away.lift = (away.lift ?? 1) * worth;
     }
 
     seen.add(key);

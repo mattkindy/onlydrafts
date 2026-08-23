@@ -34,6 +34,7 @@ import { loadAdp } from "../src/data/adp.js";
 import { normalizeName } from "../src/data/names.js";
 import { sizeOf } from "../src/features/gameSize.js";
 import { kickingVenue } from "../src/features/kickingVenue.js";
+import { fitClimate, type Reading } from "../src/features/climate.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
 import { myShare } from "../src/sim/acrossCores.js";
@@ -131,6 +132,21 @@ async function main(): Promise<void> {
   const mine = myShare(schedule);
   const rng = seededRng(Number(process.env["SEED"] ?? 23));
 
+  /**
+   * Every reading there has ever been, so a fixture nobody has played
+   * can still be given a day. Fitted on seasons before the one being
+   * walked, so nothing reads its own weather.
+   */
+  const climate = fitClimate(
+    (await loadGames())
+      .filter((g) => g.season < SCORE_ON && !g.indoors &&
+        g.temp !== undefined && g.week <= 18)
+      .map((g): Reading => ({
+        team: g.homeTeamId, week: g.week, hour: g.hour ?? 13,
+        temperature: g.temp!, wind: g.wind,
+      })),
+  );
+
   for (const fixture of
     process.env["MERGED"] || process.env["PREWARM"] ? [] : mine) {
     const home = sideFor(fixture.homeTeamId);
@@ -160,17 +176,32 @@ async function main(): Promise<void> {
       ), alpha);
     }
 
-    const venue = {
+    /**
+     * A season nobody has played has no readings, so a day is drawn for
+     * it from what that ground is like in that week at that hour. It is
+     * drawn once per run rather than once per fixture, so the walk sees
+     * a mild December afternoon in Buffalo as often as a freezing one.
+     */
+    const drawVenue = () => ({
       indoors: fixture.indoors,
-      temperature: fixture.temp,
-      wind: fixture.wind,
-    };
+      temperature: fixture.temp ??
+        (fixture.indoors
+          ? undefined
+          : climate.drawTemperature(
+              fixture.homeTeamId, fixture.week, fixture.hour ?? 13, rng,
+            )),
+      wind: fixture.wind ??
+        (fixture.indoors
+          ? undefined
+          : climate.drawWind(fixture.homeTeamId, fixture.week, rng)),
+    });
     const meanFor = new Map<string, number>();
     const madeThisGame = new Map<string, StatTotals>();
 
     const saidPoints = new Map<string, number>();
 
     for (let run = 0; run < RUNS; run++) {
+      const venue = drawVenue();
       const game = playGame(home, away, {
         rules: {
           ...rules, kickSucceeds: kicking.kickSucceeds,
