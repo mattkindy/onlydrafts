@@ -113,6 +113,15 @@ const LAST_GASP = 10;
 /** and how far out it will still try from, in yards to the goal */
 const IN_RANGE = 45;
 
+/**
+ * Somewhere to watch what the walk does on fourth down. Set it and the
+ * player eval prints kick against punt against go by where the ball is,
+ * which is how the decision model was cleared of the extra kicking.
+ */
+let chose: ((yardline: number, choice: string) => void) | undefined;
+
+export const watchFourths = (fn: typeof chose) => { chose = fn; };
+
 export function walkDrive(
   startAt: number,
   factors: PlayFactors,
@@ -222,6 +231,7 @@ export function walkDrive(
     if (state.down === 4) {
       facedAt.push(state.yardline);
       const choice = fourth.choose(state, uniform);
+      chose?.(state.yardline, choice);
 
       /**
        * Whether the staff actually sends him out. In the cold they go
