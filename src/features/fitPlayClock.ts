@@ -42,6 +42,14 @@ interface Tally {
 
 const empty = (): Tally => ({ plays: 0, seconds: 0 });
 
+/**
+ * The gaps are fitted on plays a side ran, and the walk runs a
+ * different mix of them, so it comes out about six percent quick and
+ * fits an extra half a drive into a game. This puts that back: a side
+ * gets 10.81 drives with it, 11.27 without, and takes 10.7.
+ */
+const BETWEEN_SNAPS = 1.06;
+
 /** two minutes left in either half, when everybody hurries */
 const hurrying = (secondsLeft: number) => secondsLeft % 1800 < 120;
 
@@ -155,7 +163,8 @@ export function fitPlayClock(
     secondsFor: (call, yards, margin, secondsLeft, offence) =>
       Math.max(
         4,
-        usual(call, yards, margin, secondsLeft) + (offence ? paceOf(offence) : 0),
+        (usual(call, yards, margin, secondsLeft) +
+          (offence ? paceOf(offence) : 0)) * BETWEEN_SNAPS,
       ),
   };
 }

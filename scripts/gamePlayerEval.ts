@@ -31,7 +31,7 @@ import { weatherLift } from "../src/features/weatherLift.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom } from "../src/model/gameFromDrives.js";
 import {
-  gainedAt, reached, watchFourths, watchHowFar,
+  gainedAt, gaveUpAt, reached, watchFourths, watchHowFar,
 } from "../src/model/driveFromFactors.js";
 import { myShare } from "../src/sim/acrossCores.js";
 import { buildWorld } from "../src/features/playedWorld.js";
@@ -602,6 +602,17 @@ async function main(): Promise<void> {
           console.error(
             `    ${b.padEnd(10)} ${(v.yards / v.n).toFixed(2)} ` +
             `(really ${truth[b]!.toFixed(2)})`,
+          );
+        }
+      }
+
+      if (gaveUpAt.size) {
+        console.error("  throws the sampled draw gave up on, by where the ball is");
+        for (const b of ["inside 10", "11-20", "21-30", "31-50", "51-70", "past 70"]) {
+          const v = gaveUpAt.get(b);
+          if (!v) continue;
+          console.error(
+            `    ${b.padEnd(10)} ${(100 * v.pooled / v.n).toFixed(1)}% of ${v.n}`,
           );
         }
       }

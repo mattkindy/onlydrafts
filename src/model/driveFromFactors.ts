@@ -124,6 +124,8 @@ let chose: ((yardline: number, choice: string) => void) | undefined;
 export const reached: { best: number; td: boolean }[] = [];
 /** what a play gains, by where the ball was */
 export const gainedAt = new Map<string, { n: number; yards: number }>();
+/** how often the sampled draw gives up, by where the ball is */
+export const gaveUpAt = new Map<string, { n: number; pooled: number }>();
 export let watchReach = false;
 export const watchHowFar = () => { watchReach = true; };
 
@@ -360,6 +362,16 @@ export function walkDrive(
     const caught = own
       ? own.caught
       : call === "run" || factors.caught(gained, uniform);
+    if (watchReach && call === "pass") {
+      const y0 = state.yardline;
+      const b0 = y0 <= 10 ? "inside 10" : y0 <= 20 ? "11-20" : y0 <= 30 ? "21-30"
+        : y0 <= 50 ? "31-50" : y0 <= 70 ? "51-70" : "past 70";
+      const seen0 = gaveUpAt.get(b0) ?? { n: 0, pooled: 0 };
+      seen0.n++;
+      if (!own) seen0.pooled++;
+      gaveUpAt.set(b0, seen0);
+    }
+
     if (watchReach) {
       const y = state.yardline;
       const b = y <= 10 ? "inside 10" : y <= 20 ? "11-20" : y <= 30 ? "21-30"
