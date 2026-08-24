@@ -37,6 +37,13 @@ export interface Player {
   ppg?: number;
   vor?: number;
   perGameVor?: number;
+  /**
+   * What his own projection says he is worth over a season, which is
+   * not what the card leads with. The board leads with what a pick at
+   * his place is worth, and the two disagree whenever the room and the
+   * projection do.
+   */
+  ownVor?: number;
   rank?: number;
   adpRank?: number;
   ownPpg?: number;

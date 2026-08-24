@@ -144,8 +144,6 @@ function Facts({ p, teams, costs }: {
   p: Player; teams: number; costs?: number | null;
 }) {
   const rounds = roundsOfGap(p, teams);
-  const ownPpg = p.ownPpg;
-  const shown = p.ppg ?? 0;
 
   return (
     <span class="facts">
@@ -181,12 +179,17 @@ function Facts({ p, teams, costs }: {
           <i>games</i>{p.games.toFixed(1)}
         </span>
       )}
-      {ownPpg !== undefined && Math.abs(ownPpg - shown) >= 1.5 && (
+      {/* The big value is what a pick at his place on the board is
+          worth. This is what his own projection says he is worth, shown
+          when the two disagree, which is when the room and the model
+          disagree about him. */}
+      {p.ownVor !== undefined && p.vor !== undefined &&
+        Math.abs(p.ownVor - p.vor) >= 10 && (
         <span
           class="f"
-          title="what our own projection says, before the market and the share model are mixed in"
+          title="what his own projection says he is worth over a season, before the room and the touches and the walk are mixed in. The bigger number is what a pick at his place on the board is worth."
         >
-          <i>ours alone</i>{ownPpg.toFixed(1)}
+          <i>ours alone</i>{p.ownVor.toFixed(0)}
         </span>
       )}
       {p.bye ? <span class="f"><i>bye</i>{p.bye}</span> : null}
