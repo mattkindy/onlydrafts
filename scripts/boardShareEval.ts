@@ -414,6 +414,27 @@ async function main(): Promise<void> {
       }
       note("regression and adp, the board today", mix([model, byAdp], [0.5, 0.5]));
 
+      /**
+       * What the regression's own seat is worth.
+       *
+       * The board gives it .106 and a man can be first on our own
+       * numbers and second on the board, which is what prompted this.
+       * The walk keeps its .15 and the rest of the room divides what is
+       * left in the ratio it has now, so only the regression's share
+       * moves.
+       */
+      for (const onModel of [0.106, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]) {
+        const rest = 1 - onModel - 0.15;
+        const shareOf = 0.319 / (0.319 + 0.425);
+        note(
+          `the blend with the regression at ${(100 * onModel).toFixed(0)}%`,
+          mix(
+            [model, share, byAdp, walk],
+            [onModel, rest * shareOf, rest * (1 - shareOf), 0.15],
+          ),
+        );
+      }
+
       // and the whole grid for each way of voting, so the weighting
       // is picked off a plateau rather than off a peak
       for (const [how, vote] of [
