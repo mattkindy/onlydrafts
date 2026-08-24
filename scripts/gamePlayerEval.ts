@@ -127,8 +127,10 @@ async function main(): Promise<void> {
    * drift the frozen descriptions never hear about, so week one is
    * the cleanest read on the knowing itself.
    */
+  // a season runs to week 18 and a side plays seventeen of them, so
+  // stopping at seventeen gave everybody a game less than they get
   const schedule = (await loadGames())
-    .filter((g) => g.season === SCORE_ON && g.week <= 17 &&
+    .filter((g) => g.season === SCORE_ON && g.week <= 18 &&
       (!onlyWeek || g.week === onlyWeek));
   const mine = myShare(schedule);
   /**
@@ -532,7 +534,7 @@ async function main(): Promise<void> {
 
   for (const season of [SCORE_ON - 2, SCORE_ON - 1]) {
     for (const s2 of await loadPlayerStats(season)) {
-      if (s2.week <= 17) {
+      if (s2.week <= 18) {
         gamesBefore.set(s2.playerId, (gamesBefore.get(s2.playerId) ?? 0) + 1);
         const own = seasonsSeen.get(s2.playerId) ?? new Set<number>();
         own.add(season);
@@ -545,7 +547,7 @@ async function main(): Promise<void> {
   const before = new Map<string, { games: number; points: number }>();
 
   for (const s2 of await loadPlayerStats(SCORE_ON - 1)) {
-    if (s2.week > 17) {
+    if (s2.week > 18) {
       continue;
     }
 
@@ -594,7 +596,7 @@ async function main(): Promise<void> {
   const names = new Map<string, string>();
 
   for (const s of await loadPlayerStats(SCORE_ON)) {
-    if (s.week > 17 || (onlyWeek && s.week !== onlyWeek)) {
+    if (s.week > 18 || (onlyWeek && s.week !== onlyWeek)) {
       continue;
     }
 
@@ -615,7 +617,7 @@ async function main(): Promise<void> {
   const prevPpg = new Map<string, { points: number; games: number }>();
 
   for (const s2 of await loadPlayerStats(SCORE_ON - 1)) {
-    if (s2.week > 17) {
+    if (s2.week > 18) {
       continue;
     }
 
@@ -638,7 +640,7 @@ async function main(): Promise<void> {
 
   if (onlyWeek > 1) {
     for (const s2 of await loadPlayerStats(SCORE_ON)) {
-      if (s2.week >= onlyWeek || s2.week > 17) {
+      if (s2.week >= onlyWeek || s2.week > 18) {
         continue;
       }
 
