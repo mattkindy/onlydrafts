@@ -195,11 +195,13 @@ function Facts({ p, teams, costs }: {
 }
 
 /**
- * What he does in a game, in the categories a box score uses, so the
- * points beside it can be checked against whatever the league pays.
+ * What he does over a season, in the categories a box score uses. A
+ * game's worth of it was too easy to read as a week, and a season is
+ * the number anybody weighing two men wants anyway.
  */
 function StatLine({ p }: { p: Player }) {
-  const line = lineOver(p.projected ?? p.simulated, p.position, 1, movedBy(p));
+  const line = lineOver(p.projected ?? p.simulated, p.position, p.games ?? 17,
+    movedBy(p));
 
   if (!line.length) {
     return null;
@@ -207,9 +209,10 @@ function StatLine({ p }: { p: Player }) {
 
   return (
     <div class="statline">
+      <span class="over">season</span>
       {line.map((f) => (
         <span class="s" key={f.label}>
-          <i>{f.label}</i>{f.value.toFixed(f.places)}
+          <i>{f.label}</i>{f.value.toFixed(0)}
         </span>
       ))}
     </div>

@@ -257,6 +257,9 @@
     padding: .1rem .45rem; font-variant-numeric: tabular-nums; }
   .statline .s i { color: var(--muted); font-style: normal;
     margin-right: .28rem; }
+  /* what the numbers are over, since a game's worth read as a week */
+  .statline .over { color: var(--faint); text-transform: uppercase;
+    letter-spacing: .05em; font-size: .66rem; align-self: center; }
   .statline.big { font-size: .8rem; margin: .2rem 0 .8rem; }
   /* the line sits under the bar rather than beside it, since four
      columns and a stat line do not fit across a phone */
