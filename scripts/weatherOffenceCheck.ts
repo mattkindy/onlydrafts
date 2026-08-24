@@ -14,7 +14,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
-import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
+import { loadPlayerStats } from "../src/data/nflverse.js";
 
 const FROM = 2015;
 const TO = 2025;

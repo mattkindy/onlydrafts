@@ -11,9 +11,6 @@
  * Run: npx tsx scripts/auditNumbers.ts
  */
 
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { parseCsv } from "../src/data/csv.js";
 import { spearman } from "../src/backtest/metrics.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";

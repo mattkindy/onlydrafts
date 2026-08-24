@@ -75,7 +75,7 @@ export interface Climate {
   drawTemperature: (
     team: string, week: number, hour: number, rng: () => number,
   ) => number;
-  drawWind: (team: string, week: number, rng: () => number) => number;
+  drawWind: (team: string, rng: () => number) => number;
   /** and the middle of such days, for anyone who wants one number */
   meanTemperature: (team: string, week: number, hour: number) => number;
 }
@@ -178,7 +178,7 @@ export function fitClimate(readings: Reading[]): Climate {
       return Math.max(-5, Math.min(105,
         middleAt(team, week, hour) + spread * bellDraw(rng)));
     },
-    drawWind: (team, week, rng) => {
+    drawWind: (team, rng) => {
       const its = windAt.get(team) ?? [];
       const trust = its.length / (its.length + SETTLES_AT);
       const middle = trust * mean(its) + (1 - trust) * windEverywhere;

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { RAW_DIR } from "../src/data/nflverse.js";
 import type { Snap } from "../src/model/plusMinus.js";
 import {
-  advance, emptyState, observe, DEFAULTS, type DynamicState,
+  advance, emptyState, observe, type DynamicState,
 } from "../src/model/dynamicPlusMinus.js";
 import { splitLine } from "../src/data/csv.js";
 

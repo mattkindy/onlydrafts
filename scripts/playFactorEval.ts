@@ -23,7 +23,6 @@ import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
 import { fitEndings } from "../src/features/fitEndings.js";
 import { fitTurnovers, type TurnoverRow } from "../src/features/fitTurnovers.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
-import { normalDraw } from "../src/sim/normal.js";
 
 /** the fourth downs where a side actually chose, so not the flags */
 const DECIDED = ["run", "pass", "field_goal", "punt"];
@@ -272,7 +271,6 @@ async function composed(
   }
 
   const rng = seededRng(9);
-  const normal = () => normalDraw(rng);
   const points = perSeed.reduce((a, b) => a + b, 0) / perSeed.length * games;
 
   const seen = lengths.length;

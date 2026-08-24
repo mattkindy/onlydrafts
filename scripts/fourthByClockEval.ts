@@ -19,7 +19,6 @@ import { timeBand, marginBand, type PlayState } from "../src/model/playFactors.j
 /** the fourth downs where a side actually chose, so not the flags */
 const DECIDED = ["run", "pass", "field_goal", "punt"];
 
-const LEARN = [2021, 2022, 2023, 2024];
 const SCORE_ON = 2025;
 const DRAWS = 400;
 

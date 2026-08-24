@@ -13,7 +13,6 @@ import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
 import { rmse, spearman } from "../src/backtest/metrics.js";
 import { seededRng } from "../src/sim/rng.js";
-import { normalDraw } from "../src/sim/normal.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { fitDriveRules } from "../src/features/driveRules.js";
@@ -21,7 +20,7 @@ import { fitPlayFactors, type PlayRow } from "../src/features/fitPlayFactors.js"
 import { fitTargetDepth } from "../src/features/targetDepth.js";
 import { loadAdp } from "../src/data/adp.js";
 import { normalizeName } from "../src/data/names.js";
-import { walkDrive, CLOCK_DEFAULTS } from "../src/model/driveFromFactors.js";
+import { walkDrive } from "../src/model/driveFromFactors.js";
 import { fitFourthDown, type FourthRow } from "../src/features/fitFourthDown.js";
 import { loadDriveStarts, startFrom } from "../src/features/driveStarts.js";
 import { fitEndings } from "../src/features/fitEndings.js";
@@ -77,16 +76,6 @@ async function main(): Promise<void> {
   const endings = await fitEndings([2021, 2022, 2023, 2024]);
   const withEndings = { ...rules, kickSucceeds: endings.kickSucceeds };
   const clock = { isLast: endings.isLast, lastLength: endings.lastLength };
-  const turnovers = fitTurnovers(parseCsv(await readFile(
-    join(import.meta.dirname, "..", "data", "curated", "plays.csv"), "utf8",
-  )).filter((r) =>
-    Number(r["season"]) < SCORE_ON && ["run", "pass"].includes(r["playType"] ?? ""),
-  ).map((r) => ({
-    down: Number(r["down"]), toGo: Number(r["togo"]),
-    yardline: Number(r["yardline"]), margin: Number(r["margin"]) || 0,
-    secondsLeft: Number(r["seconds"]) || 1800,
-    call: r["playType"] as "run" | "pass", lost: Number(r["turnover"]) || 0,
-  })) as TurnoverRow[]);
 
   // each team's men, from the season before the one being guessed at
   const roster = new Map<string, Set<string>>();
@@ -154,7 +143,6 @@ async function main(): Promise<void> {
   }
 
   const rng = seededRng(13);
-  const normal = () => normalDraw(rng);
   const said = new Map<string, number>();
   const both: Record<string, Map<string, number>> = {
     "who touched it before": new Map(),
@@ -169,7 +157,7 @@ async function main(): Promise<void> {
       depth: label === "and drawn at his own depth" ? depth : undefined,
     });
 
-    for (const [team, men] of roster) {
+    for (const [, men] of roster) {
       const among = [...men].filter((p) => position.has(p));
 
       if (among.length < 4) {

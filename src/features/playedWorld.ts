@@ -266,7 +266,7 @@ export async function buildWorld(
     scoreOn: SCORE_ON,
   });
   const counted = live
-    ? countPlays(learnRows as PlayRow[], undefined, false)
+    ? countPlays(learnRows as PlayRow[], false)
     : await countsFor(SCORE_ON, () => learnRows as PlayRow[]);
   const factors = fitPlayFactors([], {
     ...FACTOR_DEFAULTS,

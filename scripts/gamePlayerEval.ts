@@ -10,26 +10,18 @@
  * Run: npx tsx scripts/gamePlayerEval.ts
  */
 
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
 import { rmse, spearman } from "../src/backtest/metrics.js";
 import { seededRng } from "../src/sim/rng.js";
-import {
-  loadGames, loadPlayerStats, loadWeeklyRosters,
-} from "../src/data/nflverse.js";
-import { fitDriveRules } from "../src/features/driveRules.js";
-import { fitEndings } from "../src/features/fitEndings.js";
+import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
 import {
   fitPlayFactors, countPlays, storePlays, type PlayRow,
 } from "../src/features/fitPlayFactors.js";
 import { fitFourthDown, climbTo, type FourthRow } from "../src/features/fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "../src/features/fitPlayClock.js";
-import { fitTargetDepth } from "../src/features/targetDepth.js";
-import {
-  experienceBefore, pastShares, projectSplitShares, SHARING_POSITIONS,
-} from "../src/features/projectedShares.js";
-import { loadDraftPicks } from "../src/data/draftPicks.js";
+import { SHARING_POSITIONS } from "../src/features/projectedShares.js";
 import { loadAdp } from "../src/data/adp.js";
 import { normalizeName } from "../src/data/names.js";
 import { sizeOf } from "../src/features/gameSize.js";
@@ -37,19 +29,14 @@ import { kickingVenue } from "../src/features/kickingVenue.js";
 import { fitClimate, type Reading } from "../src/features/climate.js";
 import { weatherLift } from "../src/features/weatherLift.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
-import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
+import { playGame, linesFrom } from "../src/model/gameFromDrives.js";
 import { myShare } from "../src/sim/acrossCores.js";
-import { buildMatchupTable } from "../src/features/matchupTable.js";
-import { countsFor } from "../src/features/countsCache.js";
-import { buildPlayerVectors } from "../src/features/playerVector.js";
 import { buildWorld } from "../src/features/playedWorld.js";
 import type { Call } from "../src/model/playFactors.js";
 
 /** the fourth downs where a side actually chose, so not the flags */
-const DECIDED = ["run", "pass", "field_goal", "punt"];
 
 const SCORE_ON = Number(process.env["SEASON"] ?? 2025);
-const LEARN = [SCORE_ON - 4, SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1];
 const RUNS = Number(process.env["RUNS"] ?? 20);
 const RULES = presets.standard;
 
@@ -213,7 +200,7 @@ async function main(): Promise<void> {
       wind: fixture.wind ??
         (fixture.indoors
           ? undefined
-          : climate.drawWind(fixture.homeTeamId, fixture.week, rng)),
+          : climate.drawWind(fixture.homeTeamId, rng)),
     });
     const meanFor = new Map<string, number>();
     const madeThisGame = new Map<string, StatTotals>();

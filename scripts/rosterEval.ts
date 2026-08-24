@@ -137,10 +137,6 @@ async function main(): Promise<void> {
   const projectionPick: Picker = (available) =>
     [...available].sort((a, b) => vorOf(b) - vorOf(a))[0];
 
-  const durablePools = new Set([
-    world.players.find((p) => p.gamesPool.length > 0)?.gamesPool,
-  ]);
-
   const riskAwarePick: Picker = (available, roster) => {
     const sorted = [...available].sort((a, b) => vorOf(b) - vorOf(a));
     const best = sorted[0];

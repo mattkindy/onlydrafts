@@ -20,14 +20,6 @@ export function keep(key: string, value: unknown): void {
   }
 }
 
-export function forget(key: string): void {
-  try {
-    localStorage.removeItem(PREFIX + key);
-  } catch {
-    // nothing to do about it
-  }
-}
-
 export const normalizeName = (name: string | null | undefined) =>
   (name ?? "")
     .toLowerCase()

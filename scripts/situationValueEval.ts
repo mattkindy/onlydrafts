@@ -84,7 +84,6 @@ async function main(): Promise<void> {
   }
 
   const men = [...now.values()].filter((m) => scored.has(m.playerId) && m.overall >= 20);
-  const truth = men.map((m) => scored.get(m.playerId)!);
   console.log(`${men.length} men in ${SCORE_ON} with twenty touches or more\n`);
 
   // first: given this season's work, does knowing where it came from
