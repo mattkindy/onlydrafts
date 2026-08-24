@@ -115,6 +115,9 @@ export function rescore(players: Player[], league: League): Player[] {
     const plays = p.games!;
     p.perGameVor = Number(((p.ppg ?? 0) - (bar[p.position] ?? 0)).toFixed(1));
     p.vor = Number((plays * ((p.ppg ?? 0) - (bar[p.position] ?? 0))).toFixed(1));
+    // kept aside, because the curve below replaces vor with what a pick
+    // at his place is worth and a reader deserves to see both
+    p.ownVor = p.vor;
   }
 
   const onTheCurve = men.filter((p) => !OWN_ORDER.has(p.position));

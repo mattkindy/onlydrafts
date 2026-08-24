@@ -531,3 +531,50 @@ describe("the keeper sheet works on one scale", () => {
     expect(sums.net).toBeCloseTo(sums.roi - sums.wait.gain, 1);
   });
 });
+
+/**
+ * The big value is what a pick at his place on the board is worth, and
+ * the board is four opinions of which his projection is the smallest.
+ * So the top card can show a number that belongs to the man below it.
+ * Both are on the card now, and the chip says which is his.
+ */
+describe("a card shows both values when they disagree", () => {
+  it("keeps his own beside the board's", () => {
+    const men = boardFor(aLeague())
+      .filter((p) => !["K", "DEF"].includes(p.position));
+
+    // his own is worked out from his own points, so a man who scores
+    // more than another at his position is worth more by it
+    const backs = men.filter((p) => p.position === "RB" && p.projected)
+      .slice(0, 30);
+
+    for (const p of backs) {
+      expect(p.ownVor, p.name).toBeDefined();
+    }
+
+    const byPoints = [...backs].sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0));
+    const byOwn = [...backs].sort((a, b) => (b.ownVor ?? 0) - (a.ownVor ?? 0));
+    // not identical, because games played come into it as well
+    expect(byOwn[0]!.ownVor!).toBeGreaterThan(byOwn[byOwn.length - 1]!.ownVor!);
+    expect(byPoints.length).toBe(byOwn.length);
+
+    // and they do disagree, which is the whole reason to show both
+    const apart = men.slice(0, 40)
+      .filter((p) => Math.abs((p.ownVor ?? 0) - (p.vor ?? 0)) >= 10);
+    expect(apart.length).toBeGreaterThan(3);
+  });
+
+  it("draws the chip on a man the room and the model disagree about", () => {
+    const men = boardFor(aLeague());
+    const p = men.find((m) =>
+      Math.abs((m.ownVor ?? 0) - (m.vor ?? 0)) >= 10 && m.projected)!;
+
+    render(
+      <DraftView men={[p, ...men.filter((m) => m !== p)]} state={NO_DRAFT}
+        teams={12} snake posFilter="ALL" query="" order="rank" onMore={() => {}} />,
+      where,
+    );
+
+    expect(where.textContent).toContain("ours alone");
+  });
+});
