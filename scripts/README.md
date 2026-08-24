@@ -69,14 +69,64 @@ below life instead of 10% above. Fewer touchdowns means more drives
 reach a fourth down, and drives get shorter so more of them fit in a
 game, so the kicking gets worse rather than better.
 
+## Where the flatness comes from
+
+The shares handed to the walk give a side's five busiest men 59.9% of
+its throws where a side gives them 74.2%. The walk's own leaning and
+script multipliers push that back up to 71.8%, so the flatness is in
+the projected shares and not in the walk.
+
+Those shares divide a position's work by `Math.pow(standing, sharpness)`
+and sharpness is 1. It was swept over 2024 and 1 came out best, .761
+against .724 at .5 and .733 at 3. That sweep scored **ordering men**,
+which is what the board reads. Picking who catches a particular ball is
+a different job and wants a sharper number. The two uses pull opposite
+ways on one model.
+
+## What was tried, and what it cost
+
+Sharpening only the walk's own targeting, leaving the projection alone:
+
+```
+sharpness   five busiest take   throws to men it cannot sample
+   1              63.8%                  19.9%
+   1.3            72.2%                  16.2%
+   1.6            78.4%                  16.2%
+   2              85.2%                    -
+really            74.2%                   4.9%
+```
+
+It concentrates the throwing and does nothing for the yardage, because
+the sampled path already gains 7.63 against a targeted throw's 7.33.
+Sharpening to 1.3 and putting the sacks back together still gives
+touchdowns 17.2% against a real 21.9%.
+
+## Why it keeps failing
+
+Touchdowns are hypersensitive to yards a play. Five percent off the
+yardage costs a fifth of the touchdowns:
+
+```
+                 yards a play   touchdown
+as it is             5.69         21.7%
+with sacks           5.16         17.3%
+really               5.41         21.9%
+```
+
+So every fix has to land the yardage almost exactly or it trades the
+kicking error for a bigger scoring one. Nothing here can be moved on
+its own.
+
 ## The order to do it in
 
 1. The target shares, so a fifth of throws stop going to men nobody
-   throws to.
+   throws to. Sharpening the walk alone gets part of it; the rest is
+   that `among` carries 27 men where a side dresses about 11.
 2. The pooled draw those fall back to, which gains 4.62 where a
    targeted throw gains 7.33.
 3. The sacks and the balls thrown away, drawn from where the ball is.
 4. Refit the clock, which will have moved.
 
-Each one changes what the next is measured against, so they want doing
-together with the box score evals beside them.
+Each one changes what the next is measured against, and the yardage has
+to come out within a percent or two at the end of it, so they want
+doing together with the box score evals beside them.
