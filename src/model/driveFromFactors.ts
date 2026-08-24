@@ -120,6 +120,13 @@ const IN_RANGE = 45;
  */
 let chose: ((yardline: number, choice: string) => void) | undefined;
 
+/** how far a drive got, and whether it scored, for a check */
+export const reached: { best: number; td: boolean }[] = [];
+/** what a play gains, by where the ball was */
+export const gainedAt = new Map<string, { n: number; yards: number }>();
+export let watchReach = false;
+export const watchHowFar = () => { watchReach = true; };
+
 export const watchFourths = (fn: typeof chose) => { chose = fn; };
 
 export function walkDrive(
@@ -187,7 +194,12 @@ export function walkDrive(
   const facedAt: number[] = [];
   let thrownAway = false;
   let kickedFrom: number | undefined;
+  let deepest = 100;
   const ended = (ending: DriveEnd, handsOverAt: number): FactorDrive => {
+    if (watchReach) {
+      reached.push({ best: deepest, td: ending === "touchdown" });
+    }
+
     const forReal = Math.max(ENDS_A_DRIVE, took - sinceLastSnap + ENDS_A_DRIVE);
     state.secondsLeft = Math.max(0, state.secondsLeft + sinceLastSnap - ENDS_A_DRIVE);
 
@@ -288,6 +300,7 @@ export function walkDrive(
       return ended("turnover", 100 - state.yardline);
     }
 
+    deepest = Math.min(deepest, state.yardline);
     // who it goes to, from the men on the field at this state
     const shares = factors.goesTo(state, call, among);
     let left = uniform();
@@ -347,6 +360,16 @@ export function walkDrive(
     const caught = own
       ? own.caught
       : call === "run" || factors.caught(gained, uniform);
+    if (watchReach) {
+      const y = state.yardline;
+      const b = y <= 10 ? "inside 10" : y <= 20 ? "11-20" : y <= 30 ? "21-30"
+        : y <= 50 ? "31-50" : y <= 70 ? "51-70" : "past 70";
+      const seen = gainedAt.get(b) ?? { n: 0, yards: 0 };
+      seen.n++;
+      seen.yards += gained;
+      gainedAt.set(b, seen);
+    }
+
     plays.push({ state: { ...state }, call, player, yards: gained, scored, caught });
     tick(call, gained);
     state.yardline -= gained;

@@ -151,6 +151,75 @@ represent is, and the likeliest is the red zone: it reaches scoring
 range and settles for three where a side goes and gets seven. No knob
 here touches that.
 
+## The structure
+
+Conversion is right at every depth. Of drives reaching a spot, the
+share that score a touchdown matches:
+
+```
+reached the 10   scores 68.3%   really 68.9%
+reached the 20          56.5%          57.3%
+reached the 30          48.2%          49.1%
+reached the 40          42.5%          42.4%
+reached the 50          37.2%          37.2%
+```
+
+So the red zone is not it. What is wrong is how many drives get there.
+Reaching midfield is exact, 58.6% against 58.7%, and the walk creeps
+ahead from there: +0.7 points at the 40, +2.6 at the 30, +3.1 at the
+20, +3.6 at the 10. Drives that should stall around the forty reach the
+twenty five and kick.
+
+Yards a play, by where the ball is, says why:
+
+```
+              as it ships   with the sacks back   really
+inside 10        1.82              1.58            1.80
+11-20            3.95              3.38            4.09
+21-30            5.23              4.67            5.13
+31-50            6.29              5.65            5.80
+51-70            6.80              6.08            5.99
+past 70          6.74              5.96            6.03
+```
+
+As it ships, the walk is right near the goal and gains 12 to 14% too
+much in the open field. Put the sacks back and the open field comes
+exactly right while the goal line falls 12 to 17% short.
+
+Both readings are the same error. Work out what a targeted play has to
+gain for each band to come out right once the sacks are in it:
+
+```
+band        walk   needs    off by
+inside 10   1.82   2.43    -25.2%
+11-20       3.95   5.04    -21.6%
+21-30       5.23   6.16    -15.1%
+31-50       6.29   6.90     -8.9%
+51-70       6.80   7.23     -6.0%
+past 70     6.74   7.20     -6.4%
+```
+
+A targeted play is short everywhere, and worst near the goal. The
+missing sacks were covering for it, and covering unevenly: they cost
+4.72 yards in the open field and 3.12 near the goal, which is almost
+exactly the shape of the shortfall. Two errors, opposite signs, and
+they cancel band by band. That is why every aggregate looked fine, why
+no parameter fixes it, and why putting the sacks in alone breaks the
+scoring.
+
+So the thing to fix is the sampled draw. It widens over the state in
+three passes and the last one ignores where the ball is:
+
+```ts
+(i) => plays.down[i] === state.down && ... yardline within 20,
+(i) => Math.abs(plays.yardline[i] - state.yardline) <= 25,
+() => true,
+```
+
+A man drawn on the eight gets a play he made at midfield, capped at the
+goal line. Getting that conditioning right, and then putting the sacks
+back, is the fix. Everything else in here follows from it.
+
 ## The order to do it in
 
 1. The target shares, so a fifth of throws stop going to men nobody

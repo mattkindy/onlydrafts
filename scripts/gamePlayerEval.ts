@@ -30,7 +30,9 @@ import { fitClimate, type Reading } from "../src/features/climate.js";
 import { weatherLift } from "../src/features/weatherLift.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom } from "../src/model/gameFromDrives.js";
-import { watchFourths } from "../src/model/driveFromFactors.js";
+import {
+  gainedAt, reached, watchFourths, watchHowFar,
+} from "../src/model/driveFromFactors.js";
 import { myShare } from "../src/sim/acrossCores.js";
 import { buildWorld } from "../src/features/playedWorld.js";
 import type { Call } from "../src/model/playFactors.js";
@@ -100,6 +102,10 @@ async function main(): Promise<void> {
    * this for the rest of the chain.
    */
   const fourthsAt = new Map<string, { n: number; kick: number; punt: number; go: number }>();
+
+  if (process.env["REACH_CHECK"]) {
+    watchHowFar();
+  }
 
   if (process.env["DRIVE_CHECK"]) {
     const band = (y: number) =>
@@ -530,7 +536,11 @@ async function main(): Promise<void> {
   }
 
   if (process.env["SHARES"]) {
-    if (process.env["DRIVE_CHECK"]) {
+    if (process.env["REACH_CHECK"]) {
+    watchHowFar();
+  }
+
+  if (process.env["DRIVE_CHECK"]) {
       const per = (n: number, of: number) => (n / Math.max(1, of)).toFixed(2);
       console.error(
         `  ${per(droveHere.drives, droveHere.teamGames)} drives a side ` +
@@ -559,6 +569,43 @@ async function main(): Promise<void> {
         "41-50": "kick 3% punt 64% go 33%",
         "past 50": "kick 0% punt 88% go 12%",
       };
+      if (reached.length) {
+        const truth: Record<number, [number, number]> = {
+          10: [21.0, 68.9], 20: [31.6, 57.3], 30: [40.5, 49.1],
+          40: [49.6, 42.4], 50: [58.7, 37.2],
+        };
+        console.error("  how far a drive got, and whether it scored");
+
+        for (const b of [10, 20, 30, 40, 50]) {
+          const got = reached.filter((d) => d.best <= b);
+          const [reallyGot, reallyScored] = truth[b]!;
+          console.error(
+            `    reached the ${String(b).padStart(2)}: ` +
+            `${(100 * got.length / reached.length).toFixed(1)}% of drives ` +
+            `(really ${reallyGot}%), scoring ` +
+            `${(100 * got.filter((d) => d.td).length / Math.max(1, got.length)).toFixed(1)}% ` +
+            `(really ${reallyScored}%)`,
+          );
+        }
+      }
+
+      if (gainedAt.size) {
+        const truth: Record<string, number> = {
+          "inside 10": 1.80, "11-20": 4.09, "21-30": 5.13,
+          "31-50": 5.80, "51-70": 5.99, "past 70": 6.03,
+        };
+        console.error("  yards a play, by where the ball is");
+
+        for (const b of ["inside 10", "11-20", "21-30", "31-50", "51-70", "past 70"]) {
+          const v = gainedAt.get(b);
+          if (!v) continue;
+          console.error(
+            `    ${b.padEnd(10)} ${(v.yards / v.n).toFixed(2)} ` +
+            `(really ${truth[b]!.toFixed(2)})`,
+          );
+        }
+      }
+
       console.error("  on fourth down, by where the ball is");
       for (const b of ["inside 20", "21-30", "31-40", "41-50", "past 50"]) {
         const v = fourthsAt.get(b);
