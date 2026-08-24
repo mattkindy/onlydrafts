@@ -33,7 +33,7 @@ describe("picks so far", () => {
   it("lists them newest first, with who took each", () => {
     render(
       <DraftView men={men} state={state} teams={12} snake posFilter="ALL"
-        query="" byAdp={false} onMore={() => {}} />,
+        query="" order="rank" onMore={() => {}} />,
       where,
     );
     const shown = where.textContent!;
@@ -49,7 +49,7 @@ describe("picks so far", () => {
   it("says nothing when the draft has not started", () => {
     render(
       <DraftView men={men} state={{ ...state, made: [] }} teams={12} snake
-        posFilter="ALL" query="" byAdp={false} onMore={() => {}} />,
+        posFilter="ALL" query="" order="rank" onMore={() => {}} />,
       where,
     );
     expect(where.textContent).not.toContain("picks so far");
