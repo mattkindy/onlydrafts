@@ -35,6 +35,7 @@ import { normalizeName } from "../src/data/names.js";
 import { sizeOf } from "../src/features/gameSize.js";
 import { kickingVenue } from "../src/features/kickingVenue.js";
 import { fitClimate, type Reading } from "../src/features/climate.js";
+import { weatherLift } from "../src/features/weatherLift.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
 import { myShare } from "../src/sim/acrossCores.js";
@@ -200,8 +201,20 @@ async function main(): Promise<void> {
 
     const saidPoints = new Map<string, number>();
 
+    const marketLift = { home: home.lift, away: away.lift };
+
     for (let run = 0; run < RUNS; run++) {
       const venue = drawVenue();
+      /**
+       * The day, on top of whatever the line said, and off by default.
+       * It looked worth having on 2025 and made 2024 worse, so the two
+       * seasons disagree and nothing leans on it until they stop.
+       */
+      if (process.env["WEATHER"]) {
+        const worth = weatherLift(venue);
+        home.lift = (marketLift.home ?? 1) * worth;
+        away.lift = (marketLift.away ?? 1) * worth;
+      }
       const game = playGame(home, away, {
         rules: {
           ...rules, kickSucceeds: kicking.kickSucceeds,
