@@ -352,7 +352,38 @@ describe("a week row keeps its shape", () => {
 
     const row = where.querySelector(".wk")!;
     expect(Array.from(row.children).map((k) => k.className || "plain"))
-      .toEqual(["plain", "plain", "bar", "plain"]);
+      .toEqual(["plain", "plain", "bar", "wkpts"]);
     expect(where.querySelector(".wkline")).toBeNull();
+
+    // the average barely moves, so the row has to say the swing as well
+    const said = row.querySelector(".wkpts")!;
+    expect(said.querySelector("em")!.textContent).toMatch(/\d+ to \d+/);
+  });
+});
+
+/**
+ * A league paying nothing for a catch and no league at all both score
+ * the same way, so the board has to say which it is. Matt had to work
+ * out from a stat line whether his own league had been read.
+ */
+describe("the scoring in play is on screen", () => {
+  it("names it from what the league pays", async () => {
+    const { roomFor } = await import("./lib/board.ts");
+
+    expect(roomFor({ rec: 0, rec_yd: 0.1 })).toBe("standard");
+    expect(roomFor({ rec: 0.5, rec_yd: 0.1 })).toBe("half");
+    expect(roomFor({ rec: 1, rec_yd: 0.1 })).toBe("ppr");
+    // nothing connected reads as standard, which is why it is shown
+    expect(roomFor({})).toBe("standard");
+  });
+
+  it("scores a man by what his league pays and not by a guess", async () => {
+    const { payFor } = await import("./lib/scoring.ts");
+    const line = { rushYds: 116.5, rushTd: 0.64, receptions: 4.53, recYds: 42.49, recTd: 0.15 };
+
+    expect(payFor(line, { rec: 0, rec_yd: 0.1, rec_td: 6, rush_yd: 0.1, rush_td: 6 }))
+      .toBeCloseTo(20.65, 1);
+    expect(payFor(line, { rec: 1, rec_yd: 0.1, rec_td: 6, rush_yd: 0.1, rush_td: 6 }))
+      .toBeCloseTo(25.18, 1);
   });
 });

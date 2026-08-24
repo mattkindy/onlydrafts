@@ -231,7 +231,7 @@
     border-radius: 14px; padding: 1.2rem 1.4rem; max-width: 34rem; width: 100%; }
   .sheet h3 { margin: 0; font-size: 1.15rem; }
   .sheet .sub { color: var(--faint); font-size: .8rem; margin-bottom: .8rem; }
-  .wk { display: grid; grid-template-columns: 2.4rem 3.4rem 1fr 2.4rem;
+  .wk { display: grid; grid-template-columns: 2.2rem 3.2rem 1fr 3.6rem;
     gap: .5rem; align-items: center; font-size: .75rem; color: var(--muted);
     padding: .1rem 0; }
   .wk .bar { height: 11px; position: relative; }
@@ -243,6 +243,12 @@
     opacity: .35; border-radius: 3px; }
   /* tick: the projection */
   .wk .bar b { top: 0; width: 2px; height: 11px; background: var(--go); }
+  /* the average barely moves week to week, so the range under it is
+     the number worth reading */
+  .wk .wkpts { display: flex; flex-direction: column; align-items: flex-end;
+    line-height: 1.15; }
+  .wk .wkpts em { font-style: normal; font-size: .64rem; color: var(--faint);
+    white-space: nowrap; }
   .wk .scale { grid-column: 3; display: flex; justify-content: space-between;
     color: var(--faint); font-size: .65rem; padding-top: .2rem; }
   .fact { font-size: .8rem; margin: .15rem 0; }
@@ -268,3 +274,8 @@
     font-variant-numeric: tabular-nums; margin: -.1rem 0 .25rem; }
   .wk .wkline i { font-style: normal; color: var(--faint);
     margin-left: .15rem; }
+  /* which scoring the numbers are in, since a standard league and no
+     league at all come out looking the same */
+  .league-card .pays, #crumb .pays { background: var(--chip); color: var(--ink);
+    border-radius: 999px; padding: .1rem .55rem; font-size: .72rem;
+    text-transform: uppercase; letter-spacing: .04em; }
