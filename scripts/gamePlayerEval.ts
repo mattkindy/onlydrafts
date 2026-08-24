@@ -131,6 +131,23 @@ async function main(): Promise<void> {
     .filter((g) => g.season === SCORE_ON && g.week <= 17 &&
       (!onlyWeek || g.week === onlyWeek));
   const mine = myShare(schedule);
+  /**
+   * How many fixtures a side actually gets, which is the weeks in the
+   * schedule less its bye. Counting the weeks instead overstates it by
+   * one and every kicker ends up a kick short.
+   */
+  const gamesEachSideGets = (fixtures: typeof schedule) => {
+    const each = new Map<string, number>();
+
+    for (const g of fixtures) {
+      each.set(g.homeTeamId, (each.get(g.homeTeamId) ?? 0) + 1);
+      each.set(g.awayTeamId, (each.get(g.awayTeamId) ?? 0) + 1);
+    }
+
+    const counted = [...each.values()].sort((a, b) => a - b);
+
+    return counted[Math.floor(counted.length / 2)] ?? 17;
+  };
   const rng = seededRng(Number(process.env["SEED"] ?? 23));
 
   /**
@@ -466,6 +483,10 @@ async function main(): Promise<void> {
 
   if (process.env["SHARES"]) {
     console.log(JSON.stringify({
+      // how many times each fixture was played and how many fixtures a
+      // side got, since the kicks come back as a raw count and only
+      // these two turn it back into kicks a game
+      runs: RUNS, weeks: gamesEachSideGets(schedule),
       total: [...total.entries()], games: [...games.entries()],
       made: [...madeOf.entries()],
       kicks: [...kicksFor.entries()].map(([team, its]) => [team, {
