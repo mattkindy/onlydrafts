@@ -10,6 +10,7 @@
 import type { ComponentChildren } from "preact";
 import type { Player } from "../lib/scoring.ts";
 import { asRound, roundsOfGap, usuallyAt } from "../lib/picks.ts";
+import { lineOver, movedBy } from "../lib/statLine.ts";
 
 export interface Range {
   low: number;
@@ -193,6 +194,28 @@ function Facts({ p, teams, costs }: {
   );
 }
 
+/**
+ * What he does in a game, in the categories a box score uses, so the
+ * points beside it can be checked against whatever the league pays.
+ */
+function StatLine({ p }: { p: Player }) {
+  const line = lineOver(p.projected ?? p.simulated, p.position, 1, movedBy(p));
+
+  if (!line.length) {
+    return null;
+  }
+
+  return (
+    <div class="statline">
+      {line.map((f) => (
+        <span class="s" key={f.label}>
+          <i>{f.label}</i>{f.value.toFixed(f.places)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** the season: what he scores in a typical game, and how those vary */
 export function SeasonCard(
   props: Omit<CardProps, "value" | "unit" | "range" | "note"> & {
@@ -213,7 +236,12 @@ export function SeasonCard(
             tailLow: g["low"], tailHigh: g["high"],
           }
         : undefined}
-      note={<Facts p={props.p} teams={props.teams} costs={props.costs} />}
+      note={
+        <>
+          <StatLine p={props.p} />
+          <Facts p={props.p} teams={props.teams} costs={props.costs} />
+        </>
+      }
     />
   );
 }

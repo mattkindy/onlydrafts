@@ -250,3 +250,16 @@
   .fact.m::before { content: "- "; color: var(--mark); font-weight: 700; }
   .sheet .row { display: flex; gap: .6rem; margin-top: 1rem; }
   .league-card .nm { font-size: 1rem; }
+  /* what he does in a game, so the points beside it can be checked */
+  .statline { display: flex; flex-wrap: wrap; gap: .3rem .5rem;
+    margin: .35rem 0 .3rem; font-size: .74rem; color: var(--ink); }
+  .statline .s { background: var(--chip); border-radius: 999px;
+    padding: .1rem .45rem; font-variant-numeric: tabular-nums; }
+  .statline .s i { color: var(--muted); font-style: normal;
+    margin-right: .28rem; }
+  .statline.big { font-size: .8rem; margin: .2rem 0 .8rem; }
+  .wk .wkline { display: flex; gap: .4rem; font-size: .7rem;
+    color: var(--muted); font-variant-numeric: tabular-nums;
+    justify-content: flex-end; }
+  .wk .wkline i { font-style: normal; color: var(--faint);
+    margin-left: .15rem; }
