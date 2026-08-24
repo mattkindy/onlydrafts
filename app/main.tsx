@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import "./style.css";
 
 import { loadBoard, loadMeta, type Board } from "./lib/data.ts";
-import { rescore } from "./lib/board.ts";
+import { rescore, roomFor } from "./lib/board.ts";
 import { keep, stored, normalizeName } from "./lib/store.ts";
 import {
   NeedsEspnCookies, PROVIDERS, sleeperPlayers, type League,
@@ -64,6 +64,21 @@ const COPY: Record<View, [string, string, string]> = {
 };
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF", "ROOKIES"];
+
+/** the few a reader would check, spelled out on hover */
+function payDescription(pays: Record<string, number>): string {
+  const said = [
+    ["a catch", pays["rec"] ?? 0],
+    ["a receiving yard", pays["rec_yd"] ?? 0.1],
+    ["a rushing yard", pays["rush_yd"] ?? 0.1],
+    ["a touchdown", pays["rush_td"] ?? 6],
+    ["a passing yard", pays["pass_yd"] ?? 0.04],
+    ["a passing touchdown", pays["pass_td"] ?? 4],
+  ];
+
+  return "this league pays " +
+    said.map(([what, n]) => `${n} for ${what}`).join(", ");
+}
 
 const NOTHING: DraftNow = {
   taken: new Set(), mine: new Set(), teams: {}, rosteredBy: {}, grid: null,
@@ -226,6 +241,11 @@ function App() {
             <button onClick={() => setView("leagues")}>all leagues</button>
             <b>{active.name}</b>
             <span>you: {active.team}</span>
+            {/* what the numbers are scored by, since standard and a
+                board with no league connected look the same on screen */}
+            <span class="pays" title={payDescription(active.pays)}>
+              {roomFor(active.pays)}
+            </span>
           </span>
         )}
       </nav>
@@ -268,7 +288,7 @@ function App() {
               />
             </label>
             <button class="act" disabled={busy} onClick={findLeagues}>
-              find my leagues
+              {leagues.length ? "look again" : "find my leagues"}
             </button>
             {provider === "espn" && (
               <button onClick={() => setEspnHelp(true)}>espn sign in</button>
@@ -358,6 +378,10 @@ function App() {
             : (
               <>
                 <h2>your leagues</h2>
+                <p class="hint">
+                  A league you joined since you last looked will not be
+                  here until you look again.
+                </p>
                 <div class="cards">
                   {leagues.map((lg) => (
                     <div
@@ -370,6 +394,12 @@ function App() {
                       <div class="sub">
                         <span>{lg.size} teams</span>
                         <span>you: {lg.team}</span>
+                      </div>
+                      {/* which scoring, since picking the wrong league
+                          of two is otherwise silent */}
+                      <div class="sub">
+                        <span class="pays">{roomFor(lg.pays)}</span>
+                        <span>{lg.pays["rec"] ?? 0} a catch</span>
                       </div>
                     </div>
                   ))}

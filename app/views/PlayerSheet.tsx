@@ -42,12 +42,12 @@ function WeekByWeek({ p }: { p: Player }) {
     <>
       <h2>week by week</h2>
       <div class="hint">
-        The weeks barely differ, and that is the honest answer rather
-        than a flat one. A defence carries 0.073 of one season into the
-        next, so in August we cannot tell you that week nine is better
-        for him than week three. The bar is where the week to week
-        really is: he has good afternoons and bad ones, and which is
-        which is not knowable yet.
+        The big number is what he averages that week and it barely
+        moves, because a defence keeps 0.073 of one season into the
+        next and in August week nine cannot be told from week three.
+        The pair under it is where he lands eight weeks in ten, and
+        that is the swing worth looking at: it is most of his range,
+        every week, and which week is which is not knowable yet.
       </div>
       {games.map((w, i) => {
         const pts = points[i]!;
@@ -67,7 +67,10 @@ function WeekByWeek({ p }: { p: Player }) {
               }} />
               <b style={{ left: pct(pts) + "%" }} />
             </span>
-            <span>{pts.toFixed(1)}</span>
+            <span class="wkpts">
+              {pts.toFixed(1)}
+              <em>{(pts * spread.low).toFixed(0)} to {(pts * spread.high).toFixed(0)}</em>
+            </span>
           </div>
         );
       })}
