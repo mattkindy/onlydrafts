@@ -496,3 +496,38 @@ describe("the draft list runs down the value", () => {
     }
   });
 });
+
+/**
+ * The keeper sheet works in both the season figure and the game one.
+ * What a pick buys and what a man is worth against it come off the
+ * season; which alternative to show comes off the game. Leaving one his
+ * own and the other the board's let the two disagree about the same
+ * player, so both are the board's and they have to still relate.
+ */
+describe("the keeper sheet works on one scale", () => {
+  it("keeps the season figure and the game one in step", () => {
+    const men = boardFor(aLeague())
+      .filter((p) => !["K", "DEF"].includes(p.position));
+
+    for (const p of men.slice(0, 200)) {
+      expect(Math.abs((p.perGameVor ?? 0) * (p.games ?? 17) - (p.vor ?? 0)), p.name)
+        .toBeLessThan(2);
+    }
+  });
+
+  it("adds up on the sheet", async () => {
+    const { keeperSums, pickForRound } = await import("./lib/picks.ts");
+    const men = boardFor(aLeague());
+    const draft = {
+      teams: 12, slot: 3, snake: true, myRounds: null, taken: new Set<string>(),
+    };
+    const p = men.find((m) => m.projected)!;
+    const costPick = pickForRound(3, draft);
+    const sums = keeperSums(men, p, costPick, draft);
+
+    // keeping gains is what he is worth less what the pick buys
+    expect(sums.roi).toBeCloseTo((p.vor ?? 0) - sums.rate, 1);
+    // and what it is worth keeping him is that, less waiting for him
+    expect(sums.net).toBeCloseTo(sums.roi - sums.wait.gain, 1);
+  });
+});
