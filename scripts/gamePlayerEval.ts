@@ -30,6 +30,7 @@ import { fitClimate, type Reading } from "../src/features/climate.js";
 import { weatherLift } from "../src/features/weatherLift.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom } from "../src/model/gameFromDrives.js";
+import { watchFourths } from "../src/model/driveFromFactors.js";
 import { myShare } from "../src/sim/acrossCores.js";
 import { buildWorld } from "../src/features/playedWorld.js";
 import type { Call } from "../src/model/playFactors.js";
@@ -90,8 +91,27 @@ async function main(): Promise<void> {
   // what the walk produces, for holding against what sides really get.
   // Printed when DRIVE_CHECK is set, since eight shares would say it
   // eight times otherwise.
+  const fourthsAt = new Map<string, { n: number; kick: number; punt: number; go: number }>();
+
+  if (process.env["DRIVE_CHECK"]) {
+    const band = (y: number) =>
+      y <= 20 ? "inside 20" : y <= 30 ? "21-30" : y <= 40 ? "31-40"
+        : y <= 50 ? "41-50" : "past 50";
+    watchFourths((yardline: number, choice: string) => {
+      const b = band(yardline);
+      const seen = fourthsAt.get(b) ?? { n: 0, kick: 0, punt: 0, go: 0 };
+      seen.n++;
+      if (choice === "kick") seen.kick++;
+      else if (choice === "punt") seen.punt++;
+      else seen.go++;
+      fourthsAt.set(b, seen);
+    });
+  }
+
   const droveHere = {
-    drives: 0, plays: 0, seconds: 0, teamGames: 0, startedAt: 0,
+    drives: 0, plays: 0, seconds: 0, teamGames: 0, startedAt: 0, quick: 0,
+    gained: 0, calls: 0, runYards: 0, runs: 0, passYards: 0, passes: 0,
+    spread: new Map<number, number>(),
     faced: [] as number[],
     ends: new Map<string, number>(),
   };
@@ -275,8 +295,24 @@ async function main(): Promise<void> {
         droveHere.plays += one.drive.plays.length;
         droveHere.seconds += one.drive.took;
         droveHere.ends.set(one.drive.ending, (droveHere.ends.get(one.drive.ending) ?? 0) + 1);
+        const n = Math.min(one.drive.plays.length, 12);
+        droveHere.spread.set(n, (droveHere.spread.get(n) ?? 0) + 1);
+        if (one.drive.plays.length <= 3) droveHere.quick++;
         droveHere.faced.push(...one.drive.facedAt);
         droveHere.startedAt += one.drive.plays[0]?.state.yardline ?? 0;
+
+        for (const play of one.drive.plays) {
+          droveHere.gained += play.yards;
+          droveHere.calls++;
+
+          if (play.call === "run") {
+            droveHere.runYards += play.yards;
+            droveHere.runs++;
+          } else {
+            droveHere.passYards += play.yards;
+            droveHere.passes++;
+          }
+        }
         const its = kicksFor.get(one.team) ?? { from: [], conversions: 0 };
 
         if (one.drive.kickedFrom !== undefined) {
@@ -499,6 +535,33 @@ async function main(): Promise<void> {
           .map(([e, n]) => `${e} ${(100 * n / droveHere.drives).toFixed(1)}%`)
           .join(", "),
       );
+      console.error(
+        `  three plays or fewer ` +
+        `${(100 * droveHere.quick / droveHere.drives).toFixed(1)}% ` +
+        `(really 33.7%)\n  plays a drive: ` +
+        [...droveHere.spread.entries()].sort((a, b) => a[0] - b[0])
+          .map(([n, c]) => `${n}:${(100 * c / droveHere.drives).toFixed(0)}%`)
+          .join(" ") + `\n  really:        ` +
+        `1:5% 2:3% 3:25% 4:9% 5:9% 6:10% 7:8% 8:7% 9:6% 10:5% 11:4% 12:8%`,
+      );
+      const truth: Record<string, string> = {
+        "inside 20": "kick 69% punt 0% go 31%",
+        "21-30": "kick 73% punt 0% go 27%",
+        "31-40": "kick 54% punt 9% go 36%",
+        "41-50": "kick 3% punt 64% go 33%",
+        "past 50": "kick 0% punt 88% go 12%",
+      };
+      console.error("  on fourth down, by where the ball is");
+      for (const b of ["inside 20", "21-30", "31-40", "41-50", "past 50"]) {
+        const v = fourthsAt.get(b);
+        if (!v) continue;
+        console.error(
+          `    ${b.padEnd(10)} n=${String(v.n).padStart(5)} ` +
+          `kick ${(100 * v.kick / v.n).toFixed(0)}% ` +
+          `punt ${(100 * v.punt / v.n).toFixed(0)}% ` +
+          `go ${(100 * v.go / v.n).toFixed(0)}%   really ${truth[b]}`,
+        );
+      }
       const faced = [...droveHere.faced].sort((a, b) => a - b);
       const at = (q: number) => faced[Math.floor(q * faced.length)] ?? 0;
       console.error(
@@ -511,7 +574,13 @@ async function main(): Promise<void> {
         `${(droveHere.startedAt / Math.max(1, droveHere.drives)).toFixed(1)} out ` +
         `(really 70.6), so it makes ` +
         `${(droveHere.startedAt / Math.max(1, droveHere.drives) - at(0.5)).toFixed(1)} ` +
-        `yards before a fourth down where a side really makes 19`,
+        `yards before a fourth down where a side really makes 19\n  ` +
+        `${(droveHere.gained / Math.max(1, droveHere.calls)).toFixed(2)} a play ` +
+        `(really 5.41), ` +
+        `${(droveHere.runYards / Math.max(1, droveHere.runs)).toFixed(2)} a carry ` +
+        `(really 4.50), ` +
+        `${(droveHere.passYards / Math.max(1, droveHere.passes)).toFixed(2)} a pass ` +
+        `(really 6.09, off a pool averaging 7.33)`,
       );
     }
     console.log(JSON.stringify({
