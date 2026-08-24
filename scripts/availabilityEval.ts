@@ -19,7 +19,6 @@ import {
 
 const SEASONS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 const TEST = [2022, 2023, 2024, 2025];
-const WANTED = ["QB", "RB", "WR", "TE"];
 async function main(): Promise<void> {
   const { rowsFor } = await readAvailability(SEASONS);
 

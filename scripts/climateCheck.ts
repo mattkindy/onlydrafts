@@ -6,7 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
-import { fitClimate, HOME, type Reading } from "../src/features/climate.js";
+import { fitClimate, type Reading } from "../src/features/climate.js";
 import { seededRng } from "../src/sim/rng.js";
 
 const rows = parseCsv(await readFile(

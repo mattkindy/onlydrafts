@@ -11,7 +11,7 @@
 
 import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
-import { spearman, rmse } from "../src/backtest/metrics.js";
+import { spearman } from "../src/backtest/metrics.js";
 import { seededRng } from "../src/sim/rng.js";
 import { normalDraw } from "../src/sim/normal.js";
 import { fitRoles } from "../src/features/fitRoles.js";

@@ -8,7 +8,7 @@
  * Run: npx tsx scripts/coachPersistence.ts
  */
 
-import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
+import { loadPlayerStats } from "../src/data/nflverse.js";
 import { loadCoaches } from "../src/data/coaches.js";
 import { spearman } from "../src/backtest/metrics.js";
 

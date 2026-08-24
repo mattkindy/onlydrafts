@@ -77,7 +77,7 @@ describe("what the weather is likely to be", () => {
       const said = climate.drawTemperature("GB", 18, 20, rng);
       expect(said).toBeGreaterThanOrEqual(-5);
       expect(said).toBeLessThanOrEqual(105);
-      expect(climate.drawWind("GB", 18, rng)).toBeGreaterThanOrEqual(0);
+      expect(climate.drawWind("GB", rng)).toBeGreaterThanOrEqual(0);
     }
   });
 

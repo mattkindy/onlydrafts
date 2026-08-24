@@ -3,7 +3,6 @@ import { attributeDrives } from "./attribution.js";
 import type { Drive } from "./drive.js";
 import type { Draws } from "./playerWeek.js";
 import type { SituationalRole } from "./situationalWeek.js";
-import { zeroBySituation } from "./situations.js";
 
 function steady(): Draws {
   let n = 0;

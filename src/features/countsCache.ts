@@ -10,7 +10,7 @@
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  countPlays, type CountedPlays, type PlayRow, type FactorSettings,
+  countPlays, type CountedPlays, type PlayRow,
 } from "./fitPlayFactors.js";
 
 const KEPT = join(import.meta.dirname, "..", "..", "data", "kept");
@@ -84,7 +84,6 @@ const raise = (flat: Flat): CountedPlays => ({
  */
 export async function countsFor(
   maxSeason: number, rows: () => PlayRow[],
-  settings?: FactorSettings,
 ): Promise<CountedPlays> {
   const stamp = await stat(TOUCHES).then((s) => s.mtimeMs).catch(() => 0);
   // the counting changes shape sometimes, and an older file would come
@@ -96,7 +95,7 @@ export async function countsFor(
     return raise(JSON.parse(already) as Flat);
   }
 
-  const counted = countPlays(rows(), settings, false);
+  const counted = countPlays(rows(), false);
   await mkdir(KEPT, { recursive: true }).catch(() => undefined);
   await writeFile(at, JSON.stringify(flatten(counted))).catch(() => undefined);
 

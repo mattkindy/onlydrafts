@@ -11,12 +11,12 @@
 
 import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
-import { spearman, rmse } from "../src/backtest/metrics.js";
+import { spearman } from "../src/backtest/metrics.js";
 import { seededRng } from "../src/sim/rng.js";
 import { normalDraw } from "../src/sim/normal.js";
 import { fitRoles } from "../src/features/fitRoles.js";
 import {
-  forGame, simulateSituationalWeek, type GameContext,
+  forGame, simulateSituationalWeek,
 } from "../src/model/situationalWeek.js";
 import type { Draws } from "../src/model/playerWeek.js";
 
@@ -33,7 +33,7 @@ async function main(): Promise<void> {
     games.set(s.playerId, (games.get(s.playerId) ?? 0) + 1);
   }
 
-  const { byTeam, playsByTeam, teamOf } = await fitRoles(SCORE_ON - 1, positions, games);
+  const { byTeam, playsByTeam } = await fitRoles(SCORE_ON - 1, positions, games);
 
   // how soft each defence was to each position, from the year before
   const allowed = new Map<string, { points: number; weeks: number }>();
@@ -111,10 +111,6 @@ async function main(): Promise<void> {
 
       for (const kind of ["flat", "aware"] as const) {
         for (let run = 0; run < RUNS; run++) {
-          const context: GameContext = {
-            ...line,
-            opponent: kind === "aware" ? 1 : 1,
-          };
           const world = kind === "flat"
             ? base
             : forGame(base, { ...line, opponent: 1 });

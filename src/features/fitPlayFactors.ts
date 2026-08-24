@@ -401,8 +401,7 @@ export interface FactorExtras {
  * counts instead of each counting 141 thousand rows.
  */
 export function countPlays(
-  rows: PlayRow[], settings: FactorSettings = FACTOR_DEFAULTS,
-  wantsSides = true,
+  rows: PlayRow[], wantsSides = true,
 ): CountedPlays {
   const cells = new Map<string, Counted>();
   /**
@@ -585,13 +584,13 @@ export function fitPlayFactors(
   extras: FactorExtras = {},
 ): PlayFactors {
   const {
-    projected, split, pairing, runParts, playLevel, depth, people, plays,
+    projected, split, pairing, playLevel, depth, people, plays,
     alike,
   } = extras;
   const {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
     everyTouch, inScript, scriptPlays, onCall, callPlays,
-  } = extras.counted ?? countPlays(rows, settings, !pairing);
+  } = extras.counted ?? countPlays(rows, !pairing);
 
   /**
    * How much more of the work a man takes when the game is going this

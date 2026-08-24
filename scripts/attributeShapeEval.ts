@@ -84,7 +84,7 @@ async function main(): Promise<void> {
     spearman(fromAttributes, truth).toFixed(4).padStart(7) +
     "\n  from both, added as places    " +
     spearman(
-      men.map((_, i) => {
+      men.map(() => {
         const place = (values: number[]) => {
           const order = values.map((v, j) => ({ v, j })).sort((a, b) => b.v - a.v);
           const out = new Array<number>(values.length);
