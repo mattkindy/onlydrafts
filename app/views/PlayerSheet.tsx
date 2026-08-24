@@ -2,7 +2,7 @@
 
 import type { Player } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
-import { lineOver, movedBy, weekLine } from "../lib/statLine.ts";
+import { lineOver, movedBy } from "../lib/statLine.ts";
 
 interface Props {
   p: Player;
@@ -42,13 +42,15 @@ function WeekByWeek({ p }: { p: Player }) {
     <>
       <h2>week by week</h2>
       <div class="hint">
-        A week moves his whole line together. What the weekly model
-        knows is that a matchup is worth a tenth of him, not whether the
-        tenth comes off his catches or his yards.
+        The weeks barely differ, and that is the honest answer rather
+        than a flat one. A defence carries 0.073 of one season into the
+        next, so in August we cannot tell you that week nine is better
+        for him than week three. The bar is where the week to week
+        really is: he has good afternoons and bad ones, and which is
+        which is not knowable yet.
       </div>
       {games.map((w, i) => {
         const pts = points[i]!;
-        const line = weekLine(p.projected ?? p.simulated, p.position, w.of, movedBy(p));
 
         return (
           <div class="wk" key={w.w}>
@@ -66,15 +68,6 @@ function WeekByWeek({ p }: { p: Player }) {
               <b style={{ left: pct(pts) + "%" }} />
             </span>
             <span>{pts.toFixed(1)}</span>
-            {line.length > 0 && (
-              <span class="wkline">
-                {line.map((f) => (
-                  <span key={f.label}>
-                    {f.value.toFixed(f.places)}<i>{f.label}</i>
-                  </span>
-                ))}
-              </span>
-            )}
           </div>
         );
       })}

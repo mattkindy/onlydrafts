@@ -5,9 +5,10 @@
  * against his own average. A season is the game line times the games he
  * is expected to play, and a week is the game line times that week.
  *
- * A week moves every category together. The weekly model was fitted on
- * points, so it knows a hard matchup costs him a tenth and not whether
- * that tenth comes off his catches or his yards.
+ * There is no weekly line here on purpose. A defence carries 0.073 of
+ * one season into the next, so a week in August cannot be told from the
+ * week after it, and printing 115 yards for one and 117 for another
+ * would be inventing a difference.
  */
 
 import type { Parts } from "./scoring.ts";
@@ -71,16 +72,6 @@ export function lineOver(
       places: YARDS.has(part) ? 0 : 1,
     }))
     .filter((f) => f.value >= (f.places === 0 ? 0.5 : 0.05));
-}
-
-/** the two or three a week is worth showing by, so a row still fits */
-export function weekLine(
-  parts: Parts | null | undefined,
-  position: string,
-  of: number,
-  moved = 1,
-): Figure[] {
-  return lineOver(parts, position, of, moved).slice(0, 3);
 }
 
 /** how far the board moved him off what his own projection said */
