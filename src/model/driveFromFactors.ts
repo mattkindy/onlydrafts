@@ -301,15 +301,27 @@ export function walkDrive(
     /**
      * The opponent, heard on the sampled path. A man's own plays were
      * made against every defence he faced, so this week's matchup
-     * bends them: a strong pass defence mostly causes incompletions
-     * rather than shorter completions, so on a throw the bend flips
-     * some catches to nothing, and everywhere else it scales yards.
+     * bends them: a pass defence mostly moves whether the ball was
+     * caught rather than how far it went, so on a throw the bend moves
+     * catches, and everywhere else it scales yards.
+     *
+     * It moves them both ways. A strong defence used to turn a catch
+     * into an incompletion and a weak one never did the reverse, which
+     * took a fifth of a point off the completion rate for nothing.
      */
     if (own && factors.matchup && sides.offence && sides.defence) {
       const bend = factors.matchup(sides.offence, sides.defence, call);
 
       if (call === "pass" && own.caught && bend < 1 && uniform() > bend) {
         own = { yards: 0, caught: false };
+      } else if (call === "pass" && !own.caught && bend > 1 &&
+                 uniform() < bend - 1) {
+        own = {
+          yards: Math.max(1, Math.round(
+            factors.gains(state, call, player, uniform, sides),
+          )),
+          caught: true,
+        };
       } else if (own.yards > 0) {
         own = { ...own, yards: Math.round(own.yards * Math.min(bend, 1.2)) };
       }
