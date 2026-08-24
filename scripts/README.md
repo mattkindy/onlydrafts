@@ -117,6 +117,40 @@ So every fix has to land the yardage almost exactly or it trades the
 kicking error for a bigger scoring one. Nothing here can be moved on
 its own.
 
+## The retune, and what it settles
+
+Three knobs, swept together over one week of 2024: how sharply the walk
+picks who gets the ball, how many of the missing sacks come back, and a
+scale on the clock. Eighteen combinations, scored on the squared
+relative miss across yards a play, drives a side, and the three drive
+endings that matter.
+
+```
+sharp wasted clock |  yds  drives   TD%   FG%  punt% |  error
+  1.8      1  1.06 | 5.18  10.87  18.0  18.0   36.5 | 0.0557
+  1.4      1  1.06 | 5.16  10.72  17.5  17.8   36.4 | 0.0608
+  1.8    0.6     1 | 5.46  10.82  20.0  19.1   32.1 | 0.0648
+    1      0     1 | 5.59  10.26  21.7  19.4   31.0 | 0.0758   <- as it ships
+  1.8      0     1 | 5.72  10.18  22.3  20.9   28.7 | 0.1541
+the target           5.41  10.70  21.9  15.7   35.7
+```
+
+Nothing reaches both. Every setting that brings the kicking down takes
+the touchdowns with it, and every setting that keeps the touchdowns
+leaves the kicking where it is. The best field goal rate anywhere in
+the sweep is 17.8% against a real 15.7%, and it costs four points of
+touchdown.
+
+The lowest total error is not the one to ship. It buys 1.6 points of
+field goal rate with 4 points of touchdown, and every player's points
+on the board come off the touchdowns. What ships is close to the best
+available on the thing that matters, and the kicking is what it costs.
+
+So the parameters are not the problem. Something the walk does not
+represent is, and the likeliest is the red zone: it reaches scoring
+range and settles for three where a side goes and gets seven. No knob
+here touches that.
+
 ## The order to do it in
 
 1. The target shares, so a fifth of throws stop going to men nobody
