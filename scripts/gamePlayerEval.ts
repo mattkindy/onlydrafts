@@ -88,9 +88,17 @@ async function main(): Promise<void> {
    * from behind late is a kick and one that scores is a conversion.
    */
   const kicksFor = new Map<string, { from: number[]; conversions: number }>();
-  // what the walk produces, for holding against what sides really get.
-  // Printed when DRIVE_CHECK is set, since eight shares would say it
-  // eight times otherwise.
+  /**
+   * What the walk produces, for holding against what sides really get.
+   * Printed when DRIVE_CHECK is set, since eight shares would say it
+   * eight times otherwise.
+   *
+   * The kicking excess starts here. A fifth of the walk's throws go to
+   * men it has fewer than 25 plays for, where the back of the roster
+   * really takes a twentieth, and the pooled draw those fall back to
+   * gains 4.62 against a targeted throw's 7.33. See the README beside
+   * this for the rest of the chain.
+   */
   const fourthsAt = new Map<string, { n: number; kick: number; punt: number; go: number }>();
 
   if (process.env["DRIVE_CHECK"]) {
