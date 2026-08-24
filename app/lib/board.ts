@@ -201,6 +201,14 @@ export function rescore(players: Player[], league: League): Player[] {
 
   inOrder.forEach((p, i) => {
     p.vor = Number((curve[i] ?? 0).toFixed(1));
+    /**
+     * And the same over one game, because the keeper sheet works in
+     * both. What a pick buys and what a man is worth against it are
+     * read from the season figure, and which alternative to show is
+     * read from the game one, so leaving one his own and the other
+     * the board's let the two disagree about the same player.
+     */
+    p.perGameVor = Number((p.vor / Math.max(1, p.games ?? 17)).toFixed(1));
   });
 
   /**
