@@ -87,6 +87,13 @@ async function main(): Promise<void> {
    * from behind late is a kick and one that scores is a conversion.
    */
   const kicksFor = new Map<string, { from: number[]; conversions: number }>();
+  // what the walk produces, for holding against what sides really get.
+  // Printed when DRIVE_CHECK is set, since eight shares would say it
+  // eight times otherwise.
+  const droveHere = {
+    drives: 0, plays: 0, seconds: 0, teamGames: 0,
+    ends: new Map<string, number>(),
+  };
   const onlyWeek = Number(process.env["WEEK"] ?? 0);
   const endings = new Map<string, number>();
   const boxSaid = new Map<string, {
@@ -221,6 +228,7 @@ async function main(): Promise<void> {
         home.lift = (marketLift.home ?? 1) * worth;
         away.lift = (marketLift.away ?? 1) * worth;
       }
+      droveHere.teamGames += 2;
       const game = playGame(home, away, {
         rules: {
           ...rules, kickSucceeds: kicking.kickSucceeds,
@@ -262,6 +270,10 @@ async function main(): Promise<void> {
       }
 
       for (const one of game.possessions) {
+        droveHere.drives++;
+        droveHere.plays += one.drive.plays.length;
+        droveHere.seconds += one.drive.took;
+        droveHere.ends.set(one.drive.ending, (droveHere.ends.get(one.drive.ending) ?? 0) + 1);
         const its = kicksFor.get(one.team) ?? { from: [], conversions: 0 };
 
         if (one.drive.kickedFrom !== undefined) {
@@ -471,6 +483,20 @@ async function main(): Promise<void> {
   }
 
   if (process.env["SHARES"]) {
+    if (process.env["DRIVE_CHECK"]) {
+      const per = (n: number, of: number) => (n / Math.max(1, of)).toFixed(2);
+      console.error(
+        `  ${per(droveHere.drives, droveHere.teamGames)} drives a side ` +
+        `(really 10.7), ${per(droveHere.plays, droveHere.drives)} plays a ` +
+        `drive (really 5.98), ` +
+        `${(droveHere.seconds / Math.max(1, droveHere.drives)).toFixed(0)} ` +
+        `seconds (really 171)
+  ends: ` +
+        [...droveHere.ends.entries()].sort((a, b) => b[1] - a[1])
+          .map(([e, n]) => `${e} ${(100 * n / droveHere.drives).toFixed(1)}%`)
+          .join(", "),
+      );
+    }
     console.log(JSON.stringify({
       // how many times each fixture was played and how many fixtures a
       // side got, since the kicks come back as a raw count and only
