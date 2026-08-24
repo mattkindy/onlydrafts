@@ -44,13 +44,19 @@ async function oneSeason(season: number): Promise<void> {
   const games = new Map<string, number>();
   const made = new Map<string, Record<string, number>>();
   const kicks = new Map<string, { from: number[]; conversions: number }>();
+  let runs = 0;
+  let weeks = 0;
 
   for (const line of printed) {
     const from = JSON.parse(line) as {
+      runs?: number; weeks?: number;
       total: [string, number][]; games: [string, number][];
       made: [string, Record<string, number>][];
       kicks: [string, { from: number[]; conversions: number }][];
     };
+
+    runs = from.runs ?? runs;
+    weeks = from.weeks ?? weeks;
 
     for (const [playerId, points] of from.total) {
       total.set(playerId, (total.get(playerId) ?? 0) + points);
@@ -82,6 +88,7 @@ async function oneSeason(season: number): Promise<void> {
     import.meta.dirname, "..", "data", "kept", `played-${season}.json`,
   );
   await writeFile(at, JSON.stringify({
+    runs, weeks,
     total: [...total.entries()], games: [...games.entries()],
     made: [...made.entries()],
     kicks: [...kicks.entries()],

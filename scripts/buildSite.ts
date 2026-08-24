@@ -721,14 +721,22 @@ async function main(): Promise<void> {
     join(import.meta.dirname, "..", "data", "kept", `played-${season}.json`),
     "utf8",
   ).catch(() => "");
-  const kicksOf = new Map(
-    (walkFile
-      ? (JSON.parse(walkFile) as {
-          kicks?: [string, { from: number[]; conversions: number }][];
-        }).kicks ?? []
-      : []),
-  );
-  const runsOver = 17 * 40;
+  const walked = walkFile
+    ? JSON.parse(walkFile) as {
+        runs?: number; weeks?: number;
+        kicks?: [string, { from: number[]; conversions: number }][];
+      }
+    : {};
+  const kicksOf = new Map(walked.kicks ?? []);
+  /**
+   * The kicks come back as a raw count across every run of every
+   * fixture, so turning them into kicks a game needs both numbers. The
+   * walk writes them down now; a file from before it did gets what the
+   * walk used to run at.
+   */
+  const walkRuns = walked.runs ?? 40;
+  const walkWeeks = walked.weeks ?? 17;
+  const runsOver = walkWeeks * walkRuns;
 
   /**
    * One kicker a side. Where two are on the roster the one who took
@@ -793,7 +801,7 @@ async function main(): Promise<void> {
       ? kickerSeason(
           asHim,
           its.from.map((yardline) => yardline + 17),
-          its.conversions * 40,
+          its.conversions * walkRuns,
           runsOver,
           KICKER_GAMES,
           400,
@@ -816,7 +824,7 @@ async function main(): Promise<void> {
               : 0.96,
           },
           its.from.map((yardline) => yardline + 17),
-          its.conversions * 40,
+          its.conversions * walkRuns,
           runsOver,
         )
       : null;
