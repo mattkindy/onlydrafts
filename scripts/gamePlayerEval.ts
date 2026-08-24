@@ -91,7 +91,8 @@ async function main(): Promise<void> {
   // Printed when DRIVE_CHECK is set, since eight shares would say it
   // eight times otherwise.
   const droveHere = {
-    drives: 0, plays: 0, seconds: 0, teamGames: 0,
+    drives: 0, plays: 0, seconds: 0, teamGames: 0, startedAt: 0,
+    faced: [] as number[],
     ends: new Map<string, number>(),
   };
   const onlyWeek = Number(process.env["WEEK"] ?? 0);
@@ -274,6 +275,8 @@ async function main(): Promise<void> {
         droveHere.plays += one.drive.plays.length;
         droveHere.seconds += one.drive.took;
         droveHere.ends.set(one.drive.ending, (droveHere.ends.get(one.drive.ending) ?? 0) + 1);
+        droveHere.faced.push(...one.drive.facedAt);
+        droveHere.startedAt += one.drive.plays[0]?.state.yardline ?? 0;
         const its = kicksFor.get(one.team) ?? { from: [], conversions: 0 };
 
         if (one.drive.kickedFrom !== undefined) {
@@ -495,6 +498,20 @@ async function main(): Promise<void> {
         [...droveHere.ends.entries()].sort((a, b) => b[1] - a[1])
           .map(([e, n]) => `${e} ${(100 * n / droveHere.drives).toFixed(1)}%`)
           .join(", "),
+      );
+      const faced = [...droveHere.faced].sort((a, b) => a - b);
+      const at = (q: number) => faced[Math.floor(q * faced.length)] ?? 0;
+      console.error(
+        `  fourth downs faced ${faced.length}, yards from the posts: ` +
+        `a quarter inside ${at(0.25)}, half inside ${at(0.5)}, ` +
+        `three quarters inside ${at(0.75)}\n  ` +
+        `inside 40 (a kick) ` +
+        `${(100 * faced.filter((y) => y <= 40).length / faced.length).toFixed(1)}%` +
+        ` (really 37.4%)\n  starting ` +
+        `${(droveHere.startedAt / Math.max(1, droveHere.drives)).toFixed(1)} out ` +
+        `(really 70.6), so it makes ` +
+        `${(droveHere.startedAt / Math.max(1, droveHere.drives) - at(0.5)).toFixed(1)} ` +
+        `yards before a fourth down where a side really makes 19`,
       );
     }
     console.log(JSON.stringify({
