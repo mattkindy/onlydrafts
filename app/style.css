@@ -258,8 +258,10 @@
   .statline .s i { color: var(--muted); font-style: normal;
     margin-right: .28rem; }
   .statline.big { font-size: .8rem; margin: .2rem 0 .8rem; }
-  .wk .wkline { display: flex; gap: .4rem; font-size: .7rem;
-    color: var(--muted); font-variant-numeric: tabular-nums;
-    justify-content: flex-end; }
+  /* the line sits under the bar rather than beside it, since four
+     columns and a stat line do not fit across a phone */
+  .wk .wkline { grid-column: 3 / -1; display: flex; flex-wrap: wrap;
+    gap: .1rem .45rem; font-size: .7rem; color: var(--muted);
+    font-variant-numeric: tabular-nums; margin: -.1rem 0 .25rem; }
   .wk .wkline i { font-style: normal; color: var(--faint);
     margin-left: .15rem; }

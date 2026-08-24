@@ -325,3 +325,47 @@ describe("the line on the card adds up", () => {
     expect(labels("WR")).not.toContain("pass yds");
   });
 });
+
+/**
+ * A week row is a four column grid and the stat line was a fifth child,
+ * which pushed the points onto their own line and squashed the bar to
+ * nothing on a phone. The line belongs under the bar, after the points.
+ */
+describe("a week row keeps its shape", () => {
+  it("puts the line after the points, not between the columns", async () => {
+    const { PlayerSheet } = await import("./views/PlayerSheet.tsx");
+    const men = boardFor(aLeague());
+    const p = men.find((m) => (m.weeks?.length ?? 0) > 0 && m.projected)!;
+
+    render(
+      <PlayerSheet
+        p={p} plus={[]} minus={[]} teams={12} kept={false}
+        onKeep={() => {}} onClose={() => {}}
+      />,
+      where,
+    );
+
+    const row = where.querySelector(".wk")!;
+    const kids = Array.from(row.children).map((k) => k.className || "plain");
+
+    // week, opponent, bar, points, then the line
+    expect(kids).toEqual(["plain", "plain", "bar", "plain", "wkline"]);
+  });
+
+  it("gives every week a line and a points figure", () => {
+    const men = boardFor(aLeague());
+    const p = men.find((m) => (m.weeks?.length ?? 0) > 0 && m.projected)!;
+
+    render(
+      <PlayerSheet
+        p={p} plus={[]} minus={[]} teams={12} kept={false}
+        onKeep={() => {}} onClose={() => {}}
+      />,
+      where,
+    );
+
+    const rows = Array.from(where.querySelectorAll(".wk"))
+      .filter((r) => r.querySelector(".wkline"));
+    expect(rows.length).toBe(p.weeks!.length);
+  });
+});
