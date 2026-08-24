@@ -48,16 +48,12 @@ function WeekByWeek({ p }: { p: Player }) {
       </div>
       {games.map((w, i) => {
         const pts = points[i]!;
+        const line = weekLine(p.projected ?? p.simulated, p.position, w.of, movedBy(p));
 
         return (
           <div class="wk" key={w.w}>
             <span>w{w.w}</span>
             <span>{w.opp}</span>
-            <span class="wkline">
-              {weekLine(p.projected ?? p.simulated, p.position, w.of, movedBy(p)).map((f) => (
-                <span key={f.label}>{f.value.toFixed(f.places)}<i>{f.label}</i></span>
-              ))}
-            </span>
             <span class="bar">
               <u style={{
                 left: pct(pts * spread.low) + "%",
@@ -70,6 +66,15 @@ function WeekByWeek({ p }: { p: Player }) {
               <b style={{ left: pct(pts) + "%" }} />
             </span>
             <span>{pts.toFixed(1)}</span>
+            {line.length > 0 && (
+              <span class="wkline">
+                {line.map((f) => (
+                  <span key={f.label}>
+                    {f.value.toFixed(f.places)}<i>{f.label}</i>
+                  </span>
+                ))}
+              </span>
+            )}
           </div>
         );
       })}
