@@ -39,8 +39,10 @@ import type { Call } from "../src/model/playFactors.js";
 /** the fourth downs where a side actually chose, so not the flags */
 const DECIDED = ["run", "pass", "field_goal", "punt"];
 
-const SCORE_ON = 2025;
-const LEARN = [2021, 2022, 2023, 2024];
+const SCORE_ON = Number(process.env["SCORE_ON"] ?? 2025);
+// the four seasons before the one being scored, so nothing learns from
+// the year it is judged on
+const LEARN = [SCORE_ON - 4, SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1];
 const RUNS = Number(process.env["RUNS"] ?? 40);
 
 const middle = (values: number[]) =>
