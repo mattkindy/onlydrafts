@@ -2,6 +2,7 @@
 
 import type { Player } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
+import { lineOver, movedBy, weekLine } from "../lib/statLine.ts";
 
 interface Props {
   p: Player;
@@ -40,6 +41,11 @@ function WeekByWeek({ p }: { p: Player }) {
   return (
     <>
       <h2>week by week</h2>
+      <div class="hint">
+        A week moves his whole line together. What the weekly model
+        knows is that a matchup is worth a tenth of him, not whether the
+        tenth comes off his catches or his yards.
+      </div>
       {games.map((w, i) => {
         const pts = points[i]!;
 
@@ -47,6 +53,11 @@ function WeekByWeek({ p }: { p: Player }) {
           <div class="wk" key={w.w}>
             <span>w{w.w}</span>
             <span>{w.opp}</span>
+            <span class="wkline">
+              {weekLine(p.projected ?? p.simulated, p.position, w.of, movedBy(p)).map((f) => (
+                <span key={f.label}>{f.value.toFixed(f.places)}<i>{f.label}</i></span>
+              ))}
+            </span>
             <span class="bar">
               <u style={{
                 left: pct(pts * spread.low) + "%",
@@ -99,6 +110,20 @@ export function PlayerSheet(props: Props) {
               </>
             : " · undrafted"}
         </div>
+
+        {p.games !== undefined && (
+          <>
+            <h2>a season of him, over {p.games.toFixed(1)} games</h2>
+            <div class="statline big">
+              {lineOver(p.projected ?? p.simulated, p.position, p.games, movedBy(p))
+                .map((f) => (
+                  <span class="s" key={f.label}>
+                    <i>{f.label}</i>{f.value.toFixed(f.places)}
+                  </span>
+                ))}
+            </div>
+          </>
+        )}
 
         {sim && (
           <>

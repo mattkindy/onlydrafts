@@ -267,3 +267,61 @@ describe("the rate and the season agree", () => {
     expect(men.some((p) => p.games !== 17)).toBe(true);
   });
 });
+
+/**
+ * The point of putting his line on the card is that the number beside
+ * it can be checked. So it has to add up: what a league pays for the
+ * line has to be what the card says he scores.
+ */
+describe("the line on the card adds up", () => {
+  it("scores to the points beside it", async () => {
+    const { lineOver } = await import("./lib/statLine.ts");
+    const { payFor } = await import("./lib/scoring.ts");
+    const league = aLeague();
+    const men = boardFor(league).filter((p) => p.projected);
+
+    expect(men.length).toBeGreaterThan(100);
+
+    for (const p of men.slice(0, 60)) {
+      // what a reader works out from the line on his card, scaled the
+      // way the card scales it
+      const { movedBy } = await import("./lib/statLine.ts");
+      const scaled = Object.fromEntries(
+        Object.entries(p.projected!).map(([k, v]) => [k, v * movedBy(p)]),
+      );
+      // and it has to be the number printed beside it
+      expect(Math.abs(payFor(scaled, league.pays) - (p.ppg ?? 0)), p.name)
+        .toBeLessThan(0.11);
+    }
+  });
+
+  it("shows a season as the game line times the games", async () => {
+    const { lineOver } = await import("./lib/statLine.ts");
+    const men = boardFor(aLeague()).filter((p) => p.projected && p.games);
+    const p = men[0]!;
+    const aGame = lineOver(p.projected, p.position, 1);
+    const aSeason = lineOver(p.projected, p.position, p.games!);
+
+    expect(aSeason.length).toBe(aGame.length);
+
+    for (let i = 0; i < aGame.length; i++) {
+      expect(aSeason[i]!.value).toBeCloseTo(aGame[i]!.value * p.games!, 4);
+    }
+  });
+
+  it("gives each position the categories it is read by", async () => {
+    const { lineOver } = await import("./lib/statLine.ts");
+    const men = boardFor(aLeague());
+    const labels = (position: string) => {
+      const p = men.find((m) => m.position === position && m.projected);
+
+      return p ? lineOver(p.projected, position, 1).map((f) => f.label) : [];
+    };
+
+    expect(labels("QB")).toContain("pass yds");
+    expect(labels("QB")).not.toContain("rec");
+    expect(labels("RB")).toContain("rush yds");
+    expect(labels("WR")).toContain("rec yds");
+    expect(labels("WR")).not.toContain("pass yds");
+  });
+});
