@@ -274,7 +274,7 @@ describe("the rate and the season agree", () => {
  * line has to be what the card says he scores.
  */
 describe("the line on the card adds up", () => {
-  it("scores to the points beside it", async () => {
+  it("scores a season to the points a game beside it", async () => {
     const { lineOver } = await import("./lib/statLine.ts");
     const { payFor } = await import("./lib/scoring.ts");
     const league = aLeague();
@@ -289,9 +289,13 @@ describe("the line on the card adds up", () => {
       const scaled = Object.fromEntries(
         Object.entries(p.projected!).map(([k, v]) => [k, v * movedBy(p)]),
       );
-      // and it has to be the number printed beside it
-      expect(Math.abs(payFor(scaled, league.pays) - (p.ppg ?? 0)), p.name)
-        .toBeLessThan(0.11);
+      // the card shows a season, so a reader divides by the games shown
+      // beside it to get back to the points a game
+      const overASeason = Object.fromEntries(
+        Object.entries(scaled).map(([k, v]) => [k, v * p.games!]),
+      );
+      const aGame = payFor(overASeason, league.pays) / p.games!;
+      expect(Math.abs(aGame - (p.ppg ?? 0)), p.name).toBeLessThan(0.11);
     }
   });
 
