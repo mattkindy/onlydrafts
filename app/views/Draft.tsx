@@ -46,7 +46,7 @@ interface Props {
   snake: boolean;
   posFilter: string;
   query: string;
-  byAdp: boolean;
+  order: "rank" | "adp";
   onMore: (p: Player) => void;
   staleAt?: string;
 }
@@ -310,9 +310,11 @@ export function DraftView(props: Props) {
     .filter((p) => !state.taken.has(p.key))
     .filter(wanted)
     .map((p) => ({ p, score: p.vor ?? 0, drop: dropOff(p) }))
-    .sort((a, b) => props.byAdp
+    // our value and our order are the same thing now: what a pick at
+    // his place on the board is worth
+    .sort((a, b) => props.order === "adp"
       ? (a.p.adp ?? 999) - (b.p.adp ?? 999)
-      : b.score - a.score);
+      : (a.p.rank ?? 9999) - (b.p.rank ?? 9999));
 
   const shortlist = scored.slice(0, MOST_SHOWN);
   const max = seasonScale(shortlist.map(({ p }) => p));

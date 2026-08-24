@@ -105,7 +105,7 @@ function App() {
   const [perTeam, setPerTeam] = useState(() => stored("keepn", 3));
   const [posFilter, setPosFilter] = useState("ALL");
   const [query, setQuery] = useState("");
-  const [byAdp, setByAdp] = useState(false);
+  const [order, setOrder] = useState<"rank" | "adp">("rank");
   const [manual, setManual] = useState(() => stored("manual", ""));
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -326,10 +326,11 @@ function App() {
             <label>
               order by{" "}
               <select
-                value={byAdp ? "adp" : "value"}
-                onChange={(e) => setByAdp(e.currentTarget.value === "adp")}
+                value={order}
+                onChange={(e) =>
+                  setOrder(e.currentTarget.value as "rank" | "adp")}
               >
-                <option value="value">our value</option>
+                <option value="rank">our value</option>
                 <option value="adp">adp</option>
               </select>
             </label>
@@ -440,7 +441,7 @@ function App() {
             snake={active?.snake ?? true}
             posFilter={posFilter}
             query={query}
-            byAdp={byAdp}
+            order={order}
             onMore={setShowing}
           />
         )}

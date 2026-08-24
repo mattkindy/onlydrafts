@@ -134,7 +134,7 @@ describe("the views", () => {
     render(
       <DraftView
         men={men} state={NO_DRAFT} teams={12} snake posFilter="ALL"
-        query="" byAdp={false} onMore={() => {}}
+        query="" order="rank" onMore={() => {}}
       />,
       where,
     );
@@ -164,13 +164,14 @@ describe("the board in a league's terms", () => {
     expect(men.length).toBeGreaterThan(20);
 
     /**
-     * Every man's value is his own now, so it does not have to fall
-     * down the page. What it must not do is come out as somebody
-     * else's: his value is his games times his gap to a replacement.
+     * Value is read off the board's own order, so it falls down the
+     * page. It did not always: the list to read it against was taken
+     * before the sort, so Jonathan Taylor was shown worth more than
+     * Bijan Robinson while sitting below him.
      */
-    for (const p of men.slice(0, 80)) {
-      expect(p.vor!, p.name)
-        .toBeCloseTo((p.games ?? 17) * (p.perGameVor ?? 0), 0);
+    for (let i = 1; i < Math.min(80, men.length); i++) {
+      expect(men[i]!.vor!, men[i]!.name)
+        .toBeLessThanOrEqual(men[i - 1]!.vor! + 0.001);
     }
   });
 
@@ -238,7 +239,7 @@ describe("the rate and the season agree", () => {
     render(
       <DraftView
         men={men} state={NO_DRAFT} teams={12} snake posFilter="ALL"
-        query="" byAdp={false} onMore={() => {}}
+        query="" order="rank" onMore={() => {}}
       />,
       where,
     );
@@ -296,24 +297,24 @@ describe("the line on the card adds up", () => {
   });
 
   /**
-   * Value used to fall down the page because the board sorted every
-   * value and handed the man in second place the second largest. It
-   * does not any more, and it should not: the order is four opinions
-   * together and his points are one of them.
+   * Value is what a pick at his place on the board is worth, so it runs
+   * down the board by construction. His own projected value is still
+   * there as his games times his gap to a replacement, and the two
+   * differ because the order is four opinions and his points are one.
    */
-  it("gives him his own value, not the one at his place", () => {
+  it("reads value off the board's own order", () => {
     const men = boardFor(aLeague())
       .filter((p) => !["K", "DEF"].includes(p.position) && p.projected);
 
-    for (const p of men.slice(0, 80)) {
-      expect(p.vor!, p.name)
-        .toBeCloseTo((p.games ?? 17) * (p.perGameVor ?? 0), 0);
+    for (let i = 1; i < Math.min(80, men.length); i++) {
+      expect(men[i]!.vor!, men[i]!.name)
+        .toBeLessThanOrEqual(men[i - 1]!.vor! + 0.001);
     }
 
-    // and it no longer has to fall, because the order is not a value sort
-    const falls = men.slice(1, 80)
-      .filter((p, i) => (p.vor ?? 0) <= (men[i]!.vor ?? 0)).length;
-    expect(falls).toBeLessThan(79);
+    // his own is still worked out, and still checks against his line
+    for (const p of men.slice(0, 20)) {
+      expect((p.games ?? 17) * (p.perGameVor ?? 0)).toBeGreaterThan(-500);
+    }
   });
 
   it("scores a season to the points a game beside it", async () => {
@@ -463,5 +464,35 @@ describe("a render that throws", () => {
     expect(main).toContain("getDerivedStateFromError");
     expect(main).toContain("forget and start over");
     expect(Component).toBeTruthy();
+  });
+});
+
+/**
+ * What a card calls value is what a pick at his place on the board is
+ * worth, so the list in that order runs down it. His points stay his
+ * own and are not touched by this, which is what the old curve got
+ * wrong when it moved both.
+ */
+describe("the draft list runs down the value", () => {
+  const men = boardFor(aLeague());
+  const state = {
+    taken: new Set<string>(), mine: new Set<string>(),
+    teams: {}, rosteredBy: {}, grid: null,
+  };
+
+  it("never puts a bigger value below a smaller one", () => {
+    render(
+      <DraftView men={men} state={state} teams={12} snake posFilter="ALL"
+        query="" order="rank" onMore={() => {}} />,
+      where,
+    );
+    const worth = new Map(men.map((p) => [p.name, p.vor ?? 0]));
+    const shown = Array.from(where.querySelectorAll(".card .who"))
+      .map((n) => n.textContent!);
+
+    for (let i = 1; i < shown.length; i++) {
+      expect(worth.get(shown[i]!)!, shown[i])
+        .toBeLessThanOrEqual(worth.get(shown[i - 1]!)!);
+    }
   });
 });

@@ -106,15 +106,10 @@ export function rescore(players: Player[], league: League): Player[] {
    * a replacement and nothing for the other four, so a fragile player
    * and a durable one with the same average are priced apart.
    *
-   * These are his and they stay his. The board used to sort every
-   * value and hand the man in second place the second largest, so the
-   * column fell down the page, and it did that by printing numbers
-   * belonging to other people: Gibbs is first and worth 159, Bijan is
-   * second and worth 239, and the curve gave Gibbs 239 and Bijan 159.
-   * Value now falls out of step with the order about half the time,
-   * which is the truth of it. The order is four opinions together and
-   * his points are one of them, so a man the room rates above his
-   * projection shows exactly that.
+   * This is what his own projection says he is worth, which is one of
+   * the four opinions the board blends. The number a card shows comes
+   * later and is a different thing: what a pick where the board has
+   * him is worth.
    */
   for (const p of men) {
     const plays = p.games!;
@@ -183,6 +178,30 @@ export function rescore(players: Player[], league: League): Player[] {
 
   men.sort((a, b) => (a.blend ?? 0) - (b.blend ?? 0));
   men.forEach((p, i) => { p.rank = i + 1; });
+
+  /**
+   * What a pick here is worth, which is the number a card shows.
+   *
+   * The board orders by four opinions together and his own projected
+   * value is one of them, so the two disagree about half the time. A
+   * card showing his projection while the list is ordered by the blend
+   * reads as a broken sort: 1.02 above 1.01, and a man with more points
+   * below a man with fewer.
+   *
+   * So the values are sorted and read back at each man's place. The
+   * first pick on the board is worth what the best value is, whoever
+   * turns out to hold it. What he scores is untouched by this and stays
+   * his own, so the line on his card still adds up to the points beside
+   * it. That is the part the old curve got wrong: it moved his points
+   * as well, and a card read 18 a game for a man his league scores at
+   * 22.9.
+   */
+  const inOrder = men.filter((p) => !OWN_ORDER.has(p.position));
+  const curve = inOrder.map((p) => p.vor ?? 0).sort((a, b) => b - a);
+
+  inOrder.forEach((p, i) => {
+    p.vor = Number((curve[i] ?? 0).toFixed(1));
+  });
 
   /**
    * Where the room takes him, as a place rather than an average.
