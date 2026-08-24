@@ -7,7 +7,7 @@
  * somebody else's rules.
  */
 
-import { render } from "preact";
+import { Component, render, type ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 
 import "./style.css";
@@ -66,14 +66,14 @@ const COPY: Record<View, [string, string, string]> = {
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF", "ROOKIES"];
 
 /** the few a reader would check, spelled out on hover */
-function payDescription(pays: Record<string, number>): string {
+function payDescription(pays: Record<string, number> | null | undefined): string {
   const said = [
-    ["a catch", pays["rec"] ?? 0],
-    ["a receiving yard", pays["rec_yd"] ?? 0.1],
-    ["a rushing yard", pays["rush_yd"] ?? 0.1],
-    ["a touchdown", pays["rush_td"] ?? 6],
-    ["a passing yard", pays["pass_yd"] ?? 0.04],
-    ["a passing touchdown", pays["pass_td"] ?? 4],
+    ["a catch", pays?.["rec"] ?? 0],
+    ["a receiving yard", pays?.["rec_yd"] ?? 0.1],
+    ["a rushing yard", pays?.["rush_yd"] ?? 0.1],
+    ["a touchdown", pays?.["rush_td"] ?? 6],
+    ["a passing yard", pays?.["pass_yd"] ?? 0.04],
+    ["a passing touchdown", pays?.["pass_td"] ?? 4],
   ];
 
   return "this league pays " +
@@ -399,7 +399,7 @@ function App() {
                           of two is otherwise silent */}
                       <div class="sub">
                         <span class="pays">{roomFor(lg.pays)}</span>
-                        <span>{lg.pays["rec"] ?? 0} a catch</span>
+                        <span>{lg.pays?.["rec"] ?? 0} a catch</span>
                       </div>
                     </div>
                   ))}
@@ -475,4 +475,58 @@ function App() {
   );
 }
 
-render(<App />, document.getElementById("app")!);
+/**
+ * Somewhere for a render to fail loudly.
+ *
+ * Preact stops updating when a render throws, so the page keeps
+ * whatever it drew last. A league saved without its scoring did that
+ * once: the board loaded, drawing the league list threw, and the page
+ * sat on "reading the board" looking for all the world like the site
+ * was down. Better to say what happened and offer the way out.
+ */
+class Caught extends Component<
+  { children: ComponentChildren }, { blew: Error | null }
+> {
+  state = { blew: null as Error | null };
+
+  static getDerivedStateFromError(blew: Error) {
+    return { blew };
+  }
+
+  render() {
+    if (!this.state.blew) {
+      return this.props.children;
+    }
+
+    return (
+      <div class="wrap">
+        <h1>The page stopped</h1>
+        <div class="empty">
+          <b>{this.state.blew.message}</b>
+          <br />
+          Something the browser remembered may be from an older version
+          of this page. Forgetting it and looking your leagues up again
+          usually clears it.
+          <div class="row">
+            <button
+              class="act"
+              onClick={() => {
+                localStorage.clear();
+                location.reload();
+              }}
+            >
+              forget and start over
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+render(
+  <Caught>
+    <App />
+  </Caught>,
+  document.getElementById("app")!,
+);

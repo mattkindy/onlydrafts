@@ -429,3 +429,39 @@ describe("the scoring in play is on screen", () => {
       .toBeCloseTo(25.18, 1);
   });
 });
+
+/**
+ * A league saved in a browser by an older build may have no scoring on
+ * it. Reading it used to throw while drawing the league list, and a
+ * throw in Preact leaves the page on whatever it drew last, which was
+ * "reading the board" and looked exactly like the site being down.
+ */
+describe("a league saved by an older build", () => {
+  it("does not bring the page down", async () => {
+    const { roomFor } = await import("./lib/board.ts");
+
+    expect(roomFor(undefined)).toBe("standard");
+    expect(roomFor(null)).toBe("standard");
+    expect(roomFor({})).toBe("standard");
+  });
+
+  it("still scores a board when the league says nothing", () => {
+    const men = rescore(file.players, { teams: 12, slots: SLOTS, pays: {} });
+
+    expect(men.length).toBeGreaterThan(500);
+    expect(men[0]!.ppg).toBeGreaterThan(0);
+  });
+});
+
+describe("a render that throws", () => {
+  it("says so instead of leaving the page where it was", async () => {
+    const { Component } = await import("preact");
+
+    // the boundary is a class component with getDerivedStateFromError,
+    // which is what turns a throw into a message rather than a freeze
+    const main = readFileSync(join(import.meta.dirname, "main.tsx"), "utf8");
+    expect(main).toContain("getDerivedStateFromError");
+    expect(main).toContain("forget and start over");
+    expect(Component).toBeTruthy();
+  });
+});

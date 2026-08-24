@@ -33,8 +33,8 @@ const WHERE = ["QB", "RB", "WR", "TE", "K", "DEF"];
  * Which mock drafts to read. A point a catch moves receivers up, so a
  * ppr league reading standard mocks is reading the wrong room.
  */
-export function roomFor(pays: Pays): "ppr" | "half" | "standard" {
-  const perCatch = pays["rec"] ?? 0;
+export function roomFor(pays: Pays | null | undefined): "ppr" | "half" | "standard" {
+  const perCatch = pays?.["rec"] ?? 0;
 
   return perCatch >= 0.75 ? "ppr" : perCatch >= 0.25 ? "half" : "standard";
 }
