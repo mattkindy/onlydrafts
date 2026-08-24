@@ -282,6 +282,9 @@ export type { PlayLevel } from "./playLevel.js";
  * ratio. The pooled path stays for the men too thin to sample.
  */
 export interface PlayStore {
+  /** what a throw to nobody costs, and where it was thrown from */
+  wasted: { yardline: number; yards: number }[];
+  wastedShare: number;
   down: Int8Array;
   toGo: Int16Array;
   yardline: Int8Array;
@@ -293,6 +296,14 @@ export interface PlayStore {
   ofPair: Map<string, number[]>;
 }
 
+/**
+ * How close to the goal a play has to be drawn from somewhere like the
+ * spot it is used. Out in the field the room does not matter much; in
+ * close it decides everything, because a play from midfield applied on
+ * the eight is a different play.
+ */
+const NEAR_GOAL = 20;
+
 export function storePlays(rows: PlayRow[]): PlayStore {
   const kept = rows.filter((r) => r.player);
   const down = new Int8Array(kept.length);
@@ -302,6 +313,15 @@ export function storePlays(rows: PlayRow[]): PlayStore {
   const caught = new Uint8Array(kept.length);
   const ofMan = new Map<string, number[]>();
   const ofPair = new Map<string, number[]>();
+  /**
+   * The sacks and the balls thrown away, which belong to no receiver
+   * and so are in nobody's pool. Kept with where the ball was, because
+   * one inside the ten costs 3.12 yards and one past midfield costs
+   * 4.72: a side near the goal throws it away rather than take the
+   * sack, and has less field to lose.
+   */
+  const nobody = rows.filter((r) => r.call === "pass" && !r.player);
+  const passes = rows.filter((r) => r.call === "pass").length;
 
   kept.forEach((r, i) => {
     down[i] = r.down;
@@ -318,7 +338,11 @@ export function storePlays(rows: PlayRow[]): PlayStore {
     }
   });
 
-  return { down, toGo, yardline, yards, caught, ofMan, ofPair };
+  return {
+    down, toGo, yardline, yards, caught, ofMan, ofPair,
+    wasted: nobody.map((r) => ({ yardline: r.yardline, yards: r.yards })),
+    wastedShare: passes > 0 ? nobody.length / passes : 0,
+  };
 }
 
 /**
@@ -874,6 +898,25 @@ export function fitPlayFactors(
         passer?: string,
       ) => {
         /**
+         * A sack or a ball thrown away first, since one belongs to no
+         * receiver and so is in nobody's pool. A tenth of throws are
+         * one of these, and without them the walk's drives travelled a
+         * third further than a side's do.
+         */
+        if (call === "pass" && plays.wasted.length &&
+            uniform() < plays.wastedShare) {
+          const near = plays.wasted.filter(
+            (w) => Math.abs(w.yardline - state.yardline) <= 15,
+          );
+          const from = near.length >= 100 ? near : plays.wasted;
+
+          return {
+            yards: from[Math.floor(uniform() * from.length)]!.yards,
+            caught: false,
+          };
+        }
+
+        /**
          * A throw between these exact two men first, when they have
          * enough between them. The pairing the multiplier interface
          * could never carry comes out of joint sampling instead: what
@@ -900,19 +943,36 @@ export function fitPlayFactors(
           return undefined;
         }
 
-        const passes: ((i: number) => boolean)[] = [
-          (i) => plays.down[i] === state.down &&
-            Math.abs(plays.toGo[i]! - state.toGo) <= 3 &&
-            Math.abs(plays.yardline[i]! - state.yardline) <= 20,
-          (i) => Math.abs(plays.yardline[i]! - state.yardline) <= 25,
-          () => true,
+        /**
+         * How far out a play may have been made and still stand in for
+         * one here. Inside the twenty this used to be a flat ten yards
+         * at every pass, and hardly anybody has twenty of his own plays
+         * from inside the thirty, so the draw gave up on 70% of throws
+         * inside the ten and fell back to the pooled one, which gains
+         * 4.62 where a targeted throw gains 7.33. That is where the
+         * walk's short goal line came from.
+         */
+        const passes: { fits: (i: number) => boolean; room: number }[] = [
+          {
+            fits: (i) => plays.down[i] === state.down &&
+              Math.abs(plays.toGo[i]! - state.toGo) <= 3 &&
+              Math.abs(plays.yardline[i]! - state.yardline) <= 20,
+            room: 10,
+          },
+          {
+            fits: (i) => Math.abs(plays.yardline[i]! - state.yardline) <= 25,
+            room: 20,
+          },
+          { fits: () => true, room: 35 },
         ];
 
-        for (const fits of passes) {
+        for (const { fits, room } of passes) {
           const pool = his.filter((i) =>
             fits(i) &&
-            (state.yardline > 20 || plays.yardline[i]! <= state.yardline + 10) &&
-            (state.yardline <= 20 || plays.yardline[i]! >= state.yardline - 40));
+            (state.yardline > NEAR_GOAL ||
+              plays.yardline[i]! <= state.yardline + room) &&
+            (state.yardline <= NEAR_GOAL ||
+              plays.yardline[i]! >= state.yardline - 40));
 
           if (pool.length < 20) {
             continue;
