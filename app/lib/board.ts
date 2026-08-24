@@ -105,6 +105,16 @@ export function rescore(players: Player[], league: League): Player[] {
    * A man who misses four weeks gives you thirteen weeks of the gap to
    * a replacement and nothing for the other four, so a fragile player
    * and a durable one with the same average are priced apart.
+   *
+   * These are his and they stay his. The board used to sort every
+   * value and hand the man in second place the second largest, so the
+   * column fell down the page, and it did that by printing numbers
+   * belonging to other people: Gibbs is first and worth 159, Bijan is
+   * second and worth 239, and the curve gave Gibbs 239 and Bijan 159.
+   * Value now falls out of step with the order about half the time,
+   * which is the truth of it. The order is four opinions together and
+   * his points are one of them, so a man the room rates above his
+   * projection shows exactly that.
    */
   for (const p of men) {
     const plays = p.games!;
@@ -184,26 +194,6 @@ export function rescore(players: Player[], league: League): Player[] {
     .sort((a, b) => a.adp! - b.adp!)
     .forEach((p, i) => { p.adpRank = i + 1; });
 
-  /**
-   * The order comes from four opinions together while value over
-   * replacement comes from the projection alone, so a card could show a
-   * man at eighteen a game above one at twenty two and still give the
-   * first a bigger number. Reading the value curve in board order makes
-   * every number on a card agree with where the board has him.
-   *
-   * Read after the sort. Taking the list before it handed the best
-   * value to whoever happened to be first in the file.
-   */
-  const inOrder = men.filter((p) => !OWN_ORDER.has(p.position));
-  const curve = inOrder.map((p) => p.vor ?? 0).sort((a, b) => b - a);
-
-  inOrder.forEach((p, i) => {
-    p.vor = Number((curve[i] ?? 0).toFixed(1));
-    const plays = p.games!;
-    const said = (bar[p.position] ?? 0) + p.vor / Math.max(1, plays);
-    p.ppg = Number(said.toFixed(1));
-    p.perGameVor = Number((said - (bar[p.position] ?? 0)).toFixed(1));
-  });
 
   /**
    * The spreads were worked out under whatever the build scored, so

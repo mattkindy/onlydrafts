@@ -164,13 +164,13 @@ describe("the board in a league's terms", () => {
     expect(men.length).toBeGreaterThan(20);
 
     /**
-     * Value must fall as the board goes on. It did not: the list to
-     * read the value curve against was taken before the board was
-     * sorted, so Jonathan Taylor was shown worth more than Bijan
-     * Robinson while sitting below him.
+     * Every man's value is his own now, so it does not have to fall
+     * down the page. What it must not do is come out as somebody
+     * else's: his value is his games times his gap to a replacement.
      */
-    for (let i = 1; i < Math.min(80, men.length); i++) {
-      expect(men[i]!.vor!).toBeLessThanOrEqual(men[i - 1]!.vor! + 0.001);
+    for (const p of men.slice(0, 80)) {
+      expect(p.vor!, p.name)
+        .toBeCloseTo((p.games ?? 17) * (p.perGameVor ?? 0), 0);
     }
   });
 
@@ -274,6 +274,48 @@ describe("the rate and the season agree", () => {
  * line has to be what the card says he scores.
  */
 describe("the line on the card adds up", () => {
+  it("prints his own points under his own league's rules", async () => {
+    const { payFor } = await import("./lib/scoring.ts");
+    const at = (rec: number) => ({
+      rec, rec_yd: 0.1, rec_td: 6, rush_yd: 0.1, rush_td: 6,
+      pass_yd: 0.04, pass_td: 4,
+    });
+
+    for (const rec of [0, 0.5, 1]) {
+      const men = rescore(file.players, { teams: 12, slots: SLOTS, pays: at(rec) })
+        .filter((p) => p.projected);
+
+      for (const p of men.slice(0, 40)) {
+        // the card's number is his line scored by his league, and
+        // nothing else. It used to be whatever the value curve said at
+        // his rank, which printed 18 for a man the league scores at 22.9
+        expect(Math.abs(payFor(p.projected!, at(rec)) - (p.ppg ?? 0)), p.name)
+          .toBeLessThan(0.06);
+      }
+    }
+  });
+
+  /**
+   * Value used to fall down the page because the board sorted every
+   * value and handed the man in second place the second largest. It
+   * does not any more, and it should not: the order is four opinions
+   * together and his points are one of them.
+   */
+  it("gives him his own value, not the one at his place", () => {
+    const men = boardFor(aLeague())
+      .filter((p) => !["K", "DEF"].includes(p.position) && p.projected);
+
+    for (const p of men.slice(0, 80)) {
+      expect(p.vor!, p.name)
+        .toBeCloseTo((p.games ?? 17) * (p.perGameVor ?? 0), 0);
+    }
+
+    // and it no longer has to fall, because the order is not a value sort
+    const falls = men.slice(1, 80)
+      .filter((p, i) => (p.vor ?? 0) <= (men[i]!.vor ?? 0)).length;
+    expect(falls).toBeLessThan(79);
+  });
+
   it("scores a season to the points a game beside it", async () => {
     const { lineOver } = await import("./lib/statLine.ts");
     const { payFor } = await import("./lib/scoring.ts");
