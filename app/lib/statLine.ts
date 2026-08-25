@@ -21,10 +21,13 @@ export interface Figure {
   places: number;
 }
 
-const YARDS = new Set(["passYds", "rushYds", "recYds", "fgmYds"]);
+/** the ones a box score writes as whole numbers */
+const WHOLE = new Set(["passYds", "rushYds", "recYds", "fgmYds",
+  "passAtt", "passCmp", "carries", "targets"]);
 
 /** what a box score puts next to each thing he did */
 const CALLED: Record<string, string> = {
+  passCmp: "comp", passAtt: "att", carries: "car", targets: "tgt",
   passYds: "pass yds", passTd: "pass td", interceptions: "int",
   rushYds: "rush yds", rushTd: "rush td",
   receptions: "rec", recYds: "rec yds", recTd: "rec td",
@@ -37,10 +40,11 @@ const CALLED: Record<string, string> = {
 
 /** the few worth showing for each position, in the order a box score has them */
 const HEADLINE: Record<string, string[]> = {
-  QB: ["passYds", "passTd", "interceptions", "rushYds", "rushTd"],
-  RB: ["rushYds", "rushTd", "receptions", "recYds", "recTd"],
-  WR: ["receptions", "recYds", "recTd", "rushYds", "rushTd"],
-  TE: ["receptions", "recYds", "recTd"],
+  QB: ["passCmp", "passAtt", "passYds", "passTd", "interceptions",
+    "carries", "rushYds", "rushTd"],
+  RB: ["carries", "rushYds", "rushTd", "targets", "receptions", "recYds", "recTd"],
+  WR: ["targets", "receptions", "recYds", "recTd", "carries", "rushYds", "rushTd"],
+  TE: ["targets", "receptions", "recYds", "recTd"],
   K: ["fgm", "fgmYds", "xpm", "fgmiss"],
   DEF: ["sack", "int", "fum_rec", "def_td", "safe", "blk_kick"],
 };
@@ -70,7 +74,7 @@ export function lineOver(
     .map((part) => ({
       label: CALLED[part] ?? part,
       value: (parts[part] ?? 0) * games * moved,
-      places: YARDS.has(part) ? 0 : 1,
+      places: WHOLE.has(part) ? 0 : 1,
     }))
     .filter((f) => f.value >= (f.places === 0 ? 0.5 : 0.05));
 }
