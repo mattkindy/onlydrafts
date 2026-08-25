@@ -10,10 +10,13 @@
  *
  * So the games are put back: how many kicks a game comes from the rate
  * the walk produced, the yard lines are drawn from the ones it actually
- * generated, and his own accuracy by band decides each one.
+ * generated, and his own accuracy by band decides each one. Each game
+ * is played at the ground it is played at, on a day drawn for that week.
  */
 
 import { BANDS, bandOf, type KickerHistory } from "./kickerFromWalk.js";
+import { kickingVenue, type Venue } from "./kickingVenue.js";
+import { HOME, type Climate } from "./climate.js";
 
 /** what everyone makes from each band, near enough */
 const LEAGUE_MAKES = [0.98, 0.97, 0.94, 0.85, 0.68, 0.4];
@@ -46,6 +49,16 @@ export interface KickerSeason {
   game: Spread;
   /** and across a season, with the games he is expected to play */
   sim: Spread & { games: number };
+  /** each week as a multiple of his own average */
+  byWeek: { w: number; of: number }[];
+}
+
+/** where a fixture is played, which is the host's ground */
+export interface Fixture {
+  week: number;
+  host: string;
+  /** the hour it kicks off, local */
+  hour: number;
 }
 
 /** how often he makes one from a band, leaning on the league until he has taken enough */
@@ -73,6 +86,33 @@ const spread = (values: number[], places: number): Spread => {
     high: round(quantile(sorted, 0.9)),
   };
 };
+
+/** the ground and the day, drawn fresh so a mild December is as likely as a cold one */
+function dayAt(
+  fixture: Fixture | null,
+  climate: Climate | undefined,
+  rng: () => number,
+): Venue {
+  if (!fixture) {
+    return { indoors: false, temperature: 60, wind: 6 };
+  }
+
+  const where = HOME[fixture.host];
+
+  if (where?.indoors) {
+    return { indoors: true };
+  }
+
+  if (!climate) {
+    return { indoors: false, temperature: 60, wind: 6 };
+  }
+
+  return {
+    indoors: false,
+    temperature: climate.drawTemperature(fixture.host, fixture.week, fixture.hour, rng),
+    wind: climate.drawWind(fixture.host, rng),
+  };
+}
 
 /** a whole number of kicks this week, around the rate his side produces */
 function howManyKicks(rate: number, rng: () => number): number {
@@ -102,11 +142,15 @@ export function kickerSeason(
   games: number,
   seasons: number,
   rng: () => number,
+  /** the fixtures he plays, so each game gets its own ground and day */
+  fixtures: Fixture[] = [],
+  climate?: Climate,
 ): KickerSeason {
   const kicksPerGame = attemptYards.length / Math.max(1, gameSlots);
   const touchdownsPerGame = conversions / Math.max(1, gameSlots);
   const perGame: number[] = [];
   const perSeason: number[] = [];
+  const weekTotals = new Map<number, { points: number; times: number }>();
   const tally: Record<string, number> = { fgmYds: 0, xpm: 0, xpmiss: 0 };
 
   for (const band of BANDS) {
@@ -116,16 +160,30 @@ export function kickerSeason(
 
   const played = Math.max(1, Math.round(games));
 
+  // when he has no fixtures, every game is an ordinary mild afternoon
+  const slate: (Fixture | null)[] = fixtures.length > 0
+    ? fixtures
+    : Array.from({ length: played }, () => null);
+  // he misses some of them, so each is played this often
+  const playsIt = played / Math.max(1, slate.length);
+
   for (let season = 0; season < seasons; season++) {
     let seasonPoints = 0;
 
-    for (let game = 0; game < played; game++) {
+    for (const fixture of slate) {
+      if (rng() > playsIt) {
+        continue;
+      }
+
+      const venue = dayAt(fixture, climate, rng);
+      const sentOut = kickingVenue.appetite(venue);
       let points = 0;
 
-      for (let k = howManyKicks(kicksPerGame, rng); k > 0; k--) {
+      for (let k = howManyKicks(kicksPerGame * sentOut, rng); k > 0; k--) {
         const yards = attemptYards[Math.floor(rng() * attemptYards.length)] ?? 35;
         const band = bandOf(yards);
-        const made = rng() < makesFrom(him, band);
+        const bend = kickingVenue.bend(yards - 17, venue);
+        const made = rng() < Math.min(0.995, makesFrom(him, band) * bend);
         const name = BANDS[band]!.name;
 
         if (made) {
@@ -140,7 +198,7 @@ export function kickerSeason(
       }
 
       for (let t = howManyKicks(touchdownsPerGame, rng); t > 0; t--) {
-        if (rng() < him.extraPointRate) {
+        if (rng() < him.extraPointRate * kickingVenue.extraPoint(venue) / 0.949) {
           tally["xpm"] = (tally["xpm"] ?? 0) + 1;
           points += AS_BUILT["xpm"]!;
         } else {
@@ -151,12 +209,19 @@ export function kickerSeason(
 
       perGame.push(points);
       seasonPoints += points;
+
+      if (fixture) {
+        const so = weekTotals.get(fixture.week) ?? { points: 0, times: 0 };
+        weekTotals.set(fixture.week, {
+          points: so.points + points, times: so.times + 1,
+        });
+      }
     }
 
     perSeason.push(seasonPoints);
   }
 
-  const everyGame = seasons * played;
+  const everyGame = Math.max(1, perGame.length);
   const parts: Record<string, number> = {};
 
   for (const [part, n] of Object.entries(tally)) {
@@ -169,9 +234,20 @@ export function kickerSeason(
   parts["fgm_50p"] = (parts["fgm_50_59"] ?? 0) + (parts["fgm_60p"] ?? 0);
   parts["fgmiss_50p"] = (parts["fgmiss_50_59"] ?? 0) + (parts["fgmiss_60p"] ?? 0);
 
+  const overall = perGame.reduce((s, v) => s + v, 0) / everyGame;
+  const byWeek = [...weekTotals.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([w, t]) => ({
+      w,
+      of: overall > 0
+        ? Number((t.points / Math.max(1, t.times) / overall).toFixed(3))
+        : 1,
+    }));
+
   return {
     parts,
     game: spread(perGame, 1),
     sim: { ...spread(perSeason, 0), games: Number(games.toFixed(1)) },
+    byWeek,
   };
 }

@@ -233,18 +233,22 @@
   .sheet .sub { color: var(--faint); font-size: .8rem; margin-bottom: .8rem; }
   .wk { display: grid; grid-template-columns: 2.2rem 3.2rem 1fr 3.6rem;
     gap: .5rem; align-items: center; font-size: .75rem; color: var(--muted);
-    padding: .1rem 0; }
-  .wk .bar { height: 11px; position: relative; }
+    padding: .26rem 0; }
+  /* the same bar the card draws its range with, a row per week */
+  .wk .bar { height: 12px; position: relative; background: var(--chip);
+    border-radius: 999px; }
   .wk .bar u, .wk .bar i, .wk .bar b { position: absolute; }
-  /* whisker: a bad week to a big one */
-  .wk .bar u { top: 5px; height: 1px; background: var(--chip); }
-  /* box: the middle half of outcomes */
-  .wk .bar i { top: 2px; height: 7px; background: var(--go);
-    opacity: .35; border-radius: 3px; }
-  /* tick: the projection */
-  .wk .bar b { top: 0; width: 2px; height: 11px; background: var(--go); }
-  /* the average barely moves week to week, so the range under it is
-     the number worth reading */
+  /* a bad week to a big one */
+  .wk .bar u { top: 0; bottom: 0;
+    background: color-mix(in srgb, var(--go) 55%, var(--chip));
+    border-radius: 999px; }
+  /* the middle half, which is where he lands most weeks */
+  .wk .bar i { top: 3px; bottom: 3px;
+    background: color-mix(in srgb, var(--go) 22%, var(--chip));
+    border-radius: 2px; }
+  /* and what he averages there */
+  .wk .bar b { top: -3px; width: 3px; height: 18px; background: var(--mark);
+    border-radius: 2px; box-shadow: 0 0 0 2px var(--panel); }
   .wk .wkpts { display: flex; flex-direction: column; align-items: flex-end;
     line-height: 1.15; }
   .wk .wkpts em { font-style: normal; font-size: .64rem; color: var(--faint);
