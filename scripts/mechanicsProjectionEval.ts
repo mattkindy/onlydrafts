@@ -19,8 +19,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const SEASONS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
-const GROUPS = ["WR", "TE", "RB"];
-
 type Row = Record<string, string>;
 const n = (r: Row, key: string) => Number(r[key]) || 0;
 
@@ -196,7 +194,7 @@ for (const [which, position, enough] of [
   const label = `${which === "recYds" ? "rec yds" : "rush yds"} ${position}`;
 
   console.log(
-    `  ${label.padEnd(11)} ${String(pairs.length).padStart(4)}  ` +
+    `  ${label.padEnd(12)} ${String(pairs.length).padStart(4)}  ` +
     `${rmse(pairs.map((p) => p.parts), was).toFixed(3).padStart(9)}  ` +
     `${rmse(pairs.map((p) => p.whole), was).toFixed(3).padStart(9)}  ` +
     `${spearman(pairs.map((p) => p.parts), was).toFixed(3).padStart(8)}  ` +
