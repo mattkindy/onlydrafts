@@ -22,6 +22,7 @@ import { kickerParts, BANDS } from "../src/features/kickerFromWalk.js";
 import { kickerSeason, type Fixture } from "../src/features/kickerSeason.js";
 import { fitClimate } from "../src/features/climate.js";
 import { readingsFrom, kickoffsIn } from "../src/data/gameWeather.js";
+import { settingLift, sharedOut, type Setting } from "../src/features/weekSetting.js";
 import {
   fetchLeagueScoring,
   fetchStarterSlots,
@@ -208,6 +209,24 @@ async function main(): Promise<void> {
       ]);
     }
   }
+
+  const whereEach = new Map<string, Setting>();
+
+  for (const k of kickoffsIn(gameRows, season)) {
+    const indoors = k.indoors;
+
+    for (const [team, rest] of [
+      [k.homeTeam, k.homeRest], [k.awayTeam, k.awayRest],
+    ] as [string, number][]) {
+      whereEach.set(`${team}|${k.week}`, {
+        indoors, night: k.hour >= 18, restDays: rest,
+      });
+    }
+  }
+
+  const settingOf = (team: string, week: number): Setting =>
+    whereEach.get(`${team}|${week}`) ??
+      { indoors: false, night: false, restDays: 7 };
 
   const factors = (playerId: string, ppg: number) => {
     const e = exampleById.get(playerId);
@@ -501,9 +520,20 @@ async function main(): Promise<void> {
   for (const p of world.players) {
     const his = saidWeekly.get(p.playerId);
 
-    if (his) {
-      weeklyByPlayer.set(p.playerId, anchorToSeason(his, p.projectedPpg));
+    if (!his) {
+      continue;
     }
+
+    // the opponent is most of what the weekly model has to go on and it
+    // is a weak thing to know in August, so the roof and the kickoff
+    // time do a lot of the work here
+    const lifts = sharedOut(his.map((w) =>
+      settingLift(p.position, settingOf(p.teamId, w.week))));
+
+    weeklyByPlayer.set(p.playerId, anchorToSeason(
+      his.map((w, i) => ({ ...w, points: w.points * lifts[i]! })),
+      p.projectedPpg,
+    ));
   }
 
   console.log("simulating seasons for the board...");

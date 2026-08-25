@@ -16,6 +16,11 @@ export interface Kickoff {
   awayTeam: string;
   /** local hour, so an evening in December can be told from an afternoon */
   hour: number;
+  /** a roof takes the weather out of it, whether it is fixed or shut that day */
+  indoors: boolean;
+  /** days off before it, so a Thursday can be told from an ordinary week */
+  homeRest: number;
+  awayRest: number;
 }
 
 type Row = Record<string, string>;
@@ -60,6 +65,8 @@ export function kickoffsIn(rows: Row[], season: number): Kickoff[] {
     }
 
     const hour = hourOf(r);
+    const roof = r["roof"] ?? "";
+    const rest = (n: number) => Number.isFinite(n) ? n : 7;
 
     out.push({
       season,
@@ -68,6 +75,9 @@ export function kickoffsIn(rows: Row[], season: number): Kickoff[] {
       awayTeam: r["away_team"] ?? "",
       // a fixture with no time yet is an afternoon, which most are
       hour: Number.isFinite(hour) ? hour : 13,
+      indoors: roof === "dome" || roof === "closed",
+      homeRest: rest(Number(r["home_rest"])),
+      awayRest: rest(Number(r["away_rest"])),
     });
   }
 
