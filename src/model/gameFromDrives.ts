@@ -99,6 +99,7 @@ export function linesFrom(
     playerId, played: true,
     passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
     receptions: 0, recYds: 0, recTd: 0, fumblesLost: 0, twoPointConversions: 0,
+    carries: 0, targets: 0, passAtt: 0, passCmp: 0,
   });
   const lineOf = (playerId: string) => {
     const already = lines.get(playerId) ?? blank(playerId);
@@ -117,9 +118,22 @@ export function linesFrom(
         }
 
         const his = lineOf(play.player);
+        his.carries = (his.carries ?? 0) + 1;
         his.rushYds += play.yards;
         if (play.scored) his.rushTd++;
         continue;
+      }
+
+      // a throw nobody was named on is a sack or a ball away, which
+      // still costs the offence a down and still counts as an attempt
+      if (passer) {
+        const threw = lineOf(passer);
+        threw.passAtt = (threw.passAtt ?? 0) + 1;
+      }
+
+      if (play.player) {
+        const aimedAt = lineOf(play.player);
+        aimedAt.targets = (aimedAt.targets ?? 0) + 1;
       }
 
       if (!play.caught || !play.player) {
@@ -133,6 +147,7 @@ export function linesFrom(
 
       if (passer) {
         const threw = lineOf(passer);
+        threw.passCmp = (threw.passCmp ?? 0) + 1;
         threw.passYds += play.yards;
         if (play.scored) threw.passTd++;
       }
