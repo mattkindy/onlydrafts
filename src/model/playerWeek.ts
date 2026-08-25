@@ -49,6 +49,15 @@ export interface Draws {
 export interface PlayerLine extends StatLine {
   playerId: string;
   played: boolean;
+  /**
+   * How often he got it. No league pays for these, and they are the
+   * steadiest thing about a player, so a walk that counts them can say
+   * whether a quiet week was fewer touches or less done with them.
+   */
+  carries?: number;
+  targets?: number;
+  passAtt?: number;
+  passCmp?: number;
 }
 
 const BLANK: StatLine = {
