@@ -16,6 +16,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
 import { spearman, caught, gain } from "../src/backtest/metrics.js";
+import { fitJoint, noParts, type Parts } from "../src/features/jointParts.js";
+import { partsIn } from "../src/data/advancedParts.js";
 
 /**
  * Three rounds of a twelve team draft. Wider than this and every order
@@ -107,6 +109,7 @@ function placeOf(values: number[]): number[] {
 const STARTED = { QB: 12, RB: 34, WR: 26, TE: 12 } as Record<string, number>;
 
 interface Row {
+  playerId: string;
   name: string;
   position: string;
   adp: number;
@@ -340,6 +343,7 @@ async function rowsFor(
       walked: walkSays.get(e.playerId) ?? null,
       atPosition: touches * perGroupTouch,
       atHisOwn: touches * perTouch(before.get(e.playerId), perGroupTouch),
+      playerId: e.playerId,
       points: scored.get(e.playerId) ?? 0,
       overReplacement:
         (scored.get(e.playerId) ?? 0) - (replacementAt.get(e.position) ?? 0),
@@ -350,10 +354,70 @@ async function rowsFor(
   return rows;
 }
 
+/**
+ * The joint model over a man's parts, taught on the seasons before the
+ * first one being marked so it never sees an answer it is asked for.
+ */
+async function scoredIn(season: number): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+
+  for (const s of await loadPlayerStats(season)) {
+    if (s.week <= 18) {
+      out.set(s.playerId, (out.get(s.playerId) ?? 0) + fantasyPoints(s.statLine, RULES));
+    }
+  }
+
+  return out;
+}
+
+async function learnJoint() {
+  const first = Math.min(...TEST_SEASONS);
+  const learn: { parts: Parts; position: string; scored: number }[] = [];
+  const positionsIn = new Map<string, string>();
+
+  for (const season of ALL_SEASONS) {
+    for (const s of await loadPlayerStats(season)) {
+      positionsIn.set(s.playerId, s.position);
+    }
+  }
+
+  for (const season of ALL_SEASONS) {
+    if (season + 1 >= first) {
+      continue;
+    }
+
+    const parts = await partsIn(season);
+    const after = await scoredIn(season + 1);
+    const played = new Map<string, number>();
+
+    for (const s of await loadPlayerStats(season + 1)) {
+      played.set(s.playerId, (played.get(s.playerId) ?? 0) + 1);
+    }
+
+    for (const [who, his] of parts) {
+      const games = played.get(who) ?? 0;
+
+      if (games < 6 || his.games < 4) {
+        continue;
+      }
+
+      learn.push({
+        parts: his,
+        position: positionsIn.get(who) ?? "WR",
+        scored: (after.get(who) ?? 0) / games,
+      });
+    }
+  }
+
+  return { fitted: fitJoint(learn), learnedOn: learn.length };
+}
+
 async function main(): Promise<void> {
   const data = await buildSeasonData(ALL_SEASONS);
   const plays = await playCounts();
   const picks = await loadDraftPicks();
+  const { fitted: joint, learnedOn } = await learnJoint();
+  console.log(`the joint model learned on ${learnedOn} seasons of men\n`);
   // two ways of being right: who scored the most, and who was worth
   // the most over the man you could have had at his position instead
   const onPoints = new Map<string, number[]>();
@@ -363,6 +427,19 @@ async function main(): Promise<void> {
 
   for (const season of TEST_SEASONS) {
     const rows = await rowsFor(season, data, plays, picks);
+    // his parts from the season before, which is what a drafter has
+    const hisParts = await partsIn(season - 1);
+    /**
+     * A man the advanced files never saw keeps his regression place,
+     * the same courtesy the walk gets, rather than being ranked last
+     * for being missing.
+     */
+    const jointSays = rows.map((r) => {
+      const his = hisParts.get(r.playerId);
+
+      return his ? joint.says(his, r.position) : null;
+    });
+    const jointPlaces = placeOf(rows.map((r, i) => jointSays[i] ?? r.model));
     const byAdp = placeOf(rows.map((r) => -r.adp));
     const model = placeOf(rows.map((r) => r.model));
     const share = placeOf(rows.map((r) => r.touches));
@@ -404,6 +481,11 @@ async function main(): Promise<void> {
 
       note("where adp had him", alone(byAdp));
       note("the season regression", alone(model));
+      note("one model over all his parts", alone(jointPlaces));
+      note("that and adp, half each",
+        mix([jointPlaces, byAdp], [0.5, 0.5]));
+      note("the board's blend with his parts at 15%",
+        mix([model, share, byAdp, jointPlaces], [0.09, 0.27, 0.49, 0.15]));
       note("the share model, in touches", alone(share));
       note("touches at his position's points", alone(byGroup));
       note("touches at his own points", alone(byOwn));
