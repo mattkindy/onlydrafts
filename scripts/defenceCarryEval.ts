@@ -14,6 +14,9 @@
  */
 
 import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
+import { parseCsv } from "../src/data/csv.js";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fantasyPoints } from "../src/scoring/fantasyPoints.js";
 import { scoring } from "../src/scoring/active.js";
 
@@ -182,3 +185,139 @@ for (const season of SEASONS) {
 
 const during = slope(inSeason);
 console.log(`  everyone      ${during.slope.toFixed(3)}   (${during.n} pairs)`);
+
+
+/**
+ * The same question again, split by how much of the defence is still
+ * there. A team label absorbs everything at once: men leaving, a new
+ * coordinator, and noise. If the men are what carries, then a side that
+ * kept its defence should carry a great deal more than 0.200.
+ */
+
+const snapsFor = new Map<string, Map<string, number>>();
+
+for (const season of SEASONS) {
+  const rows = parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "raw", `snap_counts_${season}.csv`),
+    "utf8",
+  ));
+
+  for (const r of rows) {
+    const snaps = Number(r["defense_snaps"]);
+
+    if (r["game_type"] !== "REG" || !Number.isFinite(snaps) || snaps <= 0) {
+      continue;
+    }
+
+    const key = `${season}|${r["team"]}`;
+    const own = snapsFor.get(key) ?? new Map<string, number>();
+    const who = r["pfr_player_id"] ?? r["player"] ?? "";
+    own.set(who, (own.get(who) ?? 0) + snaps);
+    snapsFor.set(key, own);
+  }
+}
+
+/** the share of last season's defensive snaps played by men still here */
+function continuity(team: string, season: number): number | null {
+  const was = snapsFor.get(`${season - 1}|${team}`);
+  const now = snapsFor.get(`${season}|${team}`);
+
+  if (!was || !now || was.size === 0) {
+    return null;
+  }
+
+  let kept = 0;
+  let all = 0;
+
+  for (const [who, snaps] of was) {
+    all += snaps;
+    if (now.has(who)) {
+      kept += snaps;
+    }
+  }
+
+  return all > 0 ? kept / all : null;
+}
+
+const coordinators = parseCsv(await readFile(
+  join(import.meta.dirname, "..", "data", "curated", "coordinators.csv"), "utf8"));
+const dcOf = new Map<string, string>();
+
+for (const r of coordinators) {
+  if (r["role"] === "DC") {
+    dcOf.set(`${r["season"]}|${r["team"]}`, r["name"] ?? "");
+  }
+}
+
+const sameCoach = (team: string, season: number): boolean | null => {
+  const was = dcOf.get(`${season - 1}|${team}`);
+  const now = dcOf.get(`${season}|${team}`);
+
+  return was && now ? was === now : null;
+};
+
+interface Split {
+  name: string;
+  pairs: [number, number][];
+}
+
+const byKept: Split[] = [
+  { name: "kept under 55%", pairs: [] },
+  { name: "kept 55 to 70%", pairs: [] },
+  { name: "kept over 70%", pairs: [] },
+];
+const byCoach: Split[] = [
+  { name: "new coordinator", pairs: [] },
+  { name: "same coordinator", pairs: [] },
+];
+const both: Split[] = [
+  { name: "kept over 70% and same coordinator", pairs: [] },
+  { name: "kept under 55% or a new one", pairs: [] },
+];
+
+for (let i = 1; i < SEASONS.length; i++) {
+  const season = SEASONS[i]!;
+  const before = indexed(SEASONS[i - 1]!);
+  const after = indexed(season);
+
+  for (const [key, was] of before) {
+    const now = after.get(key);
+    const team = key.split("|")[0]!;
+    const kept = continuity(team, season);
+
+    if (now === undefined || kept === null) {
+      continue;
+    }
+
+    const pair: [number, number] = [was - 1, now - 1];
+    byKept[kept < 0.55 ? 0 : kept < 0.7 ? 1 : 2]!.pairs.push(pair);
+
+    const stayed = sameCoach(team, season);
+
+    if (stayed !== null) {
+      byCoach[stayed ? 1 : 0]!.pairs.push(pair);
+
+      if (kept >= 0.7 && stayed) {
+        both[0]!.pairs.push(pair);
+      } else if (kept < 0.55 || !stayed) {
+        both[1]!.pairs.push(pair);
+      }
+    }
+  }
+}
+
+console.log("\n\nHow much carries, by how much of the defence is still there\n");
+
+for (const group of [byKept, byCoach, both]) {
+  for (const split of group) {
+    if (split.pairs.length < 30) {
+      console.log(`  ${split.name.padEnd(36)} too few (${split.pairs.length})`);
+      continue;
+    }
+
+    const its = slope(split.pairs);
+    console.log(`  ${split.name.padEnd(36)} ${its.slope.toFixed(3)}   (${its.n} pairs)`);
+  }
+
+  console.log("");
+}
