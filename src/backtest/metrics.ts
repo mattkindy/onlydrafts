@@ -78,3 +78,61 @@ export function spearman(a: number[], b: number[]): number {
 
   return cov / Math.sqrt(varA * varB);
 }
+
+/**
+ * Spearman treats getting pick 3 right and pick 160 right as the same
+ * job, and a drafter does not. These two ask what the order was for.
+ *
+ * Both take what the board said a man was worth and what he turned out
+ * to be worth, and both want value over replacement rather than points,
+ * since a man who scores less than the waiver wire is worth nothing
+ * whatever he scores.
+ */
+
+/** what a man is worth to a drafter, which is nothing below the wire */
+const worth = (value: number) => Math.max(0, value);
+
+/**
+ * The share of the value available in the first so many picks that this
+ * order actually collected. One means it took the best men there were.
+ *
+ * The cutoff does the weighting: a man the board put at 200 never comes
+ * into it, however wrong he was.
+ */
+export function caught(said: number[], was: number[], picks: number): number {
+  if (said.length !== was.length || said.length < 2) {
+    throw new Error(
+      `caught needs two equal-length arrays of at least 2, got ${said.length} and ${was.length}`,
+    );
+  }
+
+  const take = Math.min(picks, said.length);
+  const order = said.map((value, i) => i).sort((a, b) => said[b]! - said[a]!);
+  const got = order.slice(0, take)
+    .reduce((sum, i) => sum + worth(was[i] ?? 0), 0);
+  const best = [...was].map(worth).sort((a, b) => b - a)
+    .slice(0, take).reduce((sum, v) => sum + v, 0);
+
+  return best > 0 ? got / best : 0;
+}
+
+/**
+ * The same idea without a cliff at the cutoff: every place is worth
+ * less than the one above it, the way a pick is. One means it put the
+ * best men first.
+ */
+export function gain(said: number[], was: number[]): number {
+  if (said.length !== was.length || said.length < 2) {
+    throw new Error(
+      `gain needs two equal-length arrays of at least 2, got ${said.length} and ${was.length}`,
+    );
+  }
+
+  const discounted = (values: number[]) =>
+    values.reduce((sum, v, place) => sum + worth(v) / Math.log2(place + 2), 0);
+  const order = said.map((_, i) => i).sort((a, b) => said[b]! - said[a]!);
+  const got = discounted(order.map((i) => was[i] ?? 0));
+  const best = discounted([...was].map(worth).sort((a, b) => b - a));
+
+  return best > 0 ? got / best : 0;
+}

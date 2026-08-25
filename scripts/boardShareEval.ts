@@ -15,7 +15,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
-import { spearman } from "../src/backtest/metrics.js";
+import { spearman, caught, gain } from "../src/backtest/metrics.js";
+
+/**
+ * Three rounds of a twelve team draft. Wider than this and every order
+ * scores the same, because the pool priced by adp is barely bigger than
+ * the number taken, so taking the top of it takes all of it.
+ */
+const FIRST_FEW = 36;
 import { loadPlayerStats, loadWeeklyRosters } from "../src/data/nflverse.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
 import { loadAdp } from "../src/data/adp.js";
@@ -351,6 +358,8 @@ async function main(): Promise<void> {
   // the most over the man you could have had at his position instead
   const onPoints = new Map<string, number[]>();
   const onValue = new Map<string, number[]>();
+  const onCaught = new Map<string, number[]>();
+  const onGain = new Map<string, number[]>();
 
   for (const season of TEST_SEASONS) {
     const rows = await rowsFor(season, data, plays, picks);
@@ -372,15 +381,21 @@ async function main(): Promise<void> {
     const walk = [...model];
     seen.forEach((r, k) => { walk[r.i] = seenPlace[k]!; });
 
-    for (const [truth, into] of [
-      [rows.map((r) => r.points), onPoints],
-      [rows.map((r) => r.overReplacement), onValue],
-    ] as [number[], Map<string, number[]>][]) {
+    for (const [truth, into, judge] of [
+      [rows.map((r) => r.points), onPoints, spearman],
+      [rows.map((r) => r.overReplacement), onValue, spearman],
+      // the same order asked what a drafter got out of it, where a
+      // mistake at pick three counts and one at pick a hundred and
+      // sixty does not
+      [rows.map((r) => r.overReplacement), onCaught,
+        (said: number[], was: number[]) => caught(said, was, FIRST_FEW)],
+      [rows.map((r) => r.overReplacement), onGain, gain],
+    ] as [number[], Map<string, number[]>, (a: number[], b: number[]) => number][]) {
       const note = (label: string, value: number) =>
         into.set(label, [...(into.get(label) ?? []), value]);
-      const alone = (places: number[]) => spearman(places.map((r) => -r), truth);
+      const alone = (places: number[]) => judge(places.map((r) => -r), truth);
       const mix = (parts: number[][], weights: number[]) =>
-        spearman(
+        judge(
           parts[0]!.map((_, i) =>
             -parts.reduce((sum, part, k) => sum + weights[k]! * part[i]!, 0),
           ),
@@ -458,7 +473,7 @@ async function main(): Promise<void> {
 
   const report = (what: string, ways: Map<string, number[]>) => {
     console.log(
-      `\nordering ${what}, spearman, higher is better\n` +
+      `\nordering ${what}, higher is better\n` +
         `averaged over ${TEST_SEASONS.join(", ")}\n`,
     );
 
@@ -473,6 +488,11 @@ async function main(): Promise<void> {
 
   report("a season's fantasy points", onPoints);
   report("points over the last startable man at his position", onValue);
+  report(
+    `the share of the value in the first ${FIRST_FEW} picks it collected`,
+    onCaught,
+  );
+  report("the same with every place worth less than the one above", onGain);
 }
 
 main().catch((error) => {
