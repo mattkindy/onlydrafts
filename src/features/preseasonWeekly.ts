@@ -90,8 +90,9 @@ function impliedTotal(
 ): number {
   const own = teamScoring.get(team) ?? NEUTRAL_TOTAL;
   const regressed = (own + NEUTRAL_TOTAL) / 2;
-  // oppAdjust runs about 1 either way; blunt it so a soft defence is
-  // worth a couple of points rather than a quarter of the total
+  // Trained on the Vegas number, which is what the team is expected to
+  // score, so this stays team level and asks the receiving question for
+  // everyone. Position enters the model through oppIndex instead.
   const defence = 1 + (oppAdjust("WR", opponent) - 1) * 0.5;
   return regressed * defence;
 }
@@ -140,7 +141,9 @@ export function preseasonWeekly(
         snapRecent: e?.snapPct ?? 0,
         oppIndex: input.oppIndex(position, slot.opponent),
         home: slot.home,
-        impliedTotal: impliedTotal(team, slot.opponent, input.teamScoring, input.oppAdjust),
+        impliedTotal: impliedTotal(
+          team, slot.opponent, input.teamScoring, input.oppAdjust,
+        ),
         passTendency: input.passRate.get(team) ?? NEUTRAL_PASS_RATE,
         teamId: team,
         opponent: slot.opponent,

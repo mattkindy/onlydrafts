@@ -19,7 +19,9 @@ import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.j
 import { normalizeName } from "../src/data/names.js";
 import { parseCsv } from "../src/data/csv.js";
 import { kickerParts, BANDS } from "../src/features/kickerFromWalk.js";
-import { kickerSeason } from "../src/features/kickerSeason.js";
+import { kickerSeason, type Fixture } from "../src/features/kickerSeason.js";
+import { fitClimate } from "../src/features/climate.js";
+import { readingsFrom, kickoffsIn } from "../src/data/gameWeather.js";
 import {
   fetchLeagueScoring,
   fetchStarterSlots,
@@ -188,6 +190,22 @@ async function main(): Promise<void> {
       const list = weekOpp.get(team) ?? [];
       list.push({ week: game.week, opponent, home });
       weekOpp.set(team, list);
+    }
+  }
+
+  // where and when each fixture is played, so a kicker's week can be a
+  // freezing night in Buffalo rather than another mild afternoon
+  const gameRows = parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
+  const climate = fitClimate(readingsFrom(gameRows));
+  const fixturesFor = new Map<string, Fixture[]>();
+
+  for (const k of kickoffsIn(gameRows, season)) {
+    for (const team of [k.homeTeam, k.awayTeam]) {
+      fixturesFor.set(team, [
+        ...(fixturesFor.get(team) ?? []),
+        { week: k.week, host: k.homeTeam, hour: k.hour },
+      ]);
     }
   }
 
@@ -804,8 +822,13 @@ async function main(): Promise<void> {
           its.conversions * walkRuns,
           runsOver,
           KICKER_GAMES,
-          400,
+          // the weeks are read one against another, and at 2000 the
+          // sampling alone moved them 9%, which is a third of what the
+          // weather does. This puts the noise under 2%.
+          20000,
           seededRng(29),
+          (fixturesFor.get(his.team) ?? []).sort((a, b) => a.week - b.week),
+          climate,
         )
       : null;
     const asKicked = its
@@ -839,7 +862,9 @@ async function main(): Promise<void> {
       game: walked?.game ?? null,
       sim: walked?.sim ?? null,
       weeks: (weekOpp.get(his.team) ?? []).map((w) => ({
-        w: w.week, opp: (w.home ? "v " : "@ ") + w.opponent, of: 1,
+        w: w.week,
+        opp: (w.home ? "v " : "@ ") + w.opponent,
+        of: walked?.byWeek.find((b) => b.w === w.week)?.of ?? 1,
       })),
       lastYear: Object.fromEntries(Object.entries(his.parts)
         .map(([part, n]) => [part, Number((n / his.games).toFixed(3))])),

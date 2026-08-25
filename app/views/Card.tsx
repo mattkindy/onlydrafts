@@ -198,27 +198,40 @@ function Facts({ p, teams, costs }: {
 }
 
 /**
- * What he does over a season, in the categories a box score uses. A
- * game's worth of it was too easy to read as a week, and a season is
- * the number anybody weighing two men wants anyway.
+ * What he does, in the categories a box score uses. Both rows are here
+ * because they answer different questions: a season is what anybody
+ * weighing two men wants, and a game is what you check the season
+ * against when it looks too big.
  */
 function StatLine({ p }: { p: Player }) {
-  const line = lineOver(p.projected ?? p.simulated, p.position, p.games ?? 17,
-    movedBy(p));
+  const parts = p.projected ?? p.simulated;
+  const moved = movedBy(p);
+  const season = lineOver(parts, p.position, p.games ?? 17, moved);
+  const game = lineOver(parts, p.position, 1, moved);
 
-  if (!line.length) {
+  if (!season.length) {
     return null;
   }
 
   return (
-    <div class="statline">
-      <span class="over">season</span>
-      {line.map((f) => (
-        <span class="s" key={f.label}>
-          <i>{f.label}</i>{f.value.toFixed(0)}
-        </span>
-      ))}
-    </div>
+    <>
+      <div class="statline">
+        <span class="over">season</span>
+        {season.map((f) => (
+          <span class="s" key={f.label}>
+            <i>{f.label}</i>{f.value.toFixed(0)}
+          </span>
+        ))}
+      </div>
+      <div class="statline">
+        <span class="over">a game</span>
+        {game.map((f) => (
+          <span class="s" key={f.label}>
+            <i>{f.label}</i>{f.value.toFixed(1)}
+          </span>
+        ))}
+      </div>
+    </>
   );
 }
 
