@@ -36,16 +36,32 @@ export interface StatParts {
   passYds: number; passTd: number; interceptions: number;
   rushYds: number; rushTd: number;
   receptions: number; recYds: number; recTd: number;
+  /**
+   * How often he got the ball, which no league pays for and which a
+   * reader wants anyway. A man keeps far more of his volume from one
+   * season to the next than of what he does with it, so these are the
+   * steadiest numbers on his card.
+   */
+  passAtt: number; passCmp: number; carries: number; targets: number;
 }
 
-export const PART_NAMES: (keyof StatParts)[] = [
+/** the ones a week's stat line already counts */
+const LINE_PARTS: (keyof StatParts)[] = [
   "passYds", "passTd", "interceptions", "rushYds", "rushTd",
   "receptions", "recYds", "recTd",
 ];
 
+/** and the ones counted beside it */
+const VOLUME_PARTS: (keyof StatParts)[] = [
+  "passAtt", "passCmp", "carries", "targets",
+];
+
+export const PART_NAMES: (keyof StatParts)[] = [...LINE_PARTS, ...VOLUME_PARTS];
+
 const noParts = (): StatParts => ({
   passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
   receptions: 0, recYds: 0, recTd: 0,
+  passAtt: 0, passCmp: 0, carries: 0, targets: 0,
 });
 
 export function summarizeSeason(
@@ -82,9 +98,14 @@ export function summarizeSeason(
 
     const his = parts.get(week.playerId) ?? noParts();
 
-    for (const part of PART_NAMES) {
-      his[part] += week.statLine[part] ?? 0;
+    for (const part of LINE_PARTS) {
+      his[part] += (week.statLine as unknown as Record<string, number>)[part] ?? 0;
     }
+
+    his.passAtt += week.passing.attempts;
+    his.passCmp += week.passing.completions;
+    his.carries += week.carries;
+    his.targets += week.targets;
 
     parts.set(week.playerId, his);
 

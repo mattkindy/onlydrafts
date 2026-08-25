@@ -86,6 +86,7 @@ export function partsByPosition(
 export const blankParts = (): StatParts => ({
   passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
   receptions: 0, recYds: 0, recTd: 0,
+  passAtt: 0, passCmp: 0, carries: 0, targets: 0,
 });
 
 /**

@@ -1,3 +1,4 @@
+import { blankParts } from "./partsModel.js";
 import { describe, expect, it } from "vitest";
 import { blankPlayerWeek, type PlayerWeekStats } from "../data/nflverse.js";
 import type { RosterAppearance } from "../graph/build.js";
@@ -61,10 +62,7 @@ describe("projectedQbByTeam", () => {
         airYardsPerGame: 0,
         earlyPpg: 0,
         latePpg: 0,
-        perGame: {
-        passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
-        receptions: 0, recYds: 0, recTd: 0,
-      },
+        perGame: blankParts(),
       primaryTeamId: "DET",
       },
     ];
