@@ -458,6 +458,9 @@ async function main(): Promise<void> {
   const onPoints = new Map<string, number[]>();
   const onValue = new Map<string, number[]>();
   const onCaught = new Map<string, number[]>();
+  // the same mark taken deeper, to see where an opinion earns its place
+  const deeper: [number, Map<string, number[]>][] =
+    [72, 120, 200].map((cut) => [cut, new Map<string, number[]>()]);
   const onGain = new Map<string, number[]>();
 
   for (const season of TEST_SEASONS) {
@@ -507,6 +510,10 @@ async function main(): Promise<void> {
       [rows.map((r) => r.overReplacement), onCaught,
         (said: number[], was: number[]) => caught(said, was, FIRST_FEW)],
       [rows.map((r) => r.overReplacement), onGain, gain],
+      ...deeper.map(([cut, table]) => [
+        rows.map((r) => r.overReplacement), table,
+        (said: number[], was: number[]) => caught(said, was, cut),
+      ]),
     ] as [number[], Map<string, number[]>, (a: number[], b: number[]) => number][]) {
       const note = (label: string, value: number) =>
         into.set(label, [...(into.get(label) ?? []), value]);
@@ -536,6 +543,17 @@ async function main(): Promise<void> {
           }),
           truth,
         );
+
+      // where on the board the walk is worth having, since the sharp
+      // end and the body of it want different amounts of it
+      for (const onWalk of [0, 0.15, 0.3]) {
+        const scale = 1 - onWalk;
+        note(
+          `walk ${(100 * onWalk).toFixed(0)}%`,
+          mix([model, share, byAdp, walk],
+            [0.106 * scale, 0.319 * scale, 0.425 * scale, onWalk]),
+        );
+      }
 
       note("where adp had him", alone(byAdp));
       note("the season regression", alone(model));
@@ -641,6 +659,10 @@ async function main(): Promise<void> {
     `the share of the value in the first ${FIRST_FEW} picks it collected`,
     onCaught,
   );
+
+  for (const [cut, table] of deeper) {
+    report(`the same over the first ${cut} picks`, table);
+  }
   report("the same with every place worth less than the one above", onGain);
 }
 
