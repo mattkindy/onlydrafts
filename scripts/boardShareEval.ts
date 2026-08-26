@@ -652,6 +652,36 @@ async function main(): Promise<void> {
         note(`the board, unpriced men set back ${howFar}`, shy(boardPlaces, howFar));
       }
 
+      /**
+       * The other two silences. The walk not seeing a man means he was
+       * not on a roster it played, and his parts being missing means he
+       * has never had a season. Both might be saying something about
+       * him the way adp's silence was, or might be saying nothing.
+       */
+      const setBack = (
+        which: (i: number) => boolean, howFar: number, alsoUnpriced: number,
+      ) =>
+        judge(
+          boardPlaces.map((place, i) =>
+            -(place + (unpriced[i] ? alsoUnpriced : 0) + (which(i) ? howFar : 0))),
+          truth,
+        );
+      const noWalk = (i: number) => walk[i] === undefined;
+      const noParts = (i: number) => jointPlaces[i] === undefined;
+
+      if (into === onValue) {
+        console.log(
+          `    of ${rows.length}: ${rows.filter((_, i) => unpriced[i]).length} unpriced, ` +
+          `${rows.filter((_, i) => noWalk(i)).length} the walk never saw, ` +
+          `${rows.filter((_, i) => noParts(i)).length} with no season`,
+        );
+      }
+
+      for (const howFar of [20, 50]) {
+        note(`and men the walk never saw back ${howFar}`, setBack(noWalk, howFar, 100));
+        note(`and men with no season back ${howFar}`, setBack(noParts, howFar, 100));
+      }
+
       note("where adp had him", alone(byAdp));
       note("the season regression", alone(model));
       note("one model over all his parts", alone(jointPlaces));
