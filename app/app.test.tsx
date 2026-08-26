@@ -375,7 +375,7 @@ describe("the line on the card adds up", () => {
 
 /**
  * A week says what it is worth and how far that could be out, and does
- * not say a stat line. A defence carries 0.073 of one season into the
+ * not say a stat line. A defence keeps about a fifth of itself into the
  * next, so the weeks cannot be told apart in August and printing a
  * line for each would invent a difference.
  */
