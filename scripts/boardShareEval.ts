@@ -544,6 +544,63 @@ async function main(): Promise<void> {
           truth,
         );
 
+      /**
+       * The walk counting for more the further down the board a man
+       * is. It is flat at the top and grows with depth, so one weight
+       * for the whole board is either too much early or too little
+       * late.
+       *
+       * Where he is has to come from somewhere, and it cannot come
+       * from the answer, so this blends once at the flat weight and
+       * uses that to decide how much walk he gets on the second pass.
+       */
+      const ramped = (top: number, bottom: number, reaches: number) => {
+        const firstPass = rows.map((_, i) => {
+          let said = 0;
+          let spoke = 0;
+
+          [[model, 0.106], [share, 0.319], [byAdp, 0.425], [walk, 0.15]]
+            .forEach(([part, w]) => {
+              const place = (part as (number | undefined)[])[i];
+
+              if (place !== undefined) {
+                said += (w as number) * place;
+                spoke += w as number;
+              }
+            });
+
+          return spoke > 0 ? said / spoke : rows.length + 1;
+        });
+
+        return judge(
+          rows.map((_, i) => {
+            const howFar = Math.min(1, (firstPass[i]! - 1) / reaches);
+            const onWalk = top + (bottom - top) * howFar;
+            const scale = 1 - onWalk;
+            let said = 0;
+            let spoke = 0;
+
+            [[model, 0.106 * scale], [share, 0.319 * scale],
+             [byAdp, 0.425 * scale], [walk, onWalk]]
+              .forEach(([part, w]) => {
+                const place = (part as (number | undefined)[])[i];
+
+                if (place !== undefined) {
+                  said += (w as number) * place;
+                  spoke += w as number;
+                }
+              });
+
+            return spoke > 0 ? -(said / spoke) : -(rows.length + 1);
+          }),
+          truth,
+        );
+      };
+
+      note("the walk growing 15% to 30% by pick 150", ramped(0.15, 0.30, 150));
+      note("the walk growing 15% to 40% by pick 150", ramped(0.15, 0.40, 150));
+      note("the walk growing 10% to 35% by pick 100", ramped(0.10, 0.35, 100));
+
       // where on the board the walk is worth having, since the sharp
       // end and the body of it want different amounts of it
       for (const onWalk of [0, 0.15, 0.3]) {
