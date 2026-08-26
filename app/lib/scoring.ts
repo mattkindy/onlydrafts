@@ -92,9 +92,17 @@ const THEIR_OWN_FALLBACK: Pays = {
  */
 const ALSO_CALLED: Record<string, string> = { fgmYds: "fgm_yds" };
 
+/**
+ * How often he got the ball. The board ships these so a reader can see
+ * twenty carries behind a hundred yards, and no league pays for them,
+ * so they are known here and worth nothing rather than unrecognised.
+ */
+const COUNTED_ONLY = new Set(["passAtt", "passCmp", "carries", "targets"]);
+
 /** every category the scorer understands, whatever it pays for it */
 export const scorable = (category: string) =>
-  category in SKILL || (ALSO_CALLED[category] ?? category) in THEIR_OWN_FALLBACK;
+  category in SKILL || COUNTED_ONLY.has(category) ||
+  (ALSO_CALLED[category] ?? category) in THEIR_OWN_FALLBACK;
 
 /** what one game of his is worth here */
 export function payFor(parts: Parts, pays: Pays): number {
