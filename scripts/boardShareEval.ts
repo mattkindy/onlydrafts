@@ -49,7 +49,13 @@ import {
 
 const RULES = presets.standard;
 const ALL_SEASONS = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
-const TEST_SEASONS = [2023, 2024, 2025];
+/**
+ * The seasons to mark on. Widen it with SEASONS=2021,2022,2023,2024,2025
+ * to put more behind the numbers, remembering the walk has only been
+ * run for 2023 on, so its row goes quiet for anything earlier.
+ */
+const TEST_SEASONS = (process.env["SEASONS"] ?? "2023,2024,2025")
+  .split(",").map(Number);
 const MIN_GAMES = 4;
 
 /** how many plays each offence ran, by season and team */
@@ -370,8 +376,8 @@ async function scoredIn(season: number): Promise<Map<string, number>> {
   return out;
 }
 
-async function learnJoint() {
-  const first = Math.min(...TEST_SEASONS);
+async function learnJoint(before: number) {
+  const first = before;
   const learn: { parts: Parts; position: string; scored: number }[] = [];
   const positionsIn = new Map<string, string>();
 
@@ -416,8 +422,19 @@ async function main(): Promise<void> {
   const data = await buildSeasonData(ALL_SEASONS);
   const plays = await playCounts();
   const picks = await loadDraftPicks();
-  const { fitted: joint, learnedOn } = await learnJoint();
-  console.log(`the joint model learned on ${learnedOn} seasons of men\n`);
+  // one fit per season it is marked on, taught only on pairs that had
+  // finished by then, so it never sees a season it is asked about
+  const jointFor = new Map<number, Awaited<ReturnType<typeof learnJoint>>>();
+
+  for (const season of TEST_SEASONS) {
+    jointFor.set(season, await learnJoint(season));
+    console.log(
+      `for ${season} the joint model learned on ` +
+      `${jointFor.get(season)!.learnedOn} seasons of men`,
+    );
+  }
+
+  console.log("");
   // two ways of being right: who scored the most, and who was worth
   // the most over the man you could have had at his position instead
   const onPoints = new Map<string, number[]>();
@@ -437,7 +454,7 @@ async function main(): Promise<void> {
     const jointSays = rows.map((r) => {
       const his = hisParts.get(r.playerId);
 
-      return his ? joint.says(his, r.position) : null;
+      return his ? jointFor.get(season)!.fitted.says(his, r.position) : null;
     });
     const jointPlaces = placeOf(rows.map((r, i) => jointSays[i] ?? r.model));
     const byAdp = placeOf(rows.map((r) => -r.adp));
@@ -486,6 +503,15 @@ async function main(): Promise<void> {
         mix([jointPlaces, byAdp], [0.5, 0.5]));
       note("the board's blend with his parts at 15%",
         mix([model, share, byAdp, jointPlaces], [0.09, 0.27, 0.49, 0.15]));
+      // it beats the regression on its own, so give it that seat
+      // rather than a new one
+      note("his parts in the regression's seat",
+        mix([jointPlaces, share, byAdp, walk], [0.106, 0.319, 0.425, 0.15]));
+      note("his parts in the regression's seat, at 20%",
+        mix([jointPlaces, share, byAdp, walk], [0.20, 0.28, 0.37, 0.15]));
+      note("his parts and the regression sharing it",
+        mix([model, jointPlaces, share, byAdp, walk],
+          [0.053, 0.053, 0.319, 0.425, 0.15]));
       note("the share model, in touches", alone(share));
       note("touches at his position's points", alone(byGroup));
       note("touches at his own points", alone(byOwn));
