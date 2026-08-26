@@ -23,6 +23,8 @@ import { kickerSeason, type Fixture } from "../src/features/kickerSeason.js";
 import { fitClimate } from "../src/features/climate.js";
 import { readingsFrom, kickoffsIn } from "../src/data/gameWeather.js";
 import { settingLift, sharedOut, type Setting } from "../src/features/weekSetting.js";
+import { liftFor } from "../src/features/gameScript.js";
+import { loadGameScript } from "../src/data/gameScriptTable.js";
 import {
   fetchLeagueScoring,
   fetchStarterSlots,
@@ -578,6 +580,7 @@ async function main(): Promise<void> {
     }
   }
 
+  const script = await loadGameScript(season);
   const weeklyByPlayer = new Map<string, WeeklyProjection[]>();
   const saidWeekly = preseasonWeekly({
     season, games: world.games, weeklyWeights: world.weeklyWeights,
@@ -598,11 +601,22 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // the opponent is most of what the weekly model has to go on and it
-    // is a weak thing to know in August, so the roof and the kickoff
-    // time do a lot of the work here
+    /**
+     * The roof, the kickoff time, and what the fixture does to how
+     * often his side runs it.
+     *
+     * The opponent's quality is a weak thing to know in August, so the
+     * weekly model has little to go on. Game script is a different
+     * question and a better one: chasing a good side means throwing,
+     * which is fewer carries to go round whatever the front seven is
+     * like.
+     */
+    const runs = p.projectedParts?.carries ?? 0;
+    const catches = p.projectedParts?.targets ?? 0;
+    const runShare = runs + catches > 0 ? runs / (runs + catches) : 0;
     const lifts = sharedOut(his.map((w) =>
-      settingLift(p.position, settingOf(p.teamId, w.week))));
+      settingLift(p.position, settingOf(p.teamId, w.week)) *
+      liftFor(script, w.opponent, runShare)));
 
     weeklyByPlayer.set(p.playerId, anchorToSeason(
       his.map((w, i) => ({ ...w, points: w.points * lifts[i]! })),
