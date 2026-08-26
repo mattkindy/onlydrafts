@@ -612,6 +612,46 @@ async function main(): Promise<void> {
         );
       }
 
+      /**
+       * Nobody pricing a man is itself a strong thing to know, and the
+       * blend throws it away: an opinion with nothing to say hands its
+       * weight to the others, so a man the market has never heard of
+       * is ordered as though the question never came up. This asks
+       * what he is worth if being unpriced counts against him.
+       */
+      const unpriced = rows.map((r) => r.adp === null);
+      const shy = (places: (number | undefined)[], howFar: number) =>
+        judge(
+          places.map((p, i) => {
+            const place = p ?? backOfTheField;
+
+            return -(unpriced[i] ? place + howFar : place);
+          }),
+          truth,
+        );
+      const boardPlaces = rows.map((_, i) => {
+        let said = 0;
+        let spoke = 0;
+
+        [[model, 0.106], [share, 0.319], [byAdp, 0.425], [walk, 0.15]]
+          .forEach(([part, w]) => {
+            const place = (part as (number | undefined)[])[i];
+
+            if (place !== undefined) {
+              said += (w as number) * place;
+              spoke += w as number;
+            }
+          });
+
+        return spoke > 0 ? said / spoke : backOfTheField;
+      });
+
+      note("the board as it is", shy(boardPlaces, 0));
+
+      for (const howFar of [20, 50, 100]) {
+        note(`the board, unpriced men set back ${howFar}`, shy(boardPlaces, howFar));
+      }
+
       note("where adp had him", alone(byAdp));
       note("the season regression", alone(model));
       note("one model over all his parts", alone(jointPlaces));

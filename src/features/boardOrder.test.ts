@@ -31,8 +31,14 @@ describe("blendedPlace", () => {
     );
   });
 
-  it("leaves a man nobody priced where the models put him", () => {
-    expect(blendedPlace({ parts: 30, share: 30 })).toBeCloseTo(30);
+  /**
+   * The models still order him against the others nobody priced. What
+   * changes is that the whole group goes behind the men the market has
+   * an opinion about.
+   */
+  it("orders a man nobody priced by the models, then sets him back", () => {
+    expect(blendedPlace({ parts: 30, share: 30 }))
+      .toBeCloseTo(30 + BOARD_LEAN.setBack);
   });
 });
 
@@ -171,5 +177,33 @@ describe("moving an opinion onto the board's scale", () => {
     const withStranger = new Map([["m0", 1], ["nobody", 2]]);
 
     expect(spreadOver(withStranger, reference).has("nobody")).toBe(false);
+  });
+});
+
+describe("a man nobody has priced", () => {
+  it("goes behind an equal man the market has priced", () => {
+    const priced = blendedPlace({ parts: 30, share: 30, adp: 30 });
+    const not = blendedPlace({ parts: 30, share: 30 });
+
+    expect(not).toBeGreaterThan(priced + 50);
+  });
+
+  it("is still ordered against the others like him", () => {
+    const better = blendedPlace({ parts: 10, share: 10 });
+    const worse = blendedPlace({ parts: 90, share: 90 });
+
+    expect(better).toBeLessThan(worse);
+  });
+
+  /**
+   * The share model saying nothing about a passer is not the same as
+   * the market saying nothing about anybody, and only one of them is
+   * a statement about the player.
+   */
+  it("does not punish a man for an opinion that speaks for nobody like him", () => {
+    const quarterback = blendedPlace({ parts: 20, adp: 20 });
+    const receiver = blendedPlace({ parts: 20, share: 20, adp: 20 });
+
+    expect(quarterback).toBeCloseTo(receiver, 6);
   });
 });
