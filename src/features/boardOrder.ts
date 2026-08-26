@@ -12,8 +12,16 @@
  */
 
 export interface Opinion {
-  /** his place by the season regression, 1 for the best */
-  model: number;
+  /**
+   * His place by one model over all the parts of his play, absent for
+   * a man with no season behind him.
+   *
+   * It knows nothing about passing, since the advanced stat files only
+   * count carrying and catching, so it never speaks for a quarterback.
+   */
+  parts?: number;
+  /** his place by the season regression, which is what a passer gets */
+  model?: number;
   /** his place by projected touches, absent for a quarterback */
   share?: number;
   /** where adp has him, absent if nobody has priced him */
@@ -23,6 +31,7 @@ export interface Opinion {
 }
 
 export interface BoardLean {
+  parts: number;
   model: number;
   share: number;
   adp: number;
@@ -36,11 +45,14 @@ export interface BoardLean {
  * more starts to cost.
  */
 export const BOARD_LEAN: BoardLean = {
-  model: 0.106, share: 0.319, adp: 0.425, walk: 0.15,
+  parts: 0.106, model: 0, share: 0.319, adp: 0.425, walk: 0.15,
 };
 
 /**
- * Quarterbacks are ordered mostly by the walk. Once sampled draws
+ * Quarterbacks are ordered mostly by the walk. The parts model has
+ * nothing to say about them, since it cannot see a throw, so the seat
+ * it takes for everybody else goes back to the regression here.
+ * Once sampled draws
  * could hear the opponent, the walk alone ordered the position better
  * than adp in all three test seasons (.73, .50 and .47 against .28,
  * .38 and .08), and every mix in between scored between the two. The
@@ -49,7 +61,7 @@ export const BOARD_LEAN: BoardLean = {
  * injury the market has heard about.
  */
 export const QB_LEAN: BoardLean = {
-  model: 0.03, share: 0, adp: 0.12, walk: 0.85,
+  parts: 0, model: 0.03, share: 0, adp: 0.12, walk: 0.85,
 };
 
 export function leanFor(position: string): BoardLean {
@@ -71,7 +83,15 @@ export function leanFor(position: string): BoardLean {
 export function blendedPlace(
   opinion: Opinion, lean: BoardLean = BOARD_LEAN,
 ): number {
-  const parts: [number, number][] = [[lean.model, opinion.model]];
+  const parts: [number, number][] = [];
+
+  if (opinion.parts !== undefined && lean.parts > 0) {
+    parts.push([lean.parts, opinion.parts]);
+  }
+
+  if (opinion.model !== undefined && lean.model > 0) {
+    parts.push([lean.model, opinion.model]);
+  }
 
   if (opinion.share !== undefined) {
     parts.push([lean.share, opinion.share]);
@@ -87,6 +107,11 @@ export function blendedPlace(
 
   const weight = parts.reduce((sum, [w]) => sum + w, 0);
 
+  // nobody had anything to say about him, so he goes to the back
+  if (weight === 0) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
   return parts.reduce((sum, [w, place]) => sum + w * place, 0) / weight;
 }
 
@@ -99,4 +124,32 @@ export function placesBy<T>(
     .sort((a, b) => by(b)! - by(a)!);
 
   return new Map(ranked.map((man, i) => [keyOf(man), i + 1]));
+}
+
+/**
+ * An opinion's places, moved onto the board's own scale.
+ *
+ * An opinion ranks only the men it can see, so its places run 1 to
+ * however many that is. Adding those to another opinion's places only
+ * works when both see the same men, and they do not: adp prices the
+ * front of the board, the parts model speaks for whoever had a season
+ * last year, and those are different shapes.
+ *
+ * So take the board positions of the men this opinion can see, in
+ * order, and hand its best man the first of them, its second the
+ * second, and so on. An opinion covering the front of the board comes
+ * out unchanged. One covering scattered men gets stretched to match.
+ */
+export function spreadOver(
+  places: Map<string, number>,
+  /** where each man sits on the board by something that saw everybody */
+  reference: Map<string, number>,
+): Map<string, number> {
+  const seen = [...places.keys()].filter((key) => reference.has(key));
+  const sittingAt = seen
+    .map((key) => reference.get(key)!)
+    .sort((a, b) => a - b);
+  const byPlace = [...seen].sort((a, b) => places.get(a)! - places.get(b)!);
+
+  return new Map(byPlace.map((key, i) => [key, sittingAt[i]!]));
 }
