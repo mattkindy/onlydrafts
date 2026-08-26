@@ -457,6 +457,13 @@ async function main(): Promise<void> {
       return his ? jointFor.get(season)!.fitted.says(his, r.position) : null;
     });
     const jointPlaces = placeOf(rows.map((r, i) => jointSays[i] ?? r.model));
+    const missing = rows.filter((_, i) => jointSays[i] === null);
+    const early = missing.filter((r) => r.adp <= 36);
+    console.log(
+      `  ${season}: his parts cover ${rows.length - missing.length} of ${rows.length}, ` +
+      `missing ${missing.length} (${early.length} inside the first 36: ` +
+      `${early.slice(0, 6).map((r) => r.name).join(", ")})`,
+    );
     const byAdp = placeOf(rows.map((r) => -r.adp));
     const model = placeOf(rows.map((r) => r.model));
     const share = placeOf(rows.map((r) => r.touches));
