@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
-  blendedPlace, leanFor, placesBy, BOARD_LEAN, QB_LEAN,
+  blendedPlace, leanFor, placesBy, spreadOver, BOARD_LEAN, QB_LEAN,
 } from "./boardOrder.js";
 
 describe("blendedPlace", () => {
   it("puts a man the three agree on where they all had him", () => {
-    expect(blendedPlace({ model: 10, share: 10, adp: 10 })).toBeCloseTo(10);
+    expect(blendedPlace({ parts: 10, share: 10, adp: 10 })).toBeCloseTo(10);
   });
 
   it("gives adp half the say and the two models the other half", () => {
-    const adpLikesHim = blendedPlace({ model: 50, share: 50, adp: 10 });
-    const theModelsLikeHim = blendedPlace({ model: 10, share: 10, adp: 50 });
+    const adpLikesHim = blendedPlace({ parts: 50, share: 50, adp: 10 });
+    const theModelsLikeHim = blendedPlace({ parts: 10, share: 10, adp: 50 });
 
     expect(adpLikesHim).toBeCloseTo(theModelsLikeHim);
   });
 
   it("leans on the share model more than on the regression", () => {
-    const shareLikesHim = blendedPlace({ model: 50, share: 10, adp: 30 });
-    const theRegressionLikesHim = blendedPlace({ model: 10, share: 50, adp: 30 });
+    const shareLikesHim = blendedPlace({ parts: 50, share: 10, adp: 30 });
+    const theRegressionLikesHim = blendedPlace({ parts: 10, share: 50, adp: 30 });
 
     expect(shareLikesHim).toBeLessThan(theRegressionLikesHim);
   });
@@ -25,26 +25,26 @@ describe("blendedPlace", () => {
   it("gives a silent opinion's weight to the ones that spoke", () => {
     // a quarterback, whom the share model has nothing to say about:
     // his place is the weighted middle of the opinions that spoke
-    const spoke = BOARD_LEAN.model + BOARD_LEAN.adp;
-    expect(blendedPlace({ model: 20, adp: 40 })).toBeCloseTo(
-      (BOARD_LEAN.model * 20 + BOARD_LEAN.adp * 40) / spoke,
+    const spoke = BOARD_LEAN.parts + BOARD_LEAN.adp;
+    expect(blendedPlace({ parts: 20, adp: 40 })).toBeCloseTo(
+      (BOARD_LEAN.parts * 20 + BOARD_LEAN.adp * 40) / spoke,
     );
   });
 
   it("leaves a man nobody priced where the models put him", () => {
-    expect(blendedPlace({ model: 30, share: 30 })).toBeCloseTo(30);
+    expect(blendedPlace({ parts: 30, share: 30 })).toBeCloseTo(30);
   });
 });
 
 describe("leanFor", () => {
   it("orders a quarterback mostly by the walk", () => {
     const place = blendedPlace(
-      { model: 30, adp: 30, walk: 10 }, leanFor("QB"),
+      { parts: 30, adp: 30, walk: 10 }, leanFor("QB"),
     );
-    const spoke = QB_LEAN.model + QB_LEAN.adp + QB_LEAN.walk;
+    const spoke = QB_LEAN.parts + QB_LEAN.adp + QB_LEAN.walk;
 
     expect(place).toBeCloseTo(
-      (QB_LEAN.walk * 10 + (QB_LEAN.model + QB_LEAN.adp) * 30) / spoke,
+      (QB_LEAN.walk * 10 + (QB_LEAN.parts + QB_LEAN.adp) * 30) / spoke,
     );
   });
 
@@ -128,5 +128,48 @@ describe("an opinion that speaks for only some of the board", () => {
 
     expect(said.has("b")).toBe(false);
     expect(said.size).toBe(2);
+  });
+});
+
+describe("moving an opinion onto the board's scale", () => {
+  /** twenty men, and where a thing that saw all of them puts each */
+  const reference = new Map(
+    Array.from({ length: 20 }, (_, i) => [`m${i}`, i + 1]),
+  );
+
+  it("leaves an opinion that covers the front of the board alone", () => {
+    const front = new Map(
+      Array.from({ length: 6 }, (_, i) => [`m${i}`, i + 1]),
+    );
+
+    expect([...spreadOver(front, reference)]).toEqual([...front]);
+  });
+
+  it("stretches an opinion whose men are scattered", () => {
+    const everyOther = new Map(
+      Array.from({ length: 10 }, (_, i) => [`m${i * 2}`, i + 1]),
+    );
+    const spread = spreadOver(everyOther, reference);
+
+    // its fifth best man was at 5 of 10 and now sits where the fifth
+    // of the men it can see sits on the board, which is ninth
+    expect(everyOther.get("m8")).toBe(5);
+    expect(spread.get("m8")).toBe(9);
+    expect(spread.get("m0")).toBe(1);
+    expect(spread.get("m18")).toBe(19);
+  });
+
+  it("keeps the order the opinion put them in", () => {
+    const odd = new Map([["m1", 3], ["m5", 1], ["m9", 2]]);
+    const spread = spreadOver(odd, reference);
+
+    expect(spread.get("m5")).toBeLessThan(spread.get("m9")!);
+    expect(spread.get("m9")).toBeLessThan(spread.get("m1")!);
+  });
+
+  it("drops a man the reference has never heard of", () => {
+    const withStranger = new Map([["m0", 1], ["nobody", 2]]);
+
+    expect(spreadOver(withStranger, reference).has("nobody")).toBe(false);
   });
 });

@@ -56,7 +56,11 @@ import {
   SHARING_POSITIONS,
 } from "../src/features/projectedShares.js";
 import { loadDraftPicks } from "../src/data/draftPicks.js";
-import { blendedPlace, leanFor, placesBy } from "../src/features/boardOrder.js";
+import {
+  blendedPlace, leanFor, placesBy, spreadOver,
+} from "../src/features/boardOrder.js";
+import { fitJoint, type Parts } from "../src/features/jointParts.js";
+import { partsIn } from "../src/data/advancedParts.js";
 
 /**
  * The site is the site, so it goes at the top rather than down a path
@@ -73,6 +77,76 @@ const CURRENT_SEASON = new Date().getUTCFullYear() -
 function argOf(flag: string, fallback: string): string {
   const index = process.argv.indexOf(flag);
   return index === -1 ? fallback : process.argv[index + 1]!;
+}
+
+/**
+ * Each man's place by one model over the parts of his play. A man the
+ * advanced stat files have never seen is left out rather than guessed
+ * at, and the blend gives his weight to the opinions that do have
+ * something, which is how a rookie is handled.
+ */
+async function partsSays<T extends { position: string }>(
+  board: T[],
+  keyOf: (man: T) => string,
+  idOf: Map<string, string>,
+  season: number,
+): Promise<Map<string, number>> {
+  const learn: { parts: Parts; position: string; scored: number }[] = [];
+  const positions = new Map<string, string>();
+
+  for (let year = 2018; year < season - 1; year++) {
+    const before = await partsIn(year);
+    const after = new Map<string, { points: number; games: number }>();
+
+    for (const s of await loadPlayerStats(year + 1)) {
+      if (s.week > 18) {
+        continue;
+      }
+
+      positions.set(s.playerId, s.position);
+      const so = after.get(s.playerId) ?? { points: 0, games: 0 };
+      so.points += fantasyPoints(s.statLine, scoring());
+      so.games++;
+      after.set(s.playerId, so);
+    }
+
+    for (const [who, his] of before) {
+      const next = after.get(who);
+
+      if (!next || next.games < 6 || his.games < 4) {
+        continue;
+      }
+
+      learn.push({
+        parts: his,
+        position: positions.get(who) ?? "WR",
+        scored: next.points / next.games,
+      });
+    }
+  }
+
+  const fitted = fitJoint(learn);
+  const lastYear = await partsIn(season - 1);
+  const said = new Map<string, number>();
+
+  for (const man of board) {
+    const id = idOf.get(keyOf(man));
+    const his = id === undefined ? undefined : lastYear.get(id);
+
+    if (his) {
+      said.set(keyOf(man), fitted.says(his, man.position));
+    }
+  }
+
+  console.log(
+    `his parts speak for ${said.size} of ${board.length} on the board, ` +
+    `taught on ${learn.length} seasons of men`,
+  );
+
+  return placesBy(
+    board.filter((man) => said.has(keyOf(man))), keyOf,
+    (man) => said.get(keyOf(man)) ?? null,
+  );
 }
 
 async function main(): Promise<void> {
@@ -961,14 +1035,27 @@ async function main(): Promise<void> {
   const idOf = new Map(world.players.map((p) => [normalizeName(p.name), p.playerId]));
 
   const keyOf = (p: (typeof board)[number]) => p.key;
-  const modelPlace = placesBy(board, keyOf, (p) => p.vor);
-  const sharePlace = placesBy(board, keyOf, (p) => p.touches);
-  const adpPlace = placesBy(board, keyOf, (p) => (p.adp === null ? null : -p.adp));
-  const walkPlace = placesBy(board, keyOf, (p) => {
+  /**
+   * The regression is the reference the others are measured against
+   * because it is the only one with something to say about every man.
+   * Each opinion then goes onto the board's scale, since adp prices
+   * the front 200 and the walk sees 700 and their places do not mean
+   * the same thing until they are moved onto one.
+   */
+  const everyone = placesBy(board, keyOf, (p) => p.vor);
+  const onBoard = (of: Map<string, number>) => spreadOver(of, everyone);
+  const partsPlace = onBoard(
+    await partsSays(board, keyOf, idOf, season),
+  );
+  const sharePlace = onBoard(placesBy(board, keyOf, (p) => p.touches));
+  const adpPlace = onBoard(
+    placesBy(board, keyOf, (p) => (p.adp === null ? null : -p.adp)),
+  );
+  const walkPlace = onBoard(placesBy(board, keyOf, (p) => {
     const id = idOf.get(p.key);
     const says = id === undefined ? undefined : walkSays.get(id);
     return says === undefined ? null : says;
-  });
+  }));
 
   if (walkSays.size) {
     console.log(`the played games speak for ${walkPlace.size} of the board`);
@@ -995,7 +1082,8 @@ async function main(): Promise<void> {
 
   for (const p of board) {
     (p as unknown as { blend: number }).blend = blendedPlace({
-      model: modelPlace.get(p.key)!,
+      parts: partsPlace.get(p.key),
+      model: everyone.get(p.key),
       share: sharePlace.get(p.key),
       adp: adpPlace.get(p.key),
       walk: walkPlace.get(p.key),
