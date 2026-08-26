@@ -53,6 +53,18 @@ const PLAYER_FILES: [url: string, name: string][] = [
     "https://github.com/nflverse/nflverse-data/releases/download/draft_picks/draft_picks.csv",
     "draft_picks.csv",
   ],
+  /**
+   * What a passer did, in the parts a throw is made of: how far he
+   * meant it to go, how far it went when it was caught, how much of
+   * that was the receiver afterwards, and how often he was on target.
+   * The carrying and catching files have been here for a while and
+   * this is the third of the set, without which nothing can see a
+   * quarterback except by the points he ended up with.
+   */
+  [
+    "https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_season_pass.csv",
+    "advstats_pass.csv",
+  ],
 ];
 
 function parseSeasons(arg: string | undefined): number[] {
