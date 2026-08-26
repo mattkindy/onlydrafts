@@ -70,3 +70,63 @@ describe("placesBy", () => {
     expect(places.has("unknown")).toBe(false);
   });
 });
+
+/**
+ * Each opinion ranks only the men it can see, and it sees a different
+ * set. Adp prices the top 200 or so, which is roughly the front of the
+ * board, and its places line up with the board's. An opinion that
+ * covers scattered men does not: rank 250 of 440 can be the 400th man
+ * on a board of 740, and the blend reads 250 and pulls him forward.
+ */
+describe("an opinion that speaks for only some of the board", () => {
+  /** a board where every other man is missing from one opinion */
+  const board = Array.from({ length: 20 }, (_, i) => ({
+    key: `m${i}`,
+    /** best first, so a higher number is a better man */
+    worth: 20 - i,
+    seen: i % 2 === 0,
+  }));
+
+  it("compresses a man's place toward the front when it skips men", () => {
+    const everyone = placesBy(board, (m) => m.key, (m) => m.worth);
+    const everyOther = placesBy(
+      board, (m) => m.key, (m) => (m.seen ? m.worth : null),
+    );
+    const him = "m14";
+
+    expect(everyone.get(him)).toBe(15);
+    // the same man, eighth of the ten it can see
+    expect(everyOther.get(him)).toBe(8);
+  });
+
+  /**
+   * This is what put an undrafted quarterback ninth: his parts model
+   * spoke for 443 of 740, so its places ran short and everyone it
+   * spoke for came forward against the opinions that ran long.
+   */
+  it("is why two opinions cannot have their places added as they are", () => {
+    const everyone = placesBy(board, (m) => m.key, (m) => m.worth);
+    const everyOther = placesBy(
+      board, (m) => m.key, (m) => (m.seen ? m.worth : null),
+    );
+    const him = "m14";
+
+    expect(everyOther.get(him)!).toBeLessThan(everyone.get(him)!);
+    // how far down each list he is agrees to within one man, which is
+    // the number the blend should be given instead of the place
+    expect(Math.abs(
+      everyOther.get(him)! / everyOther.size -
+      everyone.get(him)! / everyone.size,
+    )).toBeLessThan(1 / everyOther.size);
+  });
+
+  it("ranks nobody it cannot see", () => {
+    const said = placesBy(
+      [{ k: "a", v: 3 }, { k: "b", v: null }, { k: "c", v: 1 }],
+      (m) => m.k, (m) => m.v,
+    );
+
+    expect(said.has("b")).toBe(false);
+    expect(said.size).toBe(2);
+  });
+});
