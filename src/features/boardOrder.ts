@@ -33,6 +33,20 @@ export interface Opinion {
 export interface BoardLean {
   parts: number;
   model: number;
+  /**
+   * How far back a man nobody has priced goes.
+   *
+   * A silent opinion hands its weight to the others, which is right
+   * for the share model having nothing to say about a passer. It is
+   * wrong for adp, where saying nothing is saying something: nobody is
+   * taking him. The blend was throwing that away, and it is the
+   * difference between the board beating the market and tying it.
+   *
+   * There is draft sense in it as well as arithmetic. A man the market
+   * has not priced will still be there two rounds later, so putting
+   * him high only spends a pick early for something available late.
+   */
+  setBack: number;
   share: number;
   adp: number;
   walk: number;
@@ -46,6 +60,7 @@ export interface BoardLean {
  */
 export const BOARD_LEAN: BoardLean = {
   parts: 0.106, model: 0, share: 0.319, adp: 0.425, walk: 0.15,
+  setBack: 100,
 };
 
 /**
@@ -62,6 +77,7 @@ export const BOARD_LEAN: BoardLean = {
  */
 export const QB_LEAN: BoardLean = {
   parts: 0, model: 0.03, share: 0, adp: 0.12, walk: 0.85,
+  setBack: 100,
 };
 
 export function leanFor(position: string): BoardLean {
@@ -112,7 +128,9 @@ export function blendedPlace(
     return Number.MAX_SAFE_INTEGER;
   }
 
-  return parts.reduce((sum, [w, place]) => sum + w * place, 0) / weight;
+  const said = parts.reduce((sum, [w, place]) => sum + w * place, 0) / weight;
+
+  return opinion.adp === undefined ? said + lean.setBack : said;
 }
 
 /** each man's place by one measure, best first */
