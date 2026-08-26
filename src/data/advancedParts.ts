@@ -79,6 +79,14 @@ export async function partsIn(season: number): Promise<Map<string, Parts>> {
     parts.drops = n(r, "drop");
   });
 
+  await take("advstats_pass.csv", (parts, r) => {
+    parts.passAttempts = n(r, "pass_attempts");
+    parts.onTarget = n(r, "on_tgt_pct");
+    parts.badThrows = n(r, "bad_throw_pct");
+    parts.throwaways = n(r, "throwaways");
+    parts.pressured = n(r, "pressure_pct");
+  });
+
   await take("advstats_rush.csv", (parts, r) => {
     parts.carries = n(r, "att");
     parts.beforeContact = n(r, "ybc");

@@ -27,11 +27,24 @@ export interface Parts {
   beforeContact: number;
   afterContact: number;
   age: number;
+  /**
+   * What a passer did. The air yards split, which is the throwing
+   * equivalent of how far a run went before contact, only starts in
+   * 2024, so these are the ones with a history behind them: how often
+   * he throws, how often it is on target, how often he is under
+   * pressure, and how often he throws it away.
+   */
+  passAttempts: number;
+  onTarget: number;
+  badThrows: number;
+  throwaways: number;
+  pressured: number;
 }
 
 export const noParts = (): Parts => ({
   games: 0, targets: 0, receptions: 0, beforeCatch: 0, afterCatch: 0,
   drops: 0, carries: 0, beforeContact: 0, afterContact: 0, age: 0,
+  passAttempts: 0, onTarget: 0, badThrows: 0, throwaways: 0, pressured: 0,
 });
 
 const per = (top: number, bottom: number) => (bottom > 0 ? top / bottom : 0);
@@ -58,6 +71,11 @@ export function columnsFor(parts: Parts): number[] {
     per(parts.afterContact, parts.carries),
     parts.age / 30,
     Math.min(17, parts.games) / 17,
+    per(parts.passAttempts, games),
+    parts.onTarget / 100,
+    parts.badThrows / 100,
+    per(parts.throwaways, parts.passAttempts),
+    parts.pressured / 100,
   ];
 }
 
