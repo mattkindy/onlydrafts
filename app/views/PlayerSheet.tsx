@@ -45,10 +45,11 @@ function WeekByWeek({ p }: { p: Player }) {
         The big number is what he averages that week, and how much it
         moves depends on what he plays. A kicker's week is mostly the
         ground and the weather, so his swing is wide. For everyone else
-        it is the opponent, and a defence keeps 0.073 of one season
-        into the next, so in August week nine can barely be told from
-        week three. The pair under it is where he lands eight weeks in
-        ten, which is the wider number either way.
+        it is the opponent, and a defence keeps about a fifth of itself
+        from one season to the next, so in August week nine can barely
+        be told from week three. Against the run it keeps less than
+        that. The pair under it is where he lands eight weeks in ten,
+        which is the wider number either way.
       </div>
       {games.map((w, i) => {
         const pts = points[i]!;
