@@ -97,11 +97,25 @@ async function openingRoster(season: number): Promise<RosterMan[]> {
   return [...seen.values()];
 }
 
-/** places, best first, so two orderings can be averaged */
-function placeOf(values: number[]): number[] {
-  const order = values.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v);
-  const out = new Array<number>(values.length);
-  order.forEach((row, rank) => { out[row.i] = rank + 1; });
+/**
+ * Places, best first, leaving out anyone this opinion cannot see, then
+ * moved onto the whole field's scale the way the board does it. An
+ * opinion that only speaks for half the men numbers them 1 to half,
+ * and adding that to one that numbered everybody pulls its men
+ * forward.
+ */
+function placeOf(values: (number | null)[]): (number | undefined)[] {
+  const seen = values
+    .map((v, i) => ({ v, i }))
+    .filter((r): r is { v: number; i: number } => r.v !== null);
+  const order = [...seen].sort((a, b) => b.v - a.v);
+  // filled rather than left with holes, since map skips a hole and
+  // hands the next thing along an array shorter than it expects
+  const out = new Array<number | undefined>(values.length).fill(undefined);
+
+  // the places on the whole field that this opinion's men occupy
+  const sittingAt = seen.map((r) => r.i).sort((a, b) => a - b);
+  order.forEach((row, rank) => { out[row.i] = sittingAt[rank]! + 1; });
 
   return out;
 }
@@ -118,7 +132,8 @@ interface Row {
   playerId: string;
   name: string;
   position: string;
-  adp: number;
+  /** where the market has him, absent for a man nobody is taking */
+  adp: number | null;
   model: number;
   /** what the played-out games say he scores, absent if they never saw him */
   walked: number | null;
@@ -311,7 +326,10 @@ async function rowsFor(
     const entry = name ? adp.get(`${normalizeName(name)}|${e.position}`) : undefined;
     const games = played.get(e.playerId) ?? 0;
 
-    if (!entry || games < MIN_GAMES) {
+    // men nobody priced belong here too. Leaving them out was why
+    // this bench could not see an opinion go quiet, and an ordering
+    // that put an undrafted quarterback ninth scored well on it.
+    if (!name || games < MIN_GAMES) {
       continue;
     }
 
@@ -325,9 +343,9 @@ async function rowsFor(
       : 1;
 
     rows.push({
-      name: name!,
+      name,
       position: e.position,
-      adp: entry.adp,
+      adp: entry ? entry.adp : null,
       model: predictSeasonBlend(fit, e),
       touches,
       atHisDepth: (() => {
@@ -456,15 +474,13 @@ async function main(): Promise<void> {
 
       return his ? jointFor.get(season)!.fitted.says(his, r.position) : null;
     });
-    const jointPlaces = placeOf(rows.map((r, i) => jointSays[i] ?? r.model));
-    const missing = rows.filter((_, i) => jointSays[i] === null);
-    const early = missing.filter((r) => r.adp <= 36);
+    const jointPlaces = placeOf(jointSays);
+    const priced = rows.filter((r) => r.adp !== null).length;
     console.log(
-      `  ${season}: his parts cover ${rows.length - missing.length} of ${rows.length}, ` +
-      `missing ${missing.length} (${early.length} inside the first 36: ` +
-      `${early.slice(0, 6).map((r) => r.name).join(", ")})`,
+      `  ${season}: ${rows.length} men, ${priced} of them priced by adp, ` +
+      `${jointSays.filter((s) => s !== null).length} with parts behind them`,
     );
-    const byAdp = placeOf(rows.map((r) => -r.adp));
+    const byAdp = placeOf(rows.map((r) => (r.adp === null ? null : -r.adp)));
     const model = placeOf(rows.map((r) => r.model));
     const share = placeOf(rows.map((r) => r.touches));
     const byGroup = placeOf(rows.map((r) => r.atPosition));
@@ -480,7 +496,7 @@ async function main(): Promise<void> {
       .filter((r) => r.walked !== null);
     const seenPlace = placeOf(seen.map((r) => r.walked!));
     const walk = [...model];
-    seen.forEach((r, k) => { walk[r.i] = seenPlace[k]!; });
+    seen.forEach((r, k) => { walk[r.i] = seenPlace[k]; });
 
     for (const [truth, into, judge] of [
       [rows.map((r) => r.points), onPoints, spearman],
@@ -494,12 +510,30 @@ async function main(): Promise<void> {
     ] as [number[], Map<string, number[]>, (a: number[], b: number[]) => number][]) {
       const note = (label: string, value: number) =>
         into.set(label, [...(into.get(label) ?? []), value]);
-      const alone = (places: number[]) => judge(places.map((r) => -r), truth);
-      const mix = (parts: number[][], weights: number[]) =>
+      /**
+       * A man an opinion cannot see goes to the back of its list, and
+       * in a mix its weight goes to the opinions that did speak. This
+       * is what blendedPlace does on the board, and the bench used to
+       * assume every opinion spoke for everybody.
+       */
+      const backOfTheField = rows.length + 1;
+      const alone = (places: (number | undefined)[]) =>
+        judge(places.map((r) => -(r ?? backOfTheField)), truth);
+      const mix = (parts: (number | undefined)[][], weights: number[]) =>
         judge(
-          parts[0]!.map((_, i) =>
-            -parts.reduce((sum, part, k) => sum + weights[k]! * part[i]!, 0),
-          ),
+          rows.map((_, i) => {
+            let said = 0;
+            let spoke = 0;
+
+            parts.forEach((part, k) => {
+              if (part[i] !== undefined) {
+                said += weights[k]! * part[i]!;
+                spoke += weights[k]!;
+              }
+            });
+
+            return spoke > 0 ? -(said / spoke) : -backOfTheField;
+          }),
           truth,
         );
 
