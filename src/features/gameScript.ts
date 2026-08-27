@@ -28,14 +28,10 @@ export interface Effect {
 }
 
 /**
- * Pulled most of the way back toward level.
- *
- * The walk is one model's opinion about a defence rather than a
- * measurement of one, and the fit that produced these explains 0.026
- * of a side's carries. Taking it at face value would say more than the
- * evidence does.
+ * The table is already pulled back by what a defence keeps of itself,
+ * so nothing more is taken off here.
  */
-const KEEP = 0.5;
+const KEEP = 1;
 
 /** nothing here should move a side's week by more than this either way */
 const MOST = 0.12;
