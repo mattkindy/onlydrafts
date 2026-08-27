@@ -42,10 +42,8 @@ function WeekByWeek({ p }: { p: Player }) {
     <>
       <h2>week by week</h2>
       <div class="hint">
-        Big number is his average for that week. The pair under it is
-        where he lands eight weeks in ten. Weeks look alike because the
-        opponent is a weak thing to know in August; kickers swing more
-        because the weather is not.
+        His average for that week, and the range he usually lands in.
+        Matchups don't say much this far out, so most weeks look alike.
       </div>
       {games.map((w, i) => {
         const pts = points[i]!;
