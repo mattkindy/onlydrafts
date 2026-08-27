@@ -9,7 +9,7 @@
  * Run: npx tsx scripts/aggregateGameScript.ts [season]
  */
 
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
 import { fitRidge } from "../src/backtest/ridge.js";
@@ -92,17 +92,38 @@ function fitOver(of: (w: { carries: number; targets: number }) => number) {
 
 const carries = fitOver((w) => w.carries);
 const targets = fitOver((w) => w.targets);
-const out = ["season,defence,carries,targets"];
+const path = join(import.meta.dirname, "..", "data", "curated", "gameScript.csv");
 
-for (const team of teams) {
-  out.push([
-    SEASON, team,
-    (carries.get(team) ?? 1).toFixed(4),
-    (targets.get(team) ?? 1).toFixed(4),
-  ].join(","));
+/**
+ * Every other season in the file is kept. Writing only the season
+ * asked for wiped the rest, and a run for 2025 that finished after a
+ * run for 2026 left the board with a table that had nothing in it for
+ * the season it was building.
+ */
+const kept: string[] = [];
+
+try {
+  const already = (await readFile(path, "utf8")).trim().split("\n");
+
+  for (const line of already.slice(1)) {
+    if (line && Number(line.split(",")[0]) !== SEASON) {
+      kept.push(line);
+    }
+  }
+} catch {
+  // no table yet, so there is nothing to keep
 }
 
-const path = join(import.meta.dirname, "..", "data", "curated", "gameScript.csv");
+const mine = teams.map((team) => [
+  SEASON, team,
+  (carries.get(team) ?? 1).toFixed(4),
+  (targets.get(team) ?? 1).toFixed(4),
+].join(","));
+const out = [
+  "season,defence,carries,targets",
+  ...[...kept, ...mine].sort(),
+];
+
 await writeFile(path, out.join("\n") + "\n", "utf8");
 
 console.log(`fitted on ${LEARN_ON.join(", ")}, wrote ${teams.length} sides for ${SEASON}`);
