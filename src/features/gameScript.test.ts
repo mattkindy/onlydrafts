@@ -21,13 +21,12 @@ describe("what a fixture does to a side's volume", () => {
   });
 
   /**
-   * The walk is one model's opinion about a defence and its fit
-   * explains a fortieth of a side's carries, so taking it whole would
-   * claim more than it knows.
+   * The table arrives already pulled back by what a defence keeps of
+   * itself from one season to the next, so this passes it through.
    */
-  it("keeps half of what the walk said and no more", () => {
-    expect(script.carries("SF")).toBeCloseTo(1 + 0.5 * -0.07, 6);
-    expect(script.carries("TB")).toBeCloseTo(1 + 0.5 * 0.09, 6);
+  it("takes the table as it finds it", () => {
+    expect(script.carries("SF")).toBeCloseTo(0.93, 6);
+    expect(script.carries("TB")).toBeCloseTo(1.09, 6);
   });
 
   it("never moves a week more than a tenth or so", () => {

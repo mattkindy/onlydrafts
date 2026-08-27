@@ -581,6 +581,8 @@ async function main(): Promise<void> {
   }
 
   const script = await loadGameScript(season);
+  const runsBy = new Map<string, number[]>();
+  const catchesBy = new Map<string, number[]>();
   const weeklyByPlayer = new Map<string, WeeklyProjection[]>();
   const saidWeekly = preseasonWeekly({
     season, games: world.games, weeklyWeights: world.weeklyWeights,
@@ -617,6 +619,11 @@ async function main(): Promise<void> {
     const lifts = sharedOut(his.map((w) =>
       settingLift(p.position, settingOf(p.teamId, w.week)) *
       liftFor(script, w.opponent, runShare)));
+
+    // a hard fixture is fewer carries and more throws, so the two move
+    // apart even in a week where his points barely do
+    runsBy.set(p.playerId, sharedOut(his.map((w) => script.carries(w.opponent))));
+    catchesBy.set(p.playerId, sharedOut(his.map((w) => script.targets(w.opponent))));
 
     weeklyByPlayer.set(p.playerId, anchorToSeason(
       his.map((w, i) => ({ ...w, points: w.points * lifts[i]! })),
@@ -708,12 +715,16 @@ async function main(): Promise<void> {
         // and saying his every week is a flat one is closer than saying
         // he scores nothing in all of them.
         weeks: (weeklyByPlayer.get(p.playerId) ?? [])
-          .map((w) => ({
+          .map((w, i) => ({
             w: w.week,
             opp: (w.home ? "v " : "@ ") + w.opponent,
             of: p.projectedPpg >= 1
               ? Number((w.points / p.projectedPpg).toFixed(3))
               : 1,
+            // what the fixture does to his running and his catching,
+            // which pull against each other
+            run: Number((runsBy.get(p.playerId)?.[i] ?? 1).toFixed(3)),
+            got: Number((catchesBy.get(p.playerId)?.[i] ?? 1).toFixed(3)),
           })),
       };
     })

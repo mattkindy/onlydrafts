@@ -1,111 +1,82 @@
 /**
- * Walks a season and writes down what each defence does to a side's
- * volume, for the weekly view to read.
+ * What each defence does to how often a side runs and throws.
  *
- * The walk itself is slow and its weeks are noisy, so this runs once
- * and keeps the part that settles: the opponent term pooled over every
- * fixture a side played.
+ * Measured from games that were played, not from the walk. The walk
+ * was the first way I did this and it understated the effect by about
+ * half: it put the spread across the league at 12.5% where the box
+ * scores say 26%. It also took forty minutes and this takes seconds.
  *
  * Run: npx tsx scripts/aggregateGameScript.ts [season]
  */
 
 import { writeFile } from "node:fs/promises";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { buildWorld } from "../src/features/playedWorld.js";
-import { walkSeason, type Fixture } from "../src/features/walkedSeason.js";
-import { fitClimate } from "../src/features/climate.js";
-import { readingsFrom, kickoffsIn } from "../src/data/gameWeather.js";
-import { parseCsv } from "../src/data/csv.js";
-import { loadPlayerStats, loadWeeklyRosters } from "../src/data/nflverse.js";
-import { seededRng } from "../src/sim/rng.js";
+import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
 import { fitRidge } from "../src/backtest/ridge.js";
 
+/** the season the table is for, fitted from the four before it */
 const SEASON = Number(process.argv[2] ?? 2026);
-const RUNS = Number(process.env["RUNS"] ?? 60);
+const LEARN_ON = [SEASON - 4, SEASON - 3, SEASON - 2, SEASON - 1];
 
-const positions = new Map<string, string>();
+/**
+ * How much of it to keep.
+ *
+ * A defence keeps 0.287 of what it does to a side's carries from one
+ * season to the next, measured over 192 pairs, so most of last year's
+ * is gone by August.
+ */
+const KEEPS = 0.287;
 
-for (const s of await loadPlayerStats(SEASON - 1)) {
-  positions.set(s.playerId, s.position);
+const games = await loadGames();
+const facing = new Map<string, string>();
+
+for (const g of games) {
+  facing.set(`${g.season}|${g.homeTeamId}|${g.week}`, g.awayTeamId);
+  facing.set(`${g.season}|${g.awayTeamId}|${g.week}`, g.homeTeamId);
 }
 
-/** where each man is in the season being walked, not the one before */
-const teamOf = new Map<string, string>();
+const byWeek = new Map<string, { carries: number; targets: number }>();
 
-for (const man of await loadWeeklyRosters(SEASON)) {
-  if (man.week === 1) {
-    teamOf.set(man.playerId, man.teamId);
+for (const season of LEARN_ON) {
+  for (const s of await loadPlayerStats(season)) {
+    if (s.week > 18) {
+      continue;
+    }
+
+    const key = `${season}|${s.teamId}|${s.week}`;
+    const so = byWeek.get(key) ?? { carries: 0, targets: 0 };
+    so.carries += s.carries;
+    so.targets += s.targets;
+    byWeek.set(key, so);
   }
 }
 
-console.log(`building the world as it looks before ${SEASON}...`);
-const world = await buildWorld(SEASON, 1, false, positions);
-
-const rows = parseCsv(await readFile(
-  join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
-const climate = fitClimate(readingsFrom(rows));
-const fixtures: Fixture[] = kickoffsIn(rows, SEASON).map((k) => ({
-  week: k.week, homeTeam: k.homeTeam, awayTeam: k.awayTeam,
-  hour: k.hour, indoors: k.indoors,
-  homeRest: k.homeRest, awayRest: k.awayRest,
-}));
-
-console.log(`playing ${fixtures.length} fixtures ${RUNS} times over...`);
-const walked = walkSeason(
-  world, fixtures, { runs: RUNS, gamesFor: () => 17, climate }, seededRng(31),
-);
-
-const teamWeeks = new Map<string, Map<number, { carries: number; targets: number }>>();
-
-for (const [playerId, lines] of walked) {
-  const team = teamOf.get(playerId);
-
-  if (!team) {
-    continue;
-  }
-
-  const its = teamWeeks.get(team) ?? new Map<number, { carries: number; targets: number }>();
-
-  for (const week of lines.byWeek) {
-    const so = its.get(week.week) ?? { carries: 0, targets: 0 };
-    so.carries += week.parts.carries;
-    so.targets += week.parts.targets;
-    its.set(week.week, so);
-  }
-
-  teamWeeks.set(team, its);
-}
-
-const teams = [...teamWeeks.keys()].sort();
+const teams = [...new Set([...byWeek.keys()].map((k) => k.split("|")[1]!))].sort();
 const at = new Map(teams.map((t, i) => [t, i]));
 
 /**
- * One row per team game: who is running it, and who they are playing.
- * The defence terms come out as what a fixture does once the side's own
+ * One row per team game: who is running it and who they are playing.
+ * The defence terms come out as what a fixture does once a side's own
  * habits are accounted for.
  */
 function fitOver(of: (w: { carries: number; targets: number }) => number) {
   const design: number[][] = [];
   const saw: number[] = [];
 
-  for (const f of fixtures) {
-    for (const [team, against] of [
-      [f.homeTeam, f.awayTeam], [f.awayTeam, f.homeTeam],
-    ] as [string, string][]) {
-      const its = teamWeeks.get(team)?.get(f.week);
+  for (const [key, its] of byWeek) {
+    const [season, team, week] = key.split("|");
+    const against = facing.get(`${season}|${team}|${week}`);
 
-      if (!its || !at.has(team) || !at.has(against) || of(its) <= 0) {
-        continue;
-      }
-
-      const row = new Array(1 + teams.length * 2).fill(0);
-      row[0] = 1;
-      row[1 + at.get(team)!] = 1;
-      row[1 + teams.length + at.get(against)!] = 1;
-      design.push(row);
-      saw.push(of(its));
+    if (!against || !at.has(team!) || !at.has(against) || of(its) <= 0) {
+      continue;
     }
+
+    const row = new Array(1 + teams.length * 2).fill(0);
+    row[0] = 1;
+    row[1 + at.get(team!)!] = 1;
+    row[1 + teams.length + at.get(against)!] = 1;
+    design.push(row);
+    saw.push(of(its));
   }
 
   const weights = fitRidge(design, saw, 0.5);
@@ -113,14 +84,14 @@ function fitOver(of: (w: { carries: number; targets: number }) => number) {
   const raw = teams.map((t) => weights[1 + teams.length + at.get(t)!] ?? 0);
   const middle = raw.reduce((s, v) => s + v, 0) / raw.length;
 
-  // as a multiple of an ordinary afternoon, which is what the weekly
-  // view wants to multiply by
-  return new Map(teams.map((t, i) => [t, 1 + ((raw[i] ?? 0) - middle) / level]));
+  // pulled back by what a defence keeps, then written as a multiple of
+  // an ordinary afternoon
+  return new Map(teams.map((t, i) =>
+    [t, 1 + KEEPS * ((raw[i] ?? 0) - middle) / level]));
 }
 
 const carries = fitOver((w) => w.carries);
 const targets = fitOver((w) => w.targets);
-
 const out = ["season,defence,carries,targets"];
 
 for (const team of teams) {
@@ -134,13 +105,13 @@ for (const team of teams) {
 const path = join(import.meta.dirname, "..", "data", "curated", "gameScript.csv");
 await writeFile(path, out.join("\n") + "\n", "utf8");
 
-console.log(`\nwrote ${teams.length} sides to data/curated/gameScript.csv\n`);
+console.log(`fitted on ${LEARN_ON.join(", ")}, wrote ${teams.length} sides for ${SEASON}`);
 
 const ordered = teams
   .map((t) => ({ t, v: carries.get(t) ?? 1 }))
   .sort((a, b) => a.v - b.v);
 
-console.log("  you run least against, and most:");
+console.log("\n  you run least against, and most:");
 
 for (const one of [...ordered.slice(0, 3), ...ordered.slice(-3)]) {
   console.log(
