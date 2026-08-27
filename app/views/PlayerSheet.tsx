@@ -42,14 +42,10 @@ function WeekByWeek({ p }: { p: Player }) {
     <>
       <h2>week by week</h2>
       <div class="hint">
-        The big number is what he averages that week, and how much it
-        moves depends on what he plays. A kicker's week is mostly the
-        ground and the weather, so his swing is wide. For everyone else
-        it is the opponent, and a defence keeps about a fifth of itself
-        from one season to the next, so in August week nine can barely
-        be told from week three. Against the run it keeps less than
-        that. The pair under it is where he lands eight weeks in ten,
-        which is the wider number either way.
+        Big number is his average for that week. The pair under it is
+        where he lands eight weeks in ten. Weeks look alike because the
+        opponent is a weak thing to know in August; kickers swing more
+        because the weather is not.
       </div>
       {games.map((w, i) => {
         const pts = points[i]!;
