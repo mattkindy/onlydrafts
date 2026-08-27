@@ -23,8 +23,6 @@ import { kickerSeason, type Fixture } from "../src/features/kickerSeason.js";
 import { fitClimate } from "../src/features/climate.js";
 import { readingsFrom, kickoffsIn } from "../src/data/gameWeather.js";
 import { settingLift, sharedOut, type Setting } from "../src/features/weekSetting.js";
-import { liftFor } from "../src/features/gameScript.js";
-import { loadGameScript } from "../src/data/gameScriptTable.js";
 import {
   fetchLeagueScoring,
   fetchStarterSlots,
@@ -580,9 +578,6 @@ async function main(): Promise<void> {
     }
   }
 
-  const script = await loadGameScript(season);
-  const runsBy = new Map<string, number[]>();
-  const catchesBy = new Map<string, number[]>();
   const weeklyByPlayer = new Map<string, WeeklyProjection[]>();
   const saidWeekly = preseasonWeekly({
     season, games: world.games, weeklyWeights: world.weeklyWeights,
@@ -604,26 +599,16 @@ async function main(): Promise<void> {
     }
 
     /**
-     * The roof, the kickoff time, and what the fixture does to how
-     * often his side runs it.
+     * The roof, the kickoff time and the short week, and nothing else.
      *
-     * The opponent's quality is a weak thing to know in August, so the
-     * weekly model has little to go on. Game script is a different
-     * question and a better one: chasing a good side means throwing,
-     * which is fewer carries to go round whatever the front seven is
-     * like.
+     * Game script was in here and it is out again. It is a true thing
+     * about football, and the part of it that survives to August does
+     * not predict a week: against 2025 it went with what happened at
+     * -0.004, and it dragged the roof from 0.050 down to 0.038. See
+     * scripts/weeklyEval.ts.
      */
-    const runs = p.projectedParts?.carries ?? 0;
-    const catches = p.projectedParts?.targets ?? 0;
-    const runShare = runs + catches > 0 ? runs / (runs + catches) : 0;
     const lifts = sharedOut(his.map((w) =>
-      settingLift(p.position, settingOf(p.teamId, w.week)) *
-      liftFor(script, w.opponent, runShare)));
-
-    // a hard fixture is fewer carries and more throws, so the two move
-    // apart even in a week where his points barely do
-    runsBy.set(p.playerId, sharedOut(his.map((w) => script.carries(w.opponent))));
-    catchesBy.set(p.playerId, sharedOut(his.map((w) => script.targets(w.opponent))));
+      settingLift(p.position, settingOf(p.teamId, w.week))));
 
     weeklyByPlayer.set(p.playerId, anchorToSeason(
       his.map((w, i) => ({ ...w, points: w.points * lifts[i]! })),
@@ -715,16 +700,12 @@ async function main(): Promise<void> {
         // and saying his every week is a flat one is closer than saying
         // he scores nothing in all of them.
         weeks: (weeklyByPlayer.get(p.playerId) ?? [])
-          .map((w, i) => ({
+          .map((w) => ({
             w: w.week,
             opp: (w.home ? "v " : "@ ") + w.opponent,
             of: p.projectedPpg >= 1
               ? Number((w.points / p.projectedPpg).toFixed(3))
               : 1,
-            // what the fixture does to his running and his catching,
-            // which pull against each other
-            run: Number((runsBy.get(p.playerId)?.[i] ?? 1).toFixed(3)),
-            got: Number((catchesBy.get(p.playerId)?.[i] ?? 1).toFixed(3)),
           })),
       };
     })
