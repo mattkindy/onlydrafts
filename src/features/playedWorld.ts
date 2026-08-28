@@ -347,9 +347,42 @@ export async function buildWorld(
     );
   }
 
+  /**
+   * In season the recent fortnight is not a leak, it is the news: a
+   * benching or an injury replacement shows up as who took the throws
+   * last week, and August's market price cannot know it.
+   */
+  const threwLately = new Map<string, Map<string, number>>();
+
+  if (live) {
+    for (const r of raw) {
+      if (Number(r["season"]) !== SCORE_ON ||
+          Number(r["week"]) < Math.max(1, onlyWeek - 2) ||
+          Number(r["week"]) >= onlyWeek ||
+          r["playType"] !== "pass" || !r["passer"]) {
+        continue;
+      }
+
+      const team = r["offense"] ?? "";
+      const own = threwLately.get(team) ?? new Map<string, number>();
+      own.set(r["passer"]!, (own.get(r["passer"]!) ?? 0) + 1);
+      threwLately.set(team, own);
+    }
+  }
+
   const throwsFor = new Map<string, string>();
 
   for (const [team, men] of onTeam) {
+    if (live) {
+      const lately = [...(threwLately.get(team) ?? [])]
+        .sort((a, b) => b[1] - a[1])[0];
+
+      if (lately) {
+        throwsFor.set(team, lately[0]);
+        continue;
+      }
+    }
+
     const quarterbacks = men.filter((p) => p.position === "QB");
     const priced = quarterbacks
       .map((p) => ({
