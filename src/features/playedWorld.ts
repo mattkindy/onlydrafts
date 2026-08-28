@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { parseCsv } from "../data/csv.js";
 import { loadWeeklyRosters } from "../data/nflverse.js";
 import { fitDriveRules } from "./driveRules.js";
+import { fitPasserQuality } from "./passerQuality.js";
 import { fitEndings } from "./fitEndings.js";
 import {
   fitPlayFactors, countPlays, storePlays, FACTOR_DEFAULTS, type PlayRow,
@@ -141,6 +142,7 @@ export async function buildWorld(
   }
 
   const rules = await fitDriveRules(LEARN);
+  const passerWorth = await fitPasserQuality(LEARN);
   const kicking = await fitEndings(LEARN);
 
   const fourths = parseCsv(await readFile(
@@ -466,6 +468,7 @@ export async function buildWorld(
 
     return {
       team, factors, passer,
+      passLift: passer ? passerWorth(passer) : 1,
       among: [
         ...cast.map((p) => p.playerId),
         ...(passer ? [passer] : []),

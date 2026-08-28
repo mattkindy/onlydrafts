@@ -39,7 +39,7 @@ const DECIDED = ["run", "pass", "field_goal", "punt"];
 
 const SCORE_ON = 2025;
 const LEARN = [2021, 2022, 2023, 2024];
-const RUNS = 60;
+const RUNS = Number(process.env["RUNS"] ?? 60);
 const DRIVES = 11;
 
 const middle = (values: number[]) =>
