@@ -170,6 +170,14 @@ const pointsFor = (drive: FactorDrive) =>
  * Two sides alternating. The side that did not receive to start the
  * game receives to start the second half, as it does really.
  */
+/**
+ * What playing at home is worth, as a lift on the home side's plays.
+ * The home side outscores its visitor by 2.18 points over 2022 to
+ * 2024 and wins 54.8% of the time, and the walk played both sides as
+ * though the ground were nobody's.
+ */
+const AT_HOME = Number(process.env["AT_HOME"] ?? 1.024);
+
 export function playGame(
   home: Side,
   away: Side,
@@ -177,6 +185,8 @@ export function playGame(
   uniform: () => number,
   settings: GameSettings = GAME_DEFAULTS,
 ): PlayedGame {
+  home = { ...home, lift: (home.lift ?? 1) * AT_HOME };
+  away = { ...away, lift: (away.lift ?? 1) / AT_HOME };
   const points: Record<string, number> = { [home.team]: 0, [away.team]: 0 };
   const drives: Record<string, number> = { [home.team]: 0, [away.team]: 0 };
   const possessions: Possession[] = [];

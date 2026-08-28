@@ -311,6 +311,9 @@ const NEAR_GOAL = Number(process.env["NEAR_GOAL"] ?? 30);
  * there gain, which is where drives stalled into field goals.
  */
 const CLOSER = Number(process.env["CLOSER"] ?? 8);
+/** the same guard past the thirty, where forty yards of slack let a
+ * man at midfield draw plays whose gains the goal line had capped */
+const FIELD_CLOSER = Number(process.env["FIELD_CLOSER"] ?? 40);
 
 export function storePlays(rows: PlayRow[]): PlayStore {
   const kept = rows.filter((r) => r.player);
@@ -1012,7 +1015,7 @@ export function fitPlayFactors(
               (plays.yardline[i]! <= state.yardline + room &&
                 plays.yardline[i]! >= state.yardline - CLOSER)) &&
             (state.yardline <= NEAR_GOAL ||
-              plays.yardline[i]! >= state.yardline - 40);
+              plays.yardline[i]! >= state.yardline - FIELD_CLOSER);
           let count = 0;
 
           for (const i of his) {
