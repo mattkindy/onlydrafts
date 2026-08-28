@@ -185,8 +185,10 @@ const pointsFor = (drive: FactorDrive) =>
  * though the ground were nobody's.
  */
 const AT_HOME = Number(process.env["AT_HOME"] ?? 1.024);
-/** how much clock a lead can kneel away once the other side cannot stop it */
-const KNEELS_AT = Number(process.env["KNEELS_AT"] ?? 100);
+/** a kneel with nobody able to stop the clock burns the play clock */
+const KNEEL_BURNS = 41;
+/** a defensive timeout hands that play's clock back */
+const TIMEOUT_SAVES = 39;
 
 export function playGame(
   home: Side,
@@ -216,6 +218,8 @@ export function playGame(
   let against = withBall === home ? away : home;
   let startAt = kickedTo();
   let secondsLeft = settings.length;
+  const timeouts: Record<string, number> = { [home.team]: 3, [away.team]: 3 };
+  let warningLeft = true;
   let secondHalf = false;
 
   while (secondsLeft > 0 && possessions.length < settings.mostDrives) {
@@ -225,6 +229,9 @@ export function playGame(
       withBall = receivedFirst;
       against = withBall === home ? away : home;
       startAt = kickedTo();
+      timeouts[home.team] = 3;
+      timeouts[away.team] = 3;
+      warningLeft = true;
     }
 
     if (settings.startsAt) {
@@ -234,13 +241,18 @@ export function playGame(
     const margin = points[withBall.team]! - points[against.team]!;
 
     /**
-     * A side that leads with the clock nearly out kneels, and the game
-     * is over. Three kneels burn about two minutes once the other side
-     * is out of ways to stop the clock. The walk played these snaps as
-     * ordinary football, which is a chunk of why it produced fewer one
-     * score finishes than the league: 46% against 56%.
+     * A side that leads late kneels the game out when the other side
+     * cannot stop the clock. Three kneels burn the play clock each;
+     * every timeout the trailing side still has, and the two minute
+     * warning if it has not passed, hands one kneel's clock back.
      */
-    if (!settings.frozen && margin > 0 && secondsLeft <= KNEELS_AT) {
+    const stops = timeouts[against.team]! +
+      (warningLeft && secondsLeft > 120 ? 1 : 0);
+    const kneelable =
+      3 * KNEEL_BURNS - stops * TIMEOUT_SAVES;
+
+    if (!settings.frozen && margin > 0 && secondHalf &&
+        secondsLeft <= Math.max(6, kneelable)) {
       break;
     }
 
@@ -268,7 +280,24 @@ export function playGame(
     });
     points[withBall.team] = points[withBall.team]! + pointsFor(drive);
     drives[withBall.team] = drives[withBall.team]! + 1;
-    secondsLeft = Math.max(0, secondsLeft - Math.max(20, drive.took));
+    /**
+     * Trailing and late, a side spends its timeouts against the
+     * leader's drives. The seconds each play takes were fitted on
+     * games that contain those timeouts, so spending one here moves no
+     * clock; what it changes is whether the leader can kneel out.
+     */
+    const took = Math.max(20, drive.took);
+
+    if (secondHalf && secondsLeft <= 300 && margin > 0 &&
+        timeouts[against.team]! > 0) {
+      timeouts[against.team]! -= Math.min(timeouts[against.team]!, 2);
+    }
+
+    if (warningLeft && secondsLeft - took < 120) {
+      warningLeft = false;
+    }
+
+    secondsLeft = Math.max(0, secondsLeft - took);
     // rounded, because the counts are kept against whole yard lines
     // and a start of 52.47 matches none of them, so every lookup
     // widens past the spot it was asked about
