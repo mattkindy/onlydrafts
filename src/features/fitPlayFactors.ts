@@ -865,6 +865,11 @@ export function fitPlayFactors(
     )}|${least}`;
     const already = remembered.get(key);
 
+    if (process.env["COUNT_HITS"]) {
+      (globalThis as Record<string, unknown>)[already ? "atHits" : "atMisses"] =
+        Number((globalThis as Record<string, unknown>)[already ? "atHits" : "atMisses"] ?? 0) + 1;
+    }
+
     if (already) {
       return already;
     }
@@ -880,6 +885,144 @@ export function fitPlayFactors(
     }
     remembered.set(key, found);
     return found;
+  };
+
+  /**
+   * The same widening walk, keeping only what its caller reads.
+   *
+   * The full gather merges every cell's player map, and the run rate
+   * wants two numbers while the share split wants twelve players out
+   * of hundreds. These two walked the same cells and carried the whole
+   * merge, which was 95% of a game's cost.
+   */
+  const countsRemembered =
+    new Map<string, { plays: number; runs: number; scores: number }>();
+  const atCounts = (state: PlayState, least: number, call?: Call) => {
+    makeRoom(countsRemembered);
+    const key = `${call ?? "both"}|${stateKey(
+      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
+    )}|${least}`;
+    const already = countsRemembered.get(key);
+
+    if (already) {
+      return already;
+    }
+
+    let found = { plays: 0, runs: 0, scores: 0 };
+
+    for (const looseness of [0, 1, 2]) {
+      if (found.plays >= least) {
+        break;
+      }
+
+      const pooled = { plays: 0, runs: 0, scores: 0 };
+
+      for (const packed of wideningPacked(state.toGo, state.yardline)) {
+        if (Math.floor(packed / 100000) !== looseness) {
+          continue;
+        }
+
+        for (const cellKey of keysAt(
+          state.down, Math.floor(packed / 100) % 1000, packed % 100,
+          state.secondsLeft, state.margin, looseness,
+        )) {
+          const cell = cells.get(call ? `${call}|${cellKey}` : cellKey);
+
+          if (!cell) {
+            continue;
+          }
+
+          pooled.plays += cell.plays;
+          pooled.runs += cell.runs;
+          pooled.scores += cell.scores;
+        }
+
+        if (pooled.plays >= least) {
+          break;
+        }
+      }
+
+      found = pooled;
+    }
+
+    countsRemembered.set(key, found);
+
+    return found;
+  };
+
+  const cellsRemembered = new Map<string, Counted[]>();
+  const atCells = (state: PlayState, least: number, call?: Call) => {
+    makeRoom(cellsRemembered);
+    const key = `${call ?? "both"}|${stateKey(
+      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
+    )}|${least}`;
+    const already = cellsRemembered.get(key);
+
+    if (already) {
+      return already;
+    }
+
+    let found: Counted[] = [];
+    let plays = 0;
+
+    for (const looseness of [0, 1, 2]) {
+      if (plays >= least) {
+        break;
+      }
+
+      const pooled: Counted[] = [];
+      plays = 0;
+
+      for (const packed of wideningPacked(state.toGo, state.yardline)) {
+        if (Math.floor(packed / 100000) !== looseness) {
+          continue;
+        }
+
+        for (const cellKey of keysAt(
+          state.down, Math.floor(packed / 100) % 1000, packed % 100,
+          state.secondsLeft, state.margin, looseness,
+        )) {
+          const cell = cells.get(call ? `${call}|${cellKey}` : cellKey);
+
+          if (!cell) {
+            continue;
+          }
+
+          pooled.push(cell);
+          plays += cell.plays;
+        }
+
+        if (plays >= least) {
+          break;
+        }
+      }
+
+      found = pooled;
+    }
+
+    cellsRemembered.set(key, found);
+
+    return found;
+  };
+
+  /** each cell's touches added up once, since the map never changes */
+  const cellTouches = new WeakMap<Counted, number>();
+  const touchesOf = (cell: Counted) => {
+    const already = cellTouches.get(cell);
+
+    if (already !== undefined) {
+      return already;
+    }
+
+    let sum = 0;
+
+    for (const own of cell.byPlayer.values()) {
+      sum += own.touches;
+    }
+
+    cellTouches.set(cell, sum);
+
+    return sum;
   };
 
   /**
@@ -1074,7 +1217,7 @@ export function fitPlayFactors(
     matchup: pairing,
     caught: wasCaught,
     runs: (state, offence) => {
-      const league = at(state, settings.leastForCall);
+      const league = atCounts(state, settings.leastForCall);
       const leagueRate = league.plays === 0 ? 0.45 : league.runs / league.plays;
 
       if (!offence) {
@@ -1101,16 +1244,24 @@ export function fitPlayFactors(
       return itsOwn * (own.runs / own.plays) + (1 - itsOwn) * leagueRate;
     },
     goesTo: (state, call, among) => {
-      const cell = at(
+      const itsCells = atCells(
         state, settings.leastForMan * Math.max(1, among.length), call,
       );
-      const here = [...cell.byPlayer.values()].reduce((a, o) => a + o.touches, 0);
+      let here = 0;
+
+      for (const cell of itsCells) {
+        here += touchesOf(cell);
+      }
+
       const shares = new Map<string, number>();
       let total = 0;
 
       for (const player of among) {
-        const own = cell.byPlayer.get(player);
-        const touches = own ? own.touches : 0;
+        let touches = 0;
+
+        for (const cell of itsCells) {
+          touches += cell.byPlayer.get(player)?.touches ?? 0;
+        }
 
         if (!projected && !split) {
           shares.set(player, touches);
@@ -1340,7 +1491,7 @@ export function fitPlayFactors(
         return 1;
       }
 
-      const cell = at(state, settings.least, call);
+      const cell = atCounts(state, settings.least, call);
       return cell.plays === 0 ? 0 : cell.scores / cell.plays;
     },
   };
