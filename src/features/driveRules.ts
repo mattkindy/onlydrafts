@@ -44,13 +44,21 @@ export interface FittedDrives extends DriveRules {
 type Row = Record<string, string>;
 
 /** the curated plays for these seasons, read once */
-export async function loadDrivePlays(seasons: number[]): Promise<Row[]> {
+export async function loadDrivePlays(
+  seasons: number[],
+  /** in season, the weeks of the current year already played */
+  current?: { season: number; beforeWeek: number },
+): Promise<Row[]> {
   return parseCsv(
     await readFile(
       join(import.meta.dirname, "..", "..", "data", "curated", "plays.csv"),
       "utf8",
     ),
-  ).filter((r) => seasons.includes(Number(r["season"])));
+  ).filter((r) =>
+    seasons.includes(Number(r["season"])) ||
+    (current !== undefined &&
+      Number(r["season"]) === current.season &&
+      Number(r["week"]) < current.beforeWeek));
 }
 
 /**
@@ -331,8 +339,9 @@ export async function fitDriveRules(seasons: number[]): Promise<FittedDrives> {
  */
 export async function fitTeamDriveRules(
   seasons: number[],
+  current?: { season: number; beforeWeek: number },
 ): Promise<{ league: FittedDrives; byTeam: Map<string, FittedDrives> }> {
-  const rows = await loadDrivePlays(seasons);
+  const rows = await loadDrivePlays(seasons, current);
   const league = rulesFrom(rows);
   const byOffence = new Map<string, Row[]>();
 
