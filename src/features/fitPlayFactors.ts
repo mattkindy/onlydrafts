@@ -785,7 +785,7 @@ export function fitPlayFactors(
    * eight gigabytes. Letting it go now and then keeps the speed where
    * the same states repeat and the memory flat.
    */
-  const REMEMBERS = 30000;
+  const REMEMBERS = Number(process.env["REMEMBERS"] ?? 30000);
   const remembered = new Map<string, Counted>();
   /**
    * Half goes rather than all of it: clearing everything made every
@@ -892,6 +892,9 @@ export function fitPlayFactors(
    * field alike, then everything he has done on this call. Room to
    * run is asked of the pool the same way the pooled path asks it.
    */
+  /** widened play lists, one per man and call, built once */
+  const pooled = new Map<string, number[]>();
+
   const hisOwnPlay = plays
     ? (
         state: PlayState, call: Call, player: string, uniform: () => number,
@@ -922,21 +925,28 @@ export function fitPlayFactors(
          * could never carry comes out of joint sampling instead: what
          * Chase does with Burrow throwing is what those plays were.
          */
-        const together = call === "pass" && passer
-          ? plays.ofPair.get(`${player}|${passer}`) ?? []
-          : [];
-        let his = together.length >= 25
-          ? together
-          : plays.ofMan.get(`${player}|${call}`) ?? [];
+        const poolKey = `${player}|${passer ?? ""}|${call}`;
+        let his = pooled.get(poolKey);
 
-        if (his.length < 25 && alike) {
-          for (const twin of alike.get(player) ?? []) {
-            his = his.concat(plays.ofMan.get(`${twin}|${call}`) ?? []);
+        if (!his) {
+          const together = call === "pass" && passer
+            ? plays.ofPair.get(`${player}|${passer}`) ?? []
+            : [];
+          his = together.length >= 25
+            ? together
+            : plays.ofMan.get(`${player}|${call}`) ?? [];
 
-            if (his.length >= 60) {
-              break;
+          if (his.length < 25 && alike) {
+            for (const twin of alike.get(player) ?? []) {
+              his = his.concat(plays.ofMan.get(`${twin}|${call}`) ?? []);
+
+              if (his.length >= 60) {
+                break;
+              }
             }
           }
+
+          pooled.set(poolKey, his);
         }
 
         if (his.length < 25) {
@@ -966,19 +976,37 @@ export function fitPlayFactors(
           { fits: () => true, room: 35 },
         ];
 
+        // counted then scanned rather than filtered into an array,
+        // which is the walk's hottest line and was allocating a pool
+        // for every play of every game
         for (const { fits, room } of passes) {
-          const pool = his.filter((i) =>
+          const wanted = (i: number) =>
             fits(i) &&
             (state.yardline > NEAR_GOAL ||
               plays.yardline[i]! <= state.yardline + room) &&
             (state.yardline <= NEAR_GOAL ||
-              plays.yardline[i]! >= state.yardline - 40));
+              plays.yardline[i]! >= state.yardline - 40);
+          let count = 0;
 
-          if (pool.length < 20) {
+          for (const i of his) {
+            if (wanted(i)) {
+              count++;
+            }
+          }
+
+          if (count < 20) {
             continue;
           }
 
-          const at = pool[Math.floor(uniform() * pool.length)]!;
+          let pick = Math.floor(uniform() * count);
+          let at = his[0]!;
+
+          for (const i of his) {
+            if (wanted(i) && pick-- === 0) {
+              at = i;
+              break;
+            }
+          }
 
           return {
             yards: Math.min(state.yardline, plays.yards[at]!),

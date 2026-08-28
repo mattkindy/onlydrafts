@@ -299,14 +299,21 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
       return 0.58;
     },
     puntLands: (yardline, uniform) => {
-      // a punt from deep gains more field than one from midfield, and
-      // near the fringe it is often fair caught inside the twenty
-      const net = 38 + uniform() * 14;
-      const lands = yardline - net;
+      /**
+       * Two different kicks. With the whole field a punter swings away
+       * and nets about 43 with the return off. Inside the other side's
+       * half he aims to pin instead, and where the ball dies depends on
+       * where he stood. Both halves are set to where the next drive
+       * started after punts in 2022 to 2024, which the old fixed net
+       * missed by two to six yards deep at every spot.
+       */
+      const lands = yardline >= 62
+        ? yardline - (36 + uniform() * 14)
+        : 0.36 * yardline - 4 + (uniform() - 0.5) * 14;
 
-      // into the end zone is a touchback, and the ball comes out to
-      // the twenty rather than pinning anybody on their own one
-      return lands <= 0 ? 80 : Math.max(20, Math.min(99, Math.round(100 - lands)));
+      return lands <= 0
+        ? 80
+        : Math.max(1, Math.min(99, Math.round(100 - lands)));
     },
     maxPlays: 20,
   };
