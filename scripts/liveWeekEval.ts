@@ -15,25 +15,76 @@ import { loadPlayerStats } from "../src/data/nflverse.js";
 import { parseCsv } from "../src/data/csv.js";
 import { seededRng } from "../src/sim/rng.js";
 import { rmse } from "../src/backtest/metrics.js";
+import { acrossCores, myShare } from "../src/sim/acrossCores.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const SEASON = Number(process.argv[2] ?? 2025);
-const WEEKS = [3, 6, 9, 12, 15, 17];
+const SEASONS = (process.env["SEASONS_ARG"] ?? process.argv[2] ?? "2025").split(",").map(Number);
+const WEEKS = [3, 5, 7, 9, 11, 13, 15, 17];
 const RUNS = Number(process.env["RUNS"] ?? 20);
 
+const rows = parseCsv(await readFile(
+  join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
+const pooledWalk: number[] = [];
+const pooledLine: number[] = [];
+const pooledWas: number[] = [];
+
+/**
+ * Each season and week pair is its own world and its own games, so the
+ * pairs cut across the cores. A share prints its triples as one JSON
+ * line and the parent pools them.
+ */
+const asShare = process.env["SHARE"] !== undefined;
+const jobs = SEASONS.flatMap((season) => WEEKS.map((week) => ({ season, week })));
+const mine = new Set(
+  myShare(jobs.map((_, i) => i)),
+);
+
+if (!asShare) {
+  const printed = await acrossCores({
+    script: import.meta.filename,
+    env: {
+      RUNS: String(RUNS),
+      SEASONS_ARG: SEASONS.join(","),
+      ...(process.env["TEAM_DRIVES"] ? { TEAM_DRIVES: process.env["TEAM_DRIVES"]! } : {}),
+    },
+  });
+
+  for (const lineOut of printed) {
+    const got = JSON.parse(lineOut) as { walk: number[]; line: number[]; was: number[] };
+    pooledWalk.push(...got.walk);
+    pooledLine.push(...got.line);
+    pooledWas.push(...got.was);
+  }
+
+  const flat = new Array(pooledWas.length)
+    .fill(pooledWas.reduce((a, b) => a + b, 0) / pooledWas.length);
+
+  console.log(`pooled over ${pooledWas.length} games: ` +
+    `walk ${rmse(pooledWalk, pooledWas).toFixed(2)}, ` +
+    `line ${rmse(pooledLine, pooledWas).toFixed(2)}, ` +
+    `average ${rmse(flat, pooledWas).toFixed(2)}`);
+  process.exit(0);
+}
+
+let at = -1;
+
+for (const SEASON of SEASONS) {
 const positions = new Map<string, string>();
 
 for (const s of await loadPlayerStats(SEASON - 1)) {
   positions.set(s.playerId, s.position);
 }
 
-const rows = parseCsv(await readFile(
-  join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
 
-console.log(`week   walk    line    average   games`);
 
 for (const week of WEEKS) {
+  at++;
+
+  if (!mine.has(at)) {
+    continue;
+  }
+
   const world = await buildWorld(SEASON, week, true, positions);
   const rng = seededRng(41);
   const walk: number[] = [];
@@ -84,8 +135,10 @@ for (const week of WEEKS) {
   const average = new Array(was.length)
     .fill(was.reduce((a, b) => a + b, 0) / was.length);
 
-  console.log(
-    `  ${String(week).padStart(2)}   ${rmse(walk, was).toFixed(2)}   ` +
-    `${rmse(line, was).toFixed(2)}   ${rmse(average, was).toFixed(2).padStart(7)}   ${was.length}`,
-  );
+  pooledWalk.push(...walk);
+  pooledLine.push(...line);
+  pooledWas.push(...was);
 }
+}
+
+console.log(JSON.stringify({ walk: pooledWalk, line: pooledLine, was: pooledWas }));
