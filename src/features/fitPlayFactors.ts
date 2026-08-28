@@ -284,7 +284,8 @@ export type { PlayLevel } from "./playLevel.js";
 export interface PlayStore {
   /** what a throw to nobody costs, and where it was thrown from */
   wasted: { yardline: number; yards: number }[];
-  wastedShare: number;
+  /** by tens of the yardline, since one throw in seven is wasted inside the ten */
+  wastedShareAt: (yardline: number) => number;
   down: Int8Array;
   toGo: Int16Array;
   yardline: Int8Array;
@@ -328,7 +329,21 @@ export function storePlays(rows: PlayRow[]): PlayStore {
    * sack, and has less field to lose.
    */
   const nobody = rows.filter((r) => r.call === "pass" && !r.player);
-  const passes = rows.filter((r) => r.call === "pass").length;
+  const wastedBand = (yardline: number) => Math.min(9, Math.floor(yardline / 10));
+  const wastedOf = new Array(10).fill(0);
+  const passesOf = new Array(10).fill(0);
+
+  for (const r of rows) {
+    if (r.call !== "pass") {
+      continue;
+    }
+
+    passesOf[wastedBand(r.yardline)]++;
+
+    if (!r.player) {
+      wastedOf[wastedBand(r.yardline)]++;
+    }
+  }
 
   kept.forEach((r, i) => {
     down[i] = r.down;
@@ -348,7 +363,11 @@ export function storePlays(rows: PlayRow[]): PlayStore {
   return {
     down, toGo, yardline, yards, caught, ofMan, ofPair,
     wasted: nobody.map((r) => ({ yardline: r.yardline, yards: r.yards })),
-    wastedShare: passes > 0 ? nobody.length / passes : 0,
+    wastedShareAt: (yardline) => {
+      const band = wastedBand(yardline);
+
+      return passesOf[band]! > 0 ? wastedOf[band]! / passesOf[band]! : 0.105;
+    },
   };
 }
 
@@ -914,7 +933,7 @@ export function fitPlayFactors(
          * third further than a side's do.
          */
         if (call === "pass" && plays.wasted.length &&
-            uniform() < plays.wastedShare) {
+            uniform() < plays.wastedShareAt(state.yardline)) {
           const near = plays.wasted.filter(
             (w) => Math.abs(w.yardline - state.yardline) <= 15,
           );
