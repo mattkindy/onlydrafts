@@ -302,7 +302,14 @@ export interface PlayStore {
  * close it decides everything, because a play from midfield applied on
  * the eight is a different play.
  */
-const NEAR_GOAL = 20;
+const NEAR_GOAL = Number(process.env["NEAR_GOAL"] ?? 30);
+/**
+ * How much nearer the goal a borrowed play may have been made. A man
+ * standing on the eighteen was drawing his own plunges from the two,
+ * and they pulled the 11 to 30 bands 8 to 13% short of what plays
+ * there gain, which is where drives stalled into field goals.
+ */
+const CLOSER = Number(process.env["CLOSER"] ?? 8);
 
 export function storePlays(rows: PlayRow[]): PlayStore {
   const kept = rows.filter((r) => r.player);
@@ -983,7 +990,8 @@ export function fitPlayFactors(
           const wanted = (i: number) =>
             fits(i) &&
             (state.yardline > NEAR_GOAL ||
-              plays.yardline[i]! <= state.yardline + room) &&
+              (plays.yardline[i]! <= state.yardline + room &&
+                plays.yardline[i]! >= state.yardline - CLOSER)) &&
             (state.yardline <= NEAR_GOAL ||
               plays.yardline[i]! >= state.yardline - 40);
           let count = 0;
