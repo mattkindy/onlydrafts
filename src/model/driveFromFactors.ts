@@ -231,7 +231,18 @@ export function walkDrive(
      * of a half, from a median of forty three yards out. Without this
      * the walk never takes them and a kicker loses that tenth.
      */
-    const expiring = state.secondsLeft <= LAST_GASP &&
+    /**
+     * The clock runs the whole game, so the first half ends as the
+     * count passes 1800. The old check watched zero alone, which
+     * missed every halftime kick and fired at the end of any game,
+     * kicking down twelve with five seconds left. A side takes the
+     * game ending kick only when three points win or tie it.
+     */
+    const halfEnding = state.secondsLeft > 1800 &&
+      state.secondsLeft - 1800 <= LAST_GASP;
+    const gameEnding = state.secondsLeft <= LAST_GASP &&
+      state.margin >= -3 && state.margin <= 0;
+    const expiring = (halfEnding || gameEnding) &&
       state.down < 4 && state.yardline <= IN_RANGE;
 
     if (expiring) {
