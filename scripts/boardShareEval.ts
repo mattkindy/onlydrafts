@@ -16,6 +16,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../src/data/csv.js";
 import { spearman, caught, gain } from "../src/backtest/metrics.js";
+import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import { fitJoint, noParts, type Parts } from "../src/features/jointParts.js";
 import { partsIn } from "../src/data/advancedParts.js";
 
@@ -148,6 +149,8 @@ interface Row {
   /** those points less what the last startable man at his position scored */
   overReplacement: number;
   games: number;
+  /** a man with no season behind him, priced by his draft slot */
+  rookie?: boolean;
 }
 
 /**
@@ -372,6 +375,93 @@ async function rowsFor(
       overReplacement:
         (scored.get(e.playerId) ?? 0) - (replacementAt.get(e.position) ?? 0),
       games,
+    });
+  }
+
+  /**
+   * The drafted rookies, who have no season behind them and so no
+   * example above. Leaving them out was why the bench carried two
+   * rookies a season where the board carries twenty, and why the
+   * silences that fall on rookies could not be measured. Their model
+   * column is what their draft slot has been worth, fitted on the
+   * rookies of the seasons before this one.
+   */
+  const namesOn = new Map<string, string>();
+
+  for (const row of await loadWeeklyRosters(season)) {
+    if (row.week === 1) {
+      namesOn.set(row.playerId, row.name);
+    }
+  }
+
+  const slotPicks = await loadDraftPicks(
+    ALL_SEASONS.filter((s) => s < season),
+  );
+  const slotRows: number[][] = [];
+  const slotPpg: number[] = [];
+
+  for (const p of slotPicks.values()) {
+    const his = data.get(p.season)?.summaries.get(p.playerId);
+
+    if (!his || his.games < MIN_GAMES ||
+        !SHARING_POSITIONS.concat("QB").includes(p.position)) {
+      continue;
+    }
+
+    slotRows.push([
+      1, Math.log(p.pick) / Math.log(260),
+      p.position === "RB" ? 1 : 0, p.position === "WR" ? 1 : 0,
+      p.position === "QB" ? 1 : 0,
+    ]);
+    slotPpg.push(his.pointsPerGame);
+  }
+
+  const slotFit = slotRows.length >= 60
+    ? fitRidge(slotRows, slotPpg, 0.5)
+    : undefined;
+  const itsRookies = await loadDraftPicks([season]);
+
+  for (const p of itsRookies.values()) {
+    if (p.season !== season || !SHARING_POSITIONS.includes(p.position) ||
+        rows.some((r) => r.playerId === p.playerId)) {
+      continue;
+    }
+
+    const games = played.get(p.playerId) ?? 0;
+    const name = namesOn.get(p.playerId);
+
+    if (!name || games < MIN_GAMES || !slotFit) {
+      continue;
+    }
+
+    const entry = adp.get(`${normalizeName(name)}|${p.position}`);
+    const ran = plays.get(`${season - 1}|${p.team}`) ?? 1000;
+    const touches = (shares.get(p.playerId) ?? 0) * ran;
+    const group = byPosition.get(p.position);
+    const perGroupTouch = group && group.touches > 0
+      ? group.points / group.touches
+      : 1;
+    const saidPpg = Math.max(0, predictRidge(slotFit, [
+      1, Math.log(p.pick) / Math.log(260),
+      p.position === "RB" ? 1 : 0, p.position === "WR" ? 1 : 0, 0,
+    ]));
+
+    rows.push({
+      name,
+      position: p.position,
+      adp: entry ? entry.adp : null,
+      model: saidPpg * 16,
+      touches,
+      atHisDepth: touches * perGroupTouch,
+      walked: walkSays.get(p.playerId) ?? null,
+      atPosition: touches * perGroupTouch,
+      atHisOwn: touches * perGroupTouch,
+      playerId: p.playerId,
+      points: scored.get(p.playerId) ?? 0,
+      overReplacement:
+        (scored.get(p.playerId) ?? 0) - (replacementAt.get(p.position) ?? 0),
+      games,
+      rookie: true,
     });
   }
 
@@ -651,6 +741,32 @@ async function main(): Promise<void> {
       for (const howFar of [20, 50, 100]) {
         note(`the board, unpriced men set back ${howFar}`, shy(boardPlaces, howFar));
       }
+
+      /**
+       * The rookies with their draft slot filling the seat the parts
+       * model leaves empty for them, since a man with no season still
+       * has a price the market paid for him in April.
+       */
+      const slotFilled = placeOf(rows.map((r, i) =>
+        jointSays[i] ?? (r.rookie ? r.model / 16 : null)));
+      const slotBoard = rows.map((_, i) => {
+        let said = 0;
+        let spoke = 0;
+
+        [[slotFilled, 0.106], [share, 0.319], [byAdp, 0.425], [walk, 0.15]]
+          .forEach(([part, w]) => {
+            const place = (part as (number | undefined)[])[i];
+
+            if (place !== undefined) {
+              said += (w as number) * place;
+              spoke += w as number;
+            }
+          });
+
+        return spoke > 0 ? said / spoke : backOfTheField;
+      });
+
+      note("set back 100, rookies at their slot", shy(slotBoard, 100));
 
       // the walk got better this week, so its seat is asked again with
       // the set back on, which the earlier sweep never combined

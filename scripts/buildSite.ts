@@ -138,9 +138,81 @@ async function partsSays<T extends { position: string }>(
     }
   }
 
+  /**
+   * A rookie has no parts, and he has a draft slot, which orders first
+   * seasons at 0.607 on its own. His slot's expected points fill the
+   * seat, fitted on the rookies of the seasons this build may see, so
+   * the parts opinion stops being silent about exactly the men the
+   * market prices well.
+   */
+  const slotRows: number[][] = [];
+  const slotPpg: number[] = [];
+  const earlier = await loadDraftPicks(
+    Array.from({ length: 7 }, (_, i) => season - 1 - i),
+  );
+  const columnsAt = (pick: number, position: string) => [
+    1, Math.log(pick) / Math.log(260),
+    position === "RB" ? 1 : 0, position === "WR" ? 1 : 0,
+    position === "QB" ? 1 : 0,
+  ];
+  const outcomes = new Map<string, { points: number; games: number }>();
+
+  for (let year = season - 7; year < season; year++) {
+    for (const s of await loadPlayerStats(year).catch(() => [])) {
+      if (s.week > 18) {
+        continue;
+      }
+
+      const so = outcomes.get(`${year}|${s.playerId}`) ?? { points: 0, games: 0 };
+      so.points += fantasyPoints(s.statLine, scoring());
+      so.games++;
+      outcomes.set(`${year}|${s.playerId}`, so);
+    }
+  }
+
+  for (const p of earlier.values()) {
+    const his = outcomes.get(`${p.season}|${p.playerId}`);
+
+    if (!his || his.games < 4) {
+      continue;
+    }
+
+    slotRows.push(columnsAt(p.pick, p.position));
+    slotPpg.push(his.points / his.games);
+  }
+
+  const slotFit = slotRows.length >= 60
+    ? fitRidge(slotRows, slotPpg, 0.5)
+    : undefined;
+  const draftClass = await loadDraftPicks([season]);
+  let slotted = 0;
+
+  if (slotFit) {
+    for (const man of board) {
+      const id = idOf.get(keyOf(man));
+
+      if (said.has(keyOf(man)) || id === undefined) {
+        continue;
+      }
+
+      const pick = draftClass.get(id) ??
+        [...draftClass.values()].find((p) => p.playerId === id);
+
+      if (!pick || pick.season !== season) {
+        continue;
+      }
+
+      said.set(
+        keyOf(man),
+        Math.max(0, predictRidge(slotFit, columnsAt(pick.pick, pick.position))),
+      );
+      slotted++;
+    }
+  }
+
   console.log(
     `his parts speak for ${said.size} of ${board.length} on the board, ` +
-    `taught on ${learn.length} seasons of men`,
+    `taught on ${learn.length} seasons of men, ${slotted} rookies at their slot`,
   );
 
   return placesBy(
