@@ -68,11 +68,8 @@ export async function buildWorld(
     join(import.meta.dirname, "..", "..", "data", "curated", "touches.csv"), "utf8",
   ));
   /**
-   * How many times each of this year's plays counts, in season. At
-   * four the by week bench reads the same as at one, 14.2 points of
-   * margin against 14.3, so the extra weight is off: the play pools
-   * turn out to be a narrow channel for team strength, and pushing
-   * more evidence down them changed nothing.
+   * Off because four counts measured worse than one on margins, 14.88
+   * against 14.73 over 360 games: a fortnight is noisier than four years.
    */
   const AGAIN = live ? Number(process.env["THIS_YEAR_COUNTS"] ?? 1) : 1;
   const kept = raw.filter((r) =>
