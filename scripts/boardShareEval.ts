@@ -652,6 +652,31 @@ async function main(): Promise<void> {
         note(`the board, unpriced men set back ${howFar}`, shy(boardPlaces, howFar));
       }
 
+      // the walk got better this week, so its seat is asked again with
+      // the set back on, which the earlier sweep never combined
+      for (const onWalk of [0.15, 0.25, 0.35, 0.5]) {
+        const scale = (1 - onWalk) / (1 - 0.15);
+        const placesAt = rows.map((_, i) => {
+          let said = 0;
+          let spoke = 0;
+
+          [[model, 0.106 * scale], [share, 0.319 * scale],
+           [byAdp, 0.425 * scale], [walk, onWalk]]
+            .forEach(([part, w]) => {
+              const place = (part as (number | undefined)[])[i];
+
+              if (place !== undefined) {
+                said += (w as number) * place;
+                spoke += w as number;
+              }
+            });
+
+          return spoke > 0 ? said / spoke : backOfTheField;
+        });
+        note(`set back 100, walk at ${(100 * onWalk).toFixed(0)}%`,
+          shy(placesAt, 100));
+      }
+
       /**
        * The other two silences. The walk not seeing a man means he was
        * not on a roster it played, and his parts being missing means he
