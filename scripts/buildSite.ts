@@ -59,7 +59,10 @@ import { loadDraftPicks } from "../src/data/draftPicks.js";
 import {
   blendedPlace, leanFor, placesBy, spreadOver,
 } from "../src/features/boardOrder.js";
-import { fitJoint, type Parts } from "../src/features/jointParts.js";
+import {
+  fitJoint, fitJointLine, LINE_PARTS, type LinePart, type Parts,
+} from "../src/features/jointParts.js";
+import type { StatParts } from "../src/features/seasonSummary.js";
 import { partsIn } from "../src/data/advancedParts.js";
 
 /**
@@ -221,6 +224,109 @@ async function partsSays<T extends { position: string }>(
   );
 }
 
+/**
+ * A quarterback's stat line comes from one model over the parts of his
+ * play. Marked on 2024 and 2025 against the regression the board
+ * shipped, the joint line wins passers both seasons, 3.8 and 4.0
+ * points of error against 4.2 and 4.7, with everything else split, so
+ * the passers move and the other positions keep the regression's line.
+ */
+async function takePasserLines(
+  players: { playerId: string; position: string; projectedPpg: number;
+    projectedParts?: StatParts }[],
+  season: number,
+): Promise<void> {
+  const learn: {
+    parts: Parts; position: string; line: Record<LinePart, number>;
+  }[] = [];
+
+  for (let year = 2018; year < season - 1; year++) {
+    const before = await partsIn(year);
+    const after = new Map<string, {
+      games: number; line: Record<LinePart, number>;
+    }>();
+    const isQb = new Set<string>();
+
+    for (const s of await loadPlayerStats(year + 1)) {
+      if (s.week > 18) {
+        continue;
+      }
+
+      if (s.position === "QB") {
+        isQb.add(s.playerId);
+      }
+
+      const so = after.get(s.playerId) ?? {
+        games: 0,
+        line: Object.fromEntries(LINE_PARTS.map((p) => [p, 0])) as
+          Record<LinePart, number>,
+      };
+      so.games++;
+      so.line.passYds += s.statLine.passYds;
+      so.line.passTd += s.statLine.passTd;
+      so.line.interceptions += s.statLine.interceptions;
+      so.line.rushYds += s.statLine.rushYds;
+      so.line.rushTd += s.statLine.rushTd;
+      so.line.receptions += s.statLine.receptions;
+      so.line.recYds += s.statLine.recYds;
+      so.line.recTd += s.statLine.recTd;
+      so.line.passAtt += s.passing.attempts;
+      so.line.passCmp += s.passing.completions;
+      so.line.carries += s.carries;
+      so.line.targets += s.targets;
+      after.set(s.playerId, so);
+    }
+
+    for (const [who, his] of before) {
+      const next = after.get(who);
+
+      if (!next || next.games < 6 || his.games < 4 || !isQb.has(who)) {
+        continue;
+      }
+
+      learn.push({
+        parts: his,
+        position: "QB",
+        line: Object.fromEntries(LINE_PARTS.map((p) =>
+          [p, next.line[p] / next.games])) as Record<LinePart, number>,
+      });
+    }
+  }
+
+  if (learn.length < 60) {
+    return;
+  }
+
+  const fitted = fitJointLine(learn);
+  const lastYear = await partsIn(season - 1);
+  let taken = 0;
+
+  for (const p of players) {
+    if (p.position !== "QB") {
+      continue;
+    }
+
+    const his = lastYear.get(p.playerId);
+
+    if (!his || his.games < 4) {
+      continue;
+    }
+
+    const line = fitted.says(his, "QB");
+    p.projectedParts = line as unknown as StatParts;
+    p.projectedPpg = fantasyPoints({
+      passYds: line.passYds, passTd: line.passTd,
+      interceptions: line.interceptions,
+      rushYds: line.rushYds, rushTd: line.rushTd,
+      receptions: line.receptions, recYds: line.recYds, recTd: line.recTd,
+      fumblesLost: 0, twoPointConversions: 0,
+    }, scoring());
+    taken++;
+  }
+
+  console.log(`${taken} passers take the joint line`);
+}
+
 async function main(): Promise<void> {
   const season = Number(argOf("--season", String(CURRENT_SEASON)));
   const leagueId = argOf("--league", "");
@@ -316,6 +422,7 @@ async function main(): Promise<void> {
 
   // season draft board with replacement value, for the draft view
   const world = await buildPreseasonWorld(season);
+  await takePasserLines(world.players, season);
 
   const { projectDraftExamples } = await import("../src/features/seasonModel.js");
   const draftExamples = await projectDraftExamples(season, world.data);
