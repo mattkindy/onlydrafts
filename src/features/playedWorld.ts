@@ -17,7 +17,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../data/csv.js";
 import { loadWeeklyRosters } from "../data/nflverse.js";
-import { fitDriveRules } from "./driveRules.js";
+import { fitDriveRules, fitTeamDriveRules } from "./driveRules.js";
 import { fitPasserQuality } from "./passerQuality.js";
 import { loadAdp, type AdpEntry } from "../data/adp.js";
 import { normalizeName } from "../data/names.js";
@@ -160,7 +160,16 @@ export async function buildWorld(
     ]);
   }
 
-  const rules = await fitDriveRules(LEARN);
+  /**
+   * Plays teach a drive, drives teach a game, and in season the games
+   * already played teach the drive layer per team: its turnovers, its
+   * gains, how often it runs. This is where this year's form can
+   * express itself, which the play pools alone could not.
+   */
+  const teamDrives = await fitTeamDriveRules(
+    LEARN, live ? { season: SCORE_ON, beforeWeek: onlyWeek } : undefined,
+  );
+  const rules = teamDrives.league;
   const passerWorth = await fitPasserQuality(LEARN);
   const kicking = await fitEndings(LEARN);
 
@@ -536,6 +545,7 @@ export async function buildWorld(
     return {
       team, factors, passer,
       passLift: passer ? passerWorth(passer) : 1,
+      drives: teamDrives.byTeam.get(team),
       among: [
         ...cast.map((p) => p.playerId),
         ...(passer ? [passer] : []),
