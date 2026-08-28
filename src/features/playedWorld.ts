@@ -442,13 +442,32 @@ export async function buildWorld(
     }
 
     const passer = throwsFor.get(team);
+    /**
+     * Only the men who would see the field. The whole roster put 27
+     * skill players in the cast where a side dresses about 11, and a
+     * fifth of the walk's throws went to men nobody throws to, drawn
+     * from the pooled fallback that gains 4.62 where a targeted throw
+     * gains 7.33. The projected shares already say who plays, rookies
+     * included, so the cast is the twelve largest of them.
+     */
+    const skill = men
+      .filter((p) => SHARING_POSITIONS.includes(p.position))
+      .map((p) => ({
+        playerId: p.playerId,
+        share: (() => {
+          const his = split.get(p.playerId);
+
+          return his ? his.carries + his.targets : 0;
+        })(),
+      }))
+      .sort((a, b) => b.share - a.share);
+    const anyShare = skill.some((p) => p.share > 0);
+    const cast = anyShare ? skill.slice(0, 12) : skill;
 
     return {
       team, factors, passer,
       among: [
-        ...men
-          .filter((p) => SHARING_POSITIONS.includes(p.position))
-          .map((p) => p.playerId),
+        ...cast.map((p) => p.playerId),
         ...(passer ? [passer] : []),
       ],
     };
