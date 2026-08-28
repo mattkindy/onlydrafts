@@ -15,7 +15,7 @@
 import { loadPlayerStats } from "../data/nflverse.js";
 
 /** how far a clearly better passer moves a throw, either way at most */
-const REACH = Number(process.env["PASSER_REACH"] ?? 0.05);
+const REACH = Number(process.env["PASSER_REACH"] ?? 0.15);
 /** a season of throws before his rates speak for themselves */
 const SETTLES_AT = 300;
 /** how much of the gap to the middle a throw actually keeps */

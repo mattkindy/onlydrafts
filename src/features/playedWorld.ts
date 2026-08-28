@@ -400,14 +400,42 @@ export async function buildWorld(
       (sum, season) => sum + (teamPlays.get(`${season}|${team}`) ?? 0), 0,
     );
 
-    if (plays <= 0) {
-      qbCarries.set(passer, leagueQb);
+    /**
+     * A passer with no seasons behind him ran at the league rate, and
+     * the league rate is a pocket. Daniels ran for 7.4 points a game
+     * as a rookie and the walk said 1.7. The fortnight that makes him
+     * the starter shows his legs too, so it fills in until his own
+     * seasons can.
+     */
+    const early = { ran: 0, plays: 0 };
+
+    for (const r of raw) {
+      if (Number(r["season"]) !== SCORE_ON ||
+          Number(r["week"]) < passerFrom || Number(r["week"]) > passerTo ||
+          r["offense"] !== team) {
+        continue;
+      }
+
+      early.plays++;
+
+      if (r["playType"] === "run" && r["player"] === passer) {
+        early.ran++;
+      }
+    }
+
+    const earlyRate = early.plays >= 60 ? early.ran / early.plays : leagueQb;
+    const fallback = early.plays >= 60
+      ? 0.6 * earlyRate + 0.4 * leagueQb
+      : leagueQb;
+
+    if (plays <= 0 || ran + (carried.get(passer) ?? 0) === 0) {
+      qbCarries.set(passer, fallback);
       continue;
     }
 
-    // his own habit, pulled toward the league until he has run enough
+    // his own habit, pulled toward the fallback until he has run enough
     const trust = ran / (ran + 30);
-    qbCarries.set(passer, trust * (ran / plays) + (1 - trust) * leagueQb);
+    qbCarries.set(passer, trust * (ran / plays) + (1 - trust) * fallback);
   }
 
   for (const [passer, share] of qbCarries) {
