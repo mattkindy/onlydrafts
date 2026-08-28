@@ -43,12 +43,15 @@ interface Tally {
 const empty = (): Tally => ({ plays: 0, seconds: 0 });
 
 /**
- * The gaps are fitted on plays a side ran, and the walk runs a
- * different mix of them, so it comes out about six percent quick and
- * fits an extra half a drive into a game. This puts that back: a side
- * gets 10.81 drives with it, 11.27 without, and takes 10.7.
+ * A scale on the fitted gap between snaps, for experiments only.
+ *
+ * This sat at 1.06 for three days to keep kicker attempts down, and
+ * what it was doing was shrinking the whole game: ten plays and a
+ * drive went missing from every one, and two points a side with them.
+ * The kick excess it papered over comes from targeted draws gaining
+ * too little between the twenties, and gets fixed there.
  */
-const BETWEEN_SNAPS = 1.06;
+const BETWEEN_SNAPS = Number(process.env["BETWEEN_SNAPS"] ?? 1.0);
 
 /** two minutes left in either half, when everybody hurries */
 const hurrying = (secondsLeft: number) => secondsLeft % 1800 < 120;
