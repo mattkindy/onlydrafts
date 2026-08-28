@@ -134,6 +134,35 @@ export function* widening(state: PlayState): Generator<Spot> {
 }
 
 /**
+ * The same spots as packed numbers, built once per distance and yard.
+ * The generator made hundreds of objects for every query and the walk
+ * queries millions of times, so the hot loops read these instead:
+ * looseness times 100000, plus toGo times 100, plus the yardline.
+ */
+const spotsRemembered = new Map<number, Int32Array>();
+
+export function wideningPacked(toGo: number, yardline: number): Int32Array {
+  const key = toGo * 100 + yardline;
+  const already = spotsRemembered.get(key);
+
+  if (already) {
+    return already;
+  }
+
+  const state = { down: 1, toGo, yardline, secondsLeft: 1800, margin: 0 };
+  const packed: number[] = [];
+
+  for (const spot of widening(state)) {
+    packed.push(spot.looseness * 100000 + spot.toGo * 100 + spot.yardline);
+  }
+
+  const made = Int32Array.from(packed);
+  spotsRemembered.set(key, made);
+
+  return made;
+}
+
+/**
  * How the clock is cut for counting. Coarse on purpose: it matters far
  * less than the down and the distance, and a fine cut on everything at
  * once leaves nothing in any cell.
@@ -168,20 +197,40 @@ export const stateKey = (
   `${Math.min(4, down)}|${Math.min(40, toGo)}|${Math.min(99, yardline)}` +
   `|${timeBand(secondsLeft)}|${marginBand(margin)}`;
 
-/** the same state with the score let go by however much */
+/**
+ * The same state with the score let go by however much. Built once per
+ * banded state and remembered, because the walk asks for these lists
+ * millions of times and the strings were a third of a game's cost.
+ */
+const keysRemembered = new Map<number, string[]>();
+
 export const keysAt = (
   down: number, toGo: number, yardline: number,
   secondsLeft: number, margin: number, looseness: number,
 ): string[] => {
-  const spot = `${Math.min(4, down)}|${Math.min(40, toGo)}|${Math.min(99, yardline)}`;
+  const at = (Math.min(4, down) * 41 + Math.min(40, toGo)) * 100 +
+    Math.min(99, yardline);
+  const packed = ((at * 8 + timeBand(secondsLeft)) * 9 + marginBand(margin)) *
+    4 + looseness;
+  const already = keysRemembered.get(packed);
 
-  if (looseness >= 2) {
-    return [`${spot}|any`];
+  if (already) {
+    return already;
   }
 
-  const band = marginBand(margin);
-  const bands = looseness === 0 ? [band] : [band - 1, band, band + 1];
+  const spot = `${Math.min(4, down)}|${Math.min(40, toGo)}|${Math.min(99, yardline)}`;
+  const made = (() => {
+    if (looseness >= 2) {
+      return [`${spot}|any`];
+    }
 
-  return bands.filter((b) => b >= 0 && b <= 8)
-    .map((b) => `${spot}|${timeBand(secondsLeft)}|${b}`);
+    const band = marginBand(margin);
+    const bands = looseness === 0 ? [band] : [band - 1, band, band + 1];
+
+    return bands.filter((b) => b >= 0 && b <= 8)
+      .map((b) => `${spot}|${timeBand(secondsLeft)}|${b}`);
+  })();
+  keysRemembered.set(packed, made);
+
+  return made;
 };

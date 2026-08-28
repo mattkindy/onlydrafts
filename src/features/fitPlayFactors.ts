@@ -9,7 +9,7 @@
  */
 
 import {
-  emptyCell, keysAt, stateKey, widening,
+  emptyCell, keysAt, stateKey, wideningPacked,
   type Call, type PlayFactors, type PlayState, type StateCell,
 } from "../model/playFactors.js";
 import type { RunParts } from "./runParts.js";
@@ -686,13 +686,13 @@ export function fitPlayFactors(
   ) => {
     const pooled = emptyCounted();
 
-    for (const spot of widening(state)) {
-      if (spot.looseness !== looseness) {
+    for (const packed of wideningPacked(state.toGo, state.yardline)) {
+      if (Math.floor(packed / 100000) !== looseness) {
         continue;
       }
 
       for (const at of keysAt(
-        state.down, spot.toGo, spot.yardline,
+        state.down, Math.floor(packed / 100) % 1000, packed % 100,
         state.secondsLeft, state.margin, looseness,
       )) {
       const cell = cells.get(call ? `${call}|${at}` : at);
@@ -787,13 +787,13 @@ export function fitPlayFactors(
     for (const looseness of [0, 1, 2]) {
       const pooled = { plays: 0, runs: 0, yardsSum: 0 };
 
-      for (const spot of widening(state)) {
-        if (spot.looseness !== looseness) {
+      for (const packed of wideningPacked(state.toGo, state.yardline)) {
+        if (Math.floor(packed / 100000) !== looseness) {
           continue;
         }
 
         for (const cellKey of keysAt(
-          state.down, spot.toGo, spot.yardline,
+          state.down, Math.floor(packed / 100) % 1000, packed % 100,
           state.secondsLeft, state.margin, looseness,
         )) {
           const cell = from.get(`${who}|${call ? `${call}|${cellKey}` : cellKey}`);
