@@ -150,6 +150,8 @@ export function walkDrive(
      * ingests, so the walk bends toward it rather than arguing.
      */
     lift?: number;
+    /** the passer's own worth, on throws alone */
+    passLift?: number;
   } = {},
   /**
    * How long each snap takes. Without one the drive has no length in
@@ -354,9 +356,11 @@ export function walkDrive(
     const drawn = own
       ? own.yards
       : Math.round(factors.gains(state, call, player, uniform, sides));
+    const lifted = (sides.lift ?? 1) *
+      (call === "pass" ? sides.passLift ?? 1 : 1);
     const gained = Math.min(
       state.yardline,
-      sides.lift && drawn > 0 ? Math.round(drawn * sides.lift) : drawn,
+      lifted !== 1 && drawn > 0 ? Math.round(drawn * lifted) : drawn,
     );
     const scored = state.yardline - gained <= 0;
     const caught = own

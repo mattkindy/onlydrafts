@@ -30,6 +30,8 @@ export interface Side {
   passer?: string;
   /** the market's read on this side's afternoon, near one */
   lift?: number;
+  /** what the man throwing it is worth, applied to throws alone */
+  passLift?: number;
 }
 
 export interface GameRules {
@@ -232,6 +234,7 @@ export function playGame(
         offence: withBall.team, defence: against.team,
         passer: withBall.passer, season: rules.season, week: rules.week,
         lift: withBall.lift,
+        passLift: withBall.passLift,
       },
       rules.ticking,
       opening,
