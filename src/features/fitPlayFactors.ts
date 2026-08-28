@@ -744,7 +744,22 @@ export function fitPlayFactors(
    * league version so a thin team falls back to everybody rather than
    * quietly mixing the two.
    */
-  const sideRemembered = new Map<string, Counted>();
+  /** each cell's yards added up once, since the array never changes */
+  const cellSums = new WeakMap<Counted, number>();
+  const summedOnce = (cell: Counted) => {
+    const already = cellSums.get(cell);
+
+    if (already !== undefined) {
+      return already;
+    }
+
+    const sum = cell.yards.reduce((a, b) => a + b, 0);
+    cellSums.set(cell, sum);
+
+    return sum;
+  };
+  const sideRemembered =
+    new Map<string, { plays: number; runs: number; yardsSum: number }>();
   const forgetsAt = () => makeRoom(sideRemembered);
   const forSide = (
     from: Map<string, Counted>, who: string, state: PlayState,
@@ -760,10 +775,17 @@ export function fitPlayFactors(
       return already;
     }
 
-    let found = emptyCounted();
+    /**
+     * Sums only. This used to copy every yard of a side's pooled cells
+     * into a fresh array three times a play, and once the per side
+     * counts were connected those cells held whole team seasons. The
+     * two callers want a rate and an average, so the numbers travel
+     * and the arrays stay where they are.
+     */
+    let found = { plays: 0, runs: 0, yardsSum: 0 };
 
     for (const looseness of [0, 1, 2]) {
-      const pooled = emptyCounted();
+      const pooled = { plays: 0, runs: 0, yardsSum: 0 };
 
       for (const spot of widening(state)) {
         if (spot.looseness !== looseness) {
@@ -782,8 +804,7 @@ export function fitPlayFactors(
 
           pooled.plays += cell.plays;
           pooled.runs += cell.runs;
-          pooled.scores += cell.scores;
-          for (const gained of cell.yards) pooled.yards.push(gained);
+          pooled.yardsSum += summedOnce(cell);
         }
 
         if (pooled.plays >= least) {
@@ -802,8 +823,8 @@ export function fitPlayFactors(
     return found;
   };
 
-  const average = (cell: Counted) =>
-    cell.plays === 0 ? 0 : cell.yards.reduce((a, b) => a + b, 0) / cell.plays;
+  const average = (cell: { plays: number; yardsSum: number }) =>
+    cell.plays === 0 ? 0 : cell.yardsSum / cell.plays;
 
   /**
    * Remembering every widened lookup was fine while every drive was
@@ -822,7 +843,7 @@ export function fitPlayFactors(
    * order, so dropping the older half keeps what the walk is asking
    * about right now.
    */
-  const makeRoom = (cache: Map<string, Counted>) => {
+  const makeRoom = (cache: Map<string, unknown>) => {
     if (cache.size <= REMEMBERS) {
       return;
     }
@@ -1295,8 +1316,10 @@ export function fitPlayFactors(
        * for three hundred of one team's plays at one state meant the
        * answer was one every time and the teams never differed.
        */
-      const leagueYards = average(cell);
-      const held = (found: Counted) => {
+      const leagueYards = cell.plays === 0
+        ? 0
+        : cell.yards.reduce((a, b) => a + b, 0) / cell.plays;
+      const held = (found: { plays: number; yardsSum: number }) => {
         if (leagueYards <= 0 || found.plays < settings.leastForSide) {
           return 1;
         }
