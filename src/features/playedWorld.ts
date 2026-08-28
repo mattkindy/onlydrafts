@@ -19,6 +19,8 @@ import { parseCsv } from "../data/csv.js";
 import { loadWeeklyRosters } from "../data/nflverse.js";
 import { fitDriveRules } from "./driveRules.js";
 import { fitPasserQuality } from "./passerQuality.js";
+import { loadAdp, type AdpEntry } from "../data/adp.js";
+import { normalizeName } from "../data/names.js";
 import { fitEndings } from "./fitEndings.js";
 import {
   fitPlayFactors, countPlays, storePlays, FACTOR_DEFAULTS, type PlayRow,
@@ -129,8 +131,11 @@ export async function buildWorld(
     .filter((row) => row.week === castWeek && !ruledOut.has(row.playerId));
   const onTeam = new Map<string, { playerId: string; position: string }[]>();
 
+  const calledOn = new Map<string, string>();
+
   for (const row of openingWeek) {
     const position = positions.get(row.playerId) ?? row.rawPosition;
+    calledOn.set(row.playerId, row.name);
 
     if (!positions.has(row.playerId)) {
       positions.set(row.playerId, position);
@@ -321,37 +326,53 @@ export async function buildWorld(
   }
 
   /**
-   * Who throws for each side: whoever took the throws in the opening
-   * fortnight of the season being played. A drafter in August knows
-   * the named starter; the first two weeks are the closest thing the
-   * data has to that name, and they carry one fortnight of leak in a
-   * seventeen week season.
+   * Who throws for each side. It used to be whoever took the throws in
+   * the opening fortnight of the season being played, which is a
+   * fortnight of leak. An August drafter knows the starter because the
+   * market prices him, so the starter is now the quarterback on the
+   * roster the market takes earliest, and the one who threw most last
+   * season where the market has not priced any of them.
    */
-  const attempts = new Map<string, Map<string, number>>();
-
-  const passerFrom = live ? Math.max(1, onlyWeek - 2) : 1;
-  const passerTo = live ? onlyWeek - 1 : 2;
+  const augustAdp = await loadAdp(SCORE_ON).catch(() => new Map<string, AdpEntry>());
+  const threwLastYear = new Map<string, number>();
 
   for (const r of raw) {
-    if (
-      Number(r["season"]) !== SCORE_ON ||
-      Number(r["week"]) < passerFrom || Number(r["week"]) > passerTo ||
-      r["playType"] !== "pass" || !r["passer"]
-    ) {
+    if (Number(r["season"]) !== SCORE_ON - 1 || r["playType"] !== "pass" ||
+        !r["passer"]) {
       continue;
     }
 
-    const team = r["offense"] ?? "";
-    const own = attempts.get(team) ?? new Map<string, number>();
-    own.set(r["passer"]!, (own.get(r["passer"]!) ?? 0) + 1);
-    attempts.set(team, own);
+    threwLastYear.set(
+      r["passer"]!, (threwLastYear.get(r["passer"]!) ?? 0) + 1,
+    );
   }
 
   const throwsFor = new Map<string, string>();
 
-  for (const [team, own] of attempts) {
-    const most = [...own.entries()].sort((a, b) => b[1] - a[1])[0];
-    if (most) throwsFor.set(team, most[0]);
+  for (const [team, men] of onTeam) {
+    const quarterbacks = men.filter((p) => p.position === "QB");
+    const priced = quarterbacks
+      .map((p) => ({
+        playerId: p.playerId,
+        adp: augustAdp.get(
+          `${normalizeName(calledOn.get(p.playerId) ?? "")}|QB`,
+        )?.adp,
+      }))
+      .filter((p): p is { playerId: string; adp: number } => p.adp !== undefined)
+      .sort((a, b) => a.adp - b.adp);
+
+    if (priced.length > 0) {
+      throwsFor.set(team, priced[0]!.playerId);
+      continue;
+    }
+
+    const threw = quarterbacks
+      .map((p) => ({ playerId: p.playerId, n: threwLastYear.get(p.playerId) ?? 0 }))
+      .sort((a, b) => b.n - a.n);
+
+    if (threw.length > 0 && threw[0]!.n > 0) {
+      throwsFor.set(team, threw[0]!.playerId);
+    }
   }
 
   /**
@@ -388,8 +409,7 @@ export async function buildWorld(
   );
   const leagueQb = everyPlay > 0 ? everyQbCarry / everyPlay : 0.05;
 
-  for (const [team] of attempts) {
-    const passer = throwsFor.get(team);
+  for (const [team, passer] of throwsFor) {
 
     if (!passer) {
       continue;
@@ -400,42 +420,14 @@ export async function buildWorld(
       (sum, season) => sum + (teamPlays.get(`${season}|${team}`) ?? 0), 0,
     );
 
-    /**
-     * A passer with no seasons behind him ran at the league rate, and
-     * the league rate is a pocket. Daniels ran for 7.4 points a game
-     * as a rookie and the walk said 1.7. The fortnight that makes him
-     * the starter shows his legs too, so it fills in until his own
-     * seasons can.
-     */
-    const early = { ran: 0, plays: 0 };
-
-    for (const r of raw) {
-      if (Number(r["season"]) !== SCORE_ON ||
-          Number(r["week"]) < passerFrom || Number(r["week"]) > passerTo ||
-          r["offense"] !== team) {
-        continue;
-      }
-
-      early.plays++;
-
-      if (r["playType"] === "run" && r["player"] === passer) {
-        early.ran++;
-      }
-    }
-
-    const earlyRate = early.plays >= 60 ? early.ran / early.plays : leagueQb;
-    const fallback = early.plays >= 60
-      ? 0.6 * earlyRate + 0.4 * leagueQb
-      : leagueQb;
-
-    if (plays <= 0 || ran + (carried.get(passer) ?? 0) === 0) {
-      qbCarries.set(passer, fallback);
+    if (plays <= 0) {
+      qbCarries.set(passer, leagueQb);
       continue;
     }
 
-    // his own habit, pulled toward the fallback until he has run enough
+    // his own habit, pulled toward the league until he has run enough
     const trust = ran / (ran + 30);
-    qbCarries.set(passer, trust * (ran / plays) + (1 - trust) * fallback);
+    qbCarries.set(passer, trust * (ran / plays) + (1 - trust) * leagueQb);
   }
 
   for (const [passer, share] of qbCarries) {
