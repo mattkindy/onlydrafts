@@ -86,7 +86,6 @@ for (const week of WEEKS) {
   }
 
   const world = await buildWorld(SEASON, week, true, positions);
-  const rng = seededRng(41);
   const walk: number[] = [];
   const line: number[] = [];
   const was: number[] = [];
@@ -112,6 +111,16 @@ for (const week of WEEKS) {
     let saidAway = 0;
 
     for (let run = 0; run < RUNS; run++) {
+      /**
+       * Seeded by fixture and run rather than one stream, so two
+       * settings compared on this bench play the same games and their
+       * difference is the setting, not the reshuffle.
+       */
+      const rng = seededRng(
+        SEASON * 1000 + week * 37 +
+        (r["home_team"]!.charCodeAt(0) * 131 + r["away_team"]!.charCodeAt(1)) +
+        run * 7919,
+      );
       const game = playGame(home as Side, away as Side, {
         rules: { ...world.rules, kickSucceeds: world.kicking.kickSucceeds },
         fourth: world.fourth,
