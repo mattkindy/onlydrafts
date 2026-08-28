@@ -67,11 +67,25 @@ export async function buildWorld(
   const raw = parseCsv(await readFile( 
     join(import.meta.dirname, "..", "..", "data", "curated", "touches.csv"), "utf8",
   ));
+  /**
+   * How many times each of this year's plays counts, in season. At
+   * four the by week bench reads the same as at one, 14.2 points of
+   * margin against 14.3, so the extra weight is off: the play pools
+   * turn out to be a narrow channel for team strength, and pushing
+   * more evidence down them changed nothing.
+   */
+  const AGAIN = live ? Number(process.env["THIS_YEAR_COUNTS"] ?? 1) : 1;
+  const kept = raw.filter((r) =>
+    Number(r["season"]) < SCORE_ON ||
+    (live && Number(r["season"]) === SCORE_ON && Number(r["week"]) < onlyWeek),
+  );
+  const weighted = AGAIN > 1
+    ? kept.flatMap((r) =>
+        Number(r["season"]) === SCORE_ON ? Array(AGAIN).fill(r) : [r])
+    : kept;
+
   const learnRows = timeBetween(
-    raw.filter((r) =>
-      Number(r["season"]) < SCORE_ON ||
-      (live && Number(r["season"]) === SCORE_ON && Number(r["week"]) < onlyWeek),
-    ).map((r) => ({
+    weighted.map((r) => ({
       season: Number(r["season"]), week: Number(r["week"]),
       offence: r["offense"] ?? "", defence: r["defense"] ?? "",
       down: Number(r["down"]), toGo: Number(r["togo"]),
