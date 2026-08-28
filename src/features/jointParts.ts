@@ -79,6 +79,61 @@ export function columnsFor(parts: Parts): number[] {
   ];
 }
 
+/** the categories a projected stat line is made of */
+export const LINE_PARTS = [
+  "passYds", "passTd", "interceptions", "rushYds", "rushTd",
+  "receptions", "recYds", "recTd", "passAtt", "passCmp", "carries", "targets",
+] as const;
+
+export type LinePart = (typeof LINE_PARTS)[number];
+
+export interface FittedLine {
+  /** what he does in a game next season, category by category */
+  says: (parts: Parts, position: string) => Record<LinePart, number>;
+}
+
+/**
+ * The same columns, one fit per category instead of one for points, so
+ * the stat line and the points come from a single view of the man
+ * rather than the points from one model and the yards from another.
+ */
+export function fitJointLine(
+  learn: { parts: Parts; position: string; line: Record<LinePart, number> }[],
+  penalty = 0.5,
+): FittedLine {
+  const byPosition = new Map<string, typeof learn>();
+
+  for (const one of learn) {
+    byPosition.set(one.position, [...(byPosition.get(one.position) ?? []), one]);
+  }
+
+  const fitOver = (its: typeof learn) => {
+    const design = its.map((o) => columnsFor(o.parts));
+
+    return Object.fromEntries(LINE_PARTS.map((part) => [
+      part, fitRidge(design, its.map((o) => o.line[part]), penalty),
+    ])) as Record<LinePart, number[]>;
+  };
+
+  const everyone = fitOver(learn);
+  const weights = new Map<string, Record<LinePart, number[]>>();
+
+  for (const [position, its] of byPosition) {
+    weights.set(position, its.length >= ENOUGH ? fitOver(its) : everyone);
+  }
+
+  return {
+    says: (parts, position) => {
+      const fit = weights.get(position) ?? everyone;
+      const columns = columnsFor(parts);
+
+      return Object.fromEntries(LINE_PARTS.map((part) => [
+        part, Math.max(0, predictRidge(fit[part], columns)),
+      ])) as Record<LinePart, number>;
+    },
+  };
+}
+
 export interface Fitted {
   /** what it says he scores a game next season */
   says: (parts: Parts, position: string) => number;
