@@ -1060,11 +1060,24 @@ export function fitPlayFactors(
         return leagueRate;
       }
 
-      // his own where he has run enough of them from here
+      /**
+       * How much a side's mix is its own depends on the quarter. In
+       * neutral situations a team's run rate agrees with itself across
+       * weeks at 0.54 in the first quarter, where the opening is
+       * scripted, 0.40 in the third after halftime resets it, and
+       * 0.29 and 0.26 in the second and fourth where the game decides.
+       * The walk used to trust a side's own rate the same all game.
+       */
+      const q = state.secondsLeft > 2700 ? 0 : state.secondsLeft > 1800 ? 1
+        : state.secondsLeft > 900 ? 2 : 3;
+      const itsOwn = [0.54, 0.29, 0.40, 0.26][q]!;
       const own = forSide(byOffence, offence, state, settings.leastForSide);
-      return own.plays >= settings.leastForSide
-        ? own.runs / own.plays
-        : leagueRate;
+
+      if (own.plays < settings.leastForSide) {
+        return leagueRate;
+      }
+
+      return itsOwn * (own.runs / own.plays) + (1 - itsOwn) * leagueRate;
     },
     goesTo: (state, call, among) => {
       const cell = at(
