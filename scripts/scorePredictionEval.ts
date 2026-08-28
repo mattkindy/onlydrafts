@@ -19,10 +19,11 @@ import { parseCsv } from "../src/data/csv.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { seededRng } from "../src/sim/rng.js";
 import { rmse } from "../src/backtest/metrics.js";
+import { acrossCores, myShare } from "../src/sim/acrossCores.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const SEASON = Number(process.argv[2] ?? 2024);
+const SEASON = Number(process.env["SEASON"] ?? process.argv[2] ?? 2024);
 const RUNS = Number(process.env["RUNS"] ?? 30);
 
 const positions = new Map<string, string>();
@@ -31,7 +32,17 @@ for (const s of await loadPlayerStats(SEASON - 1)) {
   positions.set(s.playerId, s.position);
 }
 
-console.log(`building the world as it looked before ${SEASON}...`);
+/**
+ * Run once with no share set, this cuts itself across the cores and
+ * merges what they print. Each share builds its own world, which costs
+ * a few seconds against the minutes the split saves.
+ */
+const asShare = process.env["SHARE"] !== undefined;
+
+if (!asShare) {
+  console.log(`cutting ${RUNS} runs of ${SEASON} across the cores...`);
+}
+
 const world = await buildWorld(SEASON, 1, false, positions);
 
 const rows = parseCsv(await readFile(
@@ -81,12 +92,28 @@ for (const r of rows) {
   });
 }
 
-console.log(`playing ${fixtures.length} fixtures ${RUNS} times over...`);
-
-const rng = seededRng(53);
+const rng = seededRng(53 + Number(process.env["SHARE"] ?? 0));
 const said = new Map<number, { home: number; away: number }>();
+const mine = new Set(myShare(fixtures.map((_, i) => i)));
+
+if (!asShare) {
+  const printed = await acrossCores({
+    script: import.meta.filename,
+    env: { RUNS: String(RUNS), SEASON: String(SEASON) },
+  });
+
+  for (const line of printed) {
+    for (const [i, scores] of Object.entries(JSON.parse(line))) {
+      said.set(Number(i), scores as { home: number; away: number });
+    }
+  }
+}
 
 fixtures.forEach((f, i) => {
+  if (!asShare || !mine.has(i)) {
+    return;
+  }
+
   const home = world.sideFor(f.home);
   const away = world.sideFor(f.away);
 
@@ -125,6 +152,11 @@ fixtures.forEach((f, i) => {
 
   said.set(i, { home: homePoints / RUNS, away: awayPoints / RUNS });
 });
+
+if (asShare) {
+  console.log(JSON.stringify(Object.fromEntries(said)));
+  process.exit(0);
+}
 
 /** the margin from the home side, which is how a line is written */
 interface Pair { walk: number; vegas: number; was: number }

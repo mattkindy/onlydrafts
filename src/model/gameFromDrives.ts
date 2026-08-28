@@ -45,8 +45,10 @@ export interface GameSettings {
   /** seconds in a game, and in a half */
   length: number;
   half: number;
-  /** where a kickoff leaves the side receiving it */
+  /** where a kickoff leaves the side receiving it, when not drawn */
   afterKickoff: number;
+  /** a drawn kickoff, standing in for the fixed number above */
+  kickoffAt?: (uniform: () => number) => number;
   /** the most drives before the loop gives up, as a backstop */
   mostDrives: number;
   /**
@@ -178,10 +180,21 @@ export function playGame(
   const points: Record<string, number> = { [home.team]: 0, [away.team]: 0 };
   const drives: Record<string, number> = { [home.team]: 0, [away.team]: 0 };
   const possessions: Possession[] = [];
+  /**
+   * Where a kickoff leaves the receiving side. Mostly a touchback to
+   * the thirty, the rest a return spread around the same place, set to
+   * where drives after kickoffs started in 2024. The old fixed 75 put
+   * every kickoff drive five yards behind the played ones.
+   */
+  const kickedTo = () =>
+    settings.kickoffAt
+      ? settings.kickoffAt(uniform)
+      : uniform() < 0.62 ? 70 : Math.round(60 + uniform() * 20);
+
   const receivedFirst = uniform() < 0.5 ? home : away;
   let withBall = receivedFirst === home ? away : home;
   let against = withBall === home ? away : home;
-  let startAt = settings.afterKickoff;
+  let startAt = kickedTo();
   let secondsLeft = settings.length;
   let secondHalf = false;
 
@@ -191,7 +204,7 @@ export function playGame(
       secondHalf = true;
       withBall = receivedFirst;
       against = withBall === home ? away : home;
-      startAt = settings.afterKickoff;
+      startAt = kickedTo();
     }
 
     if (settings.startsAt) {
@@ -223,7 +236,10 @@ export function playGame(
     // rounded, because the counts are kept against whole yard lines
     // and a start of 52.47 matches none of them, so every lookup
     // widens past the spot it was asked about
-    startAt = Math.max(1, Math.min(99, Math.round(drive.handsOverAt)));
+    // a score means the other side receives a kickoff, not a spot
+    startAt = drive.ending === "touchdown" || drive.ending === "fieldGoal"
+      ? kickedTo()
+      : Math.max(1, Math.min(99, Math.round(drive.handsOverAt)));
     const wasOn = withBall;
     withBall = against;
     against = wasOn;
