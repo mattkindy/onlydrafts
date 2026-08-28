@@ -185,6 +185,8 @@ const pointsFor = (drive: FactorDrive) =>
  * though the ground were nobody's.
  */
 const AT_HOME = Number(process.env["AT_HOME"] ?? 1.024);
+/** how much clock a lead can kneel away once the other side cannot stop it */
+const KNEELS_AT = Number(process.env["KNEELS_AT"] ?? 100);
 
 export function playGame(
   home: Side,
@@ -230,6 +232,18 @@ export function playGame(
     }
 
     const margin = points[withBall.team]! - points[against.team]!;
+
+    /**
+     * A side that leads with the clock nearly out kneels, and the game
+     * is over. Three kneels burn about two minutes once the other side
+     * is out of ways to stop the clock. The walk played these snaps as
+     * ordinary football, which is a chunk of why it produced fewer one
+     * score finishes than the league: 46% against 56%.
+     */
+    if (!settings.frozen && margin > 0 && secondsLeft <= KNEELS_AT) {
+      break;
+    }
+
     const opening: Opening = settings.frozen
       ? { yardline: startAt, margin: 0, secondsLeft: 1800 }
       : { yardline: startAt, margin, secondsLeft };
