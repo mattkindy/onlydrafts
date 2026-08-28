@@ -1057,10 +1057,41 @@ async function main(): Promise<void> {
   const adpPlace = onBoard(
     placesBy(board, keyOf, (p) => (p.adp === null ? null : -p.adp)),
   );
-  const walkPlace = onBoard(placesBy(board, keyOf, (p) => {
+  /**
+   * The walk's totals are raw points, and raw points put every good
+   * quarterback above every back, which is true and useless: the board
+   * orders by what a man is worth over the one you could have had, so
+   * the walk's opinion is taken the same way. The bar per position is
+   * the last man a twelve team league starts.
+   */
+  const walkSaid = new Map<string, number>();
+
+  for (const p of board) {
     const id = idOf.get(p.key);
     const says = id === undefined ? undefined : walkSays.get(id);
-    return says === undefined ? null : says;
+
+    if (says !== undefined) {
+      walkSaid.set(p.key, says);
+    }
+  }
+
+  const STARTS = { QB: 12, RB: 34, WR: 26, TE: 12 } as Record<string, number>;
+  const walkBar = new Map<string, number>();
+
+  for (const [position, seats] of Object.entries(STARTS)) {
+    const theirs = board
+      .filter((p) => p.position === position && walkSaid.has(p.key))
+      .map((p) => walkSaid.get(p.key)!)
+      .sort((a, b) => b - a);
+    walkBar.set(position, theirs[Math.min(seats - 1, theirs.length - 1)] ?? 0);
+  }
+
+  const walkPlace = onBoard(placesBy(board, keyOf, (p) => {
+    const says = walkSaid.get(p.key);
+
+    return says === undefined
+      ? null
+      : says - (walkBar.get(p.position) ?? 0);
   }));
 
   if (walkSays.size) {
