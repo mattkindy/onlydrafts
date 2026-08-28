@@ -83,8 +83,8 @@ if (!asShare) {
   const drives = [...endings.values()].reduce((a, b) => a + b, 0);
   console.log(
     `reach: ${(100 * reached20 / drives).toFixed(1)}% of drives touch the 20 ` +
-    `(played 44), and ${(100 * scored20 / reached20).toFixed(1)}% of those score ` +
-    `(played 50)`,
+    `(played 32, counted over scrimmage snaps), and ` +
+    `${(100 * scored20 / reached20).toFixed(1)}% of those score`,
   );
   const kicks = (endings.get("fieldGoal") ?? 0) + (endings.get("missedKick") ?? 0);
 
