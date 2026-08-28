@@ -170,6 +170,7 @@ export async function buildWorld(
     LEARN, live ? { season: SCORE_ON, beforeWeek: onlyWeek } : undefined,
   );
   const rules = teamDrives.league;
+  const sidesOwnDrives = process.env["TEAM_DRIVES"] === "on";
   const passerWorth = await fitPasserQuality(LEARN);
   const kicking = await fitEndings(LEARN);
 
@@ -545,7 +546,7 @@ export async function buildWorld(
     return {
       team, factors, passer,
       passLift: passer ? passerWorth(passer) : 1,
-      drives: teamDrives.byTeam.get(team),
+      drives: sidesOwnDrives ? teamDrives.byTeam.get(team) : undefined,
       among: [
         ...cast.map((p) => p.playerId),
         ...(passer ? [passer] : []),
