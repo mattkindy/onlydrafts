@@ -266,6 +266,70 @@ if (!asShare) {
     score(starters.filter((r) => r.position === position), position);
   }
 
+  /**
+   * The ridge feeding the walk, the way the market already does for a
+   * team: the ridge says how much bigger than his ordinary week this
+   * one looks, and the walk's number is bent by that, to a power. At
+   * zero the ridge is ignored; at one its whole opinion of the week
+   * is taken.
+   */
+  console.log("the walk sized by the ridge, walk times (ridge over his average)^a:");
+
+  for (const alpha of [0.3, 0.5, 0.7, 1]) {
+    for (const position of ["all", ...POSITIONS]) {
+      const rows = starters.filter((r) =>
+        r.ridge !== undefined && r.average > 1 &&
+        (position === "all" || r.position === position));
+
+      if (rows.length < 20) {
+        continue;
+      }
+
+      const fed = rows.map((r) =>
+        r.walk * Math.pow(Math.max(0.3, r.ridge! / r.average), alpha));
+      const score = spearman(fed, rows.map((r) => r.was));
+      console.log(
+        `  a=${alpha} ${position.padEnd(4)} ${score.toFixed(3)}`,
+      );
+    }
+  }
+
+  /**
+   * The two as places on one list, mixed, which is how the board
+   * treats its voices. The ratio bend above cannot carry the ridge's
+   * ordering, since most of its edge is in how it places men against
+   * each other rather than against their own averages.
+   */
+  console.log("the walk and the ridge as mixed places:");
+
+  const placesBy = (rows: PlayerWeek[], of: (r: PlayerWeek) => number) => {
+    const order = rows.map((r, i) => ({ i, v: of(r) }))
+      .sort((a, b) => b.v - a.v);
+    const place = new Array<number>(rows.length).fill(0);
+    order.forEach((o, k) => { place[o.i] = k; });
+
+    return place;
+  };
+
+  for (const onWalk of [0.25, 0.5, 0.75]) {
+    for (const position of ["all", ...POSITIONS]) {
+      const rows = starters.filter((r) =>
+        r.ridge !== undefined &&
+        (position === "all" || r.position === position));
+
+      if (rows.length < 20) {
+        continue;
+      }
+
+      const walkAt = placesBy(rows, (r) => r.walk);
+      const ridgeAt = placesBy(rows, (r) => r.ridge!);
+      const mixed = rows.map((_, i) =>
+        -(onWalk * walkAt[i]! + (1 - onWalk) * ridgeAt[i]!));
+      const score = spearman(mixed, rows.map((r) => r.was));
+      console.log(`  walk ${onWalk} ${position.padEnd(4)} ${score.toFixed(3)}`);
+    }
+  }
+
   // the ridge the weekly view used before the walk, on the same men
   console.log("against the weekly ridge, the men it also priced:");
 
