@@ -942,9 +942,7 @@ export function fitPlayFactors(
     return dry;
   };
   const situationRemembered = new Map<string, { gain: number; dry: number }>();
-  const situationTilt = (
-    state: PlayState, call: Call, poolMean: number, poolDry: number,
-  ) => {
+  const situationTilt = (state: PlayState, call: Call) => {
     makeRoom(situationRemembered);
     const key = `${call}|${stateKey(
       state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
@@ -955,60 +953,69 @@ export function fitPlayFactors(
       return already;
     }
 
-    let held = { plays: 0, yardsSum: 0, dry: 0 };
+    const sums = (looseCap: number) => {
+      let found = { plays: 0, yardsSum: 0, dry: 0 };
 
-    for (const looseness of [0, 1]) {
-      if (held.plays >= settings.leastForSide) {
-        break;
-      }
-
-      const pooled = { plays: 0, yardsSum: 0, dry: 0 };
-
-      for (const packed of wideningPacked(state.toGo, state.yardline)) {
-        if (Math.floor(packed / 100000) !== looseness) {
-          continue;
+      for (const looseness of looseCap === 2 ? [2] : [0, 1]) {
+        if (found.plays >= settings.leastForSide) {
+          break;
         }
 
-        for (const cellKey of keysAt(
-          state.down, Math.floor(packed / 100) % 1000, packed % 100,
-          state.secondsLeft, state.margin, looseness,
-        )) {
-          const cell = cells.get(`${call}|${cellKey}`);
+        const pooled = { plays: 0, yardsSum: 0, dry: 0 };
 
-          if (!cell) {
+        for (const packed of wideningPacked(state.toGo, state.yardline)) {
+          if (Math.floor(packed / 100000) !== looseness) {
             continue;
           }
 
-          pooled.plays += cell.plays;
-          pooled.yardsSum += summedOnce(cell);
-          pooled.dry += driedOnce(cell);
+          for (const cellKey of keysAt(
+            state.down, Math.floor(packed / 100) % 1000, packed % 100,
+            state.secondsLeft, state.margin, looseness,
+          )) {
+            const cell = cells.get(`${call}|${cellKey}`);
+
+            if (!cell) {
+              continue;
+            }
+
+            pooled.plays += cell.plays;
+            pooled.yardsSum += summedOnce(cell);
+            pooled.dry += driedOnce(cell);
+          }
+
+          if (pooled.plays >= settings.leastForSide) {
+            break;
+          }
         }
 
-        if (pooled.plays >= settings.leastForSide) {
-          break;
-        }
+        found = pooled;
       }
 
-      held = pooled;
-    }
+      return found;
+    };
+    const held = sums(1);
+    const wide = sums(2);
 
     /**
-     * The dry share moves separately below, so the gain ratio is taken
-     * over the plays that made something on each side, or the two
-     * would count the same difference twice.
+     * The dry share moves separately at the draw, so the gain ratio is
+     * taken over the plays that made something on each side, or the
+     * two would count the same difference twice.
      */
-    const enough = held.plays >= settings.leastForSide;
+    const enough = held.plays >= settings.leastForSide && wide.plays > 0;
     const heldDry = enough ? held.dry / held.plays : 0;
+    const wideDry = enough ? wide.dry / wide.plays : 0;
     const heldGainful = heldDry < 0.99
       ? (held.yardsSum / Math.max(1, held.plays)) / (1 - heldDry)
       : 0;
-    const poolGainful = poolDry < 0.99 ? poolMean / (1 - poolDry) : 0;
+    const wideGainful = wideDry < 0.99
+      ? (wide.yardsSum / Math.max(1, wide.plays)) / (1 - wideDry)
+      : 0;
     const tilt = {
-      gain: enough && poolGainful > 0.1 && heldGainful > 0
-        ? Math.max(0.8, Math.min(1.25, heldGainful / poolGainful))
+      gain: enough && wideGainful > 0.1 && heldGainful > 0
+        ? Math.max(0.8, Math.min(1.25, heldGainful / wideGainful))
         : 1,
-      dry: enough && poolDry > 0.01
-        ? Math.max(0.8, Math.min(1.25, heldDry / poolDry))
+      dry: enough && wideDry > 0.01
+        ? Math.max(0.8, Math.min(1.25, heldDry / wideDry))
         : 1,
     };
     situationRemembered.set(key, tilt);
@@ -1331,8 +1338,18 @@ export function fitPlayFactors(
             }
           }
 
+          /**
+           * His own plays come from every game situation he ever
+           * faced, so the score and the clock are put back the same
+           * way the pooled draw puts them back: a side milking a lead
+           * gains less on the same call, and his sample cannot know.
+           */
+          const tilt = situationTilt(state, call);
+          const drawn = plays.yards[at]!;
+
           return {
-            yards: Math.min(state.yardline, plays.yards[at]!),
+            yards: Math.min(state.yardline,
+              drawn > 0 ? drawn * tilt.gain : drawn),
             caught: plays.caught[at] === 1,
           };
         }
@@ -1448,11 +1465,7 @@ export function fitPlayFactors(
 
       // the score and clock, put back when the pool had to let them go
       const tilt = settledAt.get(cell) === 2
-        ? situationTilt(
-            state, call,
-            summedOnce(cell) / Math.max(1, cell.plays),
-            driedOnce(cell) / Math.max(1, cell.plays),
-          )
+        ? situationTilt(state, call)
         : { gain: 1, dry: 1 };
 
       /**
