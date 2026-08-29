@@ -35,6 +35,9 @@ interface PlayerWeek {
   average: number;
   was: number;
   position: string;
+  /** the volume half on its own, to tell it apart from conversion */
+  walkTouches: number;
+  wasTouches: number;
 }
 
 const games = parseCsv(await readFile(
@@ -46,18 +49,24 @@ const mine = new Set(myShare(jobs.map((_, i) => i)));
 
 async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
   const positions = new Map<string, string>();
-  const weekly = new Map<string, { week: number; points: number }[]>();
+  const weekly =
+    new Map<string, { week: number; points: number; touches: number }[]>();
 
   for (const s of await loadPlayerStats(season)) {
     positions.set(s.playerId, s.position);
     weekly.set(s.playerId, [
       ...(weekly.get(s.playerId) ?? []),
-      { week: s.week, points: fantasyPoints(s.statLine, RULES) },
+      {
+        week: s.week,
+        points: fantasyPoints(s.statLine, RULES),
+        touches: (s.carries ?? 0) + (s.targets ?? 0),
+      },
     ]);
   }
 
   const world = await buildWorld(season, week, true, positions);
   const walked = new Map<string, number>();
+  const walkedTouches = new Map<string, number>();
   let played = 0;
 
   for (const r of games) {
@@ -93,6 +102,11 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
           id,
           (walked.get(id) ?? 0) + fantasyPoints(line, RULES) / RUNS,
         );
+        walkedTouches.set(
+          id,
+          (walkedTouches.get(id) ?? 0) +
+            ((line.carries ?? 0) + (line.targets ?? 0)) / RUNS,
+        );
       }
     }
   }
@@ -119,6 +133,8 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
       average: before.reduce((s, w) => s + w.points, 0) / before.length,
       was: now.points,
       position,
+      walkTouches: walkedTouches.get(id) ?? 0,
+      wasTouches: now.touches,
     });
   }
 
@@ -171,6 +187,27 @@ if (!asShare) {
 
   for (const position of POSITIONS) {
     score(starters.filter((r) => r.position === position), position);
+  }
+
+  // the volume half alone: does the walk know who gets the ball,
+  // apart from what they do with it?
+  console.log("their touches, same men:");
+
+  for (const position of ["RB", "WR", "TE"]) {
+    const rows = starters.filter((r) => r.position === position);
+
+    if (rows.length < 20) {
+      continue;
+    }
+
+    const walk = spearman(
+      rows.map((r) => r.walkTouches), rows.map((r) => r.wasTouches));
+    const flat = spearman(
+      rows.map((r) => r.average), rows.map((r) => r.wasTouches));
+    console.log(
+      `${position.padEnd(6)} walk touches ${walk.toFixed(3)}  ` +
+      `his points average as a stand-in ${flat.toFixed(3)}`,
+    );
   }
 } else {
   const collected: PlayerWeek[] = [];
