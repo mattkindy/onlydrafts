@@ -19,7 +19,9 @@ import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.j
 import { normalizeName } from "../src/data/names.js";
 import { parseCsv } from "../src/data/csv.js";
 import { buildWorld } from "../src/features/playedWorld.js";
-import { walkWeek, WEEKLY_WALK_SHARE } from "../src/features/walkWeek.js";
+import {
+  walkWeek, WEEKLY_WALK_SHARE, DEALT_WIDER,
+} from "../src/features/walkWeek.js";
 import { kickerParts, BANDS } from "../src/features/kickerFromWalk.js";
 import { kickerSeason, type Fixture } from "../src/features/kickerSeason.js";
 import { fitClimate } from "../src/features/climate.js";
@@ -780,22 +782,19 @@ async function main(): Promise<void> {
    * same engine that made his projection. The role simulation stays
    * for the men the walk never played.
    */
+  const dealtGames = new Map<string, number[]>();
+
   try {
     const keptGames = JSON.parse(await readFile(
       join(import.meta.dirname, "..", "data", "kept", `played-${season}.json`),
       "utf8",
     )) as { samples?: [string, number[]][] };
     let fromWalk = 0;
-    /**
-     * The walk deals every week from one world, so its games vary
-     * less than a season's weeks, which also carry role changes and
-     * hurt teammates. Stretched 1.3 around the middle, its 80% band
-     * covers 79.3% of 2024's played weeks and 81.3% of 2025's,
-     * measured in scripts/walkBandEval.ts.
-     */
-    const WIDER = 1.3;
+    const WIDER = DEALT_WIDER;
 
     for (const [playerId, his] of keptGames.samples ?? []) {
+      dealtGames.set(playerId, his);
+
       if (his.length < 40) {
         continue;
       }
@@ -913,6 +912,7 @@ async function main(): Promise<void> {
     2000,
     seededRng(17),
     world.seasonNoise,
+    dealtGames,
   );
   const simById = new Map(sims.map((s) => [s.playerId, s]));
 
