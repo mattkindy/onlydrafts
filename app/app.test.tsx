@@ -287,11 +287,12 @@ describe("the line on the card adds up", () => {
         .filter((p) => p.projected);
 
       for (const p of men.slice(0, 40)) {
-        // the card's number is his line scored by his league, and
-        // nothing else. It used to be whatever the value curve said at
-        // his rank, which printed 18 for a man the league scores at 22.9
-        expect(Math.abs(payFor(p.projected!, at(rec)) - (p.ppg ?? 0)), p.name)
-          .toBeLessThan(0.06);
+        // the number is the line the card shows scored by his league,
+        // not whatever the value curve said at his rank
+        expect(
+          Math.abs(payFor(p.simulated ?? p.projected!, at(rec)) - (p.ppg ?? 0)),
+          p.name,
+        ).toBeLessThan(0.06);
       }
     }
   });
@@ -329,8 +330,9 @@ describe("the line on the card adds up", () => {
       // what a reader works out from the line on his card, scaled the
       // way the card scales it
       const { movedBy } = await import("./lib/statLine.ts");
+      const shown = p.simulated ?? p.projected!;
       const scaled = Object.fromEntries(
-        Object.entries(p.projected!).map(([k, v]) => [k, v * movedBy(p)]),
+        Object.entries(shown).map(([k, v]) => [k, v * movedBy(p)]),
       );
       // the card shows a season, so a reader divides by the games shown
       // beside it to get back to the points a game

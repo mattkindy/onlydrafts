@@ -44,6 +44,8 @@ export interface Player {
    * projection do.
    */
   ownVor?: number;
+  /** the regression's game on its own, one voice of the blend */
+  regressionPpg?: number;
   rank?: number;
   adpRank?: number;
   ownPpg?: number;
@@ -127,18 +129,19 @@ export function payFor(parts: Parts, pays: Pays): number {
 }
 
 /**
- * What he scores in a game here.
- *
- * The regression's own projection, since the spread of his weeks was
- * worked out around it. The played out games answer for anyone it
- * never saw, which is mostly kickers and defences.
+ * What he scores in a game here. The walk's line leads wherever it
+ * played the man, and the regression covers the men it never saw.
  */
 export function scoredHere(p: Player, pays: Pays): number {
+  if (p.simulated) {
+    return payFor(p.simulated, pays);
+  }
+
   if (p.projected) {
     return payFor(p.projected, pays);
   }
 
-  return p.simulated ? payFor(p.simulated, pays) : (p.ppg ?? 0);
+  return p.ppg ?? 0;
 }
 
 export interface Lineup {

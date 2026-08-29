@@ -96,6 +96,11 @@ export function rescore(players: Player[], league: League): Player[] {
       ...(market ? { adp: market.adp, adpLow: market.low, adpHigh: market.high } : {}),
       ppg,
       ownPpg: ppg,
+      // the regression's own game, kept apart so its seat in the blend
+      // stays its own voice now that ppg leads with the walk
+      regressionPpg: p.projected
+        ? Number(payFor(p.projected, pays).toFixed(1))
+        : ppg,
     };
   });
 
@@ -121,7 +126,10 @@ export function rescore(players: Player[], league: League): Player[] {
   }
 
   const onTheCurve = men.filter((p) => !OWN_ORDER.has(p.position));
-  const modelAt = placesBy(onTheCurve, (p) => p.vor);
+  const regressionBar = lastStarter(men, started, (p) => p.regressionPpg);
+  const modelAt = placesBy(onTheCurve, (p) =>
+    (p.games ?? 17) *
+      ((p.regressionPpg ?? 0) - (regressionBar[p.position] ?? 0)));
   const shareAt = placesBy(onTheCurve, (p) => p.touches);
   const adpAt = placesBy(onTheCurve, (p) => (p.adp == null ? null : -p.adp));
   /**
