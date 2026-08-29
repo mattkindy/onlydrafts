@@ -10,16 +10,31 @@ import { normalizeName, keep } from "./store.ts";
 import { providerOf, type League } from "./providers.ts";
 import type { DraftNow, Pick } from "../views/Draft.tsx";
 
-/** how many picks until it comes back round to you */
-function picksUntil(mySlot: number, overall: number, teams: number, rounds: number) {
+/**
+ * How many picks are still to be made before yours. A keeper draft
+ * starts with slots already filled all over the board, so both your
+ * next turn and the count skip anything already taken.
+ */
+function picksUntil(
+  mySlot: number, overall: number, teams: number, rounds: number,
+  filled: Set<number>,
+) {
+  let toCome = 0;
+
   for (let n = overall; n <= teams * rounds; n++) {
+    if (filled.has(n)) {
+      continue;
+    }
+
     const round = Math.ceil(n / teams);
     const inRound = n - (round - 1) * teams;
     const slot = round % 2 === 1 ? inRound : teams - inRound + 1;
 
     if (slot === mySlot) {
-      return n - overall;
+      return toCome;
     }
+
+    toCome++;
   }
 
   return null;
@@ -130,7 +145,20 @@ export async function draftNow(options: Options): Promise<DraftNow> {
   state.pickCount = picks.length;
   state.status = draft.status;
 
-  const overall = picks.length + 1;
+  /**
+   * The next pick is the first empty slot, not one past the count.
+   * Keepers land all over the board before anyone drafts, so counting
+   * picks said the draft was thirty picks in while everyone waited on
+   * pick one.
+   */
+  const filled = new Set(picks.map((p) => p.pick_no));
+  let overall = 1;
+
+  while (filled.has(overall)) {
+    overall++;
+  }
+
+  state.filled = [...filled];
   const round = Math.ceil(overall / teams);
   const inRound = overall - (round - 1) * teams;
   const slot = round % 2 === 1 ? inRound : teams - inRound + 1;
@@ -144,7 +172,7 @@ export async function draftNow(options: Options): Promise<DraftNow> {
     overall,
     who: league.members[userAt[slot] ?? ""] ?? "slot " + slot,
     mine: mySlot === slot,
-    untilMine: mySlot ? picksUntil(mySlot, overall, teams, rounds) : null,
+    untilMine: mySlot ? picksUntil(mySlot, overall, teams, rounds, filled) : null,
   };
 
   keep("draftState", {

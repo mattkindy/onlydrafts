@@ -54,12 +54,14 @@ export interface BoardLean {
 
 /**
  * Swept on a grid rather than fitted, and taken from the middle of the
- * plateau rather than its highest cell. The walk's seat came from its
- * own sweep: fifteen percent improves the blend on both targets and
- * more starts to cost.
+ * plateau rather than its highest cell. The walk started at fifteen
+ * percent; after the fourth quarter, red zone and recency work its
+ * sweep moved: thirty percent wins season points, value over
+ * replacement and the first 72 and 120 picks, and costs half a point
+ * on the first 36 in one test season.
  */
 export const BOARD_LEAN: BoardLean = {
-  parts: 0.106, model: 0, share: 0.319, adp: 0.425, walk: 0.15,
+  parts: 0.087, model: 0, share: 0.263, adp: 0.35, walk: 0.3,
   setBack: 100,
 };
 
