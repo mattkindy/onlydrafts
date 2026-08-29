@@ -28,6 +28,7 @@ import {
 import { fitFourthDown, climbTo, type FourthRow } from "./fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "./fitPlayClock.js";
 import { fitTargetDepth } from "./targetDepth.js";
+import { buildPlayLevel } from "./playLevel.js";
 import {
   experienceBefore, pastShares, projectSplitShares, SHARING_POSITIONS,
 } from "./projectedShares.js";
@@ -335,6 +336,19 @@ export async function buildWorld(
     readsTheScript: !process.env["NO_SCRIPT"],
   }, {
     split, pairing: pairing.bend, counted,
+    /**
+     * One model over everybody on the play, in place of the chain of
+     * multipliers. Each link of that chain was fitted alone and can
+     * only see its own term, so none of them can say that a defence
+     * costs a good receiver more than a poor one. Behind a switch
+     * until the benches say what it is worth.
+     */
+    playLevel: process.env["LEVEL"]
+      ? await buildPlayLevel({
+          learn: LEARN.slice(-3),
+          scoreOn: SCORE_ON,
+        })
+      : undefined,
     depth: process.env["NO_DEPTH"] ? undefined : depth,
     plays: process.env["NO_SAMPLE"]
       ? undefined : storePlays(learnRows as PlayRow[]),
