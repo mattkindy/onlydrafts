@@ -74,6 +74,7 @@ async function main(): Promise<void> {
 
   const total = new Map<string, number>();
   const games = new Map<string, number>();
+  const samples = new Map<string, number[]>();
   /**
    * What each man actually did, before anybody scores it.
    *
@@ -278,10 +279,16 @@ async function main(): Promise<void> {
       }, rng);
 
       for (const [playerId, line] of linesFrom(game, [home, away])) {
+        const pts = fantasyPoints(line, RULES);
         meanFor.set(
           playerId,
-          (meanFor.get(playerId) ?? 0) + fantasyPoints(line, RULES) / RUNS,
+          (meanFor.get(playerId) ?? 0) + pts / RUNS,
         );
+        // every game he was dealt, kept whole, so his spread on the
+        // card can be his own rather than a pooled band's
+        const his = samples.get(playerId) ?? [];
+        his.push(Math.round(pts * 10) / 10);
+        samples.set(playerId, his);
 
         const made = madeThisGame.get(playerId) ?? blankTotals();
 
@@ -656,6 +663,7 @@ async function main(): Promise<void> {
       runs: RUNS, weeks: gamesEachSideGets(schedule),
       total: [...total.entries()], games: [...games.entries()],
       made: [...madeOf.entries()],
+      samples: [...samples.entries()],
       kicks: [...kicksFor.entries()].map(([team, its]) => [team, {
         // the attempts as distances, kept whole so a kicker's own
         // accuracy can be applied band by band
