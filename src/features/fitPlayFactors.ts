@@ -1086,6 +1086,7 @@ export function fitPlayFactors(
     return found;
   };
 
+  const crossRemembered = new Map<string, number>();
   const cellsRemembered = new Map<string, Counted[]>();
   const atCells = (state: PlayState, least: number, call?: Call) => {
     makeRoom(cellsRemembered);
@@ -1317,10 +1318,15 @@ export function fitPlayFactors(
             (state.yardline <= NEAR_GOAL ||
               plays.yardline[i]! >= state.yardline - FIELD_CLOSER);
           let count = 0;
+          let crossed = 0;
 
           for (const i of his) {
             if (wanted(i)) {
               count++;
+
+              if (plays.yards[i]! >= state.yardline) {
+                crossed++;
+              }
             }
           }
 
@@ -1335,6 +1341,24 @@ export function fitPlayFactors(
             if (wanted(i) && pick-- === 0) {
               at = i;
               break;
+            }
+          }
+
+          // his sample crosses the goal more often than plays from
+          // this state score, so the surplus is put down at the one
+          if (state.yardline <= 20 && plays.yards[at]! >= state.yardline &&
+              crossed > 0) {
+            const counted = atCounts(state, settings.leastForSide, call);
+            const scoreRate = counted.plays === 0
+              ? crossed / count
+              : counted.scores / counted.plays;
+            const keeps = Math.min(1, scoreRate / (crossed / count));
+
+            if (uniform() >= keeps) {
+              return {
+                yards: Math.max(0, state.yardline - 1),
+                caught: plays.caught[at] === 1,
+              };
             }
           }
 
@@ -1655,6 +1679,34 @@ export function fitPlayFactors(
 
       const cell = atCounts(state, settings.least, call);
       return cell.plays === 0 ? 0 : cell.scores / cell.plays;
+    },
+    crossedStands: (state, call, uniform) => {
+      makeRoom(crossRemembered);
+      const key = `${call}|${stateKey(
+        state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
+      )}`;
+      let keeps = crossRemembered.get(key);
+
+      if (keeps === undefined) {
+        const cell = at(state, settings.least, call);
+        let crossed = 0;
+
+        for (const gained of cell.yards) {
+          if (gained >= state.yardline) {
+            crossed++;
+          }
+        }
+
+        const crossShare = crossed / Math.max(1, cell.yards.length);
+        const counted = atCounts(state, settings.leastForSide, call);
+        const scoreRate = counted.plays === 0
+          ? crossShare
+          : counted.scores / counted.plays;
+        keeps = crossShare > 0 ? Math.min(1, scoreRate / crossShare) : 1;
+        crossRemembered.set(key, keeps);
+      }
+
+      return uniform() < keeps;
     },
   };
 }

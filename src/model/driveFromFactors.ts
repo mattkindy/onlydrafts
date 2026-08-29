@@ -369,10 +369,23 @@ export function walkDrive(
       : Math.round(factors.gains(state, call, player, uniform, sides));
     const lifted = (sides.lift ?? 1) *
       (call === "pass" ? sides.passLift ?? 1 : 1);
-    const gained = Math.min(
+    let gained = Math.min(
       state.yardline,
       lifted !== 1 && drawn > 0 ? Math.round(drawn * lifted) : drawn,
     );
+
+    /**
+     * A draw that crossed the goal is asked to stand against how often
+     * plays from this state really score. Near the goal the draws come
+     * from spots with more room and get capped, so they cross more
+     * often than sides score; the surplus is put down at the one.
+     */
+    if (!own && gained >= state.yardline && state.yardline <= 20 &&
+        factors.crossedStands &&
+        !factors.crossedStands(state, call, uniform)) {
+      gained = state.yardline - 1;
+    }
+
     const scored = state.yardline - gained <= 0;
     const caught = own
       ? own.caught
