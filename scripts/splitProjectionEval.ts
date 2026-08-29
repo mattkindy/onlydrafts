@@ -56,10 +56,15 @@ for (const season of SEASONS) {
     (s, team) => teamPlays.get(`${s}|${team}`) ?? 0,
   );
   const market = new Map<string, { carry: number; target: number }>();
+  const priced = new Map<string, number>();
 
   for (const row of week1) {
     const at = adp.get(`${normalizeName(row.name)}|${row.rawPosition}`);
     const implied = at ? curve.impliedShare(row.rawPosition, at.adp) : undefined;
+
+    if (at) {
+      priced.set(row.playerId, at.adp);
+    }
 
     if (implied) {
       market.set(row.playerId, implied);
@@ -68,6 +73,7 @@ for (const season of SEASONS) {
 
   const split = projectSplitShares({
     market,
+    priced,
     season,
     roster,
     past: await pastShares(

@@ -57,6 +57,8 @@ export interface ShareSettings {
    * the board's blend, not in here.
    */
   adpLean?: number;
+  /** how hard the room's draft order concentrates its division */
+  roomOrder?: number;
   /**
    * Whether the group divides its own team's budget or the league's.
    * A passing offence has more to give its receivers, which is worth
@@ -72,6 +74,13 @@ export const SHARE_DEFAULTS: ShareSettings = {
   weights: [1, 0.55, 0.3],
   ownBudget: true,
   byAge: true,
+  /**
+   * Swept at 0.15, 0.3 and 0.5 on the split bench: 0.3 wins the role
+   * ordering in all three test seasons (.771, .783, .794 from .749,
+   * .754, .773) and the hurt star class most of all, and 0.5 starts
+   * giving it back.
+   */
+  roomOrder: 0.3,
 };
 
 const middle = (values: number[]) =>
@@ -250,6 +259,8 @@ export interface ShareRequest {
    * as whatever partOf reads, for the lean toward it.
    */
   implied?: Map<string, number>;
+  /** each priced man's August draft position, for the room's order */
+  priced?: Map<string, number>;
   settings?: ShareSettings;
 }
 
@@ -385,6 +396,30 @@ export function projectShares(
             : own,
         };
       });
+
+      /**
+       * The market settles the room's pecking order where it has one.
+       * A star back from a lost season and the men who covered for
+       * him hold near even claims in the counts, and every August
+       * draft room can tell them apart: eighth overall and pick 149.
+       * Relative to the room's best price only, so a room the market
+       * never priced is left alone.
+       */
+      const order =
+        Number(process.env["ROOM_ORDER"] ?? settings.roomOrder ?? 0);
+      const priced = request.priced;
+
+      if (order > 0 && priced) {
+        const best = Math.min(...group
+          .map((man) => priced.get(man.playerId) ?? Infinity));
+
+        if (Number.isFinite(best)) {
+          for (const o of owns) {
+            const his = priced.get(o.playerId) ?? 250;
+            o.standing *= Math.pow(best / his, order);
+          }
+        }
+      }
 
       const shares = divideAmong(owns, total, settings.competition);
 
