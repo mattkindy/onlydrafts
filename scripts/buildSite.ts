@@ -18,6 +18,8 @@ import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
 import { parseCsv } from "../src/data/csv.js";
+import { buildWorld } from "../src/features/playedWorld.js";
+import { walkWeek, WEEKLY_WALK_SHARE } from "../src/features/walkWeek.js";
 import { kickerParts, BANDS } from "../src/features/kickerFromWalk.js";
 import { kickerSeason, type Fixture } from "../src/features/kickerSeason.js";
 import { fitClimate } from "../src/features/climate.js";
@@ -390,8 +392,31 @@ async function main(): Promise<void> {
 
   const index: { season: number; week: number }[] = [];
 
+  const fixtures = weeks.length
+    ? parseCsv(await readFile(
+        join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"))
+    : [];
+  /** each walked week's points per man, for the weekly mix below */
+  const weekWalked = new Map<number, Map<string, number>>();
+
   for (const week of weeks) {
-    const rows = (await weeklyProspectiveForWeek(season, week, games))
+    /**
+     * The week played out by the walk, next to the ridge's view of the
+     * same men. Mixed as places the two order a week better than
+     * either alone, .414 pooled against .330 and .401 on 2024 and
+     * 2025, so the slate is sorted by the mix and shows both numbers.
+     */
+    const walkPositions = new Map<string, string>();
+
+    for (const s of await loadPlayerStats(season - 1)) {
+      walkPositions.set(s.playerId, s.position);
+    }
+
+    const walkWorld = await buildWorld(season, week, true, walkPositions);
+    const walked = walkWeek(walkWorld, season, week, fixtures, scoring(), 60);
+    weekWalked.set(week, walked.points);
+    console.log(`  the walk played ${walked.played} fixtures of week ${week}`);
+    const slate = (await weeklyProspectiveForWeek(season, week, games))
       .map((e) => {
         const predicted = predictRidge(weights, weeklyRow(e));
         return {
@@ -401,6 +426,9 @@ async function main(): Promise<void> {
           team: e.teamId,
           opponent: (e.home ? "v " : "@ ") + e.opponent,
           predicted: Number(predicted.toFixed(1)),
+          walk: walked.points.has(e.playerId)
+            ? Number(walked.points.get(e.playerId)!.toFixed(1))
+            : null,
           floor: Number(
             outcomeQuantile(residuals, e.position, predicted, 0.1).toFixed(1),
           ),
@@ -409,8 +437,22 @@ async function main(): Promise<void> {
           ),
           snaps: Math.round(e.snapRecent * 100),
         };
-      })
-      .sort((a, b) => b.predicted - a.predicted);
+      });
+
+    /**
+     * A man the walk never saw keeps the ridge's number whole rather
+     * than being marked down for being missing.
+     */
+    const rows = slate.map((r) => {
+      const share = WEEKLY_WALK_SHARE[r.position] ?? 0.25;
+
+      return {
+        ...r,
+        mixed: r.walk === null
+          ? r.predicted
+          : Number((share * r.walk + (1 - share) * r.predicted).toFixed(1)),
+      };
+    }).sort((a, b) => b.mixed - a.mixed);
 
     await writeFile(
       join(DOCS, "data", `slate-${season}-${week}.json`),
@@ -789,10 +831,26 @@ async function main(): Promise<void> {
     const lifts = sharedOut(his.map((w) =>
       settingLift(p.position, settingOf(p.teamId, w.week))));
 
-    weeklyByPlayer.set(p.playerId, anchorToSeason(
-      his.map((w, i) => ({ ...w, points: w.points * lifts[i]! })),
-      p.projectedPpg,
-    ));
+    /**
+     * The weeks the walk has played mix its number in, at the shares
+     * the weekly bench settled: even at running back, a quarter
+     * elsewhere. Mixed as views of the same week the two order it
+     * better than either alone, .414 pooled against .330 and .401.
+     */
+    const share = WEEKLY_WALK_SHARE[p.position] ?? 0.25;
+    const mixed = his.map((w, i) => {
+      const ridgePoints = w.points * lifts[i]!;
+      const walkPoints = weekWalked.get(w.week)?.get(p.playerId);
+
+      return {
+        ...w,
+        points: walkPoints === undefined
+          ? ridgePoints
+          : share * walkPoints + (1 - share) * ridgePoints,
+      };
+    });
+
+    weeklyByPlayer.set(p.playerId, anchorToSeason(mixed, p.projectedPpg));
   }
 
   console.log("simulating seasons for the board...");

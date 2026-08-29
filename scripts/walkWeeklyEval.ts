@@ -13,8 +13,7 @@
  */
 
 import { buildWorld } from "../src/features/playedWorld.js";
-import { sizeOf } from "../src/features/gameSize.js";
-import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
+import { walkWeek } from "../src/features/walkWeek.js";
 import {
   weeklyExamplesForSeason, weeklyProspectiveForWeek, weeklyRow,
 } from "../src/features/weeklyModel.js";
@@ -22,7 +21,6 @@ import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import { loadPlayerStats, loadGames } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { parseCsv } from "../src/data/csv.js";
-import { seededRng } from "../src/sim/rng.js";
 import { spearman } from "../src/backtest/metrics.js";
 import { acrossCores, myShare } from "../src/sim/acrossCores.js";
 import { readFile } from "node:fs/promises";
@@ -114,76 +112,11 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
     ridgeSays.set(e.playerId, predictRidge(weights, weeklyRow(e)));
   }
 
-  const walked = new Map<string, number>();
-  const walkedTouches = new Map<string, number>();
-  const walkedTds = new Map<string, number>();
-  let played = 0;
-
-  for (const r of games) {
-    if (Number(r["season"]) !== season || Number(r["week"]) !== week ||
-        r["game_type"] !== "REG") {
-      continue;
-    }
-
-    const home = world.sideFor(r["home_team"]!) as Side | null;
-    const away = world.sideFor(r["away_team"]!) as Side | null;
-
-    if (!home || !away) {
-      continue;
-    }
-
-    played++;
-    /**
-     * The market sizes the afternoon and the walk splits it, which is
-     * how the week report already serves these numbers: the walk
-     * ranks a team's points at about .12 where the line ranks it at
-     * .39, so a projection without the bend is not the one shown.
-     */
-    const total = Number(r["total_line"]);
-    const spread = Number(r["spread_line"]);
-    const bendFor = new Map<string, number>();
-
-    if (Number.isFinite(total) && Number.isFinite(spread)) {
-      for (const id of home.among) {
-        bendFor.set(id, sizeOf({ total, favouredBy: spread }));
-      }
-
-      for (const id of away.among) {
-        bendFor.set(id, sizeOf({ total, favouredBy: -spread }));
-      }
-    }
-
-    for (let run = 0; run < RUNS; run++) {
-      const rng = seededRng(
-        season * 1000 + week * 37 +
-        (r["home_team"]!.charCodeAt(0) * 131 + r["away_team"]!.charCodeAt(1)) +
-        run * 7919,
-      );
-      const game = playGame(home, away, {
-        rules: { ...world.rules, kickSucceeds: world.kicking.kickSucceeds },
-        fourth: world.fourth,
-        clock: { isLast: world.kicking.isLast, lastLength: world.kicking.lastLength },
-        ticking: world.ticking, season, week,
-      }, rng);
-
-      for (const [id, line] of linesFrom(game, [home, away])) {
-        walked.set(
-          id,
-          (walked.get(id) ?? 0) +
-            (bendFor.get(id) ?? 1) * fantasyPoints(line, RULES) / RUNS,
-        );
-        walkedTouches.set(
-          id,
-          (walkedTouches.get(id) ?? 0) +
-            ((line.carries ?? 0) + (line.targets ?? 0)) / RUNS,
-        );
-        walkedTds.set(
-          id,
-          (walkedTds.get(id) ?? 0) + (line.rushTd + line.recTd) / RUNS,
-        );
-      }
-    }
-  }
+  const walkedWeek = walkWeek(world, season, week, games, RULES, RUNS);
+  const walked = walkedWeek.points;
+  const walkedTouches = walkedWeek.touches;
+  const walkedTds = walkedWeek.tds;
+  const played = walkedWeek.played;
 
   const out: PlayerWeek[] = [];
 
