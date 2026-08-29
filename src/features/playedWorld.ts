@@ -237,6 +237,14 @@ export async function buildWorld(
      * is where the season-to-date baseline started beating the frozen
      * walk on its own.
      */
+    /**
+     * A week counts for less the further back it is, when asked to.
+     * Measured worse at 0.75 on the weekly bench, at every position,
+     * with or without more trust in the season: the ridge's love of
+     * recent usage does not transfer here, and emphasizing the last
+     * fortnight only adds noise to the split. Stays at 1.
+     */
+    const WEEK_FADE = Number(process.env["WEEK_FADE"] ?? 1);
     const soFar = new Map<string, { carries: number; targets: number }>();
     let teamWeeks = 0;
     const weeksSeen = new Set<number>();
@@ -252,9 +260,11 @@ export async function buildWorld(
         continue;
       }
 
+      const back = onlyWeek - 1 - Number(r["week"]);
+      const counts = Math.pow(WEEK_FADE, Math.max(0, back));
       const own = soFar.get(r["player"]!) ?? { carries: 0, targets: 0 };
-      if (r["playType"] === "run") own.carries++;
-      else own.targets++;
+      if (r["playType"] === "run") own.carries += counts;
+      else own.targets += counts;
       soFar.set(r["player"]!, own);
     }
 
@@ -272,13 +282,18 @@ export async function buildWorld(
 
     const perWeekPlays = Math.max(30, playsSoFar / (32 * Math.max(1, teamWeeks)));
     const trust = teamWeeks / (teamWeeks + Number(process.env["TRUST_AT"] ?? 4));
+    // the same fade the counting used, so a share is counts over the
+    // weeks as they were weighted rather than over the calendar
+    const fadedWeeks = [...weeksSeen]
+      .map((w) => Math.pow(WEEK_FADE, Math.max(0, onlyWeek - 1 - w)))
+      .reduce((a, b) => a + b, 0);
 
     for (const [playerId, shown] of soFar) {
       const august = split.get(playerId) ?? { carries: 0, targets: 0 };
       split.set(playerId, {
-        carries: trust * (shown.carries / (teamWeeks * perWeekPlays)) +
+        carries: trust * (shown.carries / (fadedWeeks * perWeekPlays)) +
           (1 - trust) * august.carries,
-        targets: trust * (shown.targets / (teamWeeks * perWeekPlays)) +
+        targets: trust * (shown.targets / (fadedWeeks * perWeekPlays)) +
           (1 - trust) * august.targets,
       });
     }
