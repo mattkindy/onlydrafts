@@ -11,6 +11,12 @@ export interface PlayerWeek {
   teamId: string;
   /** same string for both sides of one NFL game */
   gameKey: string;
+  /**
+   * His own week distribution as a quantile, when one engine has dealt
+   * him enough games to have one. Without it the pooled residual bands
+   * for his position and level speak instead.
+   */
+  own?: (q: number) => number;
 }
 
 /** playerId -> a fixed preseason value, for the naive policy */
@@ -86,7 +92,11 @@ export function drawWeekOutcomes(
 
     outcomes.set(
       player.playerId,
-      outcomeQuantile(residuals, player.position, player.predicted, normalCdf(z)),
+      player.own
+        ? player.own(normalCdf(z))
+        : outcomeQuantile(
+            residuals, player.position, player.predicted, normalCdf(z),
+          ),
     );
   }
 

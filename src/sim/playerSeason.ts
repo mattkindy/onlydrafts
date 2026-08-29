@@ -2,6 +2,7 @@ import type { ResidualModel, SeasonNoise } from "../backtest/intervals.js";
 import { sampleSeasonBias } from "../backtest/intervals.js";
 import type { GameRow } from "../data/nflverse.js";
 import { drawWeekOutcomes, type PlayerWeek } from "./season.js";
+import { DEALT_WIDER } from "../features/walkWeek.js";
 
 /** what the season simulator needs to know about one player */
 import type { StatParts } from "../features/seasonSummary.js";
@@ -101,7 +102,31 @@ export function simulatePlayerSeasons(
   sims: number,
   rng: () => number,
   seasonNoise?: SeasonNoise,
+  gameSamples?: Map<string, number[]>,
 ): SeasonProjection[] {
+  /**
+   * Each man's week as his own quantile, from the games the walk
+   * dealt him, stretched the calibrated amount and hung on whatever
+   * the week's prediction says. The pooled residual bands speak for
+   * anyone without enough dealt games.
+   */
+  const ownQuantile = new Map<string, (predicted: number, q: number) => number>();
+
+  for (const [playerId, his] of gameSamples ?? []) {
+    if (his.length < 40) {
+      continue;
+    }
+
+    const sorted = [...his].sort((a, b) => a - b);
+    const at = (q: number) => sorted[Math.floor(q * (sorted.length - 1))]!;
+    // hung on the mean rather than the middle, so a season of draws
+    // adds up to the projection beside it; his games run long to the
+    // right and the middle comes in under the mean
+    const mean = his.reduce((a, b) => a + b, 0) / his.length;
+    ownQuantile.set(playerId, (predicted, q) =>
+      Math.max(0, predicted + (at(q) - mean) * DEALT_WIDER));
+  }
+
   const schedule = new Map<number, Map<string, { opponent: string; gameKey: string }>>();
 
   for (const game of games) {
@@ -167,14 +192,17 @@ export function simulatePlayerSeasons(
         }
 
         gamesPlayed.set(player.playerId, gamesPlayed.get(player.playerId)! + 1);
+        const predicted =
+          player.projectedPpg * oppAdjust(player.position, slot.opponent) +
+          (bias.get(player.playerId) ?? 0);
+        const his = ownQuantile.get(player.playerId);
         active.push({
           playerId: player.playerId,
           position: player.position,
-          predicted:
-            player.projectedPpg * oppAdjust(player.position, slot.opponent) +
-            (bias.get(player.playerId) ?? 0),
+          predicted,
           teamId: player.teamId,
           gameKey: slot.gameKey,
+          own: his ? (q) => his(predicted, q) : undefined,
         });
       }
 
