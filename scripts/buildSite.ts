@@ -1316,11 +1316,13 @@ async function main(): Promise<void> {
   ).catch(() => "");
   const played = playedFile
     ? JSON.parse(playedFile) as {
+        runs?: number;
         total: [string, number][];
         games: [string, number][];
         made?: [string, Record<string, number>][];
+        samples?: [string, number[]][];
       }
-    : { total: [], games: [], made: [] };
+    : { total: [], games: [], made: [], samples: [] };
   const walkSays = new Map<string, number>(played.total);
   const walkGames = new Map<string, number>(played.games);
   const walkMade = new Map<string, Record<string, number>>(played.made ?? []);
@@ -1391,15 +1393,28 @@ async function main(): Promise<void> {
    * one paying nothing, so the parts travel and the page applies its
    * own rules to them.
    */
+  /**
+   * Divided by the games the walk really dealt him, not the fixtures
+   * on the calendar. The absences live inside the season now, so a
+   * calendar divisor diluted a fragile man's game and his expected
+   * games then priced the missing weeks a second time.
+   */
+  const walkSampled = new Map<string, number>(
+    (played.samples ?? []).map(([id, his]) => [id, his.length]),
+  );
+  const passes = Math.max(1, played.runs ?? 20);
+
   for (const p of board) {
     const id = idOf.get(p.key);
     const made = id === undefined ? undefined : walkMade.get(id);
-    const played = id === undefined ? 0 : walkGames.get(id) ?? 0;
+    const dealt = id === undefined
+      ? 0
+      : ((walkSampled.get(id) ?? 0) / passes) || (walkGames.get(id) ?? 0);
 
-    if (made && played > 0) {
+    if (made && dealt > 0) {
       (p as unknown as { simulated: Record<string, number> }).simulated =
         Object.fromEntries(Object.entries(made)
-          .map(([part, n]) => [part, Number((n / played).toFixed(2))]));
+          .map(([part, n]) => [part, Number((n / dealt).toFixed(2))]));
     }
   }
 

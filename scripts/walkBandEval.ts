@@ -84,6 +84,6 @@ const coverage = (wider: number) => {
   );
 };
 
-for (const wider of [1, 1.15, 1.3, 1.45, 1.6]) {
+for (const wider of [1, 1.1, 1.15, 1.2, 1.3]) {
   coverage(wider);
 }
