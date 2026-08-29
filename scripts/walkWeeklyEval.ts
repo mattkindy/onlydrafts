@@ -1,0 +1,187 @@
+/**
+ * Can the walk project a week of player scoring?
+ *
+ * The weekly view is a ridge over recent form and the matchup, and the
+ * walk has never been asked the same question. Each tested week
+ * rebuilds the world as it looked that Tuesday, plays that week's
+ * fixtures, and averages each man's box scores into a projection. The
+ * score is Spearman against the points really scored that week, pooled
+ * across weeks, next to the answer "every week is his average so far",
+ * which is the same yardstick the weekly ridge was proven against.
+ *
+ * Run: npx tsx scripts/walkWeeklyEval.ts [seasons, comma separated]
+ */
+
+import { buildWorld } from "../src/features/playedWorld.js";
+import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
+import { loadPlayerStats } from "../src/data/nflverse.js";
+import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
+import { parseCsv } from "../src/data/csv.js";
+import { seededRng } from "../src/sim/rng.js";
+import { spearman } from "../src/backtest/metrics.js";
+import { acrossCores, myShare } from "../src/sim/acrossCores.js";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+const SEASONS = (process.env["SEASONS_ARG"] ?? process.argv[2] ?? "2024,2025")
+  .split(",").map(Number);
+const WEEKS = [3, 5, 7, 9, 11, 13, 15, 17];
+const RUNS = Number(process.env["RUNS"] ?? 10);
+const RULES = presets.ppr;
+const POSITIONS = ["QB", "RB", "WR", "TE"];
+
+interface PlayerWeek {
+  walk: number;
+  average: number;
+  was: number;
+  position: string;
+}
+
+const games = parseCsv(await readFile(
+  join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
+
+const asShare = process.env["SHARE"] !== undefined;
+const jobs = SEASONS.flatMap((season) => WEEKS.map((week) => ({ season, week })));
+const mine = new Set(myShare(jobs.map((_, i) => i)));
+
+async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
+  const positions = new Map<string, string>();
+  const weekly = new Map<string, { week: number; points: number }[]>();
+
+  for (const s of await loadPlayerStats(season)) {
+    positions.set(s.playerId, s.position);
+    weekly.set(s.playerId, [
+      ...(weekly.get(s.playerId) ?? []),
+      { week: s.week, points: fantasyPoints(s.statLine, RULES) },
+    ]);
+  }
+
+  const world = await buildWorld(season, week, true, positions);
+  const walked = new Map<string, number>();
+  let played = 0;
+
+  for (const r of games) {
+    if (Number(r["season"]) !== season || Number(r["week"]) !== week ||
+        r["game_type"] !== "REG") {
+      continue;
+    }
+
+    const home = world.sideFor(r["home_team"]!) as Side | null;
+    const away = world.sideFor(r["away_team"]!) as Side | null;
+
+    if (!home || !away) {
+      continue;
+    }
+
+    played++;
+
+    for (let run = 0; run < RUNS; run++) {
+      const rng = seededRng(
+        season * 1000 + week * 37 +
+        (r["home_team"]!.charCodeAt(0) * 131 + r["away_team"]!.charCodeAt(1)) +
+        run * 7919,
+      );
+      const game = playGame(home, away, {
+        rules: { ...world.rules, kickSucceeds: world.kicking.kickSucceeds },
+        fourth: world.fourth,
+        clock: { isLast: world.kicking.isLast, lastLength: world.kicking.lastLength },
+        ticking: world.ticking, season, week,
+      }, rng);
+
+      for (const [id, line] of linesFrom(game, [home, away])) {
+        walked.set(
+          id,
+          (walked.get(id) ?? 0) + fantasyPoints(line, RULES) / RUNS,
+        );
+      }
+    }
+  }
+
+  const out: PlayerWeek[] = [];
+
+  for (const [id, mean] of walked) {
+    const position = positions.get(id) ?? "";
+
+    if (!POSITIONS.includes(position)) {
+      continue;
+    }
+
+    const his = weekly.get(id) ?? [];
+    const now = his.find((w) => w.week === week);
+    const before = his.filter((w) => w.week < week);
+
+    if (!now || before.length < 2) {
+      continue;
+    }
+
+    out.push({
+      walk: mean,
+      average: before.reduce((s, w) => s + w.points, 0) / before.length,
+      was: now.points,
+      position,
+    });
+  }
+
+  if (!asShare) {
+    console.error(`  ${season} week ${week}: ${played} fixtures, ${out.length} men`);
+  }
+
+  return out;
+}
+
+if (!asShare) {
+  const printed = await acrossCores({
+    script: import.meta.filename,
+    env: { RUNS: String(RUNS), SEASONS_ARG: SEASONS.join(",") },
+  });
+  const pooled: PlayerWeek[] = [];
+
+  for (const lineOut of printed) {
+    pooled.push(...(JSON.parse(lineOut) as PlayerWeek[]));
+  }
+
+  const score = (rows: PlayerWeek[], label: string) => {
+    if (rows.length < 20) {
+      return;
+    }
+
+    const walk = spearman(rows.map((r) => r.walk), rows.map((r) => r.was));
+    const avg = spearman(rows.map((r) => r.average), rows.map((r) => r.was));
+    console.log(
+      `${label.padEnd(6)} ${String(rows.length).padStart(5)} weeks of a man: ` +
+      `walk ${walk.toFixed(3)}  his average ${avg.toFixed(3)}`,
+    );
+  };
+
+  score(pooled, "all");
+
+  for (const position of POSITIONS) {
+    score(pooled.filter((r) => r.position === position), position);
+  }
+
+  /**
+   * The men a lineup decision is about. Sorting starters above men who
+   * barely play is easy and flatters every column, so the hard
+   * question is asked apart: among men averaging double digits, who
+   * has the better week?
+   */
+  const starters = pooled.filter((r) => r.average >= 10);
+  console.log("men averaging ten or more:");
+  score(starters, "all");
+
+  for (const position of POSITIONS) {
+    score(starters.filter((r) => r.position === position), position);
+  }
+} else {
+  const collected: PlayerWeek[] = [];
+
+  for (let i = 0; i < jobs.length; i++) {
+    if (!mine.has(i)) {
+      continue;
+    }
+
+    collected.push(...await oneWeek(jobs[i]!.season, jobs[i]!.week));
+  }
+
+  console.log(JSON.stringify(collected));
+}
