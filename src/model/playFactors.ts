@@ -167,11 +167,18 @@ export function wideningPacked(toGo: number, yardline: number): Int32Array {
  * less than the down and the distance, and a fine cut on everything at
  * once leaves nothing in any cell.
  */
+/**
+ * The cut at the fourth quarter matters most: a side up two scores
+ * plays on in the second and third and shuts it down in the fourth,
+ * and one band across all three mixed the two, which is why the walk's
+ * leaders kept scoring at 25% a drive where played ones manage 20%.
+ */
 export const timeBand = (secondsLeft: number) =>
   secondsLeft > 1500 ? 0
-    : secondsLeft > 300 ? 1
-    : secondsLeft > 120 ? 2
-    : 3;
+    : secondsLeft > 900 ? 1
+    : secondsLeft > 300 ? 2
+    : secondsLeft > 120 ? 3
+    : 4;
 
 /**
  * The score, cut where the football changes rather than at round

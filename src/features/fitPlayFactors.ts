@@ -758,8 +758,10 @@ export function fitPlayFactors(
 
     return sum;
   };
-  const sideRemembered =
-    new Map<string, { plays: number; runs: number; yardsSum: number }>();
+  const sideRemembered = new Map<string, {
+    plays: number; runs: number; yardsSum: number;
+    leaguePlays: number; leagueRuns: number;
+  }>();
   const forgetsAt = () => makeRoom(sideRemembered);
   const forSide = (
     from: Map<string, Counted>, who: string, state: PlayState,
@@ -782,10 +784,18 @@ export function fitPlayFactors(
      * two callers want a rate and an average, so the numbers travel
      * and the arrays stay where they are.
      */
-    let found = { plays: 0, runs: 0, yardsSum: 0 };
+    /**
+     * The league is summed over the same cells the side's own plays
+     * came from. A side rarely has sixty plays at one score and clock,
+     * so its pool widens past them, and a rate read there can only be
+     * compared against the league read there too. Comparing it against
+     * the league's tight pool mixed the any-score team mix into the
+     * situation and pulled every extreme spot toward the middle.
+     */
+    let found = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
 
     for (const looseness of [0, 1, 2]) {
-      const pooled = { plays: 0, runs: 0, yardsSum: 0 };
+      const pooled = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
 
       for (const packed of wideningPacked(state.toGo, state.yardline)) {
         if (Math.floor(packed / 100000) !== looseness) {
@@ -805,6 +815,12 @@ export function fitPlayFactors(
           pooled.plays += cell.plays;
           pooled.runs += cell.runs;
           pooled.yardsSum += summedOnce(cell);
+          const everybody = cells.get(call ? `${call}|${cellKey}` : cellKey);
+
+          if (everybody) {
+            pooled.leaguePlays += everybody.plays;
+            pooled.leagueRuns += everybody.runs;
+          }
         }
 
         if (pooled.plays >= least) {
@@ -858,6 +874,13 @@ export function fitPlayFactors(
       cache.delete(key);
     }
   };
+  /**
+   * How far a pool had to widen before it filled. A pool that only
+   * filled with the score let go has lost the game situation, and the
+   * caller that draws gains from it puts the situation back as a
+   * ratio.
+   */
+  const settledAt = new WeakMap<Counted, number>();
   const at = (state: PlayState, least: number, call?: Call) => {
     makeRoom(remembered);
     const key = `${call ?? "both"}|${stateKey(
@@ -865,16 +888,12 @@ export function fitPlayFactors(
     )}|${least}`;
     const already = remembered.get(key);
 
-    if (process.env["COUNT_HITS"]) {
-      (globalThis as Record<string, unknown>)[already ? "atHits" : "atMisses"] =
-        Number((globalThis as Record<string, unknown>)[already ? "atHits" : "atMisses"] ?? 0) + 1;
-    }
-
     if (already) {
       return already;
     }
 
     let found = gather(state, least, 0, call);
+    settledAt.set(found, 0);
 
     for (const looseness of [1, 2]) {
       if (found.plays >= least) {
@@ -882,9 +901,119 @@ export function fitPlayFactors(
       }
 
       found = gather(state, least, looseness, call);
+      settledAt.set(found, looseness);
     }
     remembered.set(key, found);
     return found;
+  };
+
+  /**
+   * What this game situation does to a play's yards, against the
+   * any-score pool the draw came from.
+   *
+   * The gains pool needs three hundred plays and almost never finds
+   * them with the score and clock held, so late-game draws come from
+   * the any-score pool and a side up two scores gains like a side
+   * playing level. Really it gains 4.80 a play where the level side
+   * gains 5.41: the leader runs into a set front and takes what is
+   * underneath. A mean over the situation's own cells needs far
+   * fewer plays than a distribution does, so it can keep the score
+   * conditioning where the pool could not.
+   */
+  /** each cell's plays that made nothing, counted once */
+  const cellDry = new WeakMap<Counted, number>();
+  const driedOnce = (cell: Counted) => {
+    const already = cellDry.get(cell);
+
+    if (already !== undefined) {
+      return already;
+    }
+
+    let dry = 0;
+
+    for (const gained of cell.yards) {
+      if (gained <= 0) {
+        dry++;
+      }
+    }
+
+    cellDry.set(cell, dry);
+
+    return dry;
+  };
+  const situationRemembered = new Map<string, { gain: number; dry: number }>();
+  const situationTilt = (
+    state: PlayState, call: Call, poolMean: number, poolDry: number,
+  ) => {
+    makeRoom(situationRemembered);
+    const key = `${call}|${stateKey(
+      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
+    )}`;
+    const already = situationRemembered.get(key);
+
+    if (already !== undefined) {
+      return already;
+    }
+
+    let held = { plays: 0, yardsSum: 0, dry: 0 };
+
+    for (const looseness of [0, 1]) {
+      if (held.plays >= settings.leastForSide) {
+        break;
+      }
+
+      const pooled = { plays: 0, yardsSum: 0, dry: 0 };
+
+      for (const packed of wideningPacked(state.toGo, state.yardline)) {
+        if (Math.floor(packed / 100000) !== looseness) {
+          continue;
+        }
+
+        for (const cellKey of keysAt(
+          state.down, Math.floor(packed / 100) % 1000, packed % 100,
+          state.secondsLeft, state.margin, looseness,
+        )) {
+          const cell = cells.get(`${call}|${cellKey}`);
+
+          if (!cell) {
+            continue;
+          }
+
+          pooled.plays += cell.plays;
+          pooled.yardsSum += summedOnce(cell);
+          pooled.dry += driedOnce(cell);
+        }
+
+        if (pooled.plays >= settings.leastForSide) {
+          break;
+        }
+      }
+
+      held = pooled;
+    }
+
+    /**
+     * The dry share moves separately below, so the gain ratio is taken
+     * over the plays that made something on each side, or the two
+     * would count the same difference twice.
+     */
+    const enough = held.plays >= settings.leastForSide;
+    const heldDry = enough ? held.dry / held.plays : 0;
+    const heldGainful = heldDry < 0.99
+      ? (held.yardsSum / Math.max(1, held.plays)) / (1 - heldDry)
+      : 0;
+    const poolGainful = poolDry < 0.99 ? poolMean / (1 - poolDry) : 0;
+    const tilt = {
+      gain: enough && poolGainful > 0.1 && heldGainful > 0
+        ? Math.max(0.8, Math.min(1.25, heldGainful / poolGainful))
+        : 1,
+      dry: enough && poolDry > 0.01
+        ? Math.max(0.8, Math.min(1.25, heldDry / poolDry))
+        : 1,
+    };
+    situationRemembered.set(key, tilt);
+
+    return tilt;
   };
 
   /**
@@ -1237,11 +1366,21 @@ export function fitPlayFactors(
       const itsOwn = [0.54, 0.29, 0.40, 0.26][q]!;
       const own = forSide(byOffence, offence, state, settings.leastForSide);
 
-      if (own.plays < settings.leastForSide) {
+      if (own.plays < settings.leastForSide || own.leaguePlays === 0) {
         return leagueRate;
       }
 
-      return itsOwn * (own.runs / own.plays) + (1 - itsOwn) * leagueRate;
+      /**
+       * The side's mix as a leaning on the league's, both read over the
+       * same cells, applied to the rate the situation calls for. Blending
+       * the side's rate in directly let its any-score mix water down the
+       * situation whenever its own pool had to widen.
+       */
+      const leaning = (own.runs / own.plays) /
+        Math.max(0.05, own.leagueRuns / own.leaguePlays);
+
+      return Math.max(0.05, Math.min(0.95,
+        leagueRate * ((1 - itsOwn) + itsOwn * leaning)));
     },
     goesTo: (state, call, among) => {
       const itsCells = atCells(
@@ -1306,6 +1445,15 @@ export function fitPlayFactors(
       if (!pool.length) {
         return 4;
       }
+
+      // the score and clock, put back when the pool had to let them go
+      const tilt = settledAt.get(cell) === 2
+        ? situationTilt(
+            state, call,
+            summedOnce(cell) / Math.max(1, cell.plays),
+            driedOnce(cell) / Math.max(1, cell.plays),
+          )
+        : { gain: 1, dry: 1 };
 
       /**
        * Whether this is one of his long ones is decided first, from how
@@ -1376,11 +1524,12 @@ export function fitPlayFactors(
        * gain can never produce one, since nothing times anything is
        * nothing, so which end of the pool to draw from is asked first.
        */
-      const wentNowhereHere = wentNowhere.length / Math.max(1, drawFrom.length);
+      const wentNowhereHere =
+        (wentNowhere.length / Math.max(1, drawFrom.length)) * tilt.dry;
       const stuffed = playLevel && sides
         ? Math.max(0, Math.min(0.95,
             wentNowhereHere * playLevel.stuffedBy(state, call, player, sides)))
-        : wentNowhereHere;
+        : Math.min(0.95, wentNowhereHere);
 
       if (wentNowhere.length && uniform() < stuffed) {
         return wentNowhere[Math.floor(uniform() * wentNowhere.length)]!;
@@ -1413,7 +1562,7 @@ export function fitPlayFactors(
       const drawn = from[Math.floor(uniform() * from.length)]!;
 
       if (!found?.league || drawn <= 0) {
-        return drawn;
+        return drawn > 0 ? drawn * tilt.gain : drawn;
       }
 
       // and his level on top, against what everybody made over the
@@ -1433,7 +1582,7 @@ export function fitPlayFactors(
         : level;
 
       const centre = process.env["NO_CENTRE"] ? 1 : centreOf.get(call) ?? 1;
-      const bent = drawn *
+      const bent = drawn * tilt.gain *
         Math.max(0.5, Math.min(1.8, shape)) / Math.max(0.5, centre);
 
       if (!sides || bent <= 0 || playLevel) {
