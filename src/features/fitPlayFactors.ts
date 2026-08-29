@@ -17,6 +17,8 @@ import type { PlayLevel } from "./playLevel.js";
 import { bandOf, type TargetDepth } from "./targetDepth.js";
 
 export interface PlayRow {
+  /** which season it happened, so an old play can count for less */
+  season?: number;
   /** who had the ball and who was trying to stop them */
   offence: string;
   defence: string;
@@ -291,6 +293,8 @@ export interface PlayStore {
   yardline: Int8Array;
   yards: Int16Array;
   caught: Uint8Array;
+  /** how many seasons before the latest each play happened */
+  age: Int8Array;
   /** `${player}|${call}` to the rows that were his */
   ofMan: Map<string, number[]>;
   /** `${player}|${passer}` to the throws between exactly those two */
@@ -314,6 +318,14 @@ const CLOSER = Number(process.env["CLOSER"] ?? 8);
 /** the same guard past the thirty, where forty yards of slack let a
  * man at midfield draw plays whose gains the goal line had capped */
 const FIELD_CLOSER = Number(process.env["FIELD_CLOSER"] ?? 40);
+/**
+ * How much a play a season old counts against one from the latest
+ * season, in a man's own pool. Drawing all four seasons evenly gave a
+ * man his old form: Taylor drew 5.0 a carry off seasons he has not
+ * run since, while Bijan's climb to 5.4 was watered to 4.7.
+ */
+const RECENT_FADE = Number(process.env["RECENT_FADE"] ?? 0.7);
+const FADES = [0, 1, 2, 3, 4, 5].map((back) => Math.pow(RECENT_FADE, back));
 
 export function storePlays(rows: PlayRow[]): PlayStore {
   const kept = rows.filter((r) => r.player);
@@ -348,12 +360,16 @@ export function storePlays(rows: PlayRow[]): PlayStore {
     }
   }
 
+  const age = new Int8Array(kept.length);
+  const latest = kept.reduce((most, r) => Math.max(most, r.season ?? 0), 0);
+
   kept.forEach((r, i) => {
     down[i] = r.down;
     toGo[i] = r.toGo;
     yardline[i] = r.yardline;
     yards[i] = r.yards;
     caught[i] = r.call === "run" || r.caught ? 1 : 0;
+    age[i] = r.season ? latest - r.season : 0;
     const key = `${r.player}|${r.call}`;
     ofMan.set(key, [...(ofMan.get(key) ?? []), i]);
 
@@ -364,7 +380,7 @@ export function storePlays(rows: PlayRow[]): PlayStore {
   });
 
   return {
-    down, toGo, yardline, yards, caught, ofMan, ofPair,
+    down, toGo, yardline, yards, caught, age, ofMan, ofPair,
     wasted: nobody.map((r) => ({ yardline: r.yardline, yards: r.yards })),
     wastedShareAt: (yardline) => {
       const band = wastedBand(yardline);
@@ -1318,14 +1334,17 @@ export function fitPlayFactors(
             (state.yardline <= NEAR_GOAL ||
               plays.yardline[i]! >= state.yardline - FIELD_CLOSER);
           let count = 0;
-          let crossed = 0;
+          let weight = 0;
+          let crossedWeight = 0;
 
           for (const i of his) {
             if (wanted(i)) {
               count++;
+              const w = FADES[plays.age[i]!] ?? FADES[5]!;
+              weight += w;
 
               if (plays.yards[i]! >= state.yardline) {
-                crossed++;
+                crossedWeight += w;
               }
             }
           }
@@ -1334,25 +1353,29 @@ export function fitPlayFactors(
             continue;
           }
 
-          let pick = Math.floor(uniform() * count);
+          let left = uniform() * weight;
           let at = his[0]!;
 
           for (const i of his) {
-            if (wanted(i) && pick-- === 0) {
-              at = i;
-              break;
+            if (wanted(i)) {
+              left -= FADES[plays.age[i]!] ?? FADES[5]!;
+
+              if (left <= 0) {
+                at = i;
+                break;
+              }
             }
           }
 
           // his sample crosses the goal more often than plays from
           // this state score, so the surplus is put down at the one
           if (state.yardline <= 20 && plays.yards[at]! >= state.yardline &&
-              crossed > 0) {
+              crossedWeight > 0) {
             const counted = atCounts(state, settings.leastForSide, call);
             const scoreRate = counted.plays === 0
-              ? crossed / count
+              ? crossedWeight / weight
               : counted.scores / counted.plays;
-            const keeps = Math.min(1, scoreRate / (crossed / count));
+            const keeps = Math.min(1, scoreRate / (crossedWeight / weight));
 
             if (uniform() >= keeps) {
               return {
