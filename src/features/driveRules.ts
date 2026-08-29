@@ -141,6 +141,28 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
   }
 
   const ENOUGH = 40;
+  /**
+   * How much of its own rate a side gets to keep, against the
+   * league's behind it. A threshold gave a side with forty one plays
+   * its whole noisy rate and a side with thirty nine none of it, and
+   * a side's football only carries to the rest of its season at about
+   * .5, so an all or nothing read imports more noise than it finds
+   * signal. Every rate below is pulled toward the fallback by how
+   * much of it there is.
+   */
+  const SETTLES_AT = Number(process.env["TEAM_SETTLES_AT"] ?? 250);
+  const heldBy = (seen: number) => seen / (seen + SETTLES_AT);
+  const pulled = (
+    own: number, seen: number, league: number | undefined,
+  ) => {
+    if (league === undefined) {
+      return own;
+    }
+
+    const trust = heldBy(seen);
+
+    return trust * own + (1 - trust) * league;
+  };
 
   /**
    * The plays run from around here, widening out from the spot until
@@ -213,9 +235,11 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
 
   return {
     plays: scrimmage.length,
-    penaltyFirstDown: flagged.length >= ENOUGH || !fallback
-      ? flagged.length / Math.max(1, scrimmage.length + flagged.length)
-      : fallback.penaltyFirstDown,
+    penaltyFirstDown: pulled(
+      flagged.length / Math.max(1, scrimmage.length + flagged.length),
+      scrimmage.length + flagged.length,
+      fallback?.penaltyFirstDown,
+    ),
     penaltyYards: (uniform) =>
       penaltyYards.length < ENOUGH && fallback
         ? fallback.penaltyYards(uniform)
@@ -224,12 +248,11 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
           : penaltyYards[Math.floor(uniform() * penaltyYards.length)]!,
     runRate: (down, toGo) => {
       const tally = runs.get(`${down}|${distanceBand(toGo)}`);
+      const league = fallback ? fallback.runRate(down, toGo) : 0.45;
 
-      if (tally && tally.plays >= 50) {
-        return tally.runs / tally.plays;
-      }
-
-      return fallback ? fallback.runRate(down, toGo) : 0.45;
+      return tally && tally.plays > 0
+        ? pulled(tally.runs / tally.plays, tally.plays, league)
+        : league;
     },
     yardsFor: (type, down, toGo, yardline, uniform) => {
       const pool = nearby(
@@ -258,16 +281,18 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
         : 11;
     },
     means: {
-      carry: everyCarry.length >= ENOUGH || !fallback
-        ? average(everyCarry)
-        : fallback.means.carry,
-      caught: everyCatch.length >= ENOUGH || !fallback
-        ? average(everyCatch)
-        : fallback.means.caught,
+      carry: pulled(
+        average(everyCarry), everyCarry.length, fallback?.means.carry,
+      ),
+      caught: pulled(
+        average(everyCatch), everyCatch.length, fallback?.means.caught,
+      ),
     },
-    sackRate: passes.length >= ENOUGH || !fallback
-      ? sacks.length / Math.max(1, passes.length)
-      : fallback.sackRate,
+    sackRate: pulled(
+      sacks.length / Math.max(1, passes.length),
+      passes.length,
+      fallback?.sackRate,
+    ),
     sackYards: (uniform) =>
       sacks.length < ENOUGH && fallback
         ? fallback.sackYards(uniform)
@@ -276,26 +301,30 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
           : sacks[Math.floor(uniform() * sacks.length)]!,
     turnoverRate: (type) => {
       const seen = type === "run" ? givenAway.runs : givenAway.passes;
-
-      if (seen < 200 && fallback) {
-        return fallback.turnoverRate(type);
-      }
-
-      return type === "run"
+      const own = type === "run"
         ? givenAway.run / Math.max(1, givenAway.runs)
         : givenAway.pass / Math.max(1, givenAway.passes);
+
+      return pulled(own, seen, fallback?.turnoverRate(type));
     },
     goesForIt: (yardline, toGo, uniform) => {
       const key = `${Math.min(9, Math.floor(yardline / 10))}|${distanceBand(toGo)}`;
       const tally = goes.get(key);
 
-      if (tally && tally.all >= 30) {
-        return uniform() < tally.went / tally.all;
+      if (!tally || tally.all === 0 || !fallback) {
+        return fallback
+          ? fallback.goesForIt(yardline, toGo, uniform)
+          : uniform() < 0.12;
       }
 
-      return fallback
-        ? fallback.goesForIt(yardline, toGo, uniform)
-        : uniform() < 0.12;
+      /**
+       * A choice, so the coin is which book to read rather than a
+       * blended rate: reading the side's own book as often as it has
+       * earned keeps the league's shape in the rest.
+       */
+      return heldBy(tally.all) > uniform()
+        ? uniform() < tally.went / tally.all
+        : fallback.goesForIt(yardline, toGo, uniform);
     },
     // the league's kicking, by how long the attempt is
     kickSucceeds: (yardline) => {
