@@ -223,6 +223,25 @@ export async function buildWorld(
         ),
         picks: await loadDraftPicks(),
         experience: await experienceBefore(SCORE_ON),
+        priced: await (async () => {
+          const august = await loadAdp(SCORE_ON, "ppr").catch(() => null);
+          const priced = new Map<string, number>();
+
+          if (august) {
+            for (const [playerId, position] of positions) {
+              const name = calledOn.get(playerId);
+              const at = name
+                ? august.get(`${normalizeName(name)}|${position}`)
+                : undefined;
+
+              if (at) {
+                priced.set(playerId, at.adp);
+              }
+            }
+          }
+
+          return priced;
+        })(),
       });
 
   if (!splitKept && !live) {
