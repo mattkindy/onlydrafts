@@ -13,6 +13,7 @@
  */
 
 import { buildWorld } from "../src/features/playedWorld.js";
+import { sizeOf } from "../src/features/gameSize.js";
 import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
@@ -90,6 +91,25 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
     }
 
     played++;
+    /**
+     * The market sizes the afternoon and the walk splits it, which is
+     * how the week report already serves these numbers: the walk
+     * ranks a team's points at about .12 where the line ranks it at
+     * .39, so a projection without the bend is not the one shown.
+     */
+    const total = Number(r["total_line"]);
+    const spread = Number(r["spread_line"]);
+    const bendFor = new Map<string, number>();
+
+    if (Number.isFinite(total) && Number.isFinite(spread)) {
+      for (const id of home.among) {
+        bendFor.set(id, sizeOf({ total, favouredBy: spread }));
+      }
+
+      for (const id of away.among) {
+        bendFor.set(id, sizeOf({ total, favouredBy: -spread }));
+      }
+    }
 
     for (let run = 0; run < RUNS; run++) {
       const rng = seededRng(
@@ -107,7 +127,8 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
       for (const [id, line] of linesFrom(game, [home, away])) {
         walked.set(
           id,
-          (walked.get(id) ?? 0) + fantasyPoints(line, RULES) / RUNS,
+          (walked.get(id) ?? 0) +
+            (bendFor.get(id) ?? 1) * fantasyPoints(line, RULES) / RUNS,
         );
         walkedTouches.set(
           id,
