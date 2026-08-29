@@ -50,6 +50,14 @@ export interface ShareSettings {
    */
   weights: number[];
   /**
+   * How far a priced man's standing moves toward the share his draft
+   * price implies. Measured null to worse at every strength on the
+   * split bench, whether or not unpriced men lean down too, so it
+   * stays at nothing: the market's star knowledge does its work in
+   * the board's blend, not in here.
+   */
+  adpLean?: number;
+  /**
    * Whether the group divides its own team's budget or the league's.
    * A passing offence has more to give its receivers, which is worth
    * about .004 on the men a draft is about.
@@ -84,12 +92,16 @@ export async function pastShares(
 
   for (const season of seasons) {
     const tally = new Map<string, PastYear>();
+    const teamWeeks = new Map<string, Set<number>>();
 
     for (const s of await loadPlayerStats(season)) {
       if (s.week > 18 || !SHARING_POSITIONS.includes(s.position)) {
         continue;
       }
 
+      const weeks = teamWeeks.get(s.teamId) ?? new Set<number>();
+      weeks.add(s.week);
+      teamWeeks.set(s.teamId, weeks);
       const own = tally.get(s.playerId) ?? {
         playerId: s.playerId, position: s.position, team: s.teamId,
         games: 0, touches: 0, carries: 0, targets: 0,
@@ -103,11 +115,21 @@ export async function pastShares(
       tally.set(s.playerId, own);
     }
 
+    /**
+     * The role he held while on the field, not his touches over a
+     * season he partly missed. Counting a hurt star's four games over
+     * seventeen weeks of team plays read him as a backup, and his
+     * missing weeks are already priced once through the games he is
+     * expected to play. The thin evidence of a short season is priced
+     * where the seasons are combined, not by shrinking the role.
+     */
     for (const own of tally.values()) {
       const ran = Math.max(1, playsFor(season, own.team));
-      own.share = own.touches / ran;
-      own.carryShare = own.carries / ran;
-      own.targetShare = own.targets / ran;
+      const weeks = Math.max(1, teamWeeks.get(own.team)?.size ?? 17);
+      const perGame = weeks / Math.max(1, own.games);
+      own.share = (own.touches / ran) * perGame;
+      own.carryShare = (own.carries / ran) * perGame;
+      own.targetShare = (own.targets / ran) * perGame;
     }
 
     out.set(season, tally);
@@ -223,6 +245,11 @@ export interface ShareRequest {
   picks: Map<string, DraftPick>;
   /** years behind each man, from experienceBefore */
   experience: Map<string, number>;
+  /**
+   * The share the market's price implies for a man, on the same scale
+   * as whatever partOf reads, for the lean toward it.
+   */
+  implied?: Map<string, number>;
   settings?: ShareSettings;
 }
 
@@ -248,10 +275,23 @@ export interface SplitShare {
  * does not. Keeping them apart is what lets depth be used at all.
  */
 export function projectSplitShares(
-  request: ShareRequest,
+  request: ShareRequest & {
+    /** each priced man's implied carry and target share, if leaned on */
+    market?: Map<string, { carry: number; target: number }>;
+  },
 ): Map<string, SplitShare> {
-  const carries = projectShares(request, (was) => was.carryShare);
-  const targets = projectShares(request, (was) => was.targetShare);
+  const half = (of: (m: { carry: number; target: number }) => number) =>
+    request.market
+      ? new Map([...request.market].map(([id, m]) => [id, of(m)]))
+      : undefined;
+  const carries = projectShares(
+    { ...request, implied: half((m) => m.carry) },
+    (was) => was.carryShare,
+  );
+  const targets = projectShares(
+    { ...request, implied: half((m) => m.target) },
+    (was) => was.targetShare,
+  );
   const out = new Map<string, SplitShare>();
 
   for (const man of request.roster) {
@@ -286,8 +326,11 @@ export function projectShares(
       }
 
       anySeason = true;
-      total += settings.weights[i]! * partOf(was);
-      weight += settings.weights[i]!;
+      // a role read off four games votes with four games of evidence,
+      // which is where a short season's thinness is priced
+      const evidence = Math.min(1, was.games / 17);
+      total += settings.weights[i]! * evidence * partOf(was);
+      weight += settings.weights[i]! * evidence;
     }
 
     if (!anySeason) {
@@ -323,14 +366,27 @@ export function projectShares(
       const total = settings.ownBudget
         ? budgets.own.get(`${team}|${position}`) ?? league
         : league;
-      const shares = divideAmong(
-        group.map((man) => ({
+      /**
+       * The market's read, where it has one. The counts cannot tell a
+       * star back from a lost season apart from the men who covered
+       * for him, and every August draft room can: his standing moves
+       * toward the share men at his price have gone on to take.
+       */
+      const owns = group.map((man) => {
+        const own = standing(man.playerId, man.position);
+        const lean =
+          Number(process.env["ROOM_ADP_LEAN"] ?? settings.adpLean ?? 0);
+        const market = request.implied?.get(man.playerId);
+
+        return {
           playerId: man.playerId,
-          standing: standing(man.playerId, man.position),
-        })),
-        total,
-        settings.competition,
-      );
+          standing: lean > 0 && market !== undefined
+            ? (1 - lean) * own + lean * market
+            : own,
+        };
+      });
+
+      const shares = divideAmong(owns, total, settings.competition);
 
       for (const [playerId, share] of shares) {
         said.set(playerId, share);
