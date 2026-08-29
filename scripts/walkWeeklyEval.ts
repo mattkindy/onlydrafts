@@ -15,7 +15,11 @@
 import { buildWorld } from "../src/features/playedWorld.js";
 import { sizeOf } from "../src/features/gameSize.js";
 import { playGame, linesFrom, type Side } from "../src/model/gameFromDrives.js";
-import { loadPlayerStats } from "../src/data/nflverse.js";
+import {
+  weeklyExamplesForSeason, weeklyProspectiveForWeek, weeklyRow,
+} from "../src/features/weeklyModel.js";
+import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
+import { loadPlayerStats, loadGames } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { parseCsv } from "../src/data/csv.js";
 import { seededRng } from "../src/sim/rng.js";
@@ -42,6 +46,36 @@ interface PlayerWeek {
   /** and the touchdowns, the loudest part of conversion */
   walkTd: number;
   wasTd: number;
+  /** what the weekly ridge says for the same man, when it has a row */
+  ridge?: number;
+}
+
+/**
+ * The ridge the weekly view used before the walk, fitted the way
+ * start.ts fits it, once per asked season.
+ */
+const ridges = new Map<number, number[]>();
+
+async function ridgeFor(season: number) {
+  const already = ridges.get(season);
+
+  if (already) {
+    return already;
+  }
+
+  const games = await loadGames();
+  const train = [];
+
+  for (let s = 2016; s < season; s++) {
+    train.push(...(await weeklyExamplesForSeason(s, games)));
+  }
+
+  const weights = fitRidge(
+    train.map(weeklyRow), train.map((e) => e.target), 25,
+  );
+  ridges.set(season, weights);
+
+  return weights;
 }
 
 const games = parseCsv(await readFile(
@@ -72,6 +106,14 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
   }
 
   const world = await buildWorld(season, week, true, positions);
+  const weights = await ridgeFor(season);
+  const slate = await weeklyProspectiveForWeek(season, week, await loadGames());
+  const ridgeSays = new Map<string, number>();
+
+  for (const e of slate) {
+    ridgeSays.set(e.playerId, predictRidge(weights, weeklyRow(e)));
+  }
+
   const walked = new Map<string, number>();
   const walkedTouches = new Map<string, number>();
   const walkedTds = new Map<string, number>();
@@ -169,6 +211,7 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
       wasTouches: now.touches,
       walkTd: walkedTds.get(id) ?? 0,
       wasTd: now.tds,
+      ridge: ridgeSays.get(id),
     });
   }
 
@@ -221,6 +264,25 @@ if (!asShare) {
 
   for (const position of POSITIONS) {
     score(starters.filter((r) => r.position === position), position);
+  }
+
+  // the ridge the weekly view used before the walk, on the same men
+  console.log("against the weekly ridge, the men it also priced:");
+
+  for (const position of ["all", ...POSITIONS]) {
+    const rows = starters.filter((r) =>
+      r.ridge !== undefined && (position === "all" || r.position === position));
+
+    if (rows.length < 20) {
+      continue;
+    }
+
+    const walk = spearman(rows.map((r) => r.walk), rows.map((r) => r.was));
+    const ridge = spearman(rows.map((r) => r.ridge!), rows.map((r) => r.was));
+    console.log(
+      `${position.padEnd(6)} ${String(rows.length).padStart(5)}: ` +
+      `walk ${walk.toFixed(3)}  ridge ${ridge.toFixed(3)}`,
+    );
   }
 
   // the volume half alone: does the walk know who gets the ball,
