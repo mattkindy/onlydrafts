@@ -35,6 +35,8 @@ export interface DraftNow {
   /** every pick so far, in the order they were made */
   made?: Pick[];
   pickCount?: number;
+  /** the overall slots a pick already fills, keepers included */
+  filled?: number[];
   status?: string;
   clock?: { who: string; mine: boolean; overall: number; untilMine: number | null };
 }
@@ -67,15 +69,28 @@ export function matchesFilter(p: Player, posFilter: string) {
   return p.position === posFilter;
 }
 
-/** every turn of yours still to come, in draft order */
-function myUpcomingPicks(grid: DraftNow["grid"], fromOverall: number) {
+/**
+ * Every turn of yours still to come, in draft order, each with how
+ * many picks other people make first. Slots a keeper already fills are
+ * skipped on both counts.
+ */
+function myUpcomingPicks(
+  grid: DraftNow["grid"], fromOverall: number, filled: Set<number>,
+) {
   if (!grid?.mySlot) {
     return [];
   }
 
-  const picks: { overall: number; round: number; label: string }[] = [];
+  const picks: {
+    overall: number; round: number; label: string; after: number;
+  }[] = [];
+  let toCome = 0;
 
   for (let n = fromOverall; n <= grid.teams * grid.rounds; n++) {
+    if (filled.has(n)) {
+      continue;
+    }
+
     const round = Math.ceil(n / grid.teams);
     const inRound = n - (round - 1) * grid.teams;
     const slot = round % 2 === 1 ? inRound : grid.teams - inRound + 1;
@@ -85,8 +100,11 @@ function myUpcomingPicks(grid: DraftNow["grid"], fromOverall: number) {
         overall: n,
         round,
         label: round + "." + String(grid.mySlot).padStart(2, "0"),
+        after: toCome,
       });
     }
+
+    toCome++;
   }
 
   return picks;
@@ -301,7 +319,9 @@ export function DraftView(props: Props) {
    * then, so what a man is worth taking now is the gap between him and
    * whoever is left when you come back.
    */
-  const upcoming = myUpcomingPicks(state.grid, state.clock?.overall ?? 1);
+  const upcoming = myUpcomingPicks(
+    state.grid, state.clock?.overall ?? 1, new Set(state.filled ?? []),
+  );
   const dropOff = dropOffBy(men, draft, upcoming[1]?.overall ?? null);
   const wanted = (p: Player) =>
     matchesFilter(p, posFilter) && (!query || p.key.includes(query));
@@ -335,7 +355,7 @@ export function DraftView(props: Props) {
 
   for (let shown = 0; shown < shortlist.length; shown++) {
     while (nextPick < upcoming.length &&
-      shown >= Math.max(0, upcoming[nextPick]!.overall - 1 - (state.pickCount ?? 0))) {
+      shown >= upcoming[nextPick]!.after) {
       lineAfter.set(shown, upcoming[nextPick]!.label);
       nextPick++;
     }

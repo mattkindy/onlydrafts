@@ -768,6 +768,34 @@ async function main(): Promise<void> {
 
       note("set back 100, rookies at their slot", shy(slotBoard, 100));
 
+      // the shipped rookies-at-slot seat with the walk's weight raised,
+      // which the sweeps below never combined
+      for (const onWalk of [0.2, 0.25, 0.3]) {
+        const scale = (1 - onWalk) / (1 - 0.15);
+        const raised = rows.map((_, i) => {
+          let said = 0;
+          let spoke = 0;
+
+          ([[slotFilled, 0.106 * scale], [share, 0.319 * scale],
+            [byAdp, 0.425 * scale], [walk, onWalk]] as
+            [(number | undefined)[], number][])
+            .forEach(([part, w]) => {
+              const place = part[i];
+
+              if (place !== undefined) {
+                said += w * place;
+                spoke += w;
+              }
+            });
+
+          return spoke > 0 ? said / spoke : backOfTheField;
+        });
+        note(
+          `rookies at slot, walk at ${(100 * onWalk).toFixed(0)}%`,
+          shy(raised, 100),
+        );
+      }
+
       // the walk got better this week, so its seat is asked again with
       // the set back on, which the earlier sweep never combined
       for (const onWalk of [0.15, 0.25, 0.35, 0.5]) {
