@@ -38,6 +38,9 @@ interface PlayerWeek {
   /** the volume half on its own, to tell it apart from conversion */
   walkTouches: number;
   wasTouches: number;
+  /** and the touchdowns, the loudest part of conversion */
+  walkTd: number;
+  wasTd: number;
 }
 
 const games = parseCsv(await readFile(
@@ -50,7 +53,9 @@ const mine = new Set(myShare(jobs.map((_, i) => i)));
 async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
   const positions = new Map<string, string>();
   const weekly =
-    new Map<string, { week: number; points: number; touches: number }[]>();
+    new Map<string, {
+      week: number; points: number; touches: number; tds: number;
+    }[]>();
 
   for (const s of await loadPlayerStats(season)) {
     positions.set(s.playerId, s.position);
@@ -60,6 +65,7 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
         week: s.week,
         points: fantasyPoints(s.statLine, RULES),
         touches: (s.carries ?? 0) + (s.targets ?? 0),
+        tds: (s.statLine.rushTd ?? 0) + (s.statLine.recTd ?? 0),
       },
     ]);
   }
@@ -67,6 +73,7 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
   const world = await buildWorld(season, week, true, positions);
   const walked = new Map<string, number>();
   const walkedTouches = new Map<string, number>();
+  const walkedTds = new Map<string, number>();
   let played = 0;
 
   for (const r of games) {
@@ -107,6 +114,10 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
           (walkedTouches.get(id) ?? 0) +
             ((line.carries ?? 0) + (line.targets ?? 0)) / RUNS,
         );
+        walkedTds.set(
+          id,
+          (walkedTds.get(id) ?? 0) + (line.rushTd + line.recTd) / RUNS,
+        );
       }
     }
   }
@@ -135,6 +146,8 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
       position,
       walkTouches: walkedTouches.get(id) ?? 0,
       wasTouches: now.touches,
+      walkTd: walkedTds.get(id) ?? 0,
+      wasTd: now.tds,
     });
   }
 
@@ -206,6 +219,25 @@ if (!asShare) {
       rows.map((r) => r.average), rows.map((r) => r.wasTouches));
     console.log(
       `${position.padEnd(6)} walk touches ${walk.toFixed(3)}  ` +
+      `his points average as a stand-in ${flat.toFixed(3)}`,
+    );
+  }
+
+  console.log("their touchdowns, same men:");
+
+  for (const position of ["RB", "WR", "TE"]) {
+    const rows = starters.filter((r) => r.position === position);
+
+    if (rows.length < 20) {
+      continue;
+    }
+
+    const walk = spearman(
+      rows.map((r) => r.walkTd), rows.map((r) => r.wasTd));
+    const flat = spearman(
+      rows.map((r) => r.average), rows.map((r) => r.wasTd));
+    console.log(
+      `${position.padEnd(6)} walk tds ${walk.toFixed(3)}  ` +
       `his points average as a stand-in ${flat.toFixed(3)}`,
     );
   }
