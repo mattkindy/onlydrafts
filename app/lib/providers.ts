@@ -99,14 +99,20 @@ export async function sleeperPlayers() {
     return sleeperMen;
   }
 
-  const cached = stored<Record<string, { n: string; p: string }> | null>(
-    "players.v2", null,
-  );
+  /**
+   * A day, because the list gains men every week of the year: rookies
+   * at the draft, signings all summer. The old cache never expired and
+   * a browser from last season silently dropped every newer man from
+   * the draft it was watching.
+   */
+  const cached = stored<{
+    at: number; men: Record<string, { n: string; p: string }>;
+  } | null>("players.v3", null);
 
-  if (cached) {
-    sleeperMen = cached;
+  if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) {
+    sleeperMen = cached.men;
 
-    return cached;
+    return cached.men;
   }
 
   const raw = await ask("/players/nfl") as Record<string, {
@@ -120,7 +126,7 @@ export async function sleeperPlayers() {
     }
   }
 
-  keep("players.v2", trimmed);
+  keep("players.v3", { at: Date.now(), men: trimmed });
   sleeperMen = trimmed;
 
   return trimmed;
