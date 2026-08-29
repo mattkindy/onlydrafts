@@ -112,9 +112,9 @@ export const WEEKLY_WALK_SHARE: Record<string, number> = {
 
 /**
  * How much wider a man's week runs than the games the walk deals him.
- * One world deals every week, with no role changes and no hurt
- * teammates, so the walk's bands run narrow: stretched this much
- * around the middle, an 80% band covers 79.3% of 2024's played weeks
- * and 81.3% of 2025's, measured in scripts/walkBandEval.ts.
+ * One world deals every week with no role changes, so the walk's
+ * bands run narrow. Once absences were lived inside the season the
+ * stretch came down: at 1.2 an 80% band covers 81.3% of 2025's played
+ * weeks and 78.8% of 2024's, measured in scripts/walkBandEval.ts.
  */
-export const DEALT_WIDER = 1.3;
+export const DEALT_WIDER = 1.2;
