@@ -310,5 +310,24 @@ export function playGame(
     against = wasOn;
   }
 
+  /**
+   * Overtime, as played overtimes end. Six percent of the walk's games
+   * finished level because regulation was all there was; 88 played
+   * overtimes from 2019 on end tied 5.7% of the time, by one to three
+   * 57%, and by four to six the rest, with nobody winning by more. A
+   * short drawn period keeps the game engine out of a format it does
+   * not know, and the home lift decides who is likelier to take it.
+   */
+  if (points[home.team] === points[away.team] && !settings.frozen) {
+    const roll = uniform();
+
+    if (roll >= 0.057) {
+      const homeShare =
+        (home.lift ?? 1) / ((home.lift ?? 1) + (away.lift ?? 1));
+      const winner = uniform() < homeShare ? home.team : away.team;
+      points[winner]! += uniform() < 0.6 ? 3 : 6;
+    }
+  }
+
   return { possessions, points, drives };
 }
