@@ -44,6 +44,7 @@ async function oneSeason(season: number): Promise<void> {
   const games = new Map<string, number>();
   const made = new Map<string, Record<string, number>>();
   const kicks = new Map<string, { from: number[]; conversions: number }>();
+  const samples = new Map<string, number[]>();
   let runs = 0;
   let weeks = 0;
 
@@ -53,7 +54,14 @@ async function oneSeason(season: number): Promise<void> {
       total: [string, number][]; games: [string, number][];
       made: [string, Record<string, number>][];
       kicks: [string, { from: number[]; conversions: number }][];
+      samples?: [string, number[]][];
     };
+
+    for (const [playerId, his] of from.samples ?? []) {
+      const already = samples.get(playerId) ?? [];
+      already.push(...his);
+      samples.set(playerId, already);
+    }
 
     runs = from.runs ?? runs;
     weeks = from.weeks ?? weeks;
@@ -92,6 +100,7 @@ async function oneSeason(season: number): Promise<void> {
     total: [...total.entries()], games: [...games.entries()],
     made: [...made.entries()],
     kicks: [...kicks.entries()],
+    samples: [...samples.entries()],
   }));
 
   // the scoring pass, which needs no simulating

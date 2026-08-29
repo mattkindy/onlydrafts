@@ -774,6 +774,55 @@ async function main(): Promise<void> {
   }
 
   /**
+   * The walk's own spread wins over the role simulation's wherever
+   * the walk has dealt a man enough games: the kept season file
+   * records every game he was handed, so his band is his, from the
+   * same engine that made his projection. The role simulation stays
+   * for the men the walk never played.
+   */
+  try {
+    const keptGames = JSON.parse(await readFile(
+      join(import.meta.dirname, "..", "data", "kept", `played-${season}.json`),
+      "utf8",
+    )) as { samples?: [string, number[]][] };
+    let fromWalk = 0;
+    /**
+     * The walk deals every week from one world, so its games vary
+     * less than a season's weeks, which also carry role changes and
+     * hurt teammates. Stretched 1.3 around the middle, its 80% band
+     * covers 79.3% of 2024's played weeks and 81.3% of 2025's,
+     * measured in scripts/walkBandEval.ts.
+     */
+    const WIDER = 1.3;
+
+    for (const [playerId, his] of keptGames.samples ?? []) {
+      if (his.length < 40) {
+        continue;
+      }
+
+      const sorted = [...his].sort((a, b) => a - b);
+      const at = (q: number) => sorted[Math.floor(q * (sorted.length - 1))]!;
+      const middle = at(0.5);
+
+      if (middle <= 0) {
+        continue;
+      }
+
+      const stretched = (q: number) =>
+        Math.max(0, middle + (at(q) - middle) * WIDER) / middle;
+      shapeOf.set(playerId, {
+        q1: stretched(0.25), q3: stretched(0.75),
+        low: stretched(0.1), high: stretched(0.9),
+      });
+      fromWalk++;
+    }
+
+    console.log(`spreads from the walk's games for ${fromWalk} players`);
+  } catch {
+    console.warn("no kept walk games, the role simulation's bands remain");
+  }
+
+  /**
    * Each man's weeks from the weekly model rather than from his
    * season average times a blunted opponent. The two order a week
    * about equally well, but this one is the model that was measured,
