@@ -184,7 +184,7 @@ export async function buildWorld(
       choice: ["run", "pass"].includes(r["playType"] ?? "") ? "go"
         : r["playType"] === "field_goal" ? "kick" : "punt",
     })) as FourthRow[],
-    60, 6, 1, climbTo(fourthSeasons, SCORE_ON),
+    60, 2, 1, climbTo(fourthSeasons, SCORE_ON),
   );
 
   /**

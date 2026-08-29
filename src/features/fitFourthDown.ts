@@ -83,7 +83,7 @@ export function climbTo(learn: number[], target: number, byYear = 1.036): number
 }
 
 export function fitFourthDown(
-  rows: FourthRow[], least = 60, steadyAt = 6, fades = 1, lift = 1,
+  rows: FourthRow[], least = 60, steadyAt = 2, fades = 1, lift = 1,
 ): FourthDown {
   const cells = new Map<string, Tally>();
 
@@ -116,6 +116,13 @@ export function fitFourthDown(
     add(`${spot}|any`, row.choice, weight);
   }
 
+  /** the same cell with the score let go by one band either way */
+  const nearKeys = (spot: string, time: number, band: number) => {
+    const bands = [band - 1, band, band + 1].filter((b) => b >= 0 && b <= 8);
+
+    return bands.map((b) => `${spot}|${time}|${b}`);
+  };
+
   const remembered = new Map<string, Tally>();
 
   const at = (state: PlayState) => {
@@ -139,10 +146,15 @@ export function fitFourthDown(
      * was, where a side two scores behind goes 55.7% and one inside
      * two minutes 50.6%.
      */
-    const band = `${timeBand(state.secondsLeft)}|${marginBand(state.margin)}`;
-    const gathered = new Map<string, Tally>();
+    const time = timeBand(state.secondsLeft);
+    const band = marginBand(state.margin);
+    const keysFor = (spot: string, level: number) =>
+      level === 0 ? [`${spot}|${time}|${band}`]
+        : level === 1 ? nearKeys(spot, time, band)
+        : [`${spot}|any`];
+    const gathered: Tally[] = [];
 
-    for (const under of [band, "any"]) {
+    for (const level of [0, 1, 2]) {
       let found = empty();
 
       for (const reach of REACHES) {
@@ -162,18 +174,20 @@ export function fitFourthDown(
               continue;
             }
 
-            const cell = cells.get(
-              `4|${Math.min(40, toGo)}|${Math.min(99, yard)}|${under}`,
-            );
+            const spot = `4|${Math.min(40, toGo)}|${Math.min(99, yard)}`;
 
-            if (!cell) {
-              continue;
+            for (const at of keysFor(spot, level)) {
+              const cell = cells.get(at);
+
+              if (!cell) {
+                continue;
+              }
+
+              pooled.go += cell.go;
+              pooled.kick += cell.kick;
+              pooled.punt += cell.punt;
+              pooled.all += cell.all;
             }
-
-            pooled.go += cell.go;
-            pooled.kick += cell.kick;
-            pooled.punt += cell.punt;
-            pooled.all += cell.all;
           }
         }
 
@@ -184,7 +198,7 @@ export function fitFourthDown(
         }
       }
 
-      gathered.set(under, found);
+      gathered.push(found);
     }
 
     /**
@@ -192,20 +206,27 @@ export function fitFourthDown(
      *
      * Only 283 fourth downs all season happen between five minutes and
      * two, so widening within that band runs out of field before it
-     * has enough and used to give up on the band entirely. Blending
-     * keeps whatever the band does know, in proportion to how much of
-     * it there is.
+     * has enough and used to give up on the band entirely. Each level
+     * is trusted for what it saw and hands the rest down: the exact
+     * band first, then the score a band either way, then any game at
+     * this spot.
      */
-    const inBand = gathered.get(band) ?? empty();
-    const anywhere = gathered.get("any") ?? empty();
-    const trust = inBand.all / (inBand.all + steadyAt);
     const mixed = empty();
 
     for (const choice of ["go", "kick", "punt"] as FourthChoice[]) {
-      const here = inBand.all > 0 ? inBand[choice] / inBand.all : 0;
-      const ever = anywhere.all > 0 ? anywhere[choice] / anywhere.all : 0;
-      mixed[choice] = trust * here + (1 - trust) * ever;
-      mixed.all += mixed[choice];
+      let ever = 0;
+
+      for (const found of [...gathered].reverse()) {
+        if (found.all === 0) {
+          continue;
+        }
+
+        const trust = found.all / (found.all + steadyAt);
+        ever = trust * (found[choice] / found.all) + (1 - trust) * ever;
+      }
+
+      mixed[choice] = ever;
+      mixed.all += ever;
     }
 
     /**
