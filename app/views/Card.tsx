@@ -204,7 +204,9 @@ function Facts({ p, teams, costs }: {
  * against when it looks too big.
  */
 function StatLine({ p }: { p: Player }) {
-  const parts = p.projected ?? p.simulated;
+  // the walk's line leads, since the walk is the model the board
+  // trusts most; the regression speaks only for men it never saw
+  const parts = p.simulated ?? p.projected;
   const moved = movedBy(p);
   const season = lineOver(parts, p.position, p.games ?? 17, moved);
   const game = lineOver(parts, p.position, 1, moved);
