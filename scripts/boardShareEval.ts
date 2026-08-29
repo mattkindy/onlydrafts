@@ -550,7 +550,7 @@ async function main(): Promise<void> {
   const onCaught = new Map<string, number[]>();
   // the same mark taken deeper, to see where an opinion earns its place
   const deeper: [number, Map<string, number[]>][] =
-    [72, 120, 200].map((cut) => [cut, new Map<string, number[]>()]);
+    [24, 72, 120, 200].map((cut) => [cut, new Map<string, number[]>()]);
   const onGain = new Map<string, number[]>();
 
   for (const season of TEST_SEASONS) {

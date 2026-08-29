@@ -22,6 +22,7 @@ import {
 import { fitFourthDown, climbTo, type FourthRow } from "../src/features/fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "../src/features/fitPlayClock.js";
 import { SHARING_POSITIONS } from "../src/features/projectedShares.js";
+import { fitAbsence } from "../src/features/fitAbsence.js";
 import { loadAdp } from "../src/data/adp.js";
 import { normalizeName } from "../src/data/names.js";
 import { sizeOf } from "../src/features/gameSize.js";
@@ -183,6 +184,91 @@ async function main(): Promise<void> {
   const rng = seededRng(Number(process.env["SEED"] ?? 23));
 
   /**
+   * Whether a man is up or down each week of one pass through the
+   * season. Seeded by the man and the pass alone, so every share of
+   * the job answers a week the same way, and one pass's absences
+   * arrive in spells the way a season's really do. His hazard is the
+   * league's scaled to how many games men with his recent history
+   * play.
+   */
+  const absence = process.env["NO_ABSENCE"]
+    ? undefined
+    : await fitAbsence([SCORE_ON - 4, SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1]);
+  const gamesBefore = new Map<string, number[]>();
+
+  if (absence) {
+    for (const back of [1, 2, 3]) {
+      const seen = new Map<string, Set<number>>();
+
+      for (const s of await loadPlayerStats(SCORE_ON - back).catch(() => [])) {
+        if (s.week > 18) {
+          continue;
+        }
+
+        const weeks = seen.get(s.playerId) ?? new Set<number>();
+        weeks.add(s.week);
+        seen.set(s.playerId, weeks);
+      }
+
+      for (const [playerId, weeks] of seen) {
+        gamesBefore.set(playerId, [
+          ...(gamesBefore.get(playerId) ?? []), weeks.size,
+        ]);
+      }
+    }
+  }
+
+  const expectedFor = (playerId: string) => {
+    const his = gamesBefore.get(playerId) ?? [];
+    const mean = his.length
+      ? his.reduce((a, b) => a + b, 0) / his.length
+      : 15;
+    const trust = his.length / (his.length + 1);
+
+    return trust * mean + (1 - trust) * 15;
+  };
+  const seedOf = (playerId: string, run: number) => {
+    let hash = SCORE_ON * 31 + run * 7919;
+
+    for (let i = 0; i < playerId.length; i++) {
+      hash = (hash * 131 + playerId.charCodeAt(i)) | 0;
+    }
+
+    return hash >>> 0;
+  };
+  const outRemembered = new Map<string, Set<number>>();
+  const outWeeks = (playerId: string, position: string, run: number) => {
+    const key = `${playerId}|${run}`;
+    const already = outRemembered.get(key);
+
+    if (already) {
+      return already;
+    }
+
+    const draws = seededRng(seedOf(playerId, run));
+    const hazard = absence!.hazardFor(position, expectedFor(playerId), 17);
+    const out = new Set<number>();
+    let downFor = 0;
+
+    for (let week = 1; week <= 18; week++) {
+      if (downFor > 0) {
+        out.add(week);
+        downFor--;
+        continue;
+      }
+
+      if (draws() < hazard) {
+        out.add(week);
+        downFor = absence!.spellOf(position, draws) - 1;
+      }
+    }
+
+    outRemembered.set(key, out);
+
+    return out;
+  };
+
+  /**
    * Every reading there has ever been, so a fixture nobody has played
    * can still be given a day. Fitted on seasons before the one being
    * walked, so nothing reads its own weather.
@@ -265,7 +351,27 @@ async function main(): Promise<void> {
         away.lift = (marketLift.away ?? 1) * worth;
       }
       droveHere.teamGames += 2;
-      const game = playGame(home, away, {
+      /**
+       * The men down this week of this pass leave the field, and the
+       * shares renormalise over whoever is left, so a backup inherits
+       * the work for exactly the weeks the spell lasts.
+       */
+      const upNow = (side: typeof home) => {
+        if (!absence) {
+          return side;
+        }
+
+        const among = side.among.filter((id) =>
+          !SHARING_POSITIONS.includes(positions.get(id) ?? "") ||
+          !outWeeks(id, positions.get(id)!, run).has(fixture.week));
+
+        return among.length === side.among.length
+          ? side
+          : { ...side, among };
+      };
+      const homeNow = upNow(home);
+      const awayNow = upNow(away);
+      const game = playGame(homeNow, awayNow, {
         rules: {
           ...rules, kickSucceeds: kicking.kickSucceeds,
           // the ground this fixture is played on, which changes both
@@ -278,7 +384,7 @@ async function main(): Promise<void> {
         ticking, season: SCORE_ON, week: fixture.week,
       }, rng);
 
-      for (const [playerId, line] of linesFrom(game, [home, away])) {
+      for (const [playerId, line] of linesFrom(game, [homeNow, awayNow])) {
         const pts = fantasyPoints(line, RULES);
         meanFor.set(
           playerId,
