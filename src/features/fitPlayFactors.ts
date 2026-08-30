@@ -1317,6 +1317,72 @@ export function fitPlayFactors(
    */
   const countsRemembered =
     new Map<string, { plays: number; runs: number; scores: number }>();
+  /**
+   * The two formations counted over one widening pass, so they stand
+   * on the same states. Widening them apart put the gun and the
+   * centre on different supports, and a ratio between those is not a
+   * leaning, it is two answers to different questions.
+   */
+  const bothFormsRemembered = new Map<string, {
+    gun: { plays: number; runs: number };
+    centre: { plays: number; runs: number };
+  }>();
+  const atBothForms = (state: PlayState, least: number) => {
+    makeRoom(bothFormsRemembered);
+    const key = `${stateKey(
+      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
+    )}|${least}`;
+    const already = bothFormsRemembered.get(key);
+
+    if (already) {
+      return already;
+    }
+
+    let found = {
+      gun: { plays: 0, runs: 0 }, centre: { plays: 0, runs: 0 },
+    };
+
+    for (const looseness of [0, 1, 2]) {
+      if (found.gun.plays + found.centre.plays >= least) {
+        break;
+      }
+
+      const pooled = {
+        gun: { plays: 0, runs: 0 }, centre: { plays: 0, runs: 0 },
+      };
+
+      for (const packed of wideningPacked(state.toGo, state.yardline)) {
+        if (Math.floor(packed / 100000) !== looseness) {
+          continue;
+        }
+
+        for (const cellKey of keysAt(
+          state.down, Math.floor(packed / 100) % 1000, packed % 100,
+          state.secondsLeft, state.margin, looseness,
+        )) {
+          for (const form of ["gun", "centre"] as const) {
+            const cell = cells.get(`${form}|${cellKey}`);
+
+            if (cell) {
+              pooled[form].plays += cell.plays;
+              pooled[form].runs += cell.runs;
+            }
+          }
+        }
+
+        if (pooled.gun.plays + pooled.centre.plays >= least) {
+          break;
+        }
+      }
+
+      found = pooled;
+    }
+
+    bothFormsRemembered.set(key, found);
+
+    return found;
+  };
+
   const atCounts = (
     state: PlayState, least: number, call?: Call,
     /**
@@ -1796,13 +1862,36 @@ export function fitPlayFactors(
        */
       if (sides?.shotgun !== undefined) {
         const wants = Number(process.env["FORM_LEAST"] ?? settings.leastForCall);
-        const here = atCounts(
-          state, wants, undefined,
-          sides.shotgun ? "gun" : "centre",
-        );
+        const both = atBothForms(state, wants);
+        const here = sides.shotgun ? both.gun : both.centre;
+        const other = sides.shotgun ? both.centre : both.gun;
 
-        if (here.plays >= wants) {
-          return Math.max(0.02, Math.min(0.98, here.runs / here.plays));
+        /**
+         * The formation as a leaning on the pooled rate, not a rate of
+         * its own. Its own rate carries whatever the older seasons
+         * ran, and that has moved: sides ran from the gun 27.0% of the
+         * time in 2021 and 30.6% in 2023 while how often they ran at
+         * all stayed flat. A ratio against the same cells' mixture
+         * keeps the level where the pools have it and takes only what
+         * the formation says.
+         */
+        if (here.plays > 0 && other.plays > 0) {
+          const mine = here.runs / here.plays;
+          const mixture = (here.runs + other.runs) /
+            (here.plays + other.plays);
+
+          if (mixture > 0.01) {
+            /**
+             * As a leaning it is better calibrated and orders worse:
+             * it asks 41.2% where the plays were 41.8% against 40.5%
+             * for the rate, and a week of a man reads .327 against
+             * .336. Pulling toward the pooled level takes the
+             * formation back out of the call.
+             */
+            return process.env["FORM_LEAN"]
+              ? Math.max(0.02, Math.min(0.98, leagueRate * (mine / mixture)))
+              : Math.max(0.02, Math.min(0.98, mine));
+          }
         }
       }
 
