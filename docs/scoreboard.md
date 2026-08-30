@@ -22,7 +22,7 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7487 | .7050 | .6971 | .327 |
+| now | .7497 | .7012 | .6981 | .331 |
 
 The weekly number read .343 in this table for a while and it does not
 reproduce. walkWeeklyEval seeds its rng off the season, the week and
@@ -46,7 +46,13 @@ losing the first two rounds by about .007.
 | the market settles a room's pecking order | .7510 | .6961 | .6946 | |
 | the walk's seat cut to twenty percent | .7482 | .7035 | .6946 | .331 |
 | what a side's formation does to a play | .7487 | .7050 | .6971 | .327 |
-| room asked of the depth pools near the line | | | | .331 |
+| room asked of the depth pools near the line | .7497 | .7012 | .6981 | .331 |
+
+The last row is the first change in a while to move the walk and the
+weekly bench the same way. The walk's own column goes up on six of the
+board's eight cuts, the first 24 among them, .5794 to .5845. The board
+loses .004 on that same cut, which is the blend not being a simple
+function of how good its parts are.
 
 The board barely moves while the walk moves a lot, and that is
 arithmetic rather than disappointment: the walk is one voice of four
