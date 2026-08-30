@@ -182,16 +182,30 @@ Where it scores from is wrong in both directions:
 
 | a play from here scores | the walk | really |
 |---|---|---|
-| the one | 60.4% | 55.0% |
-| inside the three | 49.3% | 33.5% |
-| inside the five | 26.2% | 36.7% |
-| inside the ten | 17.6% | 22.7% |
-| inside the twenty | 6.6% | 9.0% |
-| further out | 0.6% | 1.3% |
+| the one | 58.7% | 57.7% |
+| inside the three | 39.3% | 41.9% |
+| inside the five | 29.4% | 36.7% |
+| inside the ten | 19.9% | 22.7% |
+| inside the twenty | 7.9% | 9.0% |
+| further out | 0.5% | 1.3% |
 
-It is too sure of itself from one and three yards out and not sure
-enough from four yards to the twenty, and it barely scores from
-distance at all. That last one has a candidate cause: a gain is capped
+Close in it is right. From four yards out it is short, and from beyond
+the twenty it scores at a third of the rate sides really do, which is
+the whole of the problem.
+
+Those rows had the walk far too sure of itself from two and three yards
+out until the two point tries came out of them. A try is a play from
+the two with no down, it cannot be a touchdown however it goes, and
+there were 148 of them in 2024. Left in, they drag 41.9% down to 33.5%
+and make the walk look badly over confident where it is close to right.
+
+**The walk does not play a conversion at all.** Every touchdown it
+scores is worth exactly seven, and it made none of the 148 tries. That
+costs a little on a game's margin and a little on the men who take them
+in, and it is the next thing to build. The counting side is already
+sound: ring widens the distance and the yardline but never the down, so
+a cell of tries can only be reached by asking about a try, and nothing
+asks. That last one has a candidate cause: a gain is capped
 by the spot it came from, so a catch on the five never made more than
 five yards, and the pools are full of those. Asking room of the depth
 pools near the line is worth a hundred touchdowns, 1143 to 1245, and
@@ -280,12 +294,23 @@ per-play physics gets clearly better and the fantasy ordering slightly
 worse, which usually means the accuracy is being swamped by the
 variance it adds. It is behind NO_LONG_SHAPE, switched off.
 
-The fix worth building is the one the shape of the counts prevents
-today. A Rate keeps a man's touches, his yards and how many of them
-went twenty or more, but not the yards those long ones made, so his
-level cannot be worked out with them taken out. Storing that would let
-the level be his yards a touch on the ordinary ones, against the
-league's on the ordinary ones, which is what the multiplier is for.
+A Rate now keeps the yards those long ones made, so the level can be
+worked out over a man's ordinary touches with the long ones out of both
+sides of it. That is the right shape, since whether this is one of his
+long ones is settled before the level is applied, and it shows:
+
+| | backs | receivers | spread, against 1.81 theirs | wants |
+|---|---|---|---|---|
+| the level with the long ones in it | .207 | .246 | 1.14 | 1.35x |
+| over his ordinary touches | .281 | .210 | 1.42 | 1.04x |
+
+Backs go up by a third and the spread between men lands where it should,
+1.04 times what it says. Receivers go the other way, .210 against .246,
+and a week reads .339 against .343, backs .382 against .375. So it is
+behind ORDINARY_LEVEL and switched off until the receivers are
+understood. Whatever is wrong with them is likely the same thing that
+puts the right receiver top of the list inside the ten 21.5% of the
+time where the right back is top 47.7% of the time.
 
 ## How often the walk hands it to him
 

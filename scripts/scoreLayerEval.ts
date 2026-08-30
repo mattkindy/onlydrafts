@@ -90,7 +90,14 @@ for (const r of plays) {
   const down = Number(r["down"]);
   const yardline = Number(r["yardline"]);
 
-  if (!men || !r["player"] || !Number.isFinite(down) ||
+  /**
+   * A down of nothing is a two point try, which is a play from the two
+   * that cannot be a touchdown however it goes. There are 144 of them
+   * inside the three in 2024 and they score nought, which is what made
+   * a play from there look like it scores a third of the time when a
+   * down of football from there scores closer to a half.
+   */
+  if (!men || !r["player"] || !Number.isFinite(down) || down < 1 ||
       !Number.isFinite(yardline)) {
     continue;
   }

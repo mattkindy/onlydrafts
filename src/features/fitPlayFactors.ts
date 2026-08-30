@@ -111,15 +111,28 @@ export interface Rate {
   yards: number;
   /** and how many of them went for twenty or more */
   long: number;
+  /**
+   * and what those long ones made, so a man's level can be worked out
+   * on his ordinary touches. Whether this is one of his long ones is
+   * already decided before the level is applied, so a level with the
+   * long ones still in it counts them twice.
+   */
+  longYards: number;
 }
 
-const emptyRate = (): Rate => ({ touches: 0, yards: 0, long: 0 });
+const emptyRate = (): Rate =>
+  ({ touches: 0, yards: 0, long: 0, longYards: 0 });
 
 const addTo = (into: Map<string, Rate>, key: string, yards: number): void => {
   const own = into.get(key) ?? emptyRate();
   own.touches++;
   own.yards += yards;
-  if (yards >= 20) own.long++;
+
+  if (yards >= 20) {
+    own.long++;
+    own.longYards += yards;
+  }
+
   into.set(key, own);
 };
 
@@ -129,6 +142,8 @@ export interface Counted extends StateCell {
     touches: number; yards: number; scores: number;
     /** and how often he breaks a long one, which is his own and lasts */
     long: number;
+    /** with what those made, so his level can leave them out */
+    longYards: number;
   }>;
   /**
    * Where each gain came from, since a gain is cut off by the goal
@@ -270,7 +285,11 @@ const roomFor = (cell: Counted, yardline: number): number[] => {
 const countIn = (rate: Rate, yards: number): void => {
   rate.touches++;
   rate.yards += yards;
-  if (yards >= 20) rate.long++;
+
+  if (yards >= 20) {
+    rate.long++;
+    rate.longYards += yards;
+  }
 };
 
 /**
@@ -401,6 +420,20 @@ const LINE_IS_NEAR = Number(process.env["LINE_IS_NEAR"] ?? 10);
 const GOAL_LEAST = Number(process.env["GOAL_LEAST"] ?? 5);
 /** and how many the pool a play draws from is asked for there */
 const GOAL_GAIN_LEAST = Number(process.env["GOAL_GAIN_LEAST"] ?? 300);
+
+/**
+ * Whether a man's level leaves his long gains out of both sides of it.
+ *
+ * It is the right shape, since whether this is one of his long ones is
+ * already settled before the level is applied. It orders backs by what
+ * they make of a touch at .281 where the level with the long ones in
+ * it manages .207, and it wants 1.04 times what it says where the old
+ * one wants 1.35, which is as near calibrated as anything here gets.
+ * It reads .339 a week against .343, backs .382 against .375 and
+ * receivers .272 against .280, so it is off until the receivers are
+ * understood.
+ */
+const ORDINARY_LEVEL = Boolean(process.env["ORDINARY_LEVEL"]);
 
 /**
  * A gain is a whole number of yards.
@@ -796,11 +829,16 @@ export function countPlays(
     if (row.player) {
       countIn(cell.named, row.yards);
       const own = cell.byPlayer.get(row.player) ??
-        { touches: 0, yards: 0, scores: 0, long: 0 };
+        { touches: 0, yards: 0, scores: 0, long: 0, longYards: 0 };
       own.touches++;
       own.yards += row.yards;
       own.scores += row.touchdown;
-      if (row.yards >= 20) own.long++;
+
+      if (row.yards >= 20) {
+        own.long++;
+        own.longYards += row.yards;
+      }
+
       cell.byPlayer.set(row.player, own);
     }
 
@@ -824,11 +862,16 @@ export function countPlays(
     if (row.player) {
       countIn(anyTime.named, row.yards);
       const own = anyTime.byPlayer.get(row.player) ??
-        { touches: 0, yards: 0, scores: 0, long: 0 };
+        { touches: 0, yards: 0, scores: 0, long: 0, longYards: 0 };
       own.touches++;
       own.yards += row.yards;
       own.scores += row.touchdown;
-      if (row.yards >= 20) own.long++;
+
+      if (row.yards >= 20) {
+        own.long++;
+        own.longYards += row.yards;
+      }
+
       anyTime.byPlayer.set(row.player, own);
     }
 
@@ -1108,14 +1151,16 @@ export function fitPlayFactors(
       pooled.named.touches += cell.named.touches;
       pooled.named.yards += cell.named.yards;
       pooled.named.long += cell.named.long;
+      pooled.named.longYards += cell.named.longYards;
 
       for (const [player, own] of cell.byPlayer) {
         const already = pooled.byPlayer.get(player) ??
-          { touches: 0, yards: 0, scores: 0, long: 0 };
+          { touches: 0, yards: 0, scores: 0, long: 0, longYards: 0 };
         already.touches += own.touches;
         already.yards += own.yards;
         already.scores += own.scores;
         already.long += own.long;
+        already.longYards += own.longYards;
         pooled.byPlayer.set(player, already);
       }
 
@@ -2327,8 +2372,28 @@ export function fitPlayFactors(
       // and his level on top, against what everybody made over the
       // same plays, with the long ones taken out of it since the draw
       // above has already put them in
-      const league = found.league.yards / Math.max(1, found.league.touches);
-      const his = found.his.yards / Math.max(1, found.his.touches);
+      /**
+       * His level on the ordinary touches, with the long ones taken
+       * out of both sides of it.
+       *
+       * Whether this is one of his long ones was settled above, from
+       * how often he breaks them, so a level worked out over all his
+       * touches counts a big play man's long ones a second time. That
+       * used to be undone by dividing by the square root of his rate
+       * of breaking them, which blows up on a man with one long gain
+       * in sixty touches and cost more than the level was worth: it
+       * ordered backs by what they make of a touch at .14, where
+       * having no level at all manages .22.
+       */
+      const plain = (of: { yards: number; touches: number; long: number;
+        longYards: number }) =>
+        (of.yards - of.longYards) / Math.max(1, of.touches - of.long);
+      const league = ORDINARY_LEVEL
+        ? plain(found.league)
+        : found.league.yards / Math.max(1, found.league.touches);
+      const his = ORDINARY_LEVEL
+        ? plain(found.his)
+        : found.his.yards / Math.max(1, found.his.touches);
       const leagueLongRate = found.league.long / Math.max(1, found.league.touches);
       const hisLongRate = found.his.long / Math.max(1, found.his.touches);
       // and how far it went, now that whether it went anywhere has
@@ -2336,8 +2401,9 @@ export function fitPlayFactors(
       const level = playLevel && sides
         ? playLevel.levelFor(state, call, player, sides)
         : his / Math.max(0.1, league);
-      const shape = leagueLongRate > 0 && hisLongRate > 0 &&
-        !process.env["NO_LONG_SHAPE"]
+      const shape = ORDINARY_LEVEL || process.env["NO_LONG_SHAPE"]
+        ? level
+        : leagueLongRate > 0 && hisLongRate > 0
         ? level * (leagueLongRate / hisLongRate) ** 0.5
         : level;
 
