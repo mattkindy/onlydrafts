@@ -45,6 +45,79 @@ arithmetic rather than disappointment: the walk is one voice of four
 at a fifth of the say, so a gain of .07 in its own column arrives at
 the board as .014.
 
+## Which part of a snap the walk gets wrong
+
+A snap is three decisions and the walk is scored end to end, so a bad
+week never said which of the three caused it. scripts/playLayerEval.ts
+asks each one against the 35,050 plays of 2024, with a plain answer
+beside it.
+
+| the decision | the walk | a plain answer |
+|---|---|---|
+| run or pass | .2067 | .2450, saying the league rate every time |
+| who gets the ball | 22.9% of the play to the man who got it | 16.1% from his own season share |
+| and putting him top of the list | 29.1% | 32.1% |
+| what he makes with it | 5.55 yards out | 5.40 for the call's average |
+
+The call is much the strongest of the three and the yards are level
+with the average. The plain answers in the last three rows are all read
+off the same season they are scored against, so they know things the
+walk cannot, and being level with them is better than it looks.
+
+The yards first read 7.42 against 5.40, and that was wrong. The walk
+draws a gain rather than predicting one, so a single draw has the whole
+spread of the distribution in it and scores worse than a point estimate
+even when the distribution is exactly right. Averaging twelve draws
+gives 5.55.
+
+## How often the walk hands it to him
+
+Volume decides most of a back's week and none of it came from the walk.
+The walk counts every carry, target, attempt and completion it deals
+out, and the script that writes a played season to disk listed ten
+parts and dropped those four. So a card showed a back's rushing yards
+from the walk with no carries beside them, and the board's share seat,
+its second heaviest at .3, was the share projection on its own. Adding
+those four to the list is the whole fix.
+
+scripts/volumeOrderEval.ts then asks whether the walk's allocation
+deserves the seat. It reads the walk's shares off the plays that really
+happened, so both are asked about the same plays and only the
+allocation is judged.
+
+| | the walk | the projection |
+|---|---|---|
+| 2023, 323 men | .707 | .642 |
+| 2024, 322 men | .697 | .623 |
+| 2025, 327 men | .673 | .625 |
+
+The walk is ahead in eight of the nine position and season cuts, the
+exception being 2025 tight ends. Only men both of them price are
+counted. The projection says nothing at all about quarterbacks, and
+leaving them in let every quarterback tie at nothing and handed the
+walk the row.
+
+The walk gives a side's busiest man 23.3% to 24.3% of the work where
+the busiest man really took about 31%, in all three seasons. That looks
+like an allocation far too flat, and it is not. The busiest man of a
+season is picked knowing how the season went. Ask instead what the man
+the walk itself puts first went on to take, and the walk gives him
+24.3% where he took 23.9% in 2023, and 23.9% against 24.9% in 2024. It
+is short only in 2025, 23.3% against 27.0%, and 2025 is the season
+still being played, so its work has had less time to be spread around
+by injuries.
+
+Pulling the shares apart before they are normalised, to undo some of
+the shrinking a projection does, costs ordering at every strength and
+in every season: 1.1 takes 2024 from .697 to .692, 1.25 to .685, and
+1.5 to .671, with the same slope in the other two. It does not buy
+calibration either, since there was little to buy.
+
+Both numbers that looked alarming here were artifacts of how they were
+measured, and both were the same mistake: comparing a draw, or a
+ranking, against something that already knows the answer. Measure what
+the model actually claims.
+
 ## The snap chain, four ways
 
 Drawing the formation and the defence's shell before the call, so the
@@ -120,6 +193,10 @@ Each of these was built, measured and reverted or left switched off.
   of the work at .536 on its own and explains what the projection
   missed at .005, .058 and .064 over three seasons, so the counts
   already know it.
+- Pulling a play's shares apart before they are normalised, at 1.1,
+  1.25 and 1.5. It costs ordering at every strength in every season,
+  and the concentration it was meant to fix was mostly hindsight in
+  how it had been measured.
 - Giving the formation model more seasons. Its thinnest cell already
   has 1,541 plays and most have four to twenty two thousand, so the
   extra history buys nothing and costs staleness.
