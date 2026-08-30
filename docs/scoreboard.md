@@ -22,7 +22,7 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7497 | .7012 | .6981 | .331 |
+| now | .7492 | .6961 | .7004 | .343 |
 
 The weekly number read .343 in this table for a while and it does not
 reproduce. walkWeeklyEval seeds its rng off the season, the week and
@@ -47,7 +47,19 @@ losing the first two rounds by about .007.
 | the walk's seat cut to twenty percent | .7482 | .7035 | .6946 | .331 |
 | what a side's formation does to a play | .7487 | .7050 | .6971 | .327 |
 | room asked of the depth pools near the line | .7497 | .7012 | .6981 | .331 |
-| the goal line asking for five plays a man | | | | .343 |
+| the goal line asking for five plays a man | .7492 | .6961 | .7004 | .343 |
+
+The walk's own column is the best it has been on a season, .7004, and
+on every place worth less than the one above, .7070. The board's first
+24 is .009 below where the day started, which is the cost of this and
+worth watching.
+
+Its seat was swept again and stays at twenty percent, but the shape of
+the sweep changed. The first 24 used to fall as the seat grew and now
+reads .6961 at twenty, twenty five and thirty alike. Thirty wins a
+season by .0026 and loses the first 36 and the first 72 by about .008
+each, so twenty is still the choice. The thing that had capped the seat
+is loosening.
 
 The last row is the first change in a while to move the walk and the
 weekly bench the same way. The walk's own column goes up on six of the
