@@ -19,11 +19,76 @@ import { splitLine } from "../src/data/csv.js";
 const SEASONS = [2021, 2022, 2023, 2024, 2025];
 const OUT = join(RAW_DIR, "..", "curated", "touches.csv");
 
+/**
+ * What the defence showed, from the participation file. Coverage is
+ * complete from 2023 and about a third of 2022, so a season without
+ * it leaves the columns empty and whatever reads them falls back.
+ */
+/** how many defensive backs are on, which is the look in one word */
+const shellOf = (text: string): string => {
+  let backs = 0;
+
+  for (const spot of ["CB", "FS", "SS", "S", "DB"]) {
+    backs += Number(new RegExp(`(\\d+) ${spot}(?:,|$)`).exec(text)?.[1] ?? 0);
+  }
+
+  if (backs < 4) return "";
+  if (backs === 4) return "base";
+  if (backs === 5) return "nickel";
+
+  return "dime";
+};
+
+async function shownBy(season: number) {
+  const path = join(RAW_DIR, `participation_${season}.csv`);
+  const byPlay = new Map<string, {
+    manZone: string; coverage: string; rushers: number; box: number;
+    shell: string;
+  }>();
+
+  if (!existsSync(path)) {
+    return byPlay;
+  }
+
+  const reader = createInterface({ input: createReadStream(path) });
+  let header: string[] | undefined;
+  const at: Record<string, number> = {};
+
+  for await (const line of reader) {
+    if (!header) {
+      header = splitLine(line);
+
+      for (const field of [
+        "nflverse_game_id", "play_id", "defense_man_zone_type",
+        "defense_coverage_type", "number_of_pass_rushers", "defenders_in_box",
+        "defense_personnel",
+      ]) {
+        at[field] = header.indexOf(field);
+      }
+
+      continue;
+    }
+
+    const c = splitLine(line);
+    const man = c[at["defense_man_zone_type"]!] ?? "";
+    byPlay.set(`${c[at["nflverse_game_id"]!]}|${c[at["play_id"]!]}`, {
+      manZone: man === "MAN_COVERAGE" ? "man" : man === "ZONE_COVERAGE" ? "zone" : "",
+      coverage: (c[at["defense_coverage_type"]!] ?? "").toLowerCase(),
+      rushers: Number(c[at["number_of_pass_rushers"]!]) || 0,
+      box: Number(c[at["defenders_in_box"]!]) || 0,
+      shell: shellOf(c[at["defense_personnel"]!] ?? ""),
+    });
+  }
+
+  return byPlay;
+}
+
 async function main(): Promise<void> {
   const out = createWriteStream(OUT);
   out.write(
     "season,week,offense,defense,down,togo,yardline,margin,seconds," +
-      "playType,player,passer,airYards,caught,yards,touchdown,shotgun\n",
+      "playType,player,passer,airYards,caught,yards,touchdown,shotgun," +
+      "manZone,coverage,rushers,shell,box\n",
   );
   let total = 0;
 
@@ -33,6 +98,8 @@ async function main(): Promise<void> {
     if (!existsSync(path)) {
       continue;
     }
+
+    const defenceShowed = await shownBy(season);
 
     const reader = createInterface({ input: createReadStream(path) });
     let header: string[] | undefined;
@@ -47,6 +114,7 @@ async function main(): Promise<void> {
           "score_differential", "game_seconds_remaining", "play_type",
           "yards_gained", "touchdown", "rusher_player_id", "receiver_player_id",
           "complete_pass", "passer_player_id", "air_yards", "shotgun",
+          "game_id", "play_id",
         ]) {
           at[field] = header.indexOf(field);
         }
@@ -86,6 +154,10 @@ async function main(): Promise<void> {
         continue;
       }
 
+      const shown = defenceShowed.get(
+        `${c[at["game_id"]!]}|${c[at["play_id"]!]}`,
+      );
+
       out.write([
         season, c[at["week"]!], c[at["posteam"]!], c[at["defteam"]!],
         down, c[at["ydstogo"]!], yardline,
@@ -93,6 +165,11 @@ async function main(): Promise<void> {
         type, player, passer, airYards, caught, c[at["yards_gained"]!] || 0,
         c[at["touchdown"]!] === "1" ? 1 : 0,
         c[at["shotgun"]!] === "1" ? 1 : 0,
+        shown?.manZone ?? "",
+        shown?.coverage ?? "",
+        shown?.rushers || "",
+        shown?.shell ?? "",
+        shown?.box || "",
       ].join(",") + "\n");
       written++;
     }

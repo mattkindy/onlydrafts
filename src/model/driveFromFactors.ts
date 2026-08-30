@@ -301,7 +301,21 @@ export function walkDrive(
       continue;
     }
 
-    const call: Call = uniform() < factors.runs(state, sides.offence, sides)
+    /**
+     * The two sides settle the snap before anything else happens. The
+     * offence stands somewhere, the defence answers with a shell, and
+     * the call, the man it goes to and the yards are all asked of the
+     * pair. Drawing the formation after the call let a play be under
+     * centre and thrown at the rate of one from the gun.
+     */
+    const inGun = factors.standsBack
+      ? uniform() < factors.standsBack(state, sides.offence)
+      : undefined;
+    const shell = factors.looksLike && inGun !== undefined
+      ? factors.looksLike(state, inGun, sides.defence, uniform)
+      : undefined;
+    const snap = { ...sides, shell, shotgun: inGun };
+    const call: Call = uniform() < factors.runs(state, sides.offence, snap)
       ? "run" : "pass";
 
     const givenAway = rules.turnoverAt
@@ -317,7 +331,7 @@ export function walkDrive(
 
     deepest = Math.min(deepest, state.yardline);
     // who it goes to, from the men on the field at this state
-    const shares = factors.goesTo(state, call, among);
+    const shares = factors.goesTo(state, call, among, snap);
     let left = uniform();
     let player = among[among.length - 1] ?? "";
 
@@ -333,7 +347,7 @@ export function walkDrive(
     // his own play when he has enough behind him, whole, and the
     // pooled draw with its multipliers when he does not
     let own = factors.hisOwnPlay
-      ? factors.hisOwnPlay(state, call, player, uniform, sides.passer, sides)
+      ? factors.hisOwnPlay(state, call, player, uniform, sides.passer, snap)
       : undefined;
 
     /**
@@ -356,7 +370,7 @@ export function walkDrive(
                  uniform() < bend - 1) {
         own = {
           yards: Math.max(1, Math.round(
-            factors.gains(state, call, player, uniform, sides),
+            factors.gains(state, call, player, uniform, snap),
           )),
           caught: true,
         };
@@ -366,7 +380,7 @@ export function walkDrive(
     }
     const drawn = own
       ? own.yards
-      : Math.round(factors.gains(state, call, player, uniform, sides));
+      : Math.round(factors.gains(state, call, player, uniform, snap));
     const lifted = (sides.lift ?? 1) *
       (call === "pass" ? sides.passLift ?? 1 : 1);
     let gained = Math.min(
