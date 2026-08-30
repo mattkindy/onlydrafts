@@ -11,6 +11,9 @@
  * Run: npx tsx scripts/pointsFromEval.ts [seasons, comma separated]
  */
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { parseCsv } from "../src/data/csv.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { spearman } from "../src/backtest/metrics.js";
@@ -139,6 +142,106 @@ for (const part of ["yards", "catches", "scores", "points"]) {
     `  ${part.padEnd(8)}${String(its.length).padStart(4)} men  ` +
     `his two halves agree ${spearman(
       its.map((h) => mid(h.odd)), its.map((h) => mid(h.even)),
+    ).toFixed(3)}`,
+  );
+}
+
+/**
+ * And whether scoring is a thing about a man that lasts, which is what
+ * says whether the walk could carry it as an attribute the way it
+ * already carries how far he is thrown. A touch is a carry or a target,
+ * so this is how often the work he gets turns into six points.
+ */
+const perTouch = new Map<number, Map<string, { touches: number; scores: number }>>();
+
+for (const season of [2021, 2022, 2023, 2024, 2025]) {
+  const its = new Map<string, { touches: number; scores: number }>();
+
+  for (const s of await loadPlayerStats(season).catch(() => [])) {
+    if (s.week > 18 || !["RB", "WR", "TE"].includes(s.position)) {
+      continue;
+    }
+
+    const own = its.get(s.playerId) ?? { touches: 0, scores: 0 };
+    own.touches += (s.carries ?? 0) + (s.targets ?? 0);
+    own.scores += (s.statLine["rushTd"] ?? 0) + (s.statLine["recTd"] ?? 0);
+    its.set(s.playerId, own);
+  }
+
+  perTouch.set(season, its);
+}
+
+console.log("\nscoring a touch, one season against the next, 80 touches in both:");
+
+for (const season of [2022, 2023, 2024]) {
+  const before = perTouch.get(season)!;
+  const after = perTouch.get(season + 1)!;
+  const men = [...before.keys()].filter((id) =>
+    before.get(id)!.touches >= 80 && (after.get(id)?.touches ?? 0) >= 80);
+
+  if (men.length < 20) {
+    continue;
+  }
+
+  const rate = (of: Map<string, { touches: number; scores: number }>, id: string) =>
+    of.get(id)!.scores / of.get(id)!.touches;
+  console.log(
+    `  ${season} to ${season + 1}  ${String(men.length).padStart(4)} men  ` +
+    `agrees ${spearman(
+      men.map((id) => rate(before, id)), men.map((id) => rate(after, id)),
+    ).toFixed(3)}`,
+  );
+}
+
+/**
+ * Whether the goal line work is a role that lasts, which is the thing
+ * that would be worth modelling if it does. Scoring a touch barely
+ * lasts, so the six points are in getting the ball there rather than
+ * in what a man does when he has it.
+ */
+const nearGoal = new Map<number, Map<string, number>>();
+const sideNear = new Map<number, Map<string, number>>();
+
+for (const r of parseCsv(await readFile(
+  join(import.meta.dirname, "..", "data", "curated", "touches.csv"), "utf8",
+))) {
+  const season = Number(r["season"]);
+  const yardline = Number(r["yardline"]);
+
+  if (!r["player"] || !["run", "pass"].includes(r["playType"] ?? "") ||
+      !Number.isFinite(yardline) || yardline > 10) {
+    continue;
+  }
+
+  const its = nearGoal.get(season) ?? new Map<string, number>();
+  its.set(r["player"], (its.get(r["player"]) ?? 0) + 1);
+  nearGoal.set(season, its);
+  const side = sideNear.get(season) ?? new Map<string, number>();
+  side.set(r["offense"]!, (side.get(r["offense"]!) ?? 0) + 1);
+  sideNear.set(season, side);
+}
+
+console.log("\nthe work inside the ten, one season against the next:");
+
+for (const season of [2022, 2023, 2024]) {
+  const before = nearGoal.get(season);
+  const after = nearGoal.get(season + 1);
+
+  if (!before || !after) {
+    continue;
+  }
+
+  const men = [...before.keys()].filter((id) =>
+    before.get(id)! >= 8 && (after.get(id) ?? 0) >= 1);
+
+  if (men.length < 20) {
+    continue;
+  }
+
+  console.log(
+    `  ${season} to ${season + 1}  ${String(men.length).padStart(4)} men  ` +
+    `how many he gets agrees ${spearman(
+      men.map((id) => before.get(id)!), men.map((id) => after.get(id) ?? 0),
     ).toFixed(3)}`,
   );
 }
