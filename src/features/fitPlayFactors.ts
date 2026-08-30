@@ -1450,9 +1450,35 @@ export function fitPlayFactors(
     hisOwnPlay,
     matchup: pairing,
     caught: wasCaught,
-    runs: (state, offence) => {
+    runs: (state, offence, sides) => {
       const league = atCounts(state, settings.leastForCall);
       const leagueRate = league.plays === 0 ? 0.45 : league.runs / league.plays;
+
+      /**
+       * The model's own read of the call, where it has one. The pools
+       * see the down, the distance and the spot; the model can also
+       * see the staff calling it and the men the defence has on the
+       * field, and both are things a run rate really turns on.
+       */
+      const said = playLevel?.runsHere && sides
+        ? playLevel.runsHere(state, sides)
+        : undefined;
+
+      /**
+       * At nothing, because the pools win this one and win it by a
+       * lot: weekly player ordering goes .331, .260, .193 as the
+       * model takes none, half and all of the call. A call turns on
+       * sharp steps in the distance, 72% run on third and one and 19%
+       * on third and eight, and the cells have tens of thousands of
+       * plays at each and reproduce the step, where a tree of this
+       * depth smooths across it.
+       */
+      if (said !== undefined) {
+        const onModel = Number(process.env["CALL_MODEL"] ?? 0);
+
+        return Math.max(0.05, Math.min(0.95,
+          onModel * said + (1 - onModel) * leagueRate));
+      }
 
       if (!offence) {
         return leagueRate;
