@@ -22,7 +22,7 @@ interface Flat {
   cells: [string, number, number, number, number[], number[],
     [number, number, number],
     [string, number, number, number, number][],
-    [number, number[]][]][];
+    [number, number[]][], [number, number[]][]][];
   byMan: [string, number, number, number][];
   leagueOn: [string, number, number, number][];
   caughtAt: [number, number, number][];
@@ -49,7 +49,7 @@ const flatten = (counted: CountedPlays): Flat => ({
     [c.named.touches, c.named.yards, c.named.long],
     [...c.byPlayer.entries()].map(([id, o]) =>
       [id, o.touches, o.yards, o.scores, o.long]),
-    [...c.byDepth.entries()],
+    [...c.byDepth.entries()], [...c.byDepthFrom.entries()],
   ]),
   byMan: [...counted.byMan.entries()].map(([k, r]) => [k, r.touches, r.yards, r.long]),
   leagueOn: [...counted.leagueOn.entries()].map(([k, r]) => [k, r.touches, r.yards, r.long]),
@@ -78,11 +78,11 @@ const sideCell = (
 ) => ({
   plays, runs, scores, yards, from: [],
   named: { touches: 0, yards: 0, long: 0 },
-  byPlayer: new Map(), byDepth: new Map(),
+  byPlayer: new Map(), byDepth: new Map(), byDepthFrom: new Map(),
 });
 
 const raise = (flat: Flat): CountedPlays => ({
-  cells: new Map(flat.cells.map(([key, plays, runs, scores, yards, from, named, byPlayer, byDepth]) => [
+  cells: new Map(flat.cells.map(([key, plays, runs, scores, yards, from, named, byPlayer, byDepth, byDepthFrom]) => [
     key,
     {
       plays, runs, scores, yards, from,
@@ -90,6 +90,7 @@ const raise = (flat: Flat): CountedPlays => ({
       byPlayer: new Map(byPlayer.map(([id, touches, y, sc, long]) =>
         [id, { touches, yards: y, scores: sc, long }])),
       byDepth: new Map(byDepth),
+      byDepthFrom: new Map(byDepthFrom),
     },
   ])),
   byOffence: new Map(flat.bySide.filter(([w]) => w === "o")
@@ -126,7 +127,7 @@ export async function countsFor(
   const stamp = await stat(TOUCHES).then((s) => s.mtimeMs).catch(() => 0);
   // the counting changes shape sometimes, and an older file would come
   // back missing whatever was added since
-  const at = join(KEPT, `counts11-${maxSeason}-${Math.round(stamp)}.json`);
+  const at = join(KEPT, `counts12-${maxSeason}-${Math.round(stamp)}.json`);
   const already = await readFile(at, "utf8").catch(() => "");
 
   if (already) {

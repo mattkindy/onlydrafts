@@ -155,12 +155,20 @@ export interface Counted extends StateCell {
    * every receiver the same throw.
    */
   byDepth: Map<number, number[]>;
+  /**
+   * And where each of those was thrown from, in step with them, so a
+   * throw can be drawn from spots that had the field in front of them
+   * to run into. A catch on the five never made more than five yards,
+   * and pooling it with the rest is why the walk scores from distance
+   * a third as often as anybody does.
+   */
+  byDepthFrom: Map<number, number[]>;
 }
 
 const emptyCounted = (): Counted =>
   ({
     ...emptyCell(), byPlayer: new Map(), from: [], named: emptyRate(),
-    byDepth: new Map(),
+    byDepth: new Map(), byDepthFrom: new Map(),
   });
 
 /**
@@ -211,18 +219,34 @@ const bandHere = (
  * pool of all throws is worth six. A band next door is much closer to
  * the truth than no band at all.
  */
-const gainsAtDepth = (cell: Counted, band: number): number[] => {
-  const found = [...(cell.byDepth.get(band) ?? [])];
+const gainsAtDepth = (cell: Counted, band: number, room = 0): number[] => {
+  const found: number[] = [];
+  const take = (at: number) => {
+    const gains = cell.byDepth.get(at) ?? [];
+    const from = cell.byDepthFrom.get(at) ?? [];
+
+    for (let i = 0; i < gains.length; i++) {
+      if (room <= 0 || (from[i] ?? 0) >= room) {
+        found.push(gains[i]!);
+      }
+    }
+  };
+
+  take(band);
 
   for (let step = 1; step < 6 && found.length < 40; step++) {
     for (const beside of [band - step, band + step]) {
-      for (const gained of cell.byDepth.get(beside) ?? []) {
-        found.push(gained);
-      }
+      take(beside);
     }
   }
 
-  return found;
+  /**
+   * Asking for room this far out leaves too little to draw from near
+   * the halfway line, where only a throw from a side's own end has it.
+   * Better a throw that could not have run as far as this one might
+   * than no throw of this depth at all.
+   */
+  return room > 0 && found.length < 20 ? gainsAtDepth(cell, band) : found;
 };
 
 /**
@@ -352,6 +376,17 @@ const FORM_FADES = [0, 1, 2, 3, 4, 5].map((b) => Math.pow(FORM_FADE, b));
  */
 const HOW_FAR = Number(process.env["HOW_FAR"] ?? 1);
 const FROM_COUNTS = Number(process.env["FROM_COUNTS"] ?? 0);
+
+/**
+ * How near the line a throw has to be before room is asked of its pool.
+ *
+ * Twenty five reads .331 a week against .327 for asking nowhere, and
+ * makes 1031 touchdowns against 931 where 1430 happened. Asking further
+ * out gives back both, .319 at forty and .316 everywhere, since out
+ * there the throws with the field in front of them are throws from a
+ * side's own end and those are different plays.
+ */
+const DEPTH_ROOM_UPTO = Number(process.env["DEPTH_ROOM_UPTO"] ?? 25);
 
 export function storePlays(rows: PlayRow[]): PlayStore {
   const kept = rows.filter((r) => r.player);
@@ -725,6 +760,9 @@ export function countPlays(
     if (row.call === "pass" && row.airYards !== undefined) {
       const band = bandOf(row.airYards);
       cell.byDepth.set(band, [...(cell.byDepth.get(band) ?? []), row.yards]);
+      cell.byDepthFrom.set(
+        band, [...(cell.byDepthFrom.get(band) ?? []), row.yardline],
+      );
     }
 
     if (row.player) {
@@ -750,6 +788,9 @@ export function countPlays(
     if (row.call === "pass" && row.airYards !== undefined) {
       const band = bandOf(row.airYards);
       anyTime.byDepth.set(band, [...(anyTime.byDepth.get(band) ?? []), row.yards]);
+      anyTime.byDepthFrom.set(
+        band, [...(anyTime.byDepthFrom.get(band) ?? []), row.yardline],
+      );
     }
 
     if (row.player) {
@@ -1029,6 +1070,11 @@ export function fitPlayFactors(
         const already = pooled.byDepth.get(band) ?? [];
         for (const gained of gains) already.push(gained);
         pooled.byDepth.set(band, already);
+        // in step with the gains above, so the room filter still lines
+        // up after several cells have been gathered into one
+        const spots = pooled.byDepthFrom.get(band) ?? [];
+        for (const spot of cell.byDepthFrom.get(band) ?? []) spots.push(spot);
+        pooled.byDepthFrom.set(band, spots);
       }
 
       pooled.named.touches += cell.named.touches;
@@ -2129,8 +2175,19 @@ export function fitPlayFactors(
        * settles how often the throw gains nothing as well as how much
        * it makes when it does.
        */
+      /**
+       * Room is asked for only near enough to score. Out at a side's
+       * own twenty five, keeping the throws that had seventy five
+       * yards in front of them keeps only throws from a side's own
+       * end, which are different plays, and receivers read .235
+       * against .277 for it. In close it is the throws with no room
+       * that were never going to be long.
+       */
       const atDepth = depth && call === "pass" && player
-        ? gainsAtDepth(cell, bandHere(cell, depth.leaningOf(player), uniform))
+        ? gainsAtDepth(
+            cell, bandHere(cell, depth.leaningOf(player), uniform),
+            state.yardline <= DEPTH_ROOM_UPTO ? state.yardline : 0,
+          )
         : undefined;
       /**
        * Only the gains that had room to be this long.

@@ -46,6 +46,7 @@ losing the first two rounds by about .007.
 | the market settles a room's pecking order | .7510 | .6961 | .6946 | |
 | the walk's seat cut to twenty percent | .7482 | .7035 | .6946 | .331 |
 | what a side's formation does to a play | .7487 | .7050 | .6971 | .327 |
+| room asked of the depth pools near the line | | | | .331 |
 
 The board barely moves while the walk moves a lot, and that is
 arithmetic rather than disappointment: the walk is one voice of four
@@ -132,6 +133,56 @@ A goal line bucket was tried before and reverted, which is in the list
 below. It was tried without this measurement, against the board, where
 a change worth a point of goal line allocation cannot be seen. The
 measurement to aim at is this table.
+
+## Where the touchdowns go missing
+
+scripts/scoreLayerEval.ts takes a touchdown apart. A man's scores are
+how often he gets the ball times how often that reaches the end zone,
+so the truth is put into each slot in turn and whichever swap fixes the
+ordering is the one that was breaking it. Over 2024:
+
+| ordering 200 men by the scores they made | |
+|---|---|
+| the walk, both parts its own | .306 |
+| the truth about who got the ball | .588 |
+| the truth about whether it scored | .389 |
+| how often he touched it at all | .601 |
+| how often he touched it inside the ten | .672 |
+
+Who gets it is worth .282 and whether it scores .083, so allocation is
+most of it. But the last row is the one to sit with. Counting a man's
+goal line touches orders his touchdowns better than the walk manages
+when it is handed perfect allocation, so the conversion is taking
+information away rather than adding any.
+
+Underneath both, the walk makes 931 touchdowns where 1430 happened. It
+is 24% short inside the twenty and 68% short outside it, and its gains
+run twenty or more 5.08% of the time against 6.24%, forty or more 0.68%
+against 1.01%.
+
+That last part has a cause. A gain is capped by the spot it came from,
+so a catch on the five never made more than five yards, and the pools
+are full of those. roomFor exists to keep them out and it is skipped
+for every throw with a depth, which is where the long scores are.
+Switching it off altogether costs twenty touchdowns in a season, so it
+was doing almost nothing.
+
+Asking room of the depth pools as well pays, and only close to the
+line:
+
+| room asked out to | weekly | touchdowns, against 1430 |
+|---|---|---|
+| nowhere, as it was | .327 | 931 |
+| the twenty five | .331 | 1031 |
+| the forty | .319 | 1030 |
+| everywhere | .316 | 1078 |
+
+Out at a side's own twenty five the throws with the whole field in
+front of them are throws from a side's own end, which are different
+plays, and receivers read .235 against .277 when it is asked there. In
+close, the throws with no room are the ones that were never going to be
+long, and taking them out is most of the hundred touchdowns. Twenty
+five ships.
 
 ## It barely tells one man from another
 
