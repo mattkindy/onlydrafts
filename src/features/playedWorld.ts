@@ -31,6 +31,7 @@ import { fitTargetDepth } from "./targetDepth.js";
 import { fitFormation } from "./fitFormation.js";
 import { fitCoverage } from "./fitCoverage.js";
 import { fitLook } from "./fitLook.js";
+import { fitAfterCatch } from "./fitAfterCatch.js";
 import { buildPlayLevel } from "./playLevel.js";
 import {
   experienceBefore, pastShares, projectSplitShares, SHARING_POSITIONS,
@@ -102,6 +103,8 @@ export async function buildWorld(
         ? undefined : Number(r["airYards"]),
       caught: r["caught"] === "" || r["caught"] === undefined
         ? undefined : r["caught"] === "1",
+      afterCatch: r["afterCatch"] === "" || r["afterCatch"] === undefined
+        ? undefined : Number(r["afterCatch"]),
     })),
   );
   const ticking = fitPlayClock(learnRows);
@@ -372,6 +375,19 @@ export async function buildWorld(
           .map((r) => ({
             season: r.season, offence: r.offence, defence: r.defence,
             player: r.player, manZone: r.manZone!,
+          })))
+      : undefined,
+    /**
+     * What each man makes once the ball is his, which lasts to the
+     * next season at .689 where the walk drew it as part of one
+     * number.
+     */
+    afterCatch: process.env["YAC"]
+      ? fitAfterCatch(learnRows
+          .filter((r) => r.call === "pass" && r.afterCatch !== undefined &&
+            r.airYards !== undefined && r.player)
+          .map((r) => ({
+            player: r.player, airYards: r.airYards!, afterCatch: r.afterCatch!,
           })))
       : undefined,
     formation: process.env["NO_FORMATION"]
