@@ -45,6 +45,36 @@ arithmetic rather than disappointment: the walk is one voice of four
 at a fifth of the say, so a gain of .07 in its own column arrives at
 the board as .014.
 
+## The snap chain, four ways
+
+Drawing the formation and the defence's shell before the call, so the
+call, the man and the yards all answer to one snap. It is how football
+works and it has not paid yet. Each row is a week of a man's scoring
+against .343 for the shipped walk.
+
+| how it was built | reads |
+|---|---|
+| a table of its own, keyed on yardline deciles | .314 |
+| the same cells as everything else, widened the same | .328 |
+| plus recency in those cells, and less widening | .336 |
+| as a leaning on the pooled rate rather than a rate | .327 |
+
+The call from a formation asked 40.5% run where the plays it was
+fitted on were 41.8%, and taking that apart is most of what was
+learned. The bias sat evenly across every formation and down, which
+is a level shift rather than a broken cell. Two things make it up.
+How often a side runs at all has been flat for years, so pooling
+seasons costs the ordinary call nothing, while running from the gun
+went 27.0% in 2021 to 30.6% in 2023 and lining up in it went 66% to
+72%. And keying the formation halves every cell, so a thin one
+reaches further and smooths toward its neighbours: asking for eighty
+plays before a cell speaks gives 41.0%, forty gives 41.2%, twenty
+gives 41.4%.
+
+The last row is the one to remember. As a leaning the call is better
+calibrated and orders worse. Calibration and ordering are different
+targets and only the second is what a board is scored on.
+
 ## What did not work, so nobody tries it twice
 
 Each of these was built, measured and reverted or left switched off.
@@ -66,6 +96,9 @@ Each of these was built, measured and reverted or left switched off.
 - The level model calling the play. A call turns on sharp steps in the
   distance, which the cells reproduce and a tree of that depth smooths
   across.
+- Moving the target share by how much of his usual slice a receiver
+  takes against man rather than zone. It lifts receivers and tight
+  ends and costs passers and backs, .336 against .343.
 
 The pattern across them: a multiplier bolted onto one decision does
 not carry a matchup, and a decision that turns on a dense situation
