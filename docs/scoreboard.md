@@ -24,17 +24,17 @@ Every row is the same three instruments:
 |---|---|---|---|---|
 | now | .7492 | .6961 | .7004 | .343 |
 
-The weekly number read .343 in this table for a while and it does not
-reproduce. walkWeeklyEval seeds its rng off the season, the week and
-the two sides, so it is repeatable to four figures, and run twice today
-on the shipped build it gives .327 both times. The .343 was measured
-while the kept files still had the formation counts in them, which were
-put back with a checkout afterwards. Take .327 as the bar.
+This .343 is the first time the walk has beaten saying every week is a
+man's average so far, which reads .340. An earlier .343 in this table
+did not reproduce. walkWeeklyEval seeds its rng off the season, the
+week and the two sides, so it repeats to four figures, and the build
+that was shipped at the time read .327 twice. That older number had
+been measured while the kept files still carried the formation counts,
+which a checkout put back. This one is the goal line change and it
+reproduces.
 
-The walk's seat on the board is twenty percent. It is swept after
-every change; through all of the below it has stayed there, because
-the heavier seat keeps winning a whole season by about .003 and
-losing the first two rounds by about .007.
+The walk's seat on the board is twenty percent. It is swept after every
+change, and swept out to the whole board below.
 
 ## How it moved
 
@@ -267,8 +267,8 @@ of this, and tight ends' .086 where they ordered .036.
 | 100% | .7450 | .5858 | .7205 |
 
 Ordering a whole season peaks at half and falls away after. The first
-24 picks holds to thirty and then gives way, and by four fifths it has
-lost seven hundredths. The last column falls from twenty all the way
+24 picks stays where it is up to thirty and then gives way, and by four
+fifths it has lost seven hundredths. The last column falls from twenty all the way
 down. So the two ends of the board want opposite things: the walk knows
 most about the men the market has thought about least, and the market
 knows most about the men taken first. Twenty stays.
@@ -297,8 +297,8 @@ is six points behind one, which is the opposite of how it reads.
 A throw is drawn from the pool at his own depth and from the long end
 at his own rate of breaking one, so his level on top is a third helping
 and the walk spreads receivers by what would have to be .29 times as
-far to be right. Halving it reads .344 a week against .343 and all four
-positions hold. The board says no: the first 36 goes .7276 to .7179 and
+far to be right. Halving it reads .344 a week against .343 and no
+position loses. The board says no: the first 36 goes .7276 to .7179 and
 the first 72 .7984 to .7869, for .0015 on the first 24. Ten times the
 gain, given up. It is behind LEVEL_ON_PASS and switched off.
 
