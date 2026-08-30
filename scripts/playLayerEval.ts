@@ -87,6 +87,9 @@ let targetCall = 0;
 let onTopBefore = 0;
 let targetBefore = 0;
 let sawBefore = 0;
+const nearGoal = new Map<string, {
+  plays: number; onTop: number; said: number; onTopBefore: number;
+}>();
 
 /** how often each man took the ball for his side, over the season */
 const tookIt = new Map<string, number>();
@@ -181,6 +184,40 @@ for (const r of plays) {
 
     if (best === r["player"]) {
       onTop++;
+    }
+
+    /**
+     * And the same inside the ten, where the touchdowns are. A back
+     * who gets the ball on the goal line is worth six points for it,
+     * and the walk hands those out on his share of everything.
+     */
+    if (state.yardline <= 10) {
+      const near = nearGoal.get(r["playType"]!) ??
+        { plays: 0, onTop: 0, said: 0, onTopBefore: 0 };
+      near.plays++;
+      near.said += his;
+
+      if (best === r["player"]) {
+        near.onTop++;
+      }
+
+      let bestNear = "";
+      let mostNear = -1;
+
+      for (const who of men) {
+        const had = tookBefore.get(`${who}|${r["playType"]}`) ?? 0;
+
+        if (had > mostNear) {
+          mostNear = had;
+          bestNear = who;
+        }
+      }
+
+      if (bestNear === r["player"]) {
+        near.onTopBefore++;
+      }
+
+      nearGoal.set(r["playType"]!, near);
     }
 
     let bestFlat = "";
@@ -314,6 +351,15 @@ console.log(
   `most anyone could do: ${(100 * targetCall / targets).toFixed(1)}% of the ` +
   `play, top of the list ${(100 * onTopCall / targets).toFixed(1)}%`,
 );
+
+for (const [call, near] of nearGoal) {
+  console.log(
+    `  inside the ten  ${call.padEnd(5)} ${String(near.plays).padStart(5)} plays  ` +
+    `walk gives him ${(100 * near.said / near.plays).toFixed(1)}% and puts him ` +
+    `top ${(100 * near.onTop / near.plays).toFixed(1)}%, ` +
+    `last season's counts ${(100 * near.onTopBefore / near.plays).toFixed(1)}%`,
+  );
+}
 console.log(
   `  what he makes   walk is out by ${(gainOff / gains).toFixed(2)} yards a play, ` +
   `the call's average is out by ${(flatOff / gains).toFixed(2)}`,
