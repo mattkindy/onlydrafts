@@ -107,6 +107,14 @@ Each of these was built, measured and reverted or left switched off.
   has 1,541 plays and most have four to twenty two thousand, so the
   extra history buys nothing and costs staleness.
 
+Nor do they help each other. Three pairs have been tried, the
+coverage lean with the look tilt, the whole snap chain with the
+coverage lean, and the after catch half with the coverage lean. Each
+landed at or below the better of its two halves, and in the last one
+every position tracked whichever piece was worse for it while the
+pool fell under both. Pieces that each add variance to a simulation
+do not cancel by being added together.
+
 The pattern across them: a multiplier bolted onto one decision does
 not carry a matchup, and a decision that turns on a dense situation
 belongs to the cells. What has worked is either fixing something the
