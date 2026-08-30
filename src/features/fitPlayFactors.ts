@@ -416,6 +416,12 @@ export const scriptOf = (margin: number, down: number, toGo: number) => {
  * this is the second half of that draw rather than another way of
  * asking the same question.
  */
+export const formationBandOf = (
+  call: Call, shotgun: boolean, yardline: number,
+) =>
+  `${call}|${shotgun ? "gun" : "centre"}|` +
+  `${yardline <= 20 ? "close" : yardline <= 60 ? "middle" : "back"}`;
+
 export const atFormation = (
   shotgun: boolean, down: number, toGo: number, yardline: number,
 ) =>
@@ -427,6 +433,10 @@ export interface CountedPlays {
   cells: Map<string, Counted>;
   /** what each formation led to, for the two step call */
   fromFormation: Map<string, { plays: number; runs: number }>;
+  /** and what a play from each formation came to */
+  yardsFromFormation: Map<
+    string, { plays: number; yards: number; dry: number; long: number }
+  >;
   byOffence: Map<string, Counted>;
   byDefence: Map<string, Counted>;
   byMan: Map<string, Rate>;
@@ -535,6 +545,18 @@ export function countPlays(
   const callPlays = new Map<string, number>();
   let everyTouch = 0;
   const fromFormation = new Map<string, { plays: number; runs: number }>();
+  /**
+   * What a play from each formation came to, by call and by how far
+   * out it was. A throw from under centre makes 8.13 yards and goes
+   * twenty 14.5% of the time where one from the gun makes 6.58 and
+   * goes twenty 8.8%, since the first is play action; a run from the
+   * gun makes 5.04 against 4.67, since the box is lighter. The pools
+   * keep none of this, so a side that lives in the gun draws the same
+   * runs as one that never leaves centre.
+   */
+  const yardsFromFormation =
+    new Map<string, { plays: number; yards: number; dry: number; long: number }>();
+  const formationBand = formationBandOf;
 
   for (const row of rows) {
     if (row.call === "pass" && row.caught !== undefined) {
@@ -574,6 +596,21 @@ export function countPlays(
       }
 
       fromFormation.set(at, seen);
+      const band = formationBand(row.call, row.shotgun, row.yardline);
+      const made = yardsFromFormation.get(band) ??
+        { plays: 0, yards: 0, dry: 0, long: 0 };
+      made.plays++;
+      made.yards += row.yards;
+
+      if (row.yards <= 0) {
+        made.dry++;
+      }
+
+      if (row.yards >= 20) {
+        made.long++;
+      }
+
+      yardsFromFormation.set(band, made);
     }
   }
 
@@ -677,6 +714,7 @@ export function countPlays(
   return {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
     everyTouch, inScript, scriptPlays, onCall, callPlays, fromFormation,
+    yardsFromFormation,
   };
 }
 
@@ -693,7 +731,47 @@ export function fitPlayFactors(
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
     everyTouch, inScript, scriptPlays, onCall, callPlays,
     fromFormation = new Map<string, { plays: number; runs: number }>(),
+    yardsFromFormation = new Map<
+      string, { plays: number; yards: number; dry: number; long: number }
+    >(),
   } = extras.counted ?? countPlays(rows, !pairing);
+
+  /**
+   * What this side's habit does to a drawn gain, near one. The pools
+   * hold the league's mixture of formations, so a side that lives in
+   * the gun should draw runs a little longer and throws a little
+   * shorter than the mixture, and one that never leaves centre the
+   * other way. Centred on the league's own mix, so a side with no
+   * habit of its own moves nothing.
+   */
+  const formationTilt = (state: PlayState, call: Call, offence?: string) => {
+    if (!formation || !offence || yardsFromFormation.size === 0) {
+      return 1;
+    }
+
+    const inGun = yardsFromFormation.get(
+      formationBandOf(call, true, state.yardline),
+    );
+    const centre = yardsFromFormation.get(
+      formationBandOf(call, false, state.yardline),
+    );
+
+    if (!inGun || !centre || inGun.plays < 200 || centre.plays < 200) {
+      return 1;
+    }
+
+    const gunYards = inGun.yards / inGun.plays;
+    const centreYards = centre.yards / centre.plays;
+    const leagueGun = inGun.plays / (inGun.plays + centre.plays);
+    const his = Math.max(0.02, Math.min(0.98,
+      leagueGun * formation.leaning(offence)));
+    const mixture = leagueGun * gunYards + (1 - leagueGun) * centreYards;
+    const hisWay = his * gunYards + (1 - his) * centreYards;
+
+    return mixture > 0.1
+      ? Math.max(0.85, Math.min(1.2, hisWay / mixture))
+      : 1;
+  };
 
   /**
    * How much more of the work a man takes when the game is going this
@@ -1469,9 +1547,11 @@ export function fitPlayFactors(
             }
           }
 
+          const byFormation = formationTilt(state, call, sides?.offence);
+
           return {
             yards: Math.min(state.yardline,
-              drawn > 0 ? drawn * tilt.gain : drawn),
+              drawn > 0 ? drawn * tilt.gain * byFormation : drawn),
             caught: plays.caught[at] === 1,
           };
         }
@@ -1495,7 +1575,15 @@ export function fitPlayFactors(
        * own from season to season than any rate it puts up. Averaging
        * over both is how the call lost the side that was making it.
        */
-      if (formation && fromFormation.size > 0) {
+      /**
+       * The call from the formation is off: the pools already carry
+       * how much this side runs, read straight off its own plays at
+       * these cells, so drawing the formation first says the same
+       * thing twice and pays for it in noise. What the formation
+       * knows that the pools do not is what a play from it comes to,
+       * and that is applied to the gains instead.
+       */
+      if (formation && fromFormation.size > 0 && process.env["FORMATION_CALL"]) {
         const inGun = fromFormation.get(
           atFormation(true, state.down, state.toGo, state.yardline),
         );
@@ -1777,7 +1865,7 @@ export function fitPlayFactors(
         : level;
 
       const centre = process.env["NO_CENTRE"] ? 1 : centreOf.get(call) ?? 1;
-      const bent = drawn * tilt.gain *
+      const bent = drawn * tilt.gain * formationTilt(state, call, sides?.offence) *
         Math.max(0.5, Math.min(1.8, shape)) / Math.max(0.5, centre);
 
       if (!sides || bent <= 0 || playLevel) {
