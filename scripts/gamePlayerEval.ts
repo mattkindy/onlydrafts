@@ -48,10 +48,16 @@ const RULES = presets.standard;
  * The parts of a line every scoring system is built out of. Kept as
  * the names the stat line already uses, so applying a league's rules
  * to them is a lookup rather than a translation.
+ *
+ * The last four are how often he touched it rather than what he made
+ * of it. No league pays for a carry, but the walk counts every one it
+ * hands him, and a card that shows his yards from the walk and his
+ * carries from somewhere else is showing two different players.
  */
 const PARTS = [
   "passYds", "passTd", "interceptions", "rushYds", "rushTd",
   "receptions", "recYds", "recTd", "fumblesLost", "twoPointConversions",
+  "carries", "targets", "passAtt", "passCmp",
 ] as const;
 
 type StatTotals = Record<typeof PARTS[number], number>;
@@ -59,6 +65,7 @@ type StatTotals = Record<typeof PARTS[number], number>;
 const blankTotals = (): StatTotals => ({
   passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
   receptions: 0, recYds: 0, recTd: 0, fumblesLost: 0, twoPointConversions: 0,
+  carries: 0, targets: 0, passAtt: 0, passCmp: 0,
 });
 
 const middle = (values: number[]) =>
