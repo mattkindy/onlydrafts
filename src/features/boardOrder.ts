@@ -64,7 +64,7 @@ export interface BoardLean {
  * .003, which is the one number a drafter never collects.
  */
 export const BOARD_LEAN: BoardLean = {
-  parts: 0.099, model: 0, share: 0.3, adp: 0.401, walk: 0.2,
+  parts: 0.1, model: 0, share: 0.3, adp: 0.4, walk: 0.2,
   setBack: 100,
 };
 
