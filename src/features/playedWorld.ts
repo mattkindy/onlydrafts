@@ -339,18 +339,18 @@ export async function buildWorld(
   }, {
     split, pairing: pairing.bend, counted,
     /**
-     * Where a side stands before the snap, drawn before the call.
-     * Off until the board bench breaks the tie: it moves the passing
-     * game up and the running game down, and pooled it is level.
+     * Where a side stands before the snap. It says nothing about the
+     * call that the pools do not already know, and a great deal about
+     * what a play from there comes to, so it bends the gains.
      */
-    formation: process.env["FORMATION"]
-      ? fitFormation(learnRows
+    formation: process.env["NO_FORMATION"]
+      ? undefined
+      : fitFormation(learnRows
           .filter((r) => r.shotgun !== undefined)
           .map((r) => ({
             season: r.season, offence: r.offence, down: r.down, toGo: r.toGo,
             shotgun: r.shotgun ? 1 : 0, noHuddle: 0,
-          })))
-      : undefined,
+          }))),
     /**
      * One model over everybody on the play, in place of the chain of
      * multipliers. Each link of that chain was fitted alone and can
