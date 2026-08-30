@@ -99,6 +99,13 @@ Each of these was built, measured and reverted or left switched off.
 - Moving the target share by how much of his usual slice a receiver
   takes against man rather than zone. It lifts receivers and tight
   ends and costs passers and backs, .336 against .343.
+- What a man is paid. A deal signed before the season orders his share
+  of the work at .536 on its own and explains what the projection
+  missed at .005, .058 and .064 over three seasons, so the counts
+  already know it.
+- Giving the formation model more seasons. Its thinnest cell already
+  has 1,541 plays and most have four to twenty two thousand, so the
+  extra history buys nothing and costs staleness.
 
 The pattern across them: a multiplier bolted onto one decision does
 not carry a matchup, and a decision that turns on a dense situation
