@@ -41,6 +41,13 @@ export interface PlayLevel {
    * anything is still nothing, so it is asked for separately and
    * moves which end of the pool the draw comes from.
    */
+  /**
+   * How often this call is a run here, with the two staffs and the
+   * defence on the field in it, or nothing when the model cannot
+   * say. A rate, not a leaning, since the pools answer the same
+   * question and the caller decides how to mix them.
+   */
+  runsHere?: (state: PlayState, sides: PlaySides) => number | undefined;
   stuffedBy: (
     state: PlayState, call: Call, player: string, sides: PlaySides,
   ) => number;
@@ -241,6 +248,44 @@ export async function buildPlayLevel(
   });
   const forests = new Map<Call, Forest>();
   const stuffing = new Map<Call, Forest>();
+
+  /**
+   * Whether the call is a run, over both calls at once. The pools
+   * answer this off the down, the distance and the spot; this can
+   * also see the staff calling it and the men the defence has on the
+   * field, which is where a run rate ought to move.
+   */
+  const callRows: number[][] = [];
+  const wasRun: number[] = [];
+
+  for (const season of request.learn) {
+    const knownThen = knownBefore(plays, season, coaches);
+
+    for (const play of plays) {
+      if (play.season !== season || !play.call) {
+        continue;
+      }
+
+      callRows.push(rowFor(
+        knownThen, onField, coaches, play, play.call, "",
+        {
+          offence: play.offence, defence: play.defence, passer: play.passer,
+          season: play.season, week: play.week,
+        },
+        season,
+      ));
+      wasRun.push(play.call === "run" ? 1 : 0);
+    }
+  }
+
+  const callForest = callRows.length > 5000
+    ? fitForest({
+        rows: callRows, target: wasRun, names: NAMES,
+        settings: {
+          ...TREE_DEFAULTS, trees: settings.trees, depth: settings.depth,
+        },
+      })
+    : undefined;
   /** a sample of what was learned on, for centring the ratios */
   const held = new Map<Call, { row: number[] }[]>();
   const middles = new Map<Call, number>();
@@ -385,6 +430,19 @@ export async function buildPlayLevel(
   return {
     learnedOn,
     middleOn: (call) => middles.get(call) ?? 5,
+    runsHere: (state, sides) => {
+      if (!callForest) {
+        return undefined;
+      }
+
+      const said = predictForest(callForest, rowFor(
+        known, onField, coaches, state, "run", "", sides, request.scoreOn,
+      ));
+
+      return Number.isFinite(said)
+        ? Math.max(0.05, Math.min(0.95, said))
+        : undefined;
+    },
     stuffedBy: (state, call, player, sides) => {
       const both = asked(stuffing.get(call), state, call, player, sides);
 

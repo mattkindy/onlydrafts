@@ -301,7 +301,7 @@ export function walkDrive(
       continue;
     }
 
-    const call: Call = uniform() < factors.runs(state, sides.offence)
+    const call: Call = uniform() < factors.runs(state, sides.offence, sides)
       ? "run" : "pass";
 
     const givenAway = rules.turnoverAt

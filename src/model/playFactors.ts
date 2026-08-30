@@ -29,7 +29,13 @@ export type Call = "run" | "pass";
 
 export interface PlayFactors {
   /** how often the call is a run, for this offence where it is known */
-  runs: (state: PlayState, offence?: string) => number;
+  runs: (
+    state: PlayState, offence?: string,
+    sides?: {
+      offence?: string; defence?: string;
+      passer?: string; season?: number; week?: number;
+    },
+  ) => number;
   /** how the work at this state divides between the men available */
   goesTo: (state: PlayState, call: Call, among: string[]) => Map<string, number>;
   /** what he gains, drawn */
