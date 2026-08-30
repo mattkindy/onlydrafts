@@ -89,7 +89,17 @@ let targetBefore = 0;
 let sawBefore = 0;
 const nearGoal = new Map<string, {
   plays: number; onTop: number; said: number; onTopBefore: number;
+  onTopKnown: number; men: number;
 }>();
+/** who really took it inside the ten this season, as a ceiling */
+const nearOn = new Map<string, number>();
+
+for (const r of plays) {
+  if (r["player"] && Number(r["yardline"]) <= 10 && Number(r["down"]) >= 1) {
+    const key = `${r["player"]}|${r["playType"]}`;
+    nearOn.set(key, (nearOn.get(key) ?? 0) + 1);
+  }
+}
 
 /** how often each man took the ball for his side, over the season */
 const tookIt = new Map<string, number>();
@@ -193,7 +203,7 @@ for (const r of plays) {
      */
     if (state.yardline <= 10) {
       const near = nearGoal.get(r["playType"]!) ??
-        { plays: 0, onTop: 0, said: 0, onTopBefore: 0 };
+        { plays: 0, onTop: 0, said: 0, onTopBefore: 0, onTopKnown: 0, men: 0 };
       near.plays++;
       near.said += his;
 
@@ -217,6 +227,29 @@ for (const r of plays) {
         near.onTopBefore++;
       }
 
+      /**
+       * And the most anyone could manage, which is what says whether
+       * a number is bad or the question is hard. There are five men
+       * who can catch it and two who can run it, so naming one of
+       * five right can never read like naming one of two.
+       */
+      let bestKnown = "";
+      let mostKnown = -1;
+
+      for (const who of men) {
+        const had = nearOn.get(`${who}|${r["playType"]}`) ?? 0;
+
+        if (had > mostKnown) {
+          mostKnown = had;
+          bestKnown = who;
+        }
+      }
+
+      if (bestKnown === r["player"]) {
+        near.onTopKnown++;
+      }
+
+      near.men += men.length;
       nearGoal.set(r["playType"]!, near);
     }
 
@@ -357,7 +390,9 @@ for (const [call, near] of nearGoal) {
     `  inside the ten  ${call.padEnd(5)} ${String(near.plays).padStart(5)} plays  ` +
     `walk gives him ${(100 * near.said / near.plays).toFixed(1)}% and puts him ` +
     `top ${(100 * near.onTop / near.plays).toFixed(1)}%, ` +
-    `last season's counts ${(100 * near.onTopBefore / near.plays).toFixed(1)}%`,
+    `last season's counts ${(100 * near.onTopBefore / near.plays).toFixed(1)}%, ` +
+    `the most anyone could ${(100 * near.onTopKnown / near.plays).toFixed(1)}% ` +
+    `over ${(near.men / near.plays).toFixed(1)} men`,
   );
 }
 console.log(

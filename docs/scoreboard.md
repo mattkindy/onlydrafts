@@ -254,6 +254,54 @@ average so far, .343 against .340, with backs at .375 and receivers at
 Backs' touchdowns order .129 at two where they ordered .042 before any
 of this, and tight ends' .086 where they ordered .036.
 
+## The walk's seat, swept to the whole board
+
+| seat | a season | first 24 | every place worth less than the one above |
+|---|---|---|---|
+| 20% | .7485 | .6976 | .7913 |
+| 30% | .7513 | .6976 | .7890 |
+| 40% | .7529 | .6890 | .7831 |
+| 50% | .7531 | .6889 | .7827 |
+| 65% | .7523 | .6767 | .7665 |
+| 80% | .7499 | .6234 | .7492 |
+| 100% | .7450 | .5858 | .7205 |
+
+Ordering a whole season peaks at half and falls away after. The first
+24 picks holds to thirty and then gives way, and by four fifths it has
+lost seven hundredths. The last column falls from twenty all the way
+down. So the two ends of the board want opposite things: the walk knows
+most about the men the market has thought about least, and the market
+knows most about the men taken first. Twenty stays.
+
+## Two ways of asking who takes it in near the line
+
+The goal line cell asks for five plays a man. Asked separately by call,
+a run can go tighter than a throw without the throw paying for it:
+
+| | top of the list, run | top of the list, throw |
+|---|---|---|
+| both ask five | 45.1% | 21.5% |
+| runs ask two | 47.5% | 21.5% |
+| runs ask one | 47.7% | 21.5% |
+
+The throw looks far worse than the run and mostly is not. Thirteen men
+are on the field, five of whom can catch it and two of whom can run it,
+and the most anyone could manage knowing how the season went is 58.4%
+on a run and 32.8% on a throw. Against that the walk is at 77% of what
+can be had on a run and 66% on a throw, and last season's counts alone
+get 51.2% and 21.3%. So the throw is already at its rival and the run
+is six points behind one, which is the opposite of how it reads.
+
+## A throw saying less of a man's level
+
+A throw is drawn from the pool at his own depth and from the long end
+at his own rate of breaking one, so his level on top is a third helping
+and the walk spreads receivers by what would have to be .29 times as
+far to be right. Halving it reads .344 a week against .343 and all four
+positions hold. The board says no: the first 36 goes .7276 to .7179 and
+the first 72 .7984 to .7869, for .0015 on the first 24. Ten times the
+gain, given up. It is behind LEVEL_ON_PASS and switched off.
+
 ## It barely tells one man from another
 
 Half the point of playing a season out is that a good back gains more

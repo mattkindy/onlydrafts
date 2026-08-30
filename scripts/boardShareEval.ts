@@ -800,7 +800,7 @@ async function main(): Promise<void> {
 
       // the shipped rookies-at-slot seat with the walk's weight raised,
       // which the sweeps below never combined
-      for (const onWalk of [0.2, 0.25, 0.3]) {
+      for (const onWalk of [0.2, 0.25, 0.3, 0.4, 0.5, 0.65, 0.8, 1]) {
         const scale = (1 - onWalk) / (1 - 0.15);
         const raised = rows.map((_, i) => {
           let said = 0;
