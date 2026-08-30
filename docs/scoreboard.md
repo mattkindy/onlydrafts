@@ -47,6 +47,7 @@ losing the first two rounds by about .007.
 | the walk's seat cut to twenty percent | .7482 | .7035 | .6946 | .331 |
 | what a side's formation does to a play | .7487 | .7050 | .6971 | .327 |
 | room asked of the depth pools near the line | .7497 | .7012 | .6981 | .331 |
+| the goal line asking for five plays a man | | | | .343 |
 
 The last row is the first change in a while to move the walk and the
 weekly bench the same way. The walk's own column goes up on six of the
@@ -161,34 +162,71 @@ goal line touches orders his touchdowns better than the walk manages
 when it is handed perfect allocation, so the conversion is taking
 information away rather than adding any.
 
-Underneath both, the walk makes 931 touchdowns where 1430 happened. It
-is 24% short inside the twenty and 68% short outside it, and its gains
-run twenty or more 5.08% of the time against 6.24%, forty or more 0.68%
-against 1.01%.
+Underneath both, the walk makes 1143 touchdowns where 1430 happened,
+20% short, and only 11.0% of them come from outside the twenty where
+24.8% of the ones that happened do.
 
-That last part has a cause. A gain is capped by the spot it came from,
-so a catch on the five never made more than five yards, and the pools
-are full of those. roomFor exists to keep them out and it is skipped
-for every throw with a depth, which is where the long scores are.
-Switching it off altogether costs twenty touchdowns in a season, so it
-was doing almost nothing.
+Where it scores from is wrong in both directions:
 
-Asking room of the depth pools as well pays, and only close to the
-line:
-
-| room asked out to | weekly | touchdowns, against 1430 |
+| a play from here scores | the walk | really |
 |---|---|---|
-| nowhere, as it was | .327 | 931 |
-| the twenty five | .331 | 1031 |
-| the forty | .319 | 1030 |
-| everywhere | .316 | 1078 |
+| the one | 60.4% | 55.0% |
+| inside the three | 49.3% | 33.5% |
+| inside the five | 26.2% | 36.7% |
+| inside the ten | 17.6% | 22.7% |
+| inside the twenty | 6.6% | 9.0% |
+| further out | 0.6% | 1.3% |
 
-Out at a side's own twenty five the throws with the whole field in
-front of them are throws from a side's own end, which are different
-plays, and receivers read .235 against .277 when it is asked there. In
-close, the throws with no room are the ones that were never going to be
-long, and taking them out is most of the hundred touchdowns. Twenty
-five ships.
+It is too sure of itself from one and three yards out and not sure
+enough from four yards to the twenty, and it barely scores from
+distance at all. That last one has a candidate cause: a gain is capped
+by the spot it came from, so a catch on the five never made more than
+five yards, and the pools are full of those. Asking room of the depth
+pools near the line is worth a hundred touchdowns, 1143 to 1245, and
+reads .331 a week against .327. It does nothing for the long ones,
+11.0% to 11.1%, so the distance problem is untouched and open.
+
+Asked further out it gives the week back, .319 at the forty and .316
+everywhere, because out at a side's own twenty five the throws with the
+whole field in front of them are throws from a side's own end and those
+are different plays. Twenty five ships.
+
+**A warning about measuring this.** The drive engine rounds what comes
+back from the draw, so the walk has always dealt in whole yards, and a
+bench that asks the draw directly and checks whether the gain reached
+the line is scoring a simulation that does not ship. Read unrounded,
+the walk appears to make 931 touchdowns rather than 1143 and to score
+more often from the three than from the one, which is not something
+football or the walk does. Two benches here were reading it that way.
+The draw rounds at the source now.
+
+## Letting the goal line ask for less
+
+A cell is asked for forty plays a man, so nine men on the field ask for
+three hundred and sixty. Near the line there are not that many, so the
+spot widens: ring reaches out through 0, 1, 2, 3, 5, 8, 12, 20, 35, 60
+and 99 yards, and a play from the three fills itself from the twenty
+three and the thirty eight. The man who gets it from the three is not
+the man who gets it from the thirty eight, so the demand is heaviest
+exactly where the data is thinnest and the role sharpest.
+
+Asking for five inside the ten instead of forty:
+
+| asked for | week | week, RB | week, TE | top of the list inside the ten, run |
+|---|---|---|---|---|
+| forty | .331 | .327 | .213 | 42.1% |
+| five | .343 | .375 | .272 | 45.1% |
+| two | .335 | .351 | .317 | 47.5% |
+| one | | | | 47.7% |
+
+The goal line keeps getting better all the way down and receivers start
+paying for it below five, .260 at two against .280 at five. Five ships,
+and it is the first configuration to beat saying every week is a man's
+average so far, .343 against .340, with backs at .375 and receivers at
+.280 against their own .343 and .221.
+
+Backs' touchdowns order .129 at two where they ordered .042 before any
+of this, and tight ends' .086 where they ordered .036.
 
 ## It barely tells one man from another
 
