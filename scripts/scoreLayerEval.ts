@@ -74,6 +74,16 @@ let realScores = 0;
 const fromOut = { walk: 0, was: 0 };
 /** and whether its gains run as long as the ones that happened */
 const tail = { said: 0, saidLong: 0, saidHuge: 0, was: 0, wasLong: 0, wasHuge: 0 };
+/**
+ * How often a play from here scores at all, which is a different
+ * question from which man scores. From three yards out anybody can
+ * say the rate; it is who takes it in that is hard.
+ */
+const bandOf = (yardline: number) =>
+  yardline <= 1 ? "the one" : yardline <= 3 ? "inside the three"
+    : yardline <= 5 ? "inside the five" : yardline <= 10 ? "inside the ten"
+    : yardline <= 20 ? "inside the twenty" : "further out";
+const byBand = new Map<string, { plays: number; said: number; was: number }>();
 
 for (const r of plays) {
   const men = among.get(r["offense"]!);
@@ -95,6 +105,10 @@ for (const r of plays) {
     { offence: r["offense"], defence: r["defense"] });
   const scored = Number(r["touchdown"]) === 1 ? 1 : 0;
   realScores += scored;
+  const near = byBand.get(bandOf(yardline)) ?? { plays: 0, said: 0, was: 0 };
+  near.plays++;
+  near.was += scored;
+  byBand.set(bandOf(yardline), near);
   const made = Number(r["yards"]) || 0;
   tail.was++;
   tail.wasLong += made >= 20 ? 1 : 0;
@@ -129,6 +143,10 @@ for (const r of plays) {
     }
 
     const scores = reached / TRIES;
+    const band = bandOf(yardline);
+    const its = byBand.get(band) ?? { plays: 0, said: 0, was: 0 };
+    its.said += share * scores;
+    byBand.set(band, its);
     tail.said += share;
     tail.saidLong += share * (long / TRIES);
     tail.saidHuge += share * (huge / TRIES);
@@ -168,6 +186,21 @@ console.log(
   `${(100 * tail.saidHuge / Math.max(1, tail.said)).toFixed(2)}% against ` +
   `${(100 * tail.wasHuge / Math.max(1, tail.was)).toFixed(2)}%`,
 );
+console.log("\nhow often a play from here scores at all:");
+
+for (const band of ["the one", "inside the three", "inside the five",
+  "inside the ten", "inside the twenty", "further out"]) {
+  const its = byBand.get(band);
+
+  if (its && its.plays > 50) {
+    console.log(
+      `  ${band.padEnd(19)}${String(its.plays).padStart(6)} plays  ` +
+      `walk ${(100 * its.said / its.plays).toFixed(1)}%  ` +
+      `really ${(100 * its.was / its.plays).toFixed(1)}%`,
+    );
+  }
+}
+
 console.log(
   `\nordering ${busy.length} men with 50 touches by the scores they made:\n` +
   `  the walk, both parts its own          ${order((t) => t.walk)}\n` +

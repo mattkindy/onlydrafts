@@ -388,6 +388,34 @@ const FROM_COUNTS = Number(process.env["FROM_COUNTS"] ?? 0);
  */
 const DEPTH_ROOM_UPTO = Number(process.env["DEPTH_ROOM_UPTO"] ?? 25);
 
+/**
+ * Where the goal line starts, and how many plays a man is asked for
+ * there against the forty he is asked for anywhere else.
+ *
+ * Five reads .343 a week where forty reads .331, and puts the right
+ * man top of the list inside the ten 45.1% of the time on a run where
+ * forty manages 42.1%. Tighter still keeps helping the goal line and
+ * starts costing receivers, .260 at two against .280 at five.
+ */
+const LINE_IS_NEAR = Number(process.env["LINE_IS_NEAR"] ?? 10);
+const GOAL_LEAST = Number(process.env["GOAL_LEAST"] ?? 5);
+/** and how many the pool a play draws from is asked for there */
+const GOAL_GAIN_LEAST = Number(process.env["GOAL_GAIN_LEAST"] ?? 300);
+
+/**
+ * A gain is a whole number of yards.
+ *
+ * The drive engine has always rounded what comes back from here, so
+ * this changes nothing about how a game plays out. It makes the answer
+ * whole where it is worked out instead, because a bench that asks this
+ * directly and checks whether the gain reached the line gets a
+ * different simulation than the one that ships: a yard drawn from the
+ * one and multiplied by a tilt of .8 comes to .8 and stops short, and
+ * two benches here were reading exactly that.
+ */
+const whole = (yards: number) =>
+  process.env["PART_YARDS"] ? yards : Math.round(yards);
+
 export function storePlays(rows: PlayRow[]): PlayStore {
   const kept = rows.filter((r) => r.player);
   const down = new Int8Array(kept.length);
@@ -2063,9 +2091,17 @@ export function fitPlayFactors(
         leagueRate * ((1 - itsOwn) + itsOwn * leaning)));
     },
     goesTo: (state, call, among, sides) => {
-      const itsCells = atCells(
-        state, settings.leastForMan * Math.max(1, among.length), call,
-      );
+      /**
+       * Near the line a cell is asked for less, because asking for
+       * forty plays a man out of a spot that thin reaches the twenty
+       * three and the thirty eight to fill itself, and the man who
+       * gets it from the three is not the man who gets it from the
+       * thirty eight. Everywhere else the reach costs nothing.
+       */
+      const wants = (state.yardline <= LINE_IS_NEAR
+        ? GOAL_LEAST
+        : settings.leastForMan) * Math.max(1, among.length);
+      const itsCells = atCells(state, wants, call);
       let here = 0;
 
       for (const cell of itsCells) {
@@ -2142,7 +2178,19 @@ export function fitPlayFactors(
       return shares;
     },
     gains: (state, call, player, uniform, sides) => {
-      const cell = at(state, settings.least, call);
+      /**
+       * Near the line the pool is asked for less, for the same reason
+       * the shares are. Asking three hundred plays out of the one
+       * reaches back up the field to fill itself, and what comes back
+       * scores 38% where a play from the one really scores 55%, and
+       * 43% from the three where one really scores 33%. A side does
+       * not score more often from further away.
+       */
+      const cell = at(
+        state,
+        state.yardline <= LINE_IS_NEAR ? GOAL_GAIN_LEAST : settings.least,
+        call,
+      );
       const own = cell.byPlayer.get(player);
       const pool = cell.yards;
 
@@ -2273,7 +2321,7 @@ export function fitPlayFactors(
       const drawn = from[Math.floor(uniform() * from.length)]!;
 
       if (!found?.league || drawn <= 0) {
-        return drawn > 0 ? drawn * tilt.gain : drawn;
+        return drawn > 0 ? whole(drawn * tilt.gain) : drawn;
       }
 
       // and his level on top, against what everybody made over the
@@ -2303,7 +2351,7 @@ export function fitPlayFactors(
           Math.max(0.5, centre);
 
       if (!sides || bent <= 0 || playLevel) {
-        return bent;
+        return whole(bent);
       }
 
       let byPeople = 1;
@@ -2317,11 +2365,11 @@ export function fitPlayFactors(
       }
 
       if (byPeople !== 1) {
-        return bent * byPeople;
+        return whole(bent * byPeople);
       }
 
       if (pairing && sides.offence && sides.defence) {
-        return bent * pairing(sides.offence, sides.defence, call);
+        return whole(bent * pairing(sides.offence, sides.defence, call));
       }
 
       // and what the two sides do to it, each against what everybody
@@ -2350,7 +2398,7 @@ export function fitPlayFactors(
         ? held(forSide(byDefence, sides.defence, state, settings.leastForSide, call))
         : 1;
 
-      return bent * theirs * against;
+      return whole(bent * theirs * against);
     },
     scores: (state, call, gained) => {
       if (state.yardline - gained <= 0) {
