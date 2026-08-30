@@ -138,6 +138,8 @@ interface Row {
   model: number;
   /** what the played-out games say he scores, absent if they never saw him */
   walked: number | null;
+  /** and how often they handed it to him, which is the share seat's job */
+  walkTouches: number | null;
   touches: number;
   /** those targets at what his own depth is worth a target */
   atHisDepth: number;
@@ -315,8 +317,21 @@ async function rowsFor(
   const walkFile = JSON.parse(await readFile(
     join(import.meta.dirname, "..", "data", "kept", `played-${season}.json`),
     "utf8",
-  ).catch(() => '{"total":[]}')) as { total: [string, number][] };
+  ).catch(() => '{"total":[]}')) as {
+    total: [string, number][];
+    made?: [string, Record<string, number>][];
+  };
   const walkSays = new Map<string, number>(walkFile.total);
+  const walkHanded = new Map<string, number>();
+
+  for (const [playerId, his] of walkFile.made ?? []) {
+    const handed = (his["carries"] ?? 0) + (his["targets"] ?? 0) +
+      (his["passAtt"] ?? 0);
+
+    if (handed > 0) {
+      walkHanded.set(playerId, handed);
+    }
+  }
 
   const rows: Row[] = [];
 
@@ -368,6 +383,7 @@ async function rowsFor(
         return halves.carries * ran * 4.4 + halves.targets * ran * perTarget;
       })(),
       walked: walkSays.get(e.playerId) ?? null,
+      walkTouches: walkHanded.get(e.playerId) ?? null,
       atPosition: touches * perGroupTouch,
       atHisOwn: touches * perTouch(before.get(e.playerId), perGroupTouch),
       playerId: e.playerId,
@@ -454,6 +470,7 @@ async function rowsFor(
       touches,
       atHisDepth: touches * perGroupTouch,
       walked: walkSays.get(p.playerId) ?? null,
+      walkTouches: walkHanded.get(p.playerId) ?? null,
       atPosition: touches * perGroupTouch,
       atHisOwn: touches * perGroupTouch,
       playerId: p.playerId,
@@ -590,6 +607,19 @@ async function main(): Promise<void> {
     const seenPlace = placeOf(seen.map((r) => r.walked!));
     const walk = [...model];
     seen.forEach((r, k) => { walk[r.i] = seenPlace[k]; });
+
+    /**
+     * The same, for how often the walk handed him the ball. A man it
+     * never saw keeps the share model's place, since that is the seat
+     * this is trying to take and the comparison is only fair if the
+     * two answer for the same people.
+     */
+    const handed = rows
+      .map((r, i) => ({ i, touches: r.walkTouches }))
+      .filter((r) => r.touches !== null);
+    const handedPlace = placeOf(handed.map((r) => r.touches!));
+    const walkShare = [...share];
+    handed.forEach((r, k) => { walkShare[r.i] = handedPlace[k]; });
 
     for (const [truth, into, judge] of [
       [rows.map((r) => r.points), onPoints, spearman],
@@ -868,6 +898,28 @@ async function main(): Promise<void> {
         mix([model, jointPlaces, share, byAdp, walk],
           [0.053, 0.053, 0.319, 0.425, 0.15]));
       note("the share model, in touches", alone(share));
+      note("how often the walk handed it to him", alone(walkShare));
+      /**
+       * The share seat is the board's second heaviest and the only
+       * large one the walk has nothing to do with. The walk starts
+       * from that same projection and then moves it by the situation,
+       * so this asks whether the moving helped.
+       */
+      note("the shipped blend",
+        mix([model, share, byAdp, walk], [0.1, 0.3, 0.4, 0.2]));
+      note("the shipped blend, the walk's touches in the share seat",
+        mix([model, walkShare, byAdp, walk], [0.1, 0.3, 0.4, 0.2]));
+      /**
+       * Its touches and its points come out of the same simulation, so
+       * giving it both seats is really a heavier walk, and a heavier
+       * walk has always won a whole season and lost the first round.
+       * These two keep the projection's independent voice.
+       */
+      note("the shipped blend, the share seat split between the two",
+        mix([model, share, walkShare, byAdp, walk],
+          [0.1, 0.15, 0.15, 0.4, 0.2]));
+      note("the walk's touches in the share seat, its points cut to half",
+        mix([model, walkShare, byAdp, walk], [0.1, 0.3, 0.5, 0.1]));
       note("touches at his position's points", alone(byGroup));
       note("touches at his own points", alone(byOwn));
       note("his carries and his targets, each at what they make", alone(byDepth));

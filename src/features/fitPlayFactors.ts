@@ -341,6 +341,18 @@ const FADES = [0, 1, 2, 3, 4, 5].map((back) => Math.pow(RECENT_FADE, back));
 const FORM_FADE = Number(process.env["FORM_FADE"] ?? 0.7);
 const FORM_FADES = [0, 1, 2, 3, 4, 5].map((b) => Math.pow(FORM_FADE, b));
 
+/**
+ * Three switches for asking how much of a man the walk is using, all
+ * off where they sit, and none of them paying on the board yet.
+ *
+ * HOW_FAR raises his level to a power, 0 turning it off. NO_LONG_SHAPE
+ * drops the long gain correction from that level. FROM_COUNTS moves
+ * the level of who gets the ball off the projection and onto the
+ * counts, 1 being all counts. scripts/playLayerEval.ts reads them.
+ */
+const HOW_FAR = Number(process.env["HOW_FAR"] ?? 1);
+const FROM_COUNTS = Number(process.env["FROM_COUNTS"] ?? 0);
+
 export function storePlays(rows: PlayRow[]): PlayStore {
   const kept = rows.filter((r) => r.player);
   const down = new Int8Array(kept.length);
@@ -2055,7 +2067,18 @@ export function fitPlayFactors(
               return man * coverage.underMan(player) + (1 - man);
             })()
           : 1;
-        const weight = projectedShare * leaning * facing *
+        /**
+         * The projection says how big a share he wins and the counts
+         * only lean it toward the downs he is used on. Last season's
+         * counts on their own put the right man top of the list 34.6%
+         * of the time where all of this together manages 29.1%, so
+         * some of the level is theirs to say.
+         */
+        const said = projectedShare * leaning;
+        const weight = (FROM_COUNTS <= 0 || touches <= 0 || said <= 0
+          ? said
+          : said ** (1 - FROM_COUNTS) * touches ** FROM_COUNTS) *
+          facing *
           (settings.readsTheScript === false
             ? 1
             : scriptLeaning(player, call, state));
@@ -2208,7 +2231,8 @@ export function fitPlayFactors(
       const level = playLevel && sides
         ? playLevel.levelFor(state, call, player, sides)
         : his / Math.max(0.1, league);
-      const shape = leagueLongRate > 0 && hisLongRate > 0
+      const shape = leagueLongRate > 0 && hisLongRate > 0 &&
+        !process.env["NO_LONG_SHAPE"]
         ? level * (leagueLongRate / hisLongRate) ** 0.5
         : level;
 
@@ -2218,7 +2242,8 @@ export function fitPlayFactors(
           ? drawnFormationTilt(state, call, sides.shotgun)
           : formationTilt(state, call, sides?.offence)) *
         lookTilt(state, call, sides?.shotgun ?? false, sides?.shell) *
-        Math.max(0.5, Math.min(1.8, shape)) / Math.max(0.5, centre);
+        Math.max(0.5, Math.min(1.8, HOW_FAR === 1 ? shape : shape ** HOW_FAR)) /
+          Math.max(0.5, centre);
 
       if (!sides || bent <= 0 || playLevel) {
         return bent;
