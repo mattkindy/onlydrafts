@@ -18,6 +18,7 @@ import { bandOf, type TargetDepth } from "./targetDepth.js";
 import type { Formation } from "./fitFormation.js";
 import type { Coverage } from "./fitCoverage.js";
 import type { Look } from "./fitLook.js";
+import type { AfterCatch } from "./fitAfterCatch.js";
 
 export interface PlayRow {
   /** which season it happened, so an old play can count for less */
@@ -47,6 +48,8 @@ export interface PlayRow {
   airYards?: number;
   /** whether anybody caught it, absent on a carry */
   caught?: boolean;
+  /** and what he made once it was his */
+  afterCatch?: number;
 }
 
 export interface FactorSettings {
@@ -514,6 +517,8 @@ export interface FactorExtras {
   coverage?: Coverage;
   /** and what it puts on the field against a formation */
   look?: Look;
+  /** what each man makes once the ball is his, near one */
+  afterCatch?: AfterCatch;
   /**
    * Who resembles whom, nearest first, so a man too thin to sample
    * borrows plays from men like him before falling to the crowd. A
@@ -819,7 +824,7 @@ export function fitPlayFactors(
 ): PlayFactors {
   const {
     projected, split, pairing, playLevel, depth, people, plays,
-    alike, formation, coverage, look,
+    alike, formation, coverage, look, afterCatch,
   } = extras;
   const {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
@@ -898,6 +903,21 @@ export function fitPlayFactors(
     return mixture > 0.1
       ? Math.max(0.75, Math.min(1.35, (its.yards / its.plays) / mixture))
       : 1;
+  };
+
+  /**
+   * What he makes once the ball is his. A catch is near enough half
+   * throw and half after it, and the two are different skills, so
+   * only the second half moves with the man.
+   */
+  const afterCatchTilt = (call: Call, player: string) => {
+    if (!afterCatch || call !== "pass" || !player) {
+      return 1;
+    }
+
+    const lean = afterCatch.leanOf(player);
+
+    return 1 + (lean - 1) * afterCatch.shareAfter;
   };
 
   const formationTilt = (state: PlayState, call: Call, offence?: string) => {
@@ -1789,7 +1809,10 @@ export function fitPlayFactors(
 
           return {
             yards: Math.min(state.yardline,
-              drawn > 0 ? drawn * tilt.gain * byFormation * byLook : drawn),
+              drawn > 0
+                ? drawn * tilt.gain * byFormation * byLook *
+                  afterCatchTilt(call, player)
+                : drawn),
             caught: plays.caught[at] === 1,
           };
         }
@@ -2190,7 +2213,7 @@ export function fitPlayFactors(
         : level;
 
       const centre = process.env["NO_CENTRE"] ? 1 : centreOf.get(call) ?? 1;
-      const bent = drawn * tilt.gain *
+      const bent = drawn * tilt.gain * afterCatchTilt(call, player) *
         (sides?.shotgun !== undefined
           ? drawnFormationTilt(state, call, sides.shotgun)
           : formationTilt(state, call, sides?.offence)) *

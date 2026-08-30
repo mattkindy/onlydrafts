@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   out.write(
     "season,week,offense,defense,down,togo,yardline,margin,seconds," +
       "playType,player,passer,airYards,caught,yards,touchdown,shotgun," +
-      "manZone,coverage,rushers,shell,box\n",
+      "manZone,coverage,rushers,shell,box,afterCatch\n",
   );
   let total = 0;
 
@@ -114,7 +114,7 @@ async function main(): Promise<void> {
           "score_differential", "game_seconds_remaining", "play_type",
           "yards_gained", "touchdown", "rusher_player_id", "receiver_player_id",
           "complete_pass", "passer_player_id", "air_yards", "shotgun",
-          "game_id", "play_id",
+          "game_id", "play_id", "yards_after_catch",
         ]) {
           at[field] = header.indexOf(field);
         }
@@ -144,6 +144,10 @@ async function main(): Promise<void> {
       // anybody catches it and decides most of what happens next
       const air = Number(c[at["air_yards"]!]);
       const airYards = type === "pass" && Number.isFinite(air) ? air : "";
+      // and what he made once it was his, which lasts .689 to the next
+      // season where his air yards last .884
+      const made = Number(c[at["yards_after_catch"]!]);
+      const afterCatch = type === "pass" && Number.isFinite(made) ? made : "";
       // whether anybody caught it, blank on a run
       const caught = type === "pass"
         ? (c[at["complete_pass"]!] === "1" ? 1 : 0) : "";
@@ -170,6 +174,7 @@ async function main(): Promise<void> {
         shown?.rushers || "",
         shown?.shell ?? "",
         shown?.box || "",
+        afterCatch,
       ].join(",") + "\n");
       written++;
     }
