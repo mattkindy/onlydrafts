@@ -75,6 +75,23 @@ The last row is the one to remember. As a leaning the call is better
 calibrated and orders worse. Calibration and ordering are different
 targets and only the second is what a board is scored on.
 
+## Nine ways at the same wall
+
+The thing every attempt has wanted is a matchup: what this defence
+costs this receiver, rather than what it costs receivers. Six of them
+were multipliers bolted onto one decision of a play, and three were
+nets. scripts/interactionEval.ts scores the last three on the plays
+themselves: descriptions added up rmse .743 and rank .761, averaged
+together .754 and .749, kept apart and multiplied 1.289 and .742, and
+on single plays all three are the same to three figures. entityNet
+learned free numbers for each man and came out level with adding the
+pieces up, which is what happens when there is not enough data to
+learn a representation.
+
+So the term that would carry a matchup is not in four seasons of this
+data, whichever way it is asked for. Treat it as settled rather than
+unlucky.
+
 ## What did not work, so nobody tries it twice
 
 Each of these was built, measured and reverted or left switched off.
