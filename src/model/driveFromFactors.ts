@@ -333,7 +333,7 @@ export function walkDrive(
     // his own play when he has enough behind him, whole, and the
     // pooled draw with its multipliers when he does not
     let own = factors.hisOwnPlay
-      ? factors.hisOwnPlay(state, call, player, uniform, sides.passer)
+      ? factors.hisOwnPlay(state, call, player, uniform, sides.passer, sides)
       : undefined;
 
     /**
