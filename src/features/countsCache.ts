@@ -126,7 +126,7 @@ export async function countsFor(
   const stamp = await stat(TOUCHES).then((s) => s.mtimeMs).catch(() => 0);
   // the counting changes shape sometimes, and an older file would come
   // back missing whatever was added since
-  const at = join(KEPT, `counts9-${maxSeason}-${Math.round(stamp)}.json`);
+  const at = join(KEPT, `counts11-${maxSeason}-${Math.round(stamp)}.json`);
   const already = await readFile(at, "utf8").catch(() => "");
 
   if (already) {
