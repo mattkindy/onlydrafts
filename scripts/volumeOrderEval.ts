@@ -26,6 +26,8 @@ import { buildWorld } from "../src/features/playedWorld.js";
 
 const SEASONS = (process.argv[2] ?? "2024").split(",").map(Number);
 const POSITIONS = ["QB", "RB", "WR", "TE"];
+/** 1 is the walk as it is today, and above it the shares pulled apart */
+const SHARPENED = [1, 1.1, 1.25, 1.5];
 
 const raw = parseCsv(await readFile(
   join(import.meta.dirname, "..", "data", "curated", "touches.csv"), "utf8",
@@ -62,8 +64,16 @@ for (const season of SEASONS) {
     }
   }
 
-  /** what the walk hands each man over those same plays */
-  const walked = new Map<string, number>();
+  /**
+   * What the walk hands each man over those same plays, and the same
+   * again with the shares pulled toward whoever is likeliest before
+   * they are normalised. A projection is shrunk toward the middle to
+   * be right on average, which leaves the busiest man of a side a
+   * little short, and the power says how much of that to undo.
+   */
+  const walkedAt = new Map<number, Map<string, number>>(
+    SHARPENED.map((power) => [power, new Map<string, number>()]),
+  );
 
   for (const r of plays) {
     const men = among.get(r["offense"]!);
@@ -85,10 +95,24 @@ for (const season of SEASONS) {
       { offence: r["offense"], defence: r["defense"] },
     );
 
-    for (const [player, share] of shares) {
-      walked.set(player, (walked.get(player) ?? 0) + share);
+    for (const [power, into] of walkedAt) {
+      let all = 0;
+
+      for (const share of shares.values()) {
+        all += share ** power;
+      }
+
+      if (all <= 0) {
+        continue;
+      }
+
+      for (const [player, share] of shares) {
+        into.set(player, (into.get(player) ?? 0) + (share ** power) / all);
+      }
     }
   }
+
+  const walked = walkedAt.get(1)!;
 
   /**
    * The projection the walk started from, turned into touches the way
@@ -206,28 +230,37 @@ for (const season of SEASONS) {
    * question without it: the man the walk itself puts first, and what
    * he went on to take.
    */
-  let said1 = 0;
-  let was1 = 0;
-  let named = 0;
+  console.log("  the man each power puts first, and what he took:");
 
-  for (const [, men] of among) {
-    const all = men.reduce((sum, id) => sum + (took.get(id) ?? 0), 0);
-    const mine = men.reduce((sum, id) => sum + (walked.get(id) ?? 0), 0);
+  for (const [power, of] of walkedAt) {
+    let gives = 0;
+    let was = 0;
+    let sawTop = 0;
+    const ordered = [...took.keys()].filter((id) => of.has(id) && said.has(id));
 
-    if (all <= 0 || mine <= 0) {
-      continue;
+    for (const [, men] of among) {
+      const all = men.reduce((sum, id) => sum + (took.get(id) ?? 0), 0);
+      const mine = men.reduce((sum, id) => sum + (of.get(id) ?? 0), 0);
+
+      if (all <= 0 || mine <= 0) {
+        continue;
+      }
+
+      const first = men.reduce((best, id) =>
+        (of.get(id) ?? 0) > (of.get(best) ?? 0) ? id : best);
+      sawTop++;
+      gives += (of.get(first) ?? 0) / mine;
+      was += (took.get(first) ?? 0) / all;
     }
 
-    const first = men.reduce((best, id) =>
-      (walked.get(id) ?? 0) > (walked.get(best) ?? 0) ? id : best);
-    named++;
-    said1 += (walked.get(first) ?? 0) / mine;
-    was1 += (took.get(first) ?? 0) / all;
+    console.log(
+      `    power ${power.toFixed(2)}  gives him ` +
+      `${(100 * gives / Math.max(1, sawTop)).toFixed(1)}%, he took ` +
+      `${(100 * was / Math.max(1, sawTop)).toFixed(1)}%  ` +
+      `and it orders everyone ${spearman(
+        ordered.map((id) => of.get(id) ?? 0),
+        ordered.map((id) => took.get(id) ?? 0),
+      ).toFixed(3)}`,
+    );
   }
-
-  console.log(
-    `    the man the walk puts first gets ` +
-    `${(100 * said1 / Math.max(1, named)).toFixed(1)}% of its work ` +
-    `and took ${(100 * was1 / Math.max(1, named)).toFixed(1)}% of the real work`,
-  );
 }
