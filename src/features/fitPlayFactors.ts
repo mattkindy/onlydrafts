@@ -530,6 +530,7 @@ export function countPlays(
   rows: PlayRow[], wantsSides = true,
 ): CountedPlays {
   const cells = new Map<string, Counted>();
+  const freshest = rows.reduce((most, r) => Math.max(most, r.season ?? 0), 0);
   /**
    * The same counts again per offence and per defence.
    *
@@ -749,6 +750,37 @@ export function countPlays(
       both.plays++;
       if (row.call === "run") both.runs++;
       cells.set(key, both);
+    }
+
+    /**
+     * And the same two cells again with the formation on the front,
+     * so the call from a known formation is asked of the same states
+     * and widened the same way as the call from the mixture. A table
+     * of its own, keyed on yardline deciles, came out a point and a
+     * bit under what the plays did.
+     */
+    if (row.shotgun !== undefined) {
+      const form = row.shotgun ? "gun" : "centre";
+      /**
+       * Older seasons count for less here, which they do nowhere
+       * else. How often a side runs at all has been flat for years,
+       * so pooling seasons costs the pooled call nothing; how often
+       * it runs from a given formation has not. Sides ran from the
+       * gun 27.0% of the time in 2021 and 30.6% in 2023, and they
+       * lined up in it 66% then and 72% now, so a flat pool of three
+       * seasons asks a point and a bit under what the plays did, and
+       * that is the whole of what the formation call was losing.
+       */
+      const counts = freshest && row.season
+        ? FADES[Math.min(5, freshest - row.season)]!
+        : 1;
+
+      for (const key of [eitherWay, eitherLoose]) {
+        const both = cells.get(`${form}|${key}`) ?? emptyCounted();
+        both.plays += counts;
+        if (row.call === "run") both.runs += counts;
+        cells.set(`${form}|${key}`, both);
+      }
     }
 
     for (const [into, who] of wantsSides
@@ -1282,9 +1314,18 @@ export function fitPlayFactors(
    */
   const countsRemembered =
     new Map<string, { plays: number; runs: number; scores: number }>();
-  const atCounts = (state: PlayState, least: number, call?: Call) => {
+  const atCounts = (
+    state: PlayState, least: number, call?: Call,
+    /**
+     * The formation the side stood in, when the walk has drawn one.
+     * The cells carry it, so the same widening serves it: a coarse
+     * table of its own read the call off yardline deciles and came
+     * out a point and a bit under what the plays did.
+     */
+    form?: string,
+  ) => {
     makeRoom(countsRemembered);
-    const key = `${call ?? "both"}|${stateKey(
+    const key = `${form ?? ""}|${call ?? "both"}|${stateKey(
       state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
     )}|${least}`;
     const already = countsRemembered.get(key);
@@ -1311,7 +1352,8 @@ export function fitPlayFactors(
           state.down, Math.floor(packed / 100) % 1000, packed % 100,
           state.secondsLeft, state.margin, looseness,
         )) {
-          const cell = cells.get(call ? `${call}|${cellKey}` : cellKey);
+          const spot = call ? `${call}|${cellKey}` : cellKey;
+          const cell = cells.get(form ? `${form}|${spot}` : spot);
 
           if (!cell) {
             continue;
@@ -1703,20 +1745,11 @@ export function fitPlayFactors(
      */
     standsBack: process.env["SNAP_CHAIN"] && formation
       ? (state, offence) => {
-          const inGun = fromFormation.get(atFormation(
-            true, state.down, state.toGo, state.yardline,
-            state.margin, state.secondsLeft,
-          )) ?? fromFormation.get(
-            atFormation(true, state.down, state.toGo, state.yardline),
-          );
-          const centre = fromFormation.get(atFormation(
-            false, state.down, state.toGo, state.yardline,
-            state.margin, state.secondsLeft,
-          )) ?? fromFormation.get(
-            atFormation(false, state.down, state.toGo, state.yardline),
-          );
+          const inGun = atCounts(state, settings.leastForCall, undefined, "gun");
+          const centre =
+            atCounts(state, settings.leastForCall, undefined, "centre");
 
-          if (!inGun || !centre || inGun.plays + centre.plays < 200) {
+          if (inGun.plays + centre.plays < 200) {
             return formation.gunHere(state, offence);
           }
 
@@ -1758,19 +1791,14 @@ export function fitPlayFactors(
        * is not now: the gain is drawn against the same formation, so
        * a play under centre has to be called like one.
        */
-      if (sides?.shotgun !== undefined && fromFormation.size > 0) {
-        for (const key of [
-          atFormation(
-            sides.shotgun, state.down, state.toGo, state.yardline,
-            state.margin, state.secondsLeft,
-          ),
-          atFormation(sides.shotgun, state.down, state.toGo, state.yardline),
-        ]) {
-          const cell = fromFormation.get(key);
+      if (sides?.shotgun !== undefined) {
+        const here = atCounts(
+          state, settings.leastForCall, undefined,
+          sides.shotgun ? "gun" : "centre",
+        );
 
-          if (cell && cell.plays >= settings.leastForCall) {
-            return Math.max(0.02, Math.min(0.98, cell.runs / cell.plays));
-          }
+        if (here.plays >= settings.leastForCall) {
+          return Math.max(0.02, Math.min(0.98, here.runs / here.plays));
         }
       }
 
