@@ -54,14 +54,17 @@ export interface BoardLean {
 
 /**
  * Swept on a grid rather than fitted, and taken from the middle of the
- * plateau rather than its highest cell. The walk started at fifteen
- * percent; after the fourth quarter, red zone and recency work its
- * sweep moved: thirty percent wins season points, value over
- * replacement and the first 72 and 120 picks, and costs half a point
- * on the first 36 in one test season.
+ * plateau rather than its highest cell.
+ *
+ * The walk's seat is twenty percent because that is where the early
+ * picks are, and the early picks are what a board is for: it takes
+ * the first 24 by .007 and the first 36 by .012 against thirty, gives
+ * back .004 on the first 72 and .005 on the first 120, and the two
+ * are level by the first 200. Whole season ordering prefers thirty by
+ * .003, which is the one number a drafter never collects.
  */
 export const BOARD_LEAN: BoardLean = {
-  parts: 0.087, model: 0, share: 0.263, adp: 0.35, walk: 0.3,
+  parts: 0.099, model: 0, share: 0.3, adp: 0.401, walk: 0.2,
   setBack: 100,
 };
 
