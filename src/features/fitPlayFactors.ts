@@ -429,10 +429,26 @@ export const formationBandOf = (
 
 export const atFormation = (
   shotgun: boolean, down: number, toGo: number, yardline: number,
-) =>
-  `${shotgun ? "gun" : "centre"}|${Math.min(4, down)}|` +
-  `${toGo <= 2 ? "short" : toGo <= 6 ? "medium" : "long"}|` +
-  `${Math.min(9, Math.floor(yardline / 10))}`;
+  /**
+   * And how the game stands, because the pooled call reads both and
+   * a formation table that ignores them takes the game situation
+   * away from the call: a side two scores down late throws whatever
+   * it lines up in.
+   */
+  margin?: number, secondsLeft?: number,
+) => {
+  const spot = `${shotgun ? "gun" : "centre"}|${Math.min(4, down)}|` +
+    `${toGo <= 2 ? "short" : toGo <= 6 ? "medium" : "long"}|` +
+    `${Math.min(9, Math.floor(yardline / 10))}`;
+
+  if (margin === undefined || secondsLeft === undefined) {
+    return spot;
+  }
+
+  const how = margin <= -9 ? "chasing" : margin >= 9 ? "ahead" : "level";
+
+  return `${spot}|${how}|${secondsLeft <= 900 ? "late" : "early"}`;
+};
 
 export interface CountedPlays {
   cells: Map<string, Counted>;
@@ -601,15 +617,24 @@ export function countPlays(
     }
 
     if (row.shotgun !== undefined) {
-      const at = atFormation(row.shotgun, row.down, row.toGo, row.yardline);
-      const seen = fromFormation.get(at) ?? { plays: 0, runs: 0 };
-      seen.plays++;
+      // both keys, so a thin cell with the score in it can fall back
+      // to the same spot with the score let go
+      for (const at of [
+        atFormation(
+          row.shotgun, row.down, row.toGo, row.yardline,
+          row.margin, row.secondsLeft,
+        ),
+        atFormation(row.shotgun, row.down, row.toGo, row.yardline),
+      ]) {
+        const seen = fromFormation.get(at) ?? { plays: 0, runs: 0 };
+        seen.plays++;
 
-      if (row.call === "run") {
-        seen.runs++;
+        if (row.call === "run") {
+          seen.runs++;
+        }
+
+        fromFormation.set(at, seen);
       }
-
-      fromFormation.set(at, seen);
       /**
        * And the same again with the defence's answer in it, which is
        * where the two calls stop ordering the shells the same way.
@@ -1670,8 +1695,36 @@ export function fitPlayFactors(
      * with the side's habit applied to the gain and nothing drawn.
      * Behind SNAP_CHAIN until something makes the layers pay.
      */
+    /**
+     * How often this side is in the gun here, off the very cells the
+     * call is then priced from. Reading it off a coarser table drew
+     * the gun at one rate and priced the call at another, which is
+     * why the mix came out four points light on the run.
+     */
     standsBack: process.env["SNAP_CHAIN"] && formation
-      ? (state, offence) => formation.gunHere(state, offence)
+      ? (state, offence) => {
+          const inGun = fromFormation.get(atFormation(
+            true, state.down, state.toGo, state.yardline,
+            state.margin, state.secondsLeft,
+          )) ?? fromFormation.get(
+            atFormation(true, state.down, state.toGo, state.yardline),
+          );
+          const centre = fromFormation.get(atFormation(
+            false, state.down, state.toGo, state.yardline,
+            state.margin, state.secondsLeft,
+          )) ?? fromFormation.get(
+            atFormation(false, state.down, state.toGo, state.yardline),
+          );
+
+          if (!inGun || !centre || inGun.plays + centre.plays < 200) {
+            return formation.gunHere(state, offence);
+          }
+
+          const here = inGun.plays / (inGun.plays + centre.plays);
+
+          return Math.max(0.02, Math.min(0.98,
+            here * formation.leaning(offence)));
+        }
       : undefined,
     looksLike: process.env["SNAP_CHAIN"] && look
       ? (state, shotgun, defence, uniform) =>
@@ -1706,12 +1759,18 @@ export function fitPlayFactors(
        * a play under centre has to be called like one.
        */
       if (sides?.shotgun !== undefined && fromFormation.size > 0) {
-        const cell = fromFormation.get(atFormation(
-          sides.shotgun, state.down, state.toGo, state.yardline,
-        ));
+        for (const key of [
+          atFormation(
+            sides.shotgun, state.down, state.toGo, state.yardline,
+            state.margin, state.secondsLeft,
+          ),
+          atFormation(sides.shotgun, state.down, state.toGo, state.yardline),
+        ]) {
+          const cell = fromFormation.get(key);
 
-        if (cell && cell.plays >= settings.leastForCall) {
-          return Math.max(0.02, Math.min(0.98, cell.runs / cell.plays));
+          if (cell && cell.plays >= settings.leastForCall) {
+            return Math.max(0.02, Math.min(0.98, cell.runs / cell.plays));
+          }
         }
       }
 
