@@ -16,12 +16,17 @@ import type { RunParts } from "./runParts.js";
 import type { PlayLevel } from "./playLevel.js";
 import { bandOf, type TargetDepth } from "./targetDepth.js";
 import type { Formation } from "./fitFormation.js";
+import type { Coverage } from "./fitCoverage.js";
+import type { Look } from "./fitLook.js";
 
 export interface PlayRow {
   /** which season it happened, so an old play can count for less */
   season?: number;
   /** whether the quarterback stood back, which moves the call most */
   shotgun?: boolean;
+  /** and what the defence had on the field, when it is recorded */
+  shell?: string;
+  manZone?: string;
   /** who had the ball and who was trying to stop them */
   offence: string;
   defence: string;
@@ -437,6 +442,8 @@ export interface CountedPlays {
   yardsFromFormation: Map<
     string, { plays: number; yards: number; dry: number; long: number }
   >;
+  /** and the same with the shell the defence answered with */
+  againstLook: Map<string, { plays: number; yards: number; dry: number }>;
   byOffence: Map<string, Counted>;
   byDefence: Map<string, Counted>;
   byMan: Map<string, Rate>;
@@ -484,6 +491,10 @@ export interface FactorExtras {
   plays?: PlayStore;
   /** where each side stands before the snap, drawn before the call */
   formation?: Formation;
+  /** what the defence plays, and who a side throws to against it */
+  coverage?: Coverage;
+  /** and what it puts on the field against a formation */
+  look?: Look;
   /**
    * Who resembles whom, nearest first, so a man too thin to sample
    * borrows plays from men like him before falling to the crowd. A
@@ -556,6 +567,9 @@ export function countPlays(
    */
   const yardsFromFormation =
     new Map<string, { plays: number; yards: number; dry: number; long: number }>();
+  /** the same with the shell the defence answered with */
+  const againstLook =
+    new Map<string, { plays: number; yards: number; dry: number }>();
   const formationBand = formationBandOf;
 
   for (const row of rows) {
@@ -596,6 +610,25 @@ export function countPlays(
       }
 
       fromFormation.set(at, seen);
+      /**
+       * And the same again with the defence's answer in it, which is
+       * where the two calls stop ordering the shells the same way.
+       */
+      if (row.shell) {
+        const pair = `${formationBand(row.call, row.shotgun, row.yardline)}|` +
+          row.shell;
+        const both = againstLook.get(pair) ??
+          { plays: 0, yards: 0, dry: 0 };
+        both.plays++;
+        both.yards += row.yards;
+
+        if (row.yards <= 0) {
+          both.dry++;
+        }
+
+        againstLook.set(pair, both);
+      }
+
       const band = formationBand(row.call, row.shotgun, row.yardline);
       const made = yardsFromFormation.get(band) ??
         { plays: 0, yards: 0, dry: 0, long: 0 };
@@ -715,6 +748,7 @@ export function countPlays(
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
     everyTouch, inScript, scriptPlays, onCall, callPlays, fromFormation,
     yardsFromFormation,
+    againstLook,
   };
 }
 
@@ -725,7 +759,7 @@ export function fitPlayFactors(
 ): PlayFactors {
   const {
     projected, split, pairing, playLevel, depth, people, plays,
-    alike, formation,
+    alike, formation, coverage, look,
   } = extras;
   const {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
@@ -733,6 +767,9 @@ export function fitPlayFactors(
     fromFormation = new Map<string, { plays: number; runs: number }>(),
     yardsFromFormation = new Map<
       string, { plays: number; yards: number; dry: number; long: number }
+    >(),
+    againstLook = new Map<
+      string, { plays: number; yards: number; dry: number }
     >(),
   } = extras.counted ?? countPlays(rows, !pairing);
 
@@ -744,6 +781,65 @@ export function fitPlayFactors(
    * other way. Centred on the league's own mix, so a side with no
    * habit of its own moves nothing.
    */
+  /**
+   * What the shell the defence answered with does to a play from this
+   * formation, against what that formation comes to on average. The
+   * two calls do not order the shells the same way, so this is the
+   * pair rather than a defence being stout or not.
+   */
+  const lookTilt = (
+    state: PlayState, call: Call, shotgun: boolean, shell?: string,
+  ) => {
+    if (!shell || againstLook.size === 0) {
+      return 1;
+    }
+
+    const band = formationBandOf(call, shotgun, state.yardline);
+    const both = againstLook.get(`${band}|${shell}`);
+    const anyLook = yardsFromFormation.get(band);
+
+    if (!both || !anyLook || both.plays < 200 || anyLook.plays < 200) {
+      return 1;
+    }
+
+    const its = both.yards / both.plays;
+    const usual = anyLook.yards / anyLook.plays;
+
+    return usual > 0.1 ? Math.max(0.75, Math.min(1.35, its / usual)) : 1;
+  };
+
+  /**
+   * What a play from the formation the side stood in comes to,
+   * against what that call comes to over both. Drawn now rather than
+   * taken as the side's habit, so the gain answers to the same snap
+   * the call did.
+   */
+  const drawnFormationTilt = (
+    state: PlayState, call: Call, shotgun?: boolean,
+  ) => {
+    if (shotgun === undefined || yardsFromFormation.size === 0) {
+      return 1;
+    }
+
+    const its = yardsFromFormation.get(
+      formationBandOf(call, shotgun, state.yardline),
+    );
+    const other = yardsFromFormation.get(
+      formationBandOf(call, !shotgun, state.yardline),
+    );
+
+    if (!its || !other || its.plays < 200 || other.plays < 200) {
+      return 1;
+    }
+
+    const mixture = (its.yards + other.yards) /
+      Math.max(1, its.plays + other.plays);
+
+    return mixture > 0.1
+      ? Math.max(0.75, Math.min(1.35, (its.yards / its.plays) / mixture))
+      : 1;
+  };
+
   const formationTilt = (state: PlayState, call: Call, offence?: string) => {
     if (!formation || !offence || yardsFromFormation.size === 0) {
       return 1;
@@ -1360,6 +1456,7 @@ export function fitPlayFactors(
         sides?: {
           offence?: string; defence?: string;
           passer?: string; season?: number; week?: number;
+          shotgun?: boolean; shell?: string;
         },
       ) => {
         /**
@@ -1547,11 +1644,16 @@ export function fitPlayFactors(
             }
           }
 
-          const byFormation = formationTilt(state, call, sides?.offence);
+          const byFormation = sides?.shotgun !== undefined
+            ? drawnFormationTilt(state, call, sides.shotgun)
+            : formationTilt(state, call, sides?.offence);
+          const byLook = lookTilt(
+            state, call, sides?.shotgun ?? false, sides?.shell,
+          );
 
           return {
             yards: Math.min(state.yardline,
-              drawn > 0 ? drawn * tilt.gain * byFormation : drawn),
+              drawn > 0 ? drawn * tilt.gain * byFormation * byLook : drawn),
             caught: plays.caught[at] === 1,
           };
         }
@@ -1561,6 +1663,20 @@ export function fitPlayFactors(
     : undefined;
 
   return {
+    /**
+     * The snap settled before the call, which is how football works
+     * and measures worse: every drawn layer adds variance, and a
+     * week of a man's scoring orders at .314 this way against .343
+     * with the side's habit applied to the gain and nothing drawn.
+     * Behind SNAP_CHAIN until something makes the layers pay.
+     */
+    standsBack: process.env["SNAP_CHAIN"] && formation
+      ? (state, offence) => formation.gunHere(state, offence)
+      : undefined,
+    looksLike: process.env["SNAP_CHAIN"] && look
+      ? (state, shotgun, defence, uniform) =>
+          look.shellFor(state, shotgun, defence, uniform)
+      : undefined,
     hisOwnPlay,
     matchup: pairing,
     caught: wasCaught,
@@ -1583,6 +1699,22 @@ export function fitPlayFactors(
        * knows that the pools do not is what a play from it comes to,
        * and that is applied to the gains instead.
        */
+      /**
+       * The call from the formation the side actually stood in. This
+       * was redundant while the formation went nowhere else, and it
+       * is not now: the gain is drawn against the same formation, so
+       * a play under centre has to be called like one.
+       */
+      if (sides?.shotgun !== undefined && fromFormation.size > 0) {
+        const cell = fromFormation.get(atFormation(
+          sides.shotgun, state.down, state.toGo, state.yardline,
+        ));
+
+        if (cell && cell.plays >= settings.leastForCall) {
+          return Math.max(0.02, Math.min(0.98, cell.runs / cell.plays));
+        }
+      }
+
       if (formation && fromFormation.size > 0 && process.env["FORMATION_CALL"]) {
         const inGun = fromFormation.get(
           atFormation(true, state.down, state.toGo, state.yardline),
@@ -1669,7 +1801,7 @@ export function fitPlayFactors(
       return Math.max(0.05, Math.min(0.95,
         leagueRate * ((1 - itsOwn) + itsOwn * leaning)));
     },
-    goesTo: (state, call, among) => {
+    goesTo: (state, call, among, sides) => {
       const itsCells = atCells(
         state, settings.leastForMan * Math.max(1, among.length), call,
       );
@@ -1707,7 +1839,20 @@ export function fitPlayFactors(
         const projectedShare = half
           ? (call === "run" ? half.carries : half.targets)
           : projected?.get(player) ?? 0;
-        const weight = projectedShare * leaning *
+        /**
+         * What this defence is likely playing, and how much of his
+         * usual share he takes against it. His slice moves .70 to
+         * 1.59 across men and where he sits lasts to the next season
+         * at .32, and nothing in the walk knew it.
+         */
+        const facing = call === "pass" && coverage && sides?.defence
+          ? (() => {
+              const man = coverage.manRate(sides.defence);
+
+              return man * coverage.underMan(player) + (1 - man);
+            })()
+          : 1;
+        const weight = projectedShare * leaning * facing *
           (settings.readsTheScript === false
             ? 1
             : scriptLeaning(player, call, state));
@@ -1865,7 +2010,11 @@ export function fitPlayFactors(
         : level;
 
       const centre = process.env["NO_CENTRE"] ? 1 : centreOf.get(call) ?? 1;
-      const bent = drawn * tilt.gain * formationTilt(state, call, sides?.offence) *
+      const bent = drawn * tilt.gain *
+        (sides?.shotgun !== undefined
+          ? drawnFormationTilt(state, call, sides.shotgun)
+          : formationTilt(state, call, sides?.offence)) *
+        lookTilt(state, call, sides?.shotgun ?? false, sides?.shell) *
         Math.max(0.5, Math.min(1.8, shape)) / Math.max(0.5, centre);
 
       if (!sides || bent <= 0 || playLevel) {

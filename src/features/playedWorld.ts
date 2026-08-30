@@ -29,6 +29,8 @@ import { fitFourthDown, climbTo, type FourthRow } from "./fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "./fitPlayClock.js";
 import { fitTargetDepth } from "./targetDepth.js";
 import { fitFormation } from "./fitFormation.js";
+import { fitCoverage } from "./fitCoverage.js";
+import { fitLook } from "./fitLook.js";
 import { buildPlayLevel } from "./playLevel.js";
 import {
   experienceBefore, pastShares, projectSplitShares, SHARING_POSITIONS,
@@ -92,6 +94,8 @@ export async function buildWorld(
       secondsLeft: Number(r["seconds"]) || 1800,
       call: (r["playType"] ?? "") as Call,
       shotgun: r["shotgun"] === undefined ? undefined : r["shotgun"] === "1",
+      manZone: r["manZone"] ?? "",
+      shell: r["shell"] ?? "",
       yards: Number(r["yards"]) || 0, touchdown: Number(r["touchdown"]) || 0,
       player: r["player"] ?? "", passer: r["passer"] ?? "",
       airYards: r["airYards"] === "" || r["airYards"] === undefined
@@ -343,6 +347,33 @@ export async function buildWorld(
      * call that the pools do not already know, and a great deal about
      * what a play from there comes to, so it bends the gains.
      */
+    /**
+     * What the defence plays and who a side throws to against it.
+     * Coverage is only recorded from 2023, so a man without enough of
+     * both looks behind him moves nothing.
+     */
+    /**
+     * What the defence puts on the field against a formation. The
+     * two calls do not order the shells the same way, which is why a
+     * single number for a defence could never carry the matchup.
+     */
+    look: process.env["SNAP_CHAIN"]
+      ? fitLook(learnRows
+          .filter((r) => r.shell && r.shotgun !== undefined)
+          .map((r) => ({
+            offence: r.offence, defence: r.defence, down: r.down,
+            toGo: r.toGo, yardline: r.yardline, shotgun: !!r.shotgun,
+            shell: r.shell!, manZone: r.manZone ?? "",
+          })))
+      : undefined,
+    coverage: process.env["COVERAGE"]
+      ? fitCoverage(learnRows
+          .filter((r) => r.call === "pass" && r.manZone)
+          .map((r) => ({
+            season: r.season, offence: r.offence, defence: r.defence,
+            player: r.player, manZone: r.manZone!,
+          })))
+      : undefined,
     formation: process.env["NO_FORMATION"]
       ? undefined
       : fitFormation(learnRows

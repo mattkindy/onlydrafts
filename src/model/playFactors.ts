@@ -34,10 +34,31 @@ export interface PlayFactors {
     sides?: {
       offence?: string; defence?: string;
       passer?: string; season?: number; week?: number;
+      /** and what the two sides settled before the snap */
+      shotgun?: boolean; shell?: string;
     },
   ) => number;
   /** how the work at this state divides between the men available */
-  goesTo: (state: PlayState, call: Call, among: string[]) => Map<string, number>;
+  /**
+   * How the work at this state divides between the men available.
+   * Given the defence, the split can lean toward the men it struggles
+   * with: a receiver's slice moves a long way with the coverage.
+   */
+  goesTo: (
+    state: PlayState, call: Call, among: string[],
+    sides?: { offence?: string; defence?: string; shell?: string },
+  ) => Map<string, number>;
+  /**
+   * What the defence puts on the field against this look, drawn. A
+   * drive asks once a snap and hands it to the target and the gain,
+   * so both answer to the same defence.
+   */
+  looksLike?: (
+    state: PlayState, shotgun: boolean, defence: string | undefined,
+    uniform: () => number,
+  ) => string;
+  /** and whether a side stood in the gun here, drawn */
+  standsBack?: (state: PlayState, offence?: string) => number;
   /** what he gains, drawn */
   gains: (
     state: PlayState, call: Call, player: string, uniform: () => number,
@@ -45,6 +66,8 @@ export interface PlayFactors {
       offence?: string; defence?: string;
       /** who threw it, and when, so a level model can be asked */
       passer?: string; season?: number; week?: number;
+      /** and what the two sides settled before the snap */
+      shotgun?: boolean; shell?: string;
     },
   ) => number;
   /** how often it ends in the end zone from here, given the yards */
@@ -72,6 +95,7 @@ export interface PlayFactors {
     sides?: {
       offence?: string; defence?: string;
       passer?: string; season?: number; week?: number;
+      shotgun?: boolean; shell?: string;
     },
   ) => { yards: number; caught: boolean } | undefined;
   /**

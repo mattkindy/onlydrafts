@@ -34,6 +34,7 @@ interface Flat {
   callPlays: [string, number][];
   fromFormation?: [string, { plays: number; runs: number }][];
   yardsFromFormation?: [string, { plays: number; yards: number; dry: number; long: number }][];
+  againstLook?: [string, { plays: number; yards: number; dry: number }][];
   /**
    * The per side counts, slim: a side cell only ever answers with its
    * plays, its runs and its yards, so the player and depth maps that
@@ -61,6 +62,7 @@ const flatten = (counted: CountedPlays): Flat => ({
   callPlays: [...counted.callPlays.entries()],
   fromFormation: [...counted.fromFormation.entries()],
   yardsFromFormation: [...counted.yardsFromFormation.entries()],
+  againstLook: [...counted.againstLook.entries()],
   bySide: [
     ...[...counted.byOffence.entries()].map(([k, c]) =>
       ["o", k, c.plays, c.runs, c.scores, c.yards] as
@@ -107,6 +109,7 @@ const raise = (flat: Flat): CountedPlays => ({
   callPlays: new Map(flat.callPlays),
   fromFormation: new Map(flat.fromFormation ?? []),
   yardsFromFormation: new Map(flat.yardsFromFormation ?? []),
+  againstLook: new Map(flat.againstLook ?? []),
 });
 
 /**
@@ -123,7 +126,7 @@ export async function countsFor(
   const stamp = await stat(TOUCHES).then((s) => s.mtimeMs).catch(() => 0);
   // the counting changes shape sometimes, and an older file would come
   // back missing whatever was added since
-  const at = join(KEPT, `counts8-${maxSeason}-${Math.round(stamp)}.json`);
+  const at = join(KEPT, `counts9-${maxSeason}-${Math.round(stamp)}.json`);
   const already = await readFile(at, "utf8").catch(() => "");
 
   if (already) {
