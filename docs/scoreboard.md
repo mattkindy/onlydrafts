@@ -22,7 +22,14 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7487 | .7050 | .6971 | .343 |
+| now | .7487 | .7050 | .6971 | .327 |
+
+The weekly number read .343 in this table for a while and it does not
+reproduce. walkWeeklyEval seeds its rng off the season, the week and
+the two sides, so it is repeatable to four figures, and run twice today
+on the shipped build it gives .327 both times. The .343 was measured
+while the kept files still had the formation counts in them, which were
+put back with a checkout afterwards. Take .327 as the bar.
 
 The walk's seat on the board is twenty percent. It is swept after
 every change; through all of the below it has stayed there, because
@@ -38,7 +45,7 @@ losing the first two rounds by about .007.
 | injuries lived as spells, a share made a role | .7488 | .6948 | .6692 | |
 | the market settles a room's pecking order | .7510 | .6961 | .6946 | |
 | the walk's seat cut to twenty percent | .7482 | .7035 | .6946 | .331 |
-| what a side's formation does to a play | .7487 | .7050 | .6971 | .343 |
+| what a side's formation does to a play | .7487 | .7050 | .6971 | .327 |
 
 The board barely moves while the walk moves a lot, and that is
 arithmetic rather than disappointment: the walk is one voice of four
@@ -52,23 +59,88 @@ week never said which of the three caused it. scripts/playLayerEval.ts
 asks each one against the 35,050 plays of 2024, with a plain answer
 beside it.
 
-| the decision | the walk | a plain answer |
-|---|---|---|
-| run or pass | .2067 | .2450, saying the league rate every time |
-| who gets the ball | 22.9% of the play to the man who got it | 16.1% from his own season share |
-| and putting him top of the list | 29.1% | 32.1% |
-| what he makes with it | 5.55 yards out | 5.40 for the call's average |
+**The call is at the ceiling.** The walk misses it by .2067 where
+saying the league rate every time misses by .2450. A ridge fitted on
+the 106,386 plays of the three seasons before, reading the same down,
+distance, field position, score and clock, gets .2063. It has no team
+identity in it at all and still ties, so a side's own tendency adds
+nearly nothing once the situation is known. First and second down are
+close to a coin flip, .2326 and .2139 against .2614 and .2419, and only
+third down is properly callable at .1430. There is no room here.
 
-The call is much the strongest of the three and the yards are level
-with the average. The plain answers in the last three rows are all read
-off the same season they are scored against, so they know things the
-walk cannot, and being level with them is better than it looks.
+**Who gets the ball is where it loses.** Against last season's share of
+that same call, which is the rival it has to beat:
 
-The yards first read 7.42 against 5.40, and that was wrong. The walk
-draws a gain rather than predicting one, so a single draw has the whole
-spread of the distribution in it and scores worse than a point estimate
-even when the distribution is exactly right. Averaging twelve draws
-gives 5.55.
+| putting the right man top of the list | 2023 | 2024 | 2025 |
+|---|---|---|---|
+| the walk | 29.4% | 29.1% | 29.6% |
+| last season's share of the call | 33.4% | 34.6% | 31.6% |
+| knowing this season, so nobody could do better | 40.5% | 40.7% | 40.1% |
+
+It loses to last season's counts by four or five points every season,
+and on the average share too, 22.9% against 24.2%. goesTo builds its
+weight as the projected share times a leaning, so the level comes
+entirely from the shrunk preseason projection and the counts only lean
+it toward the downs a man is used on. Moving the level onto the counts
+lifts the average share to 24.0% and drops the top of the list to
+28.4%, because the counts the walk has are conditioned on the state and
+faded over several seasons, so a man who started two years ago
+still has weight at 0.7 squared. Stale rather than wrong, and that is
+the lead worth following.
+
+**What he makes with it is level with the average**, 5.55 yards out
+against 5.40. That first read 7.42 and it was wrong: the walk draws a
+gain rather than predicting one, so a single draw has the whole spread
+of the distribution in it and scores worse than a point estimate even
+when the distribution is exactly right. Averaging twelve draws gives
+5.55.
+
+## It barely tells one man from another
+
+Half the point of playing a season out is that a good back gains more
+than a poor one from the same place. Among men given the same thing,
+over 2024 and men with sixty touches or more, the walk orders them by
+what they make of a touch at .224 for the ones who mostly run and .305
+for the ones who mostly catch.
+
+Pooling everyone gives .765, and that is a fourth artifact of the same
+family. A catch gains more than a carry, so most of the pooled number
+is the gap between the two groups, which is a fact about roles the walk
+gets for free. The same goes for the spread. Pooled, it says men differ
+by 1.10 yards a touch where 1.81 of the difference is really theirs, so
+the walk looks like it is speaking too quietly by a third. Within a
+group it is speaking too loudly, wanting 0.70 and 0.51 rather than 1.33.
+
+A man's level is his yards a touch against the league's, times
+`(leagueLongRate / hisLongRate) ** 0.5` to keep the long ones from
+being counted twice, since the draw has already decided whether this is
+one of his. That correction is what does the damage:
+
+| | backs | receivers | spread, against 1.81 theirs | wants |
+|---|---|---|---|---|
+| his level and the correction | .138 | .267 | 1.10 | 1.33x |
+| his level alone | .282 | .390 | 1.75 | 0.84x |
+| no level at all | .224 | .305 | 1.12 | 1.41x |
+
+His level is worth having and the correction is worth less than
+nothing, taking backs below what no level at all manages. Dividing by a
+man's own rate of breaking a long one is unstable where that rate is
+small: one long gain in sixty touches against a league five in a
+hundred is a multiplier of 1.73 on nothing but noise.
+
+Taking it off is not a win yet, though. It leaves the weekly bench at
+.323 against .327, and the board's first 24 picks at .6961 against
+.7050, while a whole season stays level at .7490 against .7487. So the
+per-play physics gets clearly better and the fantasy ordering slightly
+worse, which usually means the accuracy is being swamped by the
+variance it adds. It is behind NO_LONG_SHAPE, switched off.
+
+The fix worth building is the one the shape of the counts prevents
+today. A Rate keeps a man's touches, his yards and how many of them
+went twenty or more, but not the yards those long ones made, so his
+level cannot be worked out with them taken out. Storing that would let
+the level be his yards a touch on the ordinary ones, against the
+league's on the ordinary ones, which is what the multiplier is for.
 
 ## How often the walk hands it to him
 
@@ -123,7 +195,8 @@ the model actually claims.
 Drawing the formation and the defence's shell before the call, so the
 call, the man and the yards all answer to one snap. It is how football
 works and it has not paid yet. Each row is a week of a man's scoring
-against .343 for the shipped walk.
+against .343 for the shipped walk, which is the bar that no longer
+reproduces, so read the four against each other and not against .327.
 
 | how it was built | reads |
 |---|---|

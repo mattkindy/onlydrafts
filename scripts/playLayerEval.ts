@@ -16,8 +16,11 @@ import { parseCsv } from "../src/data/csv.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { buildWorld } from "../src/features/playedWorld.js";
 import { seededRng } from "../src/sim/rng.js";
+import { spearman } from "../src/backtest/metrics.js";
 
 const SEASON = Number(process.argv[2] ?? 2024);
+/** enough touches that half of them still says something about him */
+const ENOUGH_PLAYS = 60;
 
 const positions = new Map<string, string>();
 
@@ -26,10 +29,29 @@ for (const s of await loadPlayerStats(SEASON - 1)) {
 }
 
 const world = await buildWorld(SEASON, 1, false, positions);
-const plays = parseCsv(await readFile(
+const every = parseCsv(await readFile(
   join(import.meta.dirname, "..", "data", "curated", "touches.csv"), "utf8",
-)).filter((r) =>
-  Number(r["season"]) === SEASON && ["run", "pass"].includes(r["playType"] ?? ""));
+)).filter((r) => ["run", "pass"].includes(r["playType"] ?? ""));
+const plays = every.filter((r) => Number(r["season"]) === SEASON);
+
+/**
+ * Last season's share of each call, which is the rival the walk has
+ * to beat. The two below that read this season know how it went and
+ * are there to say what was there to be had, not to be beaten.
+ */
+const tookBefore = new Map<string, number>();
+const sideBefore = new Map<string, number>();
+
+for (const r of every) {
+  if (Number(r["season"]) !== SEASON - 1 || !r["player"]) {
+    continue;
+  }
+
+  const key = `${r["player"]}|${r["playType"]}`;
+  tookBefore.set(key, (tookBefore.get(key) ?? 0) + 1);
+  const side = `${r["offense"]}|${r["playType"]}`;
+  sideBefore.set(side, (sideBefore.get(side) ?? 0) + 1);
+}
 
 /** the men each side had, as the walk sees them */
 const among = new Map<string, string[]>();
@@ -60,10 +82,23 @@ let targetSaid = 0;
 let targetFlat = 0;
 let onTop = 0;
 let onTopFlat = 0;
+let onTopCall = 0;
+let targetCall = 0;
+let onTopBefore = 0;
+let targetBefore = 0;
+let sawBefore = 0;
 
 /** how often each man took the ball for his side, over the season */
 const tookIt = new Map<string, number>();
 const sideTook = new Map<string, number>();
+/**
+ * And the same split by whether it was run or thrown, which is most
+ * of what tells a back from a receiver. Both are counted on the very
+ * season they are scored against, so they know what happened and the
+ * walk does not. They are here as a ceiling, not as a fair rival.
+ */
+const tookOn = new Map<string, number>();
+const sideOn = new Map<string, number>();
 
 for (const r of plays) {
   if (!r["player"]) {
@@ -72,11 +107,25 @@ for (const r of plays) {
 
   tookIt.set(r["player"], (tookIt.get(r["player"]) ?? 0) + 1);
   sideTook.set(r["offense"]!, (sideTook.get(r["offense"]!) ?? 0) + 1);
+  const call = r["playType"]!;
+  tookOn.set(`${r["player"]}|${call}`, (tookOn.get(`${r["player"]}|${call}`) ?? 0) + 1);
+  sideOn.set(`${r["offense"]}|${call}`, (sideOn.get(`${r["offense"]}|${call}`) ?? 0) + 1);
 }
 
 let gains = 0;
 let gainOff = 0;
 let flatOff = 0;
+
+/**
+ * Each man's plays, with what the walk expected of them and what they
+ * made, and the actual yards split odd play from even. A man's own
+ * average over a season is mostly noise, so the two halves are what
+ * says how much of the spread between men is a thing about the men.
+ */
+const eachMan = new Map<string, {
+  n: number; said: number; was: number; runs: number;
+  odd: number; oddN: number; even: number; evenN: number;
+}>();
 const rng = seededRng(11);
 const middleOf = new Map<string, { n: number; yards: number }>();
 
@@ -147,6 +196,54 @@ for (const r of plays) {
       }
     }
 
+    const call = r["playType"]!;
+    const onCall = (who: string) => (tookOn.get(`${who}|${call}`) ?? 0) /
+      Math.max(1, sideOn.get(`${r["offense"]}|${call}`) ?? 1);
+    let bestCall = "";
+    let mostCall = -1;
+
+    for (const who of men) {
+      if (onCall(who) > mostCall) {
+        mostCall = onCall(who);
+        bestCall = who;
+      }
+    }
+
+    targetCall += onCall(r["player"]);
+
+    if (bestCall === r["player"]) {
+      onTopCall++;
+    }
+
+    // and the same off last season, which is what the walk knows too
+    let allBefore = 0;
+
+    for (const who of men) {
+      allBefore += tookBefore.get(`${who}|${call}`) ?? 0;
+    }
+
+    let bestBefore = "";
+    let mostBefore = -1;
+
+    for (const who of men) {
+      const had = tookBefore.get(`${who}|${call}`) ?? 0;
+
+      if (had > mostBefore) {
+        mostBefore = had;
+        bestBefore = who;
+      }
+    }
+
+    if (allBefore > 0) {
+      sawBefore++;
+      targetBefore +=
+        (tookBefore.get(`${r["player"]}|${call}`) ?? 0) / allBefore;
+
+      if (bestBefore === r["player"]) {
+        onTopBefore++;
+      }
+    }
+
     if (bestFlat === r["player"]) {
       onTopFlat++;
     }
@@ -171,6 +268,24 @@ for (const r of plays) {
     gains++;
     gainOff += Math.abs(drawn - was);
     flatOff += Math.abs((flat ? flat.yards / flat.n : 5) - was);
+
+    const own = eachMan.get(r["player"]) ?? {
+      n: 0, said: 0, was: 0, odd: 0, oddN: 0, even: 0, evenN: 0, runs: 0,
+    };
+    own.n++;
+    own.said += drawn;
+    own.was += was;
+
+    if (own.n % 2 === 1) {
+      own.odd += was;
+      own.oddN++;
+    } else {
+      own.even += was;
+      own.evenN++;
+    }
+
+    own.runs += r["playType"] === "run" ? 1 : 0;
+    eachMan.set(r["player"], own);
   }
 }
 
@@ -185,10 +300,86 @@ console.log(
   `his own season share gives him ${(100 * targetFlat / targets).toFixed(1)}%`,
 );
 console.log(
-  `                  and names him first ${(100 * onTop / targets).toFixed(1)}% ` +
-  `of the time against ${(100 * onTopFlat / targets).toFixed(1)}%`,
+  `                  and puts him top of the list ` +
+  `${(100 * onTop / targets).toFixed(1)}% of the time against ` +
+  `${(100 * onTopFlat / targets).toFixed(1)}%`,
+);
+console.log(
+  `                  last season's share of the call: ` +
+  `${(100 * targetBefore / Math.max(1, sawBefore)).toFixed(1)}% of the play, ` +
+  `top of the list ${(100 * onTopBefore / Math.max(1, sawBefore)).toFixed(1)}%`,
+);
+console.log(
+  `                  and knowing this season and the call, which is the ` +
+  `most anyone could do: ${(100 * targetCall / targets).toFixed(1)}% of the ` +
+  `play, top of the list ${(100 * onTopCall / targets).toFixed(1)}%`,
 );
 console.log(
   `  what he makes   walk is out by ${(gainOff / gains).toFixed(2)} yards a play, ` +
   `the call's average is out by ${(flatOff / gains).toFixed(2)}`,
 );
+
+/**
+ * Does it tell one man from another, and by enough?
+ *
+ * Half the point of playing a season out is that a good back gains
+ * more than a poor one in the same place. If the walk's men are all
+ * near the league average, it is a situation model wearing a roster.
+ */
+const spread = (of: number[]) => {
+  const mid = of.reduce((a, b) => a + b, 0) / Math.max(1, of.length);
+
+  return Math.sqrt(
+    of.reduce((sum, v) => sum + (v - mid) ** 2, 0) / Math.max(1, of.length),
+  );
+};
+const enough = [...eachMan.values()].filter((m) => m.n >= ENOUGH_PLAYS &&
+  m.oddN > 0 && m.evenN > 0);
+
+console.log(`\na yard a touch, over men with ${ENOUGH_PLAYS} touches or more:`);
+
+/**
+ * Split by what they are given, since a run is drawn from a pool of
+ * runs and a throw from a pool at the man's own depth. Only the throw
+ * has the depth already in the draw, so only the throw can have it
+ * counted a second time by his level on top.
+ */
+for (const [who, mine] of [
+  ["they mostly run", enough.filter((m) => m.runs / m.n > 0.7)],
+  ["they mostly catch", enough.filter((m) => m.runs / m.n < 0.3)],
+  ["everyone", enough],
+] as [string, typeof enough][]) {
+  if (mine.length < 20) {
+    continue;
+  }
+
+  const said = mine.map((m) => m.said / m.n);
+  const was = mine.map((m) => m.was / m.n);
+  const odd = mine.map((m) => m.odd / m.oddN);
+  const even = mine.map((m) => m.even / m.evenN);
+  const midOf = (of: number[]) =>
+    of.reduce((a, b) => a + b, 0) / Math.max(1, of.length);
+  const midOdd = midOf(odd);
+  const midEven = midOf(even);
+  const midSaid = midOf(said);
+  /**
+   * The two halves of a man's own season agree only on what is really
+   * his, so how far they move together is the spread worth having.
+   * The spread of his whole season has a season of luck in it too.
+   */
+  const truly = Math.sqrt(Math.max(0, odd.reduce(
+    (sum, v, i) => sum + (v - midOdd) * (even[i]! - midEven), 0,
+  ) / Math.max(1, odd.length)));
+  // and above one here means the walk is speaking too quietly
+  const slope = (odd.reduce(
+    (sum, v, i) => sum + (said[i]! - midSaid) * (v - midOdd), 0,
+  ) / Math.max(1, odd.length)) / Math.max(1e-9, spread(said) ** 2);
+
+  console.log(
+    `  ${who.padEnd(18)}${String(mine.length).padStart(4)} men  ` +
+    `walk spreads ${spread(said).toFixed(2)}, ` +
+    `${truly.toFixed(2)} of theirs is real, ` +
+    `orders ${spearman(said, was).toFixed(3)}, ` +
+    `wants ${slope.toFixed(2)}x`,
+  );
+}
