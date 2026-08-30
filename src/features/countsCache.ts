@@ -32,6 +32,7 @@ interface Flat {
   scriptPlays: [string, number][];
   onCall: [string, number][];
   callPlays: [string, number][];
+  fromFormation?: [string, { plays: number; runs: number }][];
   /**
    * The per side counts, slim: a side cell only ever answers with its
    * plays, its runs and its yards, so the player and depth maps that
@@ -57,6 +58,7 @@ const flatten = (counted: CountedPlays): Flat => ({
   scriptPlays: [...counted.scriptPlays.entries()],
   onCall: [...counted.onCall.entries()],
   callPlays: [...counted.callPlays.entries()],
+  fromFormation: [...counted.fromFormation.entries()],
   bySide: [
     ...[...counted.byOffence.entries()].map(([k, c]) =>
       ["o", k, c.plays, c.runs, c.scores, c.yards] as
@@ -101,6 +103,7 @@ const raise = (flat: Flat): CountedPlays => ({
   scriptPlays: new Map(flat.scriptPlays),
   onCall: new Map(flat.onCall),
   callPlays: new Map(flat.callPlays),
+  fromFormation: new Map(flat.fromFormation ?? []),
 });
 
 /**

@@ -28,6 +28,7 @@ import {
 import { fitFourthDown, climbTo, type FourthRow } from "./fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "./fitPlayClock.js";
 import { fitTargetDepth } from "./targetDepth.js";
+import { fitFormation } from "./fitFormation.js";
 import { buildPlayLevel } from "./playLevel.js";
 import {
   experienceBefore, pastShares, projectSplitShares, SHARING_POSITIONS,
@@ -90,6 +91,7 @@ export async function buildWorld(
       yardline: Number(r["yardline"]), margin: Number(r["margin"]) || 0,
       secondsLeft: Number(r["seconds"]) || 1800,
       call: (r["playType"] ?? "") as Call,
+      shotgun: r["shotgun"] === undefined ? undefined : r["shotgun"] === "1",
       yards: Number(r["yards"]) || 0, touchdown: Number(r["touchdown"]) || 0,
       player: r["player"] ?? "", passer: r["passer"] ?? "",
       airYards: r["airYards"] === "" || r["airYards"] === undefined
@@ -336,6 +338,19 @@ export async function buildWorld(
     readsTheScript: !process.env["NO_SCRIPT"],
   }, {
     split, pairing: pairing.bend, counted,
+    /**
+     * Where a side stands before the snap, drawn before the call.
+     * Off until the board bench breaks the tie: it moves the passing
+     * game up and the running game down, and pooled it is level.
+     */
+    formation: process.env["FORMATION"]
+      ? fitFormation(learnRows
+          .filter((r) => r.shotgun !== undefined)
+          .map((r) => ({
+            season: r.season, offence: r.offence, down: r.down, toGo: r.toGo,
+            shotgun: r.shotgun ? 1 : 0, noHuddle: 0,
+          })))
+      : undefined,
     /**
      * One model over everybody on the play, in place of the chain of
      * multipliers. Each link of that chain was fitted alone and can
