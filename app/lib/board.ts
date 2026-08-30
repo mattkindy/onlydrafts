@@ -21,7 +21,7 @@ export interface League {
 }
 
 /** the same weights the board is built with, quarterbacks apart */
-const LEAN = { model: 0.087, share: 0.263, adp: 0.35, walk: 0.3 };
+const LEAN = { model: 0.099, share: 0.3, adp: 0.401, walk: 0.2 };
 const QB_LEAN = { model: 0.03, share: 0, adp: 0.12, walk: 0.85 };
 
 /** ordered among themselves, placed where the room drafts them */
