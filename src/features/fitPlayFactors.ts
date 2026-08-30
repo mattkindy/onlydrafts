@@ -418,6 +418,14 @@ const DEPTH_ROOM_UPTO = Number(process.env["DEPTH_ROOM_UPTO"] ?? 25);
  */
 const LINE_IS_NEAR = Number(process.env["LINE_IS_NEAR"] ?? 10);
 const GOAL_LEAST = Number(process.env["GOAL_LEAST"] ?? 5);
+/**
+ * A run and a throw ask separately. There are two men who can run it
+ * from the three and five who can catch it, so a tight cell says much
+ * more about the run than about the throw, and one number for both was
+ * either loose for the run or tight for the throw.
+ */
+const GOAL_LEAST_RUN = Number(process.env["GOAL_LEAST_RUN"] ?? GOAL_LEAST);
+const GOAL_LEAST_PASS = Number(process.env["GOAL_LEAST_PASS"] ?? GOAL_LEAST);
 /** and how many the pool a play draws from is asked for there */
 const GOAL_GAIN_LEAST = Number(process.env["GOAL_GAIN_LEAST"] ?? 300);
 
@@ -434,6 +442,18 @@ const GOAL_GAIN_LEAST = Number(process.env["GOAL_GAIN_LEAST"] ?? 300);
  * understood.
  */
 const ORDINARY_LEVEL = Boolean(process.env["ORDINARY_LEVEL"]);
+
+/**
+ * How much of a man's level is said, a run and a throw apart.
+ *
+ * A throw is already drawn from the pool at his own depth and from the
+ * long end at his own rate of breaking one, so his level is a third
+ * helping of the same man: the walk spreads receivers by what would
+ * have to be .29 times as far to be right. Halving it reads .344 a
+ * week against .343, with passers, backs and receivers all up.
+ */
+const LEVEL_ON_RUN = Number(process.env["LEVEL_ON_RUN"] ?? 1);
+const LEVEL_ON_PASS = Number(process.env["LEVEL_ON_PASS"] ?? 1);
 
 /**
  * A gain is a whole number of yards.
@@ -2144,7 +2164,7 @@ export function fitPlayFactors(
        * thirty eight. Everywhere else the reach costs nothing.
        */
       const wants = (state.yardline <= LINE_IS_NEAR
-        ? GOAL_LEAST
+        ? (call === "run" ? GOAL_LEAST_RUN : GOAL_LEAST_PASS)
         : settings.leastForMan) * Math.max(1, among.length);
       const itsCells = atCells(state, wants, call);
       let here = 0;
@@ -2310,8 +2330,23 @@ export function fitPlayFactors(
       const longOnes: number[] = [];
       const shortOnes: number[] = [];
       const wentNowhere: number[] = [];
+      /**
+       * What this pool makes on an ordinary touch, counted while it is
+       * being split so it costs nothing. On a throw the pool is the one
+       * at this man's own depth, and that is what his level has to be
+       * measured against: a deep threat is already being dealt deep
+       * throws, so measuring him against every throw in the league
+       * credits him for the depth a second time.
+       */
+      let poolPlain = 0;
+      let poolPlainOf = 0;
 
       for (const gained of drawFrom) {
+        if (gained < 20) {
+          poolPlain += gained;
+          poolPlainOf++;
+        }
+
         if (gained <= 0) {
           wentNowhere.push(gained);
           continue;
@@ -2388,9 +2423,16 @@ export function fitPlayFactors(
       const plain = (of: { yards: number; touches: number; long: number;
         longYards: number }) =>
         (of.yards - of.longYards) / Math.max(1, of.touches - of.long);
-      const league = ORDINARY_LEVEL
-        ? plain(found.league)
-        : found.league.yards / Math.max(1, found.league.touches);
+      /**
+       * Measured against the pool the draw came from when that pool is
+       * his own depth, and against the league on this call otherwise.
+       */
+      const atHisDepth = ORDINARY_LEVEL && atDepth && poolPlainOf >= 20
+        ? poolPlain / poolPlainOf
+        : 0;
+      const league = !ORDINARY_LEVEL
+        ? found.league.yards / Math.max(1, found.league.touches)
+        : atHisDepth > 0 ? atHisDepth : plain(found.league);
       const his = ORDINARY_LEVEL
         ? plain(found.his)
         : found.his.yards / Math.max(1, found.his.touches);
@@ -2401,11 +2443,22 @@ export function fitPlayFactors(
       const level = playLevel && sides
         ? playLevel.levelFor(state, call, player, sides)
         : his / Math.max(0.1, league);
-      const shape = ORDINARY_LEVEL || process.env["NO_LONG_SHAPE"]
+      const said = ORDINARY_LEVEL || process.env["NO_LONG_SHAPE"]
         ? level
         : leagueLongRate > 0 && hisLongRate > 0
         ? level * (leagueLongRate / hisLongRate) ** 0.5
         : level;
+      /**
+       * How much of his level to say, which is not the same on a run
+       * as on a throw. A throw is already drawn from the pool at his
+       * own depth and from the long end at his own rate of breaking
+       * one, so his level is a third helping of the same man and the
+       * walk spreads receivers three times as far as it should. A run
+       * is drawn from a pool that knows nothing about him, so his
+       * level is all he has.
+       */
+      const saying = call === "pass" ? LEVEL_ON_PASS : LEVEL_ON_RUN;
+      const shape = saying === 1 ? said : 1 + (said - 1) * saying;
 
       const centre = process.env["NO_CENTRE"] ? 1 : centreOf.get(call) ?? 1;
       const bent = drawn * tilt.gain * afterCatchTilt(call, player) *
