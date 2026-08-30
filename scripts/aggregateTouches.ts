@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   const out = createWriteStream(OUT);
   out.write(
     "season,week,offense,defense,down,togo,yardline,margin,seconds," +
-      "playType,player,passer,airYards,caught,yards,touchdown\n",
+      "playType,player,passer,airYards,caught,yards,touchdown,shotgun\n",
   );
   let total = 0;
 
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
           "week", "posteam", "defteam", "down", "ydstogo", "yardline_100",
           "score_differential", "game_seconds_remaining", "play_type",
           "yards_gained", "touchdown", "rusher_player_id", "receiver_player_id",
-          "complete_pass", "passer_player_id", "air_yards",
+          "complete_pass", "passer_player_id", "air_yards", "shotgun",
         ]) {
           at[field] = header.indexOf(field);
         }
@@ -92,6 +92,7 @@ async function main(): Promise<void> {
         c[at["score_differential"]!] || 0, c[at["game_seconds_remaining"]!] || 0,
         type, player, passer, airYards, caught, c[at["yards_gained"]!] || 0,
         c[at["touchdown"]!] === "1" ? 1 : 0,
+        c[at["shotgun"]!] === "1" ? 1 : 0,
       ].join(",") + "\n");
       written++;
     }

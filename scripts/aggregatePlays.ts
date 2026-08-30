@@ -85,7 +85,8 @@ async function personnelFor(season: number) {
 async function main(): Promise<void> {
   const rows: string[] = [
     "season,week,offense,defense,drive,down,togo,yardline,margin,seconds," +
-      "grouping,shell,box,playType,yards,firstDown,touchdown,turnover",
+      "grouping,shell,box,playType,yards,firstDown,touchdown,turnover," +
+      "shotgun,noHuddle",
   ];
 
   for (const season of SEASONS) {
@@ -110,6 +111,9 @@ async function main(): Promise<void> {
           "game_seconds_remaining", "play_type", "yards_gained",
           "first_down", "touchdown", "interception", "fumble_lost",
           "first_down_penalty", "penalty_yards",
+          // at one state these move the call by 26 points, and a
+          // side's habit is its own season to season at .61
+          "shotgun", "no_huddle",
         ]) {
           at[field] = header.indexOf(field);
         }
@@ -152,6 +156,8 @@ async function main(): Promise<void> {
         c[at["first_down"]!] === "1" ? 1 : 0,
         c[at["touchdown"]!] === "1" ? 1 : 0,
         lost ? 1 : 0,
+        c[at["shotgun"]!] === "1" ? 1 : 0,
+        c[at["no_huddle"]!] === "1" ? 1 : 0,
       ].join(","));
       written++;
     }

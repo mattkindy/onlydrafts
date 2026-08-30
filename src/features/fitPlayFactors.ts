@@ -15,10 +15,13 @@ import {
 import type { RunParts } from "./runParts.js";
 import type { PlayLevel } from "./playLevel.js";
 import { bandOf, type TargetDepth } from "./targetDepth.js";
+import type { Formation } from "./fitFormation.js";
 
 export interface PlayRow {
   /** which season it happened, so an old play can count for less */
   season?: number;
+  /** whether the quarterback stood back, which moves the call most */
+  shotgun?: boolean;
   /** who had the ball and who was trying to stop them */
   offence: string;
   defence: string;
@@ -407,8 +410,23 @@ export const scriptOf = (margin: number, down: number, toGo: number) => {
   return `${how}|${mustThrow ? "long" : "normal"}`;
 };
 
+/**
+ * How often a call is a run from each formation, by down, distance
+ * and where the ball is. The formation is drawn before the call, so
+ * this is the second half of that draw rather than another way of
+ * asking the same question.
+ */
+export const atFormation = (
+  shotgun: boolean, down: number, toGo: number, yardline: number,
+) =>
+  `${shotgun ? "gun" : "centre"}|${Math.min(4, down)}|` +
+  `${toGo <= 2 ? "short" : toGo <= 6 ? "medium" : "long"}|` +
+  `${Math.min(9, Math.floor(yardline / 10))}`;
+
 export interface CountedPlays {
   cells: Map<string, Counted>;
+  /** what each formation led to, for the two step call */
+  fromFormation: Map<string, { plays: number; runs: number }>;
   byOffence: Map<string, Counted>;
   byDefence: Map<string, Counted>;
   byMan: Map<string, Rate>;
@@ -454,6 +472,8 @@ export interface FactorExtras {
   counted?: CountedPlays;
   /** the plays kept whole, which turns the draw personal */
   plays?: PlayStore;
+  /** where each side stands before the snap, drawn before the call */
+  formation?: Formation;
   /**
    * Who resembles whom, nearest first, so a man too thin to sample
    * borrows plays from men like him before falling to the crowd. A
@@ -514,6 +534,7 @@ export function countPlays(
   const onCall = new Map<string, number>();
   const callPlays = new Map<string, number>();
   let everyTouch = 0;
+  const fromFormation = new Map<string, { plays: number; runs: number }>();
 
   for (const row of rows) {
     if (row.call === "pass" && row.caught !== undefined) {
@@ -541,6 +562,18 @@ export function countPlays(
         (onCall.get(`${row.player}|${row.call}`) ?? 0) + 1,
       );
       callPlays.set(row.call, (callPlays.get(row.call) ?? 0) + 1);
+    }
+
+    if (row.shotgun !== undefined) {
+      const at = atFormation(row.shotgun, row.down, row.toGo, row.yardline);
+      const seen = fromFormation.get(at) ?? { plays: 0, runs: 0 };
+      seen.plays++;
+
+      if (row.call === "run") {
+        seen.runs++;
+      }
+
+      fromFormation.set(at, seen);
     }
   }
 
@@ -643,7 +676,7 @@ export function countPlays(
   }
   return {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
-    everyTouch, inScript, scriptPlays, onCall, callPlays,
+    everyTouch, inScript, scriptPlays, onCall, callPlays, fromFormation,
   };
 }
 
@@ -654,11 +687,12 @@ export function fitPlayFactors(
 ): PlayFactors {
   const {
     projected, split, pairing, playLevel, depth, people, plays,
-    alike,
+    alike, formation,
   } = extras;
   const {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
     everyTouch, inScript, scriptPlays, onCall, callPlays,
+    fromFormation = new Map<string, { plays: number; runs: number }>(),
   } = extras.counted ?? countPlays(rows, !pairing);
 
   /**
@@ -1453,6 +1487,40 @@ export function fitPlayFactors(
     runs: (state, offence, sides) => {
       const league = atCounts(state, settings.leastForCall);
       const leagueRate = league.plays === 0 ? 0.45 : league.runs / league.plays;
+
+      /**
+       * The formation first, then the call from it. A side in the gun
+       * runs 41.7% on first and ten between the twenties and one
+       * under centre runs 67.7%, and where a side stands is more its
+       * own from season to season than any rate it puts up. Averaging
+       * over both is how the call lost the side that was making it.
+       */
+      if (formation && fromFormation.size > 0) {
+        const inGun = fromFormation.get(
+          atFormation(true, state.down, state.toGo, state.yardline),
+        );
+        const underCentre = fromFormation.get(
+          atFormation(false, state.down, state.toGo, state.yardline),
+        );
+
+        if (inGun && underCentre &&
+            inGun.plays >= settings.leastForCall &&
+            underCentre.plays >= settings.leastForCall) {
+          /**
+           * The league's own rate at these very cells, so a side with
+           * no leaning of its own comes out exactly where the pools
+           * had it. Taking the base from a differently cut table
+           * passed 1.8 points more than the plays did.
+           */
+          const here = inGun.plays / (inGun.plays + underCentre.plays);
+          const gun = Math.max(0.02, Math.min(0.98,
+            here * formation.leaning(offence)));
+
+          return Math.max(0.02, Math.min(0.98,
+            gun * (inGun.runs / inGun.plays) +
+            (1 - gun) * (underCentre.runs / underCentre.plays)));
+        }
+      }
 
       /**
        * The model's own read of the call, where it has one. The pools
