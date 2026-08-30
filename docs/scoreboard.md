@@ -95,6 +95,44 @@ of the distribution in it and scores worse than a point estimate even
 when the distribution is exactly right. Averaging twelve draws gives
 5.55.
 
+## The touchdowns, which is where a week is won
+
+Better yards a carry ought to mean better weeks and it does not, and
+this is why. scripts/pointsFromEval.ts takes a week apart for men
+averaging ten or more, over 2024 and 2025:
+
+| | how wide, against the week's own spread | orders the week |
+|---|---|---|
+| yards | 0.53 | .84 |
+| catches | 0.33 | .17 |
+| touchdowns | 0.72 | .77 |
+
+Scores are the widest part of a week, wider than yards, and for backs
+alone they are 0.57 against 0.53. They are not the luck of a Sunday
+either. Splitting each man's weeks in two, his halves agree .721 on
+scores where they agree .807 on yards and .617 on the week itself. A
+man's scoring is nearly as much his own as his yardage is.
+
+The walk orders backs' touchdowns at .042 and tight ends' at .036,
+where saying every week is his average so far gets .204 and .184. So
+one half of a week it does reasonably and the other half, which is
+wider, it produces at random. A gain in yards a carry is swallowed by
+that.
+
+Inside the ten it loses to last season's counts at naming who gets it:
+
+| top of the list, inside the ten | 2023 | 2024 | 2025 |
+|---|---|---|---|
+| runs, the walk | 41.1% | 42.1% | 39.1% |
+| runs, last season's counts | 45.1% | 51.2% | 37.9% |
+| passes, the walk | 23.2% | 17.8% | 21.7% |
+| passes, last season's counts | 27.0% | 21.3% | 24.6% |
+
+A goal line bucket was tried before and reverted, which is in the list
+below. It was tried without this measurement, against the board, where
+a change worth a point of goal line allocation cannot be seen. The
+measurement to aim at is this table.
+
 ## It barely tells one man from another
 
 Half the point of playing a season out is that a good back gains more
