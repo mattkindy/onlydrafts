@@ -62,6 +62,11 @@ export interface PlayFactors {
   hisOwnPlay?: (
     state: PlayState, call: Call, player: string, uniform: () => number,
     passer?: string,
+    /** and who else is out there, so a level model can be asked */
+    sides?: {
+      offence?: string; defence?: string;
+      passer?: string; season?: number; week?: number;
+    },
   ) => { yards: number; caught: boolean } | undefined;
   /**
    * What this matchup does to a carry or a throw, near one. The

@@ -1245,6 +1245,10 @@ export function fitPlayFactors(
     ? (
         state: PlayState, call: Call, player: string, uniform: () => number,
         passer?: string,
+        sides?: {
+          offence?: string; defence?: string;
+          passer?: string; season?: number; week?: number;
+        },
       ) => {
         /**
          * A sack or a ball thrown away first, since one belongs to no
@@ -1336,6 +1340,7 @@ export function fitPlayFactors(
           let count = 0;
           let weight = 0;
           let crossedWeight = 0;
+          let dryWeight = 0;
 
           for (const i of his) {
             if (wanted(i)) {
@@ -1345,6 +1350,10 @@ export function fitPlayFactors(
 
               if (plays.yards[i]! >= state.yardline) {
                 crossedWeight += w;
+              }
+
+              if (plays.yards[i]! <= 0) {
+                dryWeight += w;
               }
             }
           }
@@ -1393,6 +1402,38 @@ export function fitPlayFactors(
            */
           const tilt = situationTilt(state, call);
           const drawn = plays.yards[at]!;
+
+          /**
+           * The level model, on the sampled path as well.
+           *
+           * His own plays were made against everybody he ever faced,
+           * so this week's people have to be heard here too, and the
+           * pooled path is the only one that used to hear them. That
+           * is why the model read as a wash: a starter has plays of
+           * his own, so the pooled path is where he never goes.
+           */
+          if (playLevel && sides) {
+            const dryHere = dryWeight / Math.max(1, weight);
+            const stuffs = playLevel.stuffedBy(state, call, player, sides);
+
+            if (drawn > 0 && stuffs > 1 && dryHere < 0.95) {
+              const goesDry = (stuffs - 1) * dryHere / (1 - dryHere);
+
+              if (uniform() < goesDry) {
+                return { yards: 0, caught: false };
+              }
+            }
+
+            if (drawn > 0) {
+              const level = playLevel.levelFor(state, call, player, sides);
+
+              return {
+                yards: Math.min(state.yardline,
+                  drawn * tilt.gain * Math.max(0.5, Math.min(1.8, level))),
+                caught: plays.caught[at] === 1,
+              };
+            }
+          }
 
           return {
             yards: Math.min(state.yardline,
