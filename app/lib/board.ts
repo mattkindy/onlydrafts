@@ -133,12 +133,16 @@ export function rescore(players: Player[], league: League): Player[] {
   const shareAt = placesBy(onTheCurve, (p) => p.touches);
   const adpAt = placesBy(onTheCurve, (p) => (p.adp == null ? null : -p.adp));
   /**
-   * The walk keeps quiet on rookies. It has no plays to draw from for
-   * them, and its third of a point a game dragged every one of them to
-   * the bottom of the board.
+   * The walk speaks about rookies too. It used to keep quiet on them,
+   * from a time when it had nothing to draw for one and gave every
+   * rookie a third of a point a game. It draws them from the pools
+   * now, at the share their draft slot buys, and gives the first back
+   * of this class fifteen and a half a game. The bench has scored
+   * them that way all along, so leaving them out here meant the board
+   * a drafter reads was not the board that was measured.
    */
   const walkAt = placesBy(onTheCurve, (p) =>
-    p.simulated && !p.rookie
+    p.simulated
       ? payFor(p.simulated, pays) - (bar[p.position] ?? 0)
       : null);
 
