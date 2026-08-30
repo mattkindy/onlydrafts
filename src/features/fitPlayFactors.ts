@@ -334,6 +334,9 @@ const FIELD_CLOSER = Number(process.env["FIELD_CLOSER"] ?? 40);
  */
 const RECENT_FADE = Number(process.env["RECENT_FADE"] ?? 0.7);
 const FADES = [0, 1, 2, 3, 4, 5].map((back) => Math.pow(RECENT_FADE, back));
+/** and how much harder the formation cells fade, since their rate climbs */
+const FORM_FADE = Number(process.env["FORM_FADE"] ?? 0.7);
+const FORM_FADES = [0, 1, 2, 3, 4, 5].map((b) => Math.pow(FORM_FADE, b));
 
 export function storePlays(rows: PlayRow[]): PlayStore {
   const kept = rows.filter((r) => r.player);
@@ -772,7 +775,7 @@ export function countPlays(
        * that is the whole of what the formation call was losing.
        */
       const counts = freshest && row.season
-        ? FADES[Math.min(5, freshest - row.season)]!
+        ? FORM_FADES[Math.min(5, freshest - row.season)]!
         : 1;
 
       for (const key of [eitherWay, eitherLoose]) {
@@ -1792,12 +1795,13 @@ export function fitPlayFactors(
        * a play under centre has to be called like one.
        */
       if (sides?.shotgun !== undefined) {
+        const wants = Number(process.env["FORM_LEAST"] ?? settings.leastForCall);
         const here = atCounts(
-          state, settings.leastForCall, undefined,
+          state, wants, undefined,
           sides.shotgun ? "gun" : "centre",
         );
 
-        if (here.plays >= settings.leastForCall) {
+        if (here.plays >= wants) {
           return Math.max(0.02, Math.min(0.98, here.runs / here.plays));
         }
       }
