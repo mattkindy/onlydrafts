@@ -20,11 +20,11 @@ const TOUCHES = join(
 
 interface Flat {
   cells: [string, number, number, number, number[], number[],
-    [number, number, number],
-    [string, number, number, number, number][],
+    [number, number, number, number],
+    [string, number, number, number, number, number][],
     [number, number[]][], [number, number[]][]][];
-  byMan: [string, number, number, number][];
-  leagueOn: [string, number, number, number][];
+  byMan: [string, number, number, number, number][];
+  leagueOn: [string, number, number, number, number][];
   caughtAt: [number, number, number][];
   overall: [string, number][];
   everyTouch: number;
@@ -46,13 +46,15 @@ interface Flat {
 const flatten = (counted: CountedPlays): Flat => ({
   cells: [...counted.cells.entries()].map(([key, c]) => [
     key, c.plays, c.runs, c.scores, c.yards, c.from,
-    [c.named.touches, c.named.yards, c.named.long],
+    [c.named.touches, c.named.yards, c.named.long, c.named.longYards],
     [...c.byPlayer.entries()].map(([id, o]) =>
-      [id, o.touches, o.yards, o.scores, o.long]),
+      [id, o.touches, o.yards, o.scores, o.long, o.longYards]),
     [...c.byDepth.entries()], [...c.byDepthFrom.entries()],
   ]),
-  byMan: [...counted.byMan.entries()].map(([k, r]) => [k, r.touches, r.yards, r.long]),
-  leagueOn: [...counted.leagueOn.entries()].map(([k, r]) => [k, r.touches, r.yards, r.long]),
+  byMan: [...counted.byMan.entries()].map(
+    ([k, r]) => [k, r.touches, r.yards, r.long, r.longYards]),
+  leagueOn: [...counted.leagueOn.entries()].map(
+    ([k, r]) => [k, r.touches, r.yards, r.long, r.longYards]),
   caughtAt: [...counted.caughtAt.entries()].map(([k, o]) => [k, o.threw, o.caught]),
   overall: [...counted.overall.entries()],
   everyTouch: counted.everyTouch,
@@ -77,7 +79,7 @@ const sideCell = (
   plays: number, runs: number, scores: number, yards: number[],
 ) => ({
   plays, runs, scores, yards, from: [],
-  named: { touches: 0, yards: 0, long: 0 },
+  named: { touches: 0, yards: 0, long: 0, longYards: 0 },
   byPlayer: new Map(), byDepth: new Map(), byDepthFrom: new Map(),
 });
 
@@ -86,9 +88,12 @@ const raise = (flat: Flat): CountedPlays => ({
     key,
     {
       plays, runs, scores, yards, from,
-      named: { touches: named[0], yards: named[1], long: named[2] },
-      byPlayer: new Map(byPlayer.map(([id, touches, y, sc, long]) =>
-        [id, { touches, yards: y, scores: sc, long }])),
+      named: {
+        touches: named[0], yards: named[1], long: named[2],
+        longYards: named[3],
+      },
+      byPlayer: new Map(byPlayer.map(([id, touches, y, sc, long, ly]) =>
+        [id, { touches, yards: y, scores: sc, long, longYards: ly }])),
       byDepth: new Map(byDepth),
       byDepthFrom: new Map(byDepthFrom),
     },
@@ -99,8 +104,10 @@ const raise = (flat: Flat): CountedPlays => ({
   byDefence: new Map(flat.bySide.filter(([w]) => w === "d")
     .map(([, k, plays, runs, scores, yards]) =>
       [k, sideCell(plays, runs, scores, yards)])),
-  byMan: new Map(flat.byMan.map(([k, touches, yards, long]) => [k, { touches, yards, long }])),
-  leagueOn: new Map(flat.leagueOn.map(([k, touches, yards, long]) => [k, { touches, yards, long }])),
+  byMan: new Map(flat.byMan.map(([k, touches, yards, long, longYards]) =>
+    [k, { touches, yards, long, longYards }])),
+  leagueOn: new Map(flat.leagueOn.map(([k, touches, yards, long, longYards]) =>
+    [k, { touches, yards, long, longYards }])),
   caughtAt: new Map(flat.caughtAt.map(([k, threw, caught]) => [k, { threw, caught }])),
   overall: new Map(flat.overall),
   everyTouch: flat.everyTouch,
@@ -127,7 +134,7 @@ export async function countsFor(
   const stamp = await stat(TOUCHES).then((s) => s.mtimeMs).catch(() => 0);
   // the counting changes shape sometimes, and an older file would come
   // back missing whatever was added since
-  const at = join(KEPT, `counts12-${maxSeason}-${Math.round(stamp)}.json`);
+  const at = join(KEPT, `counts13-${maxSeason}-${Math.round(stamp)}.json`);
   const already = await readFile(at, "utf8").catch(() => "");
 
   if (already) {
