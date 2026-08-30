@@ -112,7 +112,7 @@ export function PlayerSheet(props: Props) {
           <>
             <h2>a season of him, over {p.games.toFixed(1)} games</h2>
             <div class="statline big">
-              {lineOver(p.projected ?? p.simulated, p.position, p.games, movedBy(p))
+              {lineOver(p.simulated ?? p.projected, p.position, p.games, movedBy(p))
                 .map((f) => (
                   <span class="s" key={f.label}>
                     <i>{f.label}</i>{f.value.toFixed(f.places)}
