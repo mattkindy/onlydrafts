@@ -166,7 +166,41 @@ export async function loadWeeklyRosters(
       weightPounds: toNumber(row["weight"]),
       yearsExperience: toNumber(row["years_exp"]),
       depthPosition: row["depth_chart_position"] || undefined,
+      status: row["status"] || undefined,
     }));
+}
+
+/** what the league says about a man rather than what he did */
+export const EXEMPT = "EXE";
+
+/**
+ * The men on the commissioner's exempt list, most recently first.
+ *
+ * A man goes on it while he is charged with something and comes off it
+ * when that ends, so the last week he appears is what says whether he
+ * is still on it. It is a handful of players a season and every one of
+ * them is worth nothing to a fantasy team for as long as it lasts.
+ */
+export async function exemptMen(
+  season: number,
+): Promise<Map<string, { name: string; team: string; lastWeek: number }>> {
+  const found = new Map<string, { name: string; team: string; lastWeek: number }>();
+
+  for (const row of await loadWeeklyRosters(season).catch(() => [])) {
+    if (row.status !== EXEMPT) {
+      continue;
+    }
+
+    const already = found.get(row.playerId);
+
+    if (!already || row.week > already.lastWeek) {
+      found.set(row.playerId, {
+        name: row.name, team: row.teamId, lastWeek: row.week,
+      });
+    }
+  }
+
+  return found;
 }
 
 export interface SnapCountWeek {

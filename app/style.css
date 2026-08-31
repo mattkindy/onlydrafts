@@ -283,3 +283,19 @@
   .league-card .pays, #crumb .pays { background: var(--chip); color: var(--ink);
     border-radius: 999px; padding: .1rem .55rem; font-size: .72rem;
     text-transform: uppercase; letter-spacing: .04em; }
+
+  /* how the draft went, a table because it is a table: seven columns
+     of numbers a person reads down rather than across */
+  table.rating { width: 100%; border-collapse: collapse; font-size: .82rem;
+    font-variant-numeric: tabular-nums; margin: .4rem 0 1rem;
+    display: block; overflow-x: auto; white-space: nowrap; }
+  table.rating th { text-align: left; color: var(--muted); font-weight: 500;
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+    padding: .35rem .5rem; border-bottom: 1px solid var(--edge); }
+  table.rating td { padding: .35rem .5rem;
+    border-bottom: 1px solid var(--edge); }
+  table.rating td i { font-style: normal; color: var(--faint);
+    margin-left: .3rem; font-size: .74rem; }
+  /* your own team, so it can be found without counting rows */
+  table.rating tr.on td { background: var(--chip); color: var(--ink); }
+  table.rating tr.on td:nth-child(2) { font-weight: 600; }

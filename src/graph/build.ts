@@ -27,6 +27,13 @@ export interface RosterAppearance {
   weightPounds?: number;
   yearsExperience?: number;
   depthPosition?: string;
+  /**
+   * What the league had him as that week. ACT is playing, RES is hurt,
+   * and EXE is the commissioner's exempt list, which is where a man
+   * goes while he is charged with something: he cannot practise or
+   * play and nobody knows for how long.
+   */
+  status?: string;
 }
 
 /** nflverse roster labels collapsed into the graph's position groups. */

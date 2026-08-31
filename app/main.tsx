@@ -25,10 +25,11 @@ import type { Player } from "./lib/scoring.ts";
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
 import { EspnSheet } from "./views/EspnSheet.tsx";
 import { Roster } from "./views/Roster.tsx";
+import { DraftRating } from "./views/DraftRating.tsx";
 import { Keepers } from "./views/Keepers.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
 
-type View = "leagues" | "roster" | "keepers" | "draft" | "start" | "waivers";
+type View = "leagues" | "roster" | "keepers" | "draft" | "rating" | "start" | "waivers";
 
 const COPY: Record<View, [string, string, string]> = {
   leagues: [
@@ -50,6 +51,11 @@ const COPY: Record<View, [string, string, string]> = {
     "Draft help",
     "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
     "The big number is value over a replacement starter. Players stay on the board until they are actually kept or drafted.",
+  ],
+  rating: [
+    "How the draft went",
+    "Every team against what its own picks were worth, so the team that drafted third is not rewarded for drafting third. Then your own draft, pick by pick.",
+    "Where the room was taking a man leads and our own value over a replacement starter follows, since the board orders kickers and defences by nothing much.",
   ],
   start: [
     "Who to start",
@@ -252,7 +258,7 @@ function App() {
 
       {view !== "leagues" && (
         <div id="subnav">
-          {(["roster", "keepers", "draft", "start", "waivers"] as View[]).map((v) => (
+          {(["roster", "keepers", "draft", "rating", "start", "waivers"] as View[]).map((v) => (
             <button
               key={v}
               class={v === view ? "on" : ""}
@@ -443,6 +449,15 @@ function App() {
             query={query}
             order={order}
             onMore={setShowing}
+          />
+        )}
+
+        {board && active && view === "rating" && (
+          <DraftRating
+            board={men}
+            byKey={byKey}
+            league={active}
+            made={draft.made ?? []}
           />
         )}
 
