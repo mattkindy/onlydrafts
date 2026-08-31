@@ -138,20 +138,25 @@ export interface TeamRating {
 /**
  * Every team, against what its own picks should have bought, so the
  * team that picked first is not rewarded for picking first.
+ *
+ * Picks arrive already paired with the men they bought, so a pick
+ * nobody could look up costs a team nothing: both sides of the
+ * comparison then count the same picks.
  */
 export function rateTeams(
-  teams: { owner: string; men: Player[]; picks: number[] }[],
+  teams: { owner: string; took: { at: number; p: Player }[] }[],
   slots: string[] | null | undefined,
   curve: number[],
 ): TeamRating[] {
   return teams
     .map((team) => {
-      const filled = fillLineup(team.men, slots, curve);
+      const men = team.took.map((t) => t.p);
+      const filled = fillLineup(men, slots, curve);
       // the slots a lineup cannot start are discounted the way the
       // bench is, so both sides of the comparison count alike
-      const starts = team.men.length - filled.bench.length;
-      const expected = team.picks
-        .slice()
+      const starts = men.length - filled.bench.length;
+      const expected = team.took
+        .map((t) => t.at)
         .sort((a, b) => a - b)
         .reduce((sum, pick, i) =>
           sum + worthAt(curve, pick) * (i < starts ? 1 : ON_THE_BENCH), 0);
@@ -190,4 +195,52 @@ export function ratePicks(
     waited: p.adp === null || p.adp === undefined ? null : p.adp - at,
     over: worthOf(p, curve) - worthAt(curve, at),
   }));
+}
+
+/**
+ * A grade a person can read, against how the rest of this league did.
+ *
+ * Measured from the middle of the room rather than from nothing,
+ * because the overs do not average out to nothing. A league where
+ * everybody came in a little under otherwise reads as six Cs.
+ */
+export function gradesFor(rated: TeamRating[]): Map<string, string> {
+  const overs = rated.map((t) => t.over);
+  const middle = overs.reduce((a, b) => a + b, 0) / Math.max(1, overs.length);
+  const spread = Math.sqrt(overs.reduce(
+    (sum, v) => sum + (v - middle) ** 2, 0) / Math.max(1, overs.length));
+  const said = new Map<string, string>();
+
+  for (const team of rated) {
+    const by = spread > 0 ? (team.over - middle) / spread : 0;
+    said.set(
+      team.owner,
+      by > 1.2 ? "A" : by > 0.55 ? "B" : by > -0.2 ? "C"
+        : by > -0.9 ? "D" : "F",
+    );
+  }
+
+  return said;
+}
+
+/**
+ * What a provider calls a side against what the play data calls it.
+ * Only the Rams differ: Sleeper writes LAR and the play files write LA.
+ */
+const SAME_SIDE: Record<string, string> = { LAR: "LA" };
+
+/**
+ * The board's key for a man a provider named. A defence comes back as
+ * "Los Angeles Rams" where the board has it as the three letters the
+ * league writes on a scoreboard, so it is looked up by its team.
+ */
+export function keyForPick(
+  pick: { name: string; position: string; team?: string | null },
+  normalize: (s: string) => string,
+): string {
+  if (pick.position !== "DEF" || !pick.team) {
+    return normalize(pick.name);
+  }
+
+  return normalize(SAME_SIDE[pick.team.toUpperCase()] ?? pick.team);
 }

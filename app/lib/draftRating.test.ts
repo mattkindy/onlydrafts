@@ -79,8 +79,7 @@ describe("rating teams", () => {
     const curve = marketCurve(board);
     const at = (picks: number[]) => ({
       owner: `t${picks[0]}`,
-      men: picks.map((n) => board[n - 1]!),
-      picks,
+      took: picks.map((n) => ({ at: n, p: board[n - 1]! })),
     });
     // both take exactly the men the room says go at their slots
     const rated = rateTeams([at([1, 24, 25]), at([12, 13, 36])], SLOTS, curve);
@@ -93,11 +92,13 @@ describe("rating teams", () => {
   it("puts the team that beat the room on top", () => {
     const curve = marketCurve(board);
     const asExpected = {
-      owner: "even", men: [board[39]!, board[40]!], picks: [40, 41],
+      owner: "even",
+      took: [{ at: 40, p: board[39]! }, { at: 41, p: board[40]! }],
     };
     // the same slots, but it came away with two of the best men
     const stole = {
-      owner: "stole", men: [board[0]!, board[1]!], picks: [40, 41],
+      owner: "stole",
+      took: [{ at: 40, p: board[0]! }, { at: 41, p: board[1]! }],
     };
     const rated = rateTeams([asExpected, stole], SLOTS, curve);
     expect(rated[0]!.owner).toBe("stole");

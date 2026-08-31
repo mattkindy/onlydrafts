@@ -3,7 +3,7 @@
 import type { Player } from "../lib/scoring.ts";
 import type { League } from "../lib/providers.ts";
 import {
-  marketCurve, ratePicks, rateTeams, type TeamRating,
+  gradesFor, keyForPick, marketCurve, ratePicks, rateTeams, type TeamRating,
 } from "../lib/draftRating.ts";
 import { asRound } from "../lib/picks.ts";
 import { normalizeName } from "../lib/store.ts";
@@ -17,22 +17,15 @@ interface Props {
   made: Pick[];
 }
 
-/** a grade a person can read, off how far a team beat its own slots */
-function gradeOf(over: number, spread: number): string {
-  const by = spread > 0 ? over / spread : 0;
-
-  return by > 1.1 ? "A" : by > 0.5 ? "B" : by > -0.5 ? "C" : by > -1.1 ? "D" : "F";
-}
-
 function TeamRow(
-  { team, at, spread, mine }:
-  { team: TeamRating; at: number; spread: number; mine: boolean },
+  { team, at, grade, mine }:
+  { team: TeamRating; at: number; grade: string; mine: boolean },
 ) {
   return (
     <tr class={mine ? "on" : ""}>
       <td>{at}</td>
       <td>{team.owner}</td>
-      <td>{gradeOf(team.over, spread)}</td>
+      <td>{grade}</td>
       <td>{team.over > 0 ? `+${team.over.toFixed(1)}` : team.over.toFixed(1)}</td>
       <td>{team.got.toFixed(1)}</td>
       <td>{team.expected.toFixed(1)}</td>
@@ -56,44 +49,36 @@ export function DraftRating(props: Props) {
    * rosters are the fallback for a league whose provider cannot say
    * what happened pick by pick.
    */
-  const drafted = new Map<string, { men: Player[]; picks: number[] }>();
+  const drafted = new Map<string, { at: number; p: Player }[]>();
 
   for (const pick of props.made) {
     if (pick.keeper) {
       continue;
     }
 
-    const own = drafted.get(pick.who) ?? { men: [], picks: [] };
-    const p = byKey.get(normalizeName(pick.name));
-    own.picks.push(pick.overall);
+    const p = byKey.get(keyForPick(pick, normalizeName));
 
     if (p) {
-      own.men.push(p);
+      drafted.set(pick.who, [
+        ...(drafted.get(pick.who) ?? []), { at: pick.overall, p },
+      ]);
     }
-
-    drafted.set(pick.who, own);
   }
 
   const teams = drafted.size > 0
-    ? [...drafted.entries()].map(([owner, its]) => ({ owner, ...its }))
+    ? [...drafted.entries()].map(([owner, took]) => ({ owner, took }))
     : league.allRosters.map((r) => ({
         owner: r.owner,
-        men: r.keys
-          .map((m) => byKey.get(m.key))
-          .filter((p): p is Player => Boolean(p)),
-        picks: r.picks,
+        took: r.keys
+          .map((m, i) => ({ at: r.picks[i] ?? 999, p: byKey.get(m.key) }))
+          .filter((x): x is { at: number; p: Player } => Boolean(x.p)),
       }));
   const rated = rateTeams(teams, league.slots, curve);
-  const overs = rated.map((t) => t.over);
-  const middle = overs.reduce((a, b) => a + b, 0) / Math.max(1, overs.length);
-  const spread = Math.sqrt(
-    overs.reduce((sum, v) => sum + (v - middle) ** 2, 0) /
-      Math.max(1, overs.length),
-  );
+  const grades = gradesFor(rated);
 
   const mine = props.made
     .filter((pick) => pick.mine && !pick.keeper)
-    .map((pick) => ({ at: pick.overall, p: byKey.get(normalizeName(pick.name)) }))
+    .map((pick) => ({ at: pick.overall, p: byKey.get(keyForPick(pick, normalizeName)) }))
     .filter((x): x is { at: number; p: Player } => Boolean(x.p));
   const picks = ratePicks(mine, curve);
 
@@ -130,7 +115,7 @@ export function DraftRating(props: Props) {
               key={team.owner}
               team={team}
               at={i + 1}
-              spread={spread}
+              grade={grades.get(team.owner) ?? "C"}
               mine={team.owner === league.team}
             />
           ))}

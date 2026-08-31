@@ -15,7 +15,7 @@ import { rescore } from "../app/lib/board.js";
 import { normalizeName } from "../app/lib/store.js";
 import type { Pays, Player } from "../app/lib/scoring.js";
 import {
-  marketCurve, ratePicks, rateTeams, worthOf,
+  gradesFor, keyForPick, marketCurve, ratePicks, rateTeams, worthOf,
 } from "../app/lib/draftRating.js";
 
 const WHO = process.argv[2] ?? "mattkindy";
@@ -47,7 +47,9 @@ if (!league) {
 const [picks, rosters, members] = await Promise.all([
   get<{
     pick_no: number; picked_by: string; is_keeper: boolean | null;
-    metadata: { first_name: string; last_name: string; position: string };
+    metadata: {
+      first_name: string; last_name: string; position: string; team: string;
+    };
   }[]>(`/draft/${league.draft_id}/picks`),
   get<{ owner_id: string; players: string[] }[]>(`/league/${league.league_id}/rosters`),
   get<{ user_id: string; display_name: string }[]>(`/league/${league.league_id}/users`),
@@ -65,43 +67,49 @@ const board = rescore(file.players, {
 const byKey = new Map(board.map((p) => [p.key, p]));
 const curve = marketCurve(board);
 
-/** each side's men and the slots it picked from, off the draft itself */
-const mine = new Map<string, { men: Player[]; picks: number[] }>();
+/**
+ * A keeper was not drafted, whatever slot it came in at, so it is left
+ * out of the rating along with the pick it used.
+ */
+const asPick = (pick: typeof picks[number]) => ({
+  name: `${pick.metadata.first_name} ${pick.metadata.last_name}`,
+  position: pick.metadata.position,
+  team: pick.metadata.team,
+});
+
+/** each side's men paired with the picks that bought them */
+const mine = new Map<string, { at: number; p: Player }[]>();
+const lost: string[] = [];
 
 for (const pick of picks) {
-  const who = named.get(pick.picked_by) ?? pick.picked_by;
-  const own = mine.get(who) ?? { men: [], picks: [] };
-  const p = byKey.get(
-    normalizeName(`${pick.metadata.first_name} ${pick.metadata.last_name}`),
-  );
-  own.picks.push(pick.pick_no);
-
-  if (p) {
-    own.men.push(p);
+  if (pick.is_keeper) {
+    continue;
   }
 
-  mine.set(who, own);
+  const who = named.get(pick.picked_by) ?? pick.picked_by;
+  const p = byKey.get(keyForPick(asPick(pick), normalizeName));
+
+  if (p) {
+    mine.set(who, [...(mine.get(who) ?? []), { at: pick.pick_no, p }]);
+  } else {
+    lost.push(asPick(pick).name);
+  }
 }
 
 const rated = rateTeams(
-  [...mine.entries()].map(([owner, its]) => ({ owner, ...its })),
+  [...mine.entries()].map(([owner, took]) => ({ owner, took })),
   league.roster_positions,
   curve,
 );
-const overs = rated.map((t) => t.over);
-const middle = overs.reduce((a, b) => a + b, 0) / Math.max(1, overs.length);
-const spread = Math.sqrt(overs.reduce(
-  (sum, v) => sum + (v - middle) ** 2, 0) / Math.max(1, overs.length));
-const grade = (over: number) => {
-  const by = spread > 0 ? (over - middle) / spread : 0;
-
-  return by > 1.1 ? "A" : by > 0.5 ? "B" : by > -0.5 ? "C" : by > -1.1 ? "D" : "F";
-};
+const grades = gradesFor(rated);
 
 console.log(
   `${league.name}, ${league.total_rosters} teams, ` +
   `${picks.length} picks, ${league.roster_positions.join("/")}\n` +
-  `scoring a catch at ${league.scoring_settings["rec"] ?? 0}\n`,
+  `scoring a catch at ${league.scoring_settings["rec"] ?? 0}, ` +
+  `${picks.filter((p) => p.is_keeper).length} keepers left out` +
+  (lost.length ? `\nnot on the board, so left out: ${lost.join(", ")}` : "") +
+  `\n`,
 );
 console.log("  # team                 grade    over     got   slots  best three");
 
@@ -111,18 +119,17 @@ for (const [i, team] of rated.entries()) {
     : team.over.toFixed(1);
   console.log(
     `${String(i + 1).padStart(3)} ${team.owner.slice(0, 20).padEnd(20)} ` +
-    `${grade(team.over).padEnd(5)} ${said.padStart(7)} ` +
+    `${(grades.get(team.owner) ?? "C").padEnd(5)} ${said.padStart(7)} ` +
     `${team.got.toFixed(1).padStart(7)} ${team.expected.toFixed(1).padStart(7)}  ` +
     team.starters.slice(0, 3).map((s) => s.p.name).join(", "),
   );
 }
 
 const own = picks
-  .filter((pick) => (named.get(pick.picked_by) ?? "") === WHO)
+  .filter((pick) => !pick.is_keeper && (named.get(pick.picked_by) ?? "") === WHO)
   .map((pick) => ({
     at: pick.pick_no,
-    p: byKey.get(normalizeName(
-      `${pick.metadata.first_name} ${pick.metadata.last_name}`)),
+    p: byKey.get(keyForPick(asPick(pick), normalizeName)),
   }))
   .filter((x): x is { at: number; p: Player } => Boolean(x.p));
 
