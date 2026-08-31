@@ -1,5 +1,15 @@
 {
   "extends": "./app/tsconfig.json",
-  "compilerOptions": { "types": ["node", "vite/client"] },
-  "include": ["app/**/*.ts", "app/**/*.tsx", "scripts/rateDraft.ts"]
+  "compilerOptions": {
+    "types": [
+      "node",
+      "vite/client"
+    ]
+  },
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "scripts/rateDraft.ts",
+    "scripts/draftReportData.ts"
+  ]
 }

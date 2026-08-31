@@ -174,12 +174,13 @@ export async function loadWeeklyRosters(
 export const EXEMPT = "EXE";
 
 /**
- * The men on the commissioner's exempt list, most recently first.
+ * The men these files mark exempt, most recently first.
  *
- * A man goes on it while he is charged with something and comes off it
- * when that ends, so the last week he appears is what says whether he
- * is still on it. It is a handful of players a season and every one of
- * them is worth nothing to a fantasy team for as long as it lasts.
+ * Not the source to reach for when the question is who can play today.
+ * These files lag by weeks, so a man added this afternoon is not in
+ * them, and the code is not the same list every season: 2026 spells 28
+ * rows E14, which is the international pathway. scripts/exemptCheck.ts
+ * asks Sleeper instead. This is here for looking backwards.
  */
 export async function exemptMen(
   season: number,
