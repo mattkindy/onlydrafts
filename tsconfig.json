@@ -8,5 +8,7 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src", "scripts"]
+  "include": ["src", "scripts"],
+  "//": "rateDraft reaches into app for the board and the rating, and app spells its imports with a .ts extension under bundler resolution, which NodeNext will not read. tsx runs both. It is checked by tsconfig.app.json instead.",
+  "exclude": ["scripts/rateDraft.ts"]
 }

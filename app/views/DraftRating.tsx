@@ -49,13 +49,40 @@ function TeamRow(
 export function DraftRating(props: Props) {
   const { league, board, byKey } = props;
   const curve = marketCurve(board);
-  const teams = league.allRosters.map((r) => ({
-    owner: r.owner,
-    men: r.keys
-      .map((m) => byKey.get(m.key))
-      .filter((p): p is Player => Boolean(p)),
-    picks: r.picks,
-  }));
+  /**
+   * Built from the picks that were made rather than from the rosters,
+   * because a roster read afterwards has the free agents somebody took
+   * the moment the draft ended, and those were nobody's pick. The
+   * rosters are the fallback for a league whose provider cannot say
+   * what happened pick by pick.
+   */
+  const drafted = new Map<string, { men: Player[]; picks: number[] }>();
+
+  for (const pick of props.made) {
+    if (pick.keeper) {
+      continue;
+    }
+
+    const own = drafted.get(pick.who) ?? { men: [], picks: [] };
+    const p = byKey.get(normalizeName(pick.name));
+    own.picks.push(pick.overall);
+
+    if (p) {
+      own.men.push(p);
+    }
+
+    drafted.set(pick.who, own);
+  }
+
+  const teams = drafted.size > 0
+    ? [...drafted.entries()].map(([owner, its]) => ({ owner, ...its }))
+    : league.allRosters.map((r) => ({
+        owner: r.owner,
+        men: r.keys
+          .map((m) => byKey.get(m.key))
+          .filter((p): p is Player => Boolean(p)),
+        picks: r.picks,
+      }));
   const rated = rateTeams(teams, league.slots, curve);
   const overs = rated.map((t) => t.over);
   const middle = overs.reduce((a, b) => a + b, 0) / Math.max(1, overs.length);
@@ -85,6 +112,9 @@ export function DraftRating(props: Props) {
         <b>{rated.length} teams</b> in {league.name}, each against what its own
         picks were worth. A team picking third should come away with more than
         one picking tenth, so only beating your own slots counts.
+        {drafted.size > 0
+          ? " Only the men who were drafted count, so a free agent taken the moment the draft ended is nobody's pick."
+          : " Read off the rosters, since this league cannot say what happened pick by pick."}
       </div>
 
       <table class="rating">
