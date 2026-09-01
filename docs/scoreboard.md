@@ -640,11 +640,17 @@ measured is the ordering and not the model. The room drafts on the
 real draft position for that year, which is a better projection than
 either rule is given, which is why both sit under half.
 
-| season | points only | with roster sense | by war | war ahead |
-|---|---|---|---|---|
-| 2023 | 15.0% | 49.0% | 55.9% | 9 of 12 |
-| 2024 | 38.7% | 45.9% | 50.8% | 7 of 12 |
-| 2025 | 35.6% | 46.3% | 51.8% | 10 of 12 |
+| season | points only | with roster sense | by war | war, projected side | war ahead |
+|---|---|---|---|---|---|
+| 2023 | 15.0% | 49.0% | 55.9% | 52.4% | 9 of 12 |
+| 2024 | 38.7% | 45.9% | 50.8% | 53.1% | 7 of 12 |
+| 2025 | 35.6% | 46.3% | 51.8% | 55.7% | 10 of 12 |
+
+The fourth column is what the page does. It measures a man against the
+side you would finish with rather than the handful you have, which was
+added to stop every candidate reading nought on the first pick. It
+averages 53.7 against 52.8 for the plainer version, so the change costs
+nothing and is worth about a point.
 
 Points alone is not a rule anybody uses and is there to show why: it
 takes ten quarterbacks, since they score the most, and eight of them
