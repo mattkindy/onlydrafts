@@ -504,3 +504,126 @@ The pattern across them: a multiplier bolted onto one decision does
 not carry a matchup, and a decision that turns on a dense situation
 belongs to the cells. What has worked is either fixing something the
 walk had wrong, or handing it a fact it did not have.
+
+## What a defence is worth, and what it is worth knowing
+
+Every number here is measured, and most of what was tried came back
+null. The two that did not are at the bottom.
+
+A defence had no spread at all. Every other position shipped five
+figures describing how its weeks vary; a defence shipped rates and
+nothing around them, so a card drew no range and nothing could ask how
+its bad weeks looked. Its weeks are drawn now from the counting rates
+and the bracket frequencies.
+
+Replacement level was the wrong question for the two positions nobody
+keeps. A back you draft you keep, so the last man the league starts is
+who you would be playing instead of him. A kicker or a defence you
+replace any week you like, so the comparison is the wire. Playing that
+out over 2021 to 2025, one choice a week from the men nobody rosters:
+
+| what a team does with the slot | points a game |
+|---|---|
+| takes one at random | 4.99 |
+| keeps the best one left | 5.31 |
+| chooses each week on the betting line | 7.61 |
+| drafts one and streams over him | 8.04 |
+| chooses each week with hindsight | 15.77 |
+
+Hindsight is the ceiling and not a strategy. A first pass used it as
+the replacement level and priced the wire at 9.15, which would have
+deleted both positions from the board.
+
+Streaming crowds. Only one team takes the softest matchup and the rest
+work down the list, so what it pays depends on how many are at it: 2.30
+a game alone, 1.43 with six, 0.43 with all twelve. Six is what the app
+uses. A kicker gains nothing at any number, so he keeps the plain bar.
+
+Drafting a defence is worth about seven points across a season, which
+is the option of starting him in the weeks he beats the wire. That is
+one good week from a receiver.
+
+### Forecasting a defence: mostly null
+
+Per part, how much is still there next season, 128 team pairs: points
+allowed .259, fumble recoveries .195, sacks .160, interceptions .083,
+blocked kicks -.038, defensive touchdowns -.121, safeties -.135. The
+last three are anti-persistent and the build projects all of them by
+carrying last year's count forward whole.
+
+Forecasting next season's points a game:
+
+| built from | reads |
+|---|---|
+| repeat last year, which is what we do | .233 |
+| points allowed alone | .280 |
+| each part shrunk by what it measured | .271 |
+| the same with the dead parts dropped | .277 |
+| sacks alone | .106 |
+| who they play next year | .044 |
+
+Throwing most of the box score away beats using it. The ceiling is
+about .28 either way.
+
+Continuity does not rescue it. Splitting 128 team seasons by the share
+of last year's defensive snaps still on the roster gives .255 / .073 /
+.362, and weighting those men by what they did gives .270 / .122 /
+.285. Non-monotone both ways, and with 42 teams a cell the standard
+error is about .15, so the whole spread is noise. Shrinking last season
+toward the league by who left reads .260 against .259 for doing
+nothing.
+
+Nor does the coach. Splitting 317 team seasons by whether the head
+coach was the same man gives .250 when he stayed and .210 when he did
+not, and the smaller cell has 74 teams, where the standard error is
+about .12. Pooled it reads .300, above both halves, which is what
+happens when the groups differ in level.
+
+The coordinator is untested rather than null. coaches.csv has only
+head coaches and offensive coordinators across seasons, and
+coordinators.csv is 33 rows for 2024. Defensive scheme is the one term
+on the list that has never had a fair go, and the blocker is data.
+
+### Weekly is a different question, and answerable
+
+Out of sample, half the weeks fitting and half scoring, predicting a
+defence's week: the betting line alone .376, the line with the
+opponent's sacks allowed and giveaways .385. Against .280 for the best
+season forecast.
+
+That gap is the whole point. A season averages seventeen matchups and
+the matchup is most of the signal, which is also why the season-long
+schedule reads .044 while the weekly line is worth 2.3 points a game.
+
+Opponent tendencies add .009 over the line. About three standard errors
+at 2238 weeks, so it is there, and it is small: the line already prices
+them. Team-level features will not beat the market.
+
+### Penalties belong to the man
+
+The drive rules fit penalties per offence, so a defender who interferes
+every week is credited to whoever he played that day.
+
+A man's flag rate reads .520 from one season to the next over 2608
+pairs, and .565 among the 1054 who played fifteen games in both. It is
+the most
+persistent thing measured anywhere in this file: four times team points
+allowed, three times sacks.
+
+Who drew the flag is not in this data. Interference comes on an
+incomplete pass and receiver_player_id is empty there, so five seasons
+turn up four men with one flag each. It needs the play description
+parsed.
+
+What does not follow from any of that is a better team forecast.
+Predicting a side's flags next season from the men who will be playing
+for it reads .191 by their rates and .172 by their counts, against .152
+for the side's own last season. With 128 teams the standard error is
+about .09, so the three are the same number. Most of a squad stays put,
+so a team's own history already knows what its men do, and a roster
+list counts a backup the same as a starter.
+
+So the habit is the man's, and moving it between shirts buys nothing
+measurable at the team level. If it pays anywhere it is inside the
+walk, where the defenders on the field are known one at a time and
+nothing has to be aggregated. That is untested.

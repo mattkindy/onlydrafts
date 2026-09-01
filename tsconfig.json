@@ -14,9 +14,13 @@
     "src",
     "scripts"
   ],
-  "//": "rateDraft reaches into app for the board and the rating, and app spells its imports with a .ts extension under bundler resolution, which NodeNext will not read. tsx runs both. It is checked by tsconfig.app.json instead.",
+  "//": "These reach into app for the board and the rating, and app spells its imports with a .ts extension under bundler resolution, which NodeNext will not read. tsx runs them all. They are checked by tsconfig.app.json instead.",
   "exclude": [
     "scripts/rateDraft.ts",
-    "scripts/draftReportData.ts"
+    "scripts/draftReportData.ts",
+    "scripts/rateMyDraft.ts",
+    "scripts/checkDefenceValue.ts",
+    "scripts/checkKickersAndDefences.ts",
+    "scripts/checkPositionHeight.ts"
   ]
 }

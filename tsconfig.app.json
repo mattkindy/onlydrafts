@@ -10,6 +10,10 @@
     "app/**/*.ts",
     "app/**/*.tsx",
     "scripts/rateDraft.ts",
-    "scripts/draftReportData.ts"
+    "scripts/draftReportData.ts",
+    "scripts/rateMyDraft.ts",
+    "scripts/checkDefenceValue.ts",
+    "scripts/checkKickersAndDefences.ts",
+    "scripts/checkPositionHeight.ts"
   ]
 }
