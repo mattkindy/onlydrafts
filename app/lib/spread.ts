@@ -63,6 +63,50 @@ function poisson(rate: number, rand: () => number): number {
   return n;
 }
 
+/** which quantile each shipped figure is, in order */
+const AT = [0.1, 0.25, 0.5, 0.75, 0.9];
+
+/**
+ * Weeks drawn from a shipped spread, reading its five figures as points
+ * on the inverse of his distribution and going straight between them.
+ * Outside the tenth and the ninetieth it keeps the slope it arrived
+ * with, since a week out there happens one time in five.
+ */
+export function weeksFromSpread(
+  spread: Spread, name: string, draws = DRAWS,
+): number[] {
+  const points = [spread.low, spread.q1, spread.mid, spread.q3, spread.high];
+  const rand = mulberry32(seedOf(name));
+  const out: number[] = [];
+
+  for (let i = 0; i < draws; i++) {
+    const u = rand();
+
+    if (u <= AT[0]!) {
+      const slope = (points[1]! - points[0]!) / (AT[1]! - AT[0]!);
+      out.push(points[0]! + (u - AT[0]!) * slope);
+      continue;
+    }
+
+    if (u >= AT[4]!) {
+      const slope = (points[4]! - points[3]!) / (AT[4]! - AT[3]!);
+      out.push(points[4]! + (u - AT[4]!) * slope);
+      continue;
+    }
+
+    let at = 1;
+
+    while (at < AT.length - 1 && u > AT[at]!) {
+      at++;
+    }
+
+    const span = (u - AT[at - 1]!) / (AT[at]! - AT[at - 1]!);
+    out.push(points[at - 1]! + span * (points[at]! - points[at - 1]!));
+  }
+
+  return out;
+}
+
 /** the counting events a defence is paid for, none of them common */
 const DEFENCE_EVENTS = ["sack", "int", "fum_rec", "def_td", "safe", "blk_kick"];
 

@@ -10,11 +10,9 @@ import { useState } from "preact/hooks";
 
 import type { Player } from "../lib/scoring.ts";
 import { asRound, expectedBestAt, type Draft as DraftPicks } from "../lib/picks.ts";
-import {
-  needScorer, openingsAfter, stillNeeded,
-  type NeedScore, type Openings,
-} from "../lib/need.ts";
+import { openingsAfter, stillNeeded, type Openings } from "../lib/need.ts";
 import { finishRange } from "../lib/finish.ts";
+import { baselineFor, typicalWeek, winShareFor, type WinShare } from "../lib/winShare.ts";
 import { STREAMED } from "../lib/replacementPool.ts";
 import { SeasonCard, seasonScale } from "./Card.tsx";
 
@@ -262,11 +260,21 @@ function Clock({ state, teams }: { state: DraftNow; teams: number }) {
 /** how many cards the whole board opens with, and steps by */
 const A_PAGE = 60;
 
+/**
+ * How many weeks to draw when the board is scored by what a man adds to
+ * your wins. Two thousand takes about a fifth of a second on a laptop
+ * for seven hundred men and the draft board redraws every ten seconds,
+ * so this trades a little resolution for a page that keeps up. The
+ * difference it reads is paired, both sides drawing the same weeks, so
+ * it is steadier than the count on its own suggests.
+ */
+const WEEKS_DRAWN = 1200;
+
 interface Scored {
   p: Player;
   score: number;
   drop: number;
-  need: NeedScore | null;
+  need: WinShare | null;
 }
 
 /**
@@ -346,7 +354,10 @@ function FullRankings(
                   mine={state.mine.has(p.key)}
                   {...(injuryBadge(state.hurt?.[p.key]) ?? {})}
                   aside={byNeed && need
-                    ? { label: "to your lineup", value: need.score.toFixed(1) }
+                    ? {
+                      label: "weeks won",
+                      value: (need.added * 100).toFixed(1) + "%",
+                    }
                     : STREAMED.has(p.position)
                       /**
                        * You have to start a kicker and a defence, so
@@ -357,8 +368,12 @@ function FullRankings(
                        */
                       ? { label: "over the wire", value: (p.ownVor ?? 0).toFixed(1) }
                       : { label: "value here", value: score.toFixed(1) }}
-                  tag={byNeed && need?.fills === "bench"
-                    ? "you would be benching him behind what you have"
+                  tag={byNeed && need
+                    ? need.starts < 0.05
+                      ? "you would never start him over what you have"
+                      : need.starts < 0.9
+                        ? `you would start him ${Math.round(need.starts * 100)}% of weeks`
+                        : "he starts every week you have him"
                     : i < 3
                       ? "best left at " + p.position
                       : state.rosteredBy[p.key]
@@ -528,14 +543,26 @@ export function DraftView(props: Props) {
   const drafted = men.filter((p) => state.mine.has(p.key));
   const open = openingsAfter(props.slots, drafted);
   const left = men.filter((p) => !state.taken.has(p.key));
-  const needs = needScorer({
-    men: left, draft, nextTurn: upcoming[1]?.overall ?? null, open,
-  });
+  /**
+   * What he would add to how often you win a week, drawn against the
+   * roster you have. It replaces a points measure that could not say
+   * why a first kicker is worth anything or a fifth back is worth
+   * something, and the whole board is scored off one baseline.
+   */
+  const worth = props.byNeed
+    ? winShareFor(
+      baselineFor(drafted, props.slots, WEEKS_DRAWN),
+      typicalWeek(men, props.slots, teams, WEEKS_DRAWN),
+      WEEKS_DRAWN,
+    )
+    : null;
 
   const scored = left
     .filter(wanted)
     .filter((p) => !props.needOnly || stillNeeded(p.position, open))
-    .map((p) => ({ p, score: p.vor ?? 0, drop: dropOff(p), need: needs(p) }))
+    .map((p) => ({
+      p, score: p.vor ?? 0, drop: dropOff(p), need: worth?.(p) ?? null,
+    }))
     /**
      * By the board, or by what he adds to your lineup once the slots
      * you have left are counted. A man the need score cannot speak for,
@@ -544,7 +571,7 @@ export function DraftView(props: Props) {
      */
     .sort((a, b) => {
       if (props.byNeed && a.need && b.need) {
-        return b.need.score - a.need.score;
+        return b.need.added - a.need.added;
       }
 
       return props.order === "adp"
