@@ -171,9 +171,51 @@ describe("what a pick at each place bought", () => {
       }],
       SLOTS,
       curve,
-      bar,
+      (pick) => bar[Math.max(0, pick - 1)] ?? 0,
     );
 
     expect(Math.abs(rated[0]!.perPick)).toBeLessThan(6);
+  });
+});
+
+/**
+ * A man kept costs the pick he is kept at and is nearly always cheaper
+ * than one drafted there, so measuring both against one bar made
+ * keeping look good for every side and drafting look bad for nine of
+ * twelve. The bar is asked about the slot and about which it was.
+ */
+describe("keeping and drafting are different markets", () => {
+  const curve = marketCurve(board);
+
+  it("asks the bar which kind of pick it was", () => {
+    const asked: { pick: number; kept: boolean }[] = [];
+    const took = [
+      { at: 10, p: board[9]!, kept: true },
+      { at: 40, p: board[39]!, kept: false },
+    ];
+
+    rateTeams([{ owner: "one", took }], SLOTS, curve, (pick, kept) => {
+      asked.push({ pick, kept });
+
+      return worthAt(curve, pick);
+    });
+
+    expect(asked).toContainEqual({ pick: 10, kept: true });
+    expect(asked).toContainEqual({ pick: 40, kept: false });
+  });
+
+  it("prices the same slot differently for the two", () => {
+    const dear = (pick: number, kept: boolean) =>
+      kept ? worthAt(curve, pick) * 2 : worthAt(curve, pick);
+    const took = [{ at: 10, p: board[9]!, kept: true }];
+
+    const cheap = rateTeams(
+      [{ owner: "a", took }], SLOTS, curve, () => 0,
+    )[0]!;
+    const costly = rateTeams(
+      [{ owner: "a", took }], SLOTS, curve, dear,
+    )[0]!;
+
+    expect(costly.over).toBeLessThan(cheap.over);
   });
 });

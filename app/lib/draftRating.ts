@@ -208,14 +208,22 @@ export interface TeamRating {
  * comparison then count the same picks.
  */
 export function rateTeams(
-  teams: { owner: string; took: { at: number; p: Player }[] }[],
+  teams: {
+    owner: string; took: { at: number; p: Player; kept?: boolean }[];
+  }[],
   slots: string[] | null | undefined,
   curve: number[],
-  /** what a pick at each place buys, when it has been worked out */
-  bar?: number[],
+  /**
+   * What a pick at each place buys, asked of the slot and of whether it
+   * was a keeper. A man kept costs the pick he is kept at and he is
+   * nearly always cheaper than one drafted there, so measuring both
+   * against one bar made keeping look good for everybody and drafting
+   * look bad for nine sides out of twelve.
+   */
+  buysAt?: (pick: number, kept: boolean) => number,
 ): TeamRating[] {
-  const buys = (pick: number) =>
-    bar?.[Math.max(0, Math.round(pick) - 1)] ?? worthAt(curve, pick);
+  const buys = (pick: number, kept: boolean) =>
+    buysAt?.(pick, kept) ?? worthAt(curve, pick);
 
   return teams
     .map((team) => {
@@ -224,11 +232,11 @@ export function rateTeams(
       // the slots a lineup cannot start are discounted the way the
       // bench is, so both sides of the comparison count alike
       const starts = men.length - filled.bench.length;
-      const expected = team.took
-        .map((t) => t.at)
-        .sort((a, b) => a - b)
-        .reduce((sum, pick, i) =>
-          sum + buys(pick) * (i < starts ? 1 : ON_THE_BENCH), 0);
+      const expected = [...team.took]
+        .sort((a, b) => a.at - b.at)
+        .reduce((sum, t, i) =>
+          sum + buys(t.at, Boolean(t.kept)) *
+            (i < starts ? 1 : ON_THE_BENCH), 0);
 
       const over = filled.worth - expected;
 
@@ -259,17 +267,18 @@ export interface PickRating {
 
 /** each pick of one draft, against where the room had the man */
 export function ratePicks(
-  made: { at: number; p: Player }[], curve: number[], bar?: number[],
+  made: { at: number; p: Player; kept?: boolean }[], curve: number[],
+  buysAt?: (pick: number, kept: boolean) => number,
 ): PickRating[] {
-  const buys = (pick: number) =>
-    bar?.[Math.max(0, Math.round(pick) - 1)] ?? worthAt(curve, pick);
+  const buys = (pick: number, kept: boolean) =>
+    buysAt?.(pick, kept) ?? worthAt(curve, pick);
 
-  return made.map(({ at, p }) => ({
+  return made.map(({ at, p, kept }) => ({
     at,
     p,
     adp: p.adp ?? null,
     fell: p.adp === null || p.adp === undefined ? null : at - p.adp,
-    over: worthOf(p, curve) - buys(at),
+    over: worthOf(p, curve) - buys(at, Boolean(kept)),
   }));
 }
 

@@ -15,6 +15,7 @@ import { rescore } from "../app/lib/board.ts";
 import { normalizeName } from "../app/lib/store.ts";
 import {
   barFromPicks, gradesFor, keyForPick, marketCurve, rateTeams, ratePicks,
+  worthAt,
 } from "../app/lib/draftRating.ts";
 import type { Player } from "../app/lib/scoring.ts";
 
@@ -115,7 +116,9 @@ const men = rescore(boardPlayers, {
 
 const byKey = new Map(men.map((p) => [p.key, p]));
 
-const took = new Map<string, { at: number; p: Player }[]>();
+const took = new Map<
+  string, { at: number; p: Player; kept: boolean }[]
+>();
 
 for (const pick of picks) {
   const said = everyone[pick.player_id];
@@ -140,7 +143,10 @@ for (const pick of picks) {
     continue;
   }
 
-  took.set(owner, [...(took.get(owner) ?? []), { at: pick.pick_no, p }]);
+  took.set(owner, [
+    ...(took.get(owner) ?? []),
+    { at: pick.pick_no, p, kept: Boolean(pick.is_keeper) },
+  ]);
 }
 
 const curve = marketCurve(men);
@@ -165,9 +171,24 @@ const kept = picks
       : null;
   })
   .filter(Boolean) as { key: string; at: number }[];
-/** every pick the room made, which is the bar each of them is judged against */
+/**
+ * Two bars, since keeping and drafting are different markets. A kept
+ * man is nearly always cheaper than one drafted at the same slot, so
+ * one bar over both made keeping look good for everybody and drafting
+ * look bad for nine sides out of twelve.
+ */
 const everyMade = [...took].flatMap(([, its]) => its);
-const bar = barFromPicks(everyMade, curve, 260);
+const keptBar = barFromPicks(
+  everyMade.filter((t) => t.kept), curve, 260,
+);
+const draftedBar = barFromPicks(
+  everyMade.filter((t) => !t.kept), curve, 260,
+);
+const bar = (pick: number, kept: boolean) => {
+  const its = kept ? keptBar : draftedBar;
+
+  return its[Math.max(0, Math.round(pick) - 1)] ?? worthAt(curve, pick);
+};
 const rated = rateTeams(
   [...took].map(([owner, its]) => ({ owner, took: its })),
   league.roster_positions ?? null,
@@ -176,15 +197,36 @@ const rated = rateTeams(
 );
 const grades = gradesFor(rated);
 
-console.log("team".padEnd(20) + "grade".padEnd(7) + "per pick".padStart(9) +
-  "  picks");
+/**
+ * Keeping a man and choosing one are decisions made months apart, so
+ * they are worth reading apart. Both spend a pick and both are measured
+ * the same way: what he was worth against what that slot usually bought.
+ */
+const splitFor = (owner: string, kept: boolean) => {
+  const its = (took.get(owner) ?? []).filter((t) => t.kept === kept);
+
+  if (!its.length) {
+    return "none";
+  }
+
+  const each = ratePicks(its, curve, bar);
+  const mean = each.reduce((sum, r) => sum + r.over, 0) / each.length;
+
+  return mean.toFixed(1) + " of " + each.length;
+};
+
+console.log(
+  "team".padEnd(20) + "grade".padEnd(7) + "per pick".padStart(9) +
+  "     keeping" + "     drafting",
+);
 
 for (const team of rated) {
   console.log(
     team.owner.padEnd(20) +
     (grades.get(team.owner) ?? "").padEnd(7) +
     team.perPick.toFixed(2).padStart(9) +
-    `  ${team.picks}`,
+    splitFor(team.owner, true).padStart(12) +
+    splitFor(team.owner, false).padStart(13),
   );
 }
 
