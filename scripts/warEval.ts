@@ -210,10 +210,33 @@ for (const [was, now] of PAIRS) {
     return open;
   };
 
-  const outcome: Record<string, number[]> = { points: [], sensible: [], war: [] };
+  /**
+   * The app measures a man against the side you would finish with
+   * rather than the handful you have, so that arm is here too. It was
+   * added to stop every candidate reading nought on the first pick.
+   */
+  const fillOut = (side: Man[], left: Man[]) => {
+    const filled = [...side];
+    const open = stillOpen(side);
+
+    for (const where of open) {
+      const him = left.find((m) =>
+        m.position === where && !filled.includes(m));
+
+      if (him) {
+        filled.push(him);
+      }
+    }
+
+    return filled;
+  };
+
+  const outcome: Record<string, number[]> = {
+    points: [], sensible: [], war: [], projected: [],
+  };
 
   for (let seat = 0; seat < TEAMS; seat++) {
-    for (const rule of ["points", "sensible", "war"] as const) {
+    for (const rule of ["points", "sensible", "war", "projected"] as const) {
       const gone = new Set<string>();
       const sides: Man[][] = Array.from({ length: TEAMS }, () => []);
 
@@ -242,7 +265,16 @@ for (const [was, now] of PAIRS) {
                 byPoints.find((m) => !gone.has(m.id))!
             : left
               .slice(0, 30)
-              .map((m) => ({ m, adds: warFor(sides[seat]!, m, rival) }))
+              .map((m) => ({
+                m,
+                adds: warFor(
+                  rule === "projected"
+                    ? fillOut(sides[seat]!, left)
+                    : sides[seat]!,
+                  m,
+                  rival,
+                ),
+              }))
               .sort((a, b) => b.adds - a.adds)[0]!.m;
 
           gone.add(him.id);
@@ -286,6 +318,8 @@ for (const [was, now] of PAIRS) {
     `${now}  points only ${(mean(outcome["points"]!) * 100).toFixed(1)}%` +
     `   with roster sense ${(mean(outcome["sensible"]!) * 100).toFixed(1)}%` +
     `   by war ${(mean(outcome["war"]!) * 100).toFixed(1)}%` +
+    `   war on the projected side ` +
+    `${(mean(outcome["projected"]!) * 100).toFixed(1)}%` +
     `   war ahead in ${ahead} of ${TEAMS} seats`,
   );
 }
