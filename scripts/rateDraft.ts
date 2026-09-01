@@ -138,11 +138,11 @@ console.log("  pick  player                  pos   room had  waited     over");
 
 for (const pick of ratePicks(own, curve)) {
   const round = Math.ceil(pick.at / league.total_rosters);
-  const waited = pick.waited === null
+  const waited = pick.fell === null
     ? ""
-    : pick.waited > 0
-    ? `${pick.waited.toFixed(0)} late`
-    : `${(-pick.waited).toFixed(0)} early`;
+    : pick.fell > 0
+    ? `${pick.fell.toFixed(0)} late`
+    : `${(-pick.fell).toFixed(0)} early`;
   console.log(
     `  ${String(round).padStart(2)}.${String(
       ((pick.at - 1) % league.total_rosters) + 1).padStart(2, "0")}  ` +
