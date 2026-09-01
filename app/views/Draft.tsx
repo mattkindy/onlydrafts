@@ -12,7 +12,9 @@ import type { Player } from "../lib/scoring.ts";
 import { asRound, expectedBestAt, type Draft as DraftPicks } from "../lib/picks.ts";
 import { openingsAfter, stillNeeded, type Openings } from "../lib/need.ts";
 import { finishRange } from "../lib/finish.ts";
-import { baselineFor, typicalWeek, winShareFor, type WinShare } from "../lib/winShare.ts";
+import {
+  baselineFor, projectedRoster, typicalWeek, winShareFor, type WinShare,
+} from "../lib/winShare.ts";
 import { STREAMED } from "../lib/replacementPool.ts";
 import { SeasonCard, seasonScale } from "./Card.tsx";
 
@@ -551,7 +553,13 @@ export function DraftView(props: Props) {
    */
   const worth = props.byNeed
     ? winShareFor(
-      baselineFor(drafted, props.slots, WEEKS_DRAWN),
+      baselineFor(
+        projectedRoster(
+          drafted, props.slots, left, upcoming.map((u) => u.overall),
+        ),
+        props.slots,
+        WEEKS_DRAWN,
+      ),
       typicalWeek(men, props.slots, teams, WEEKS_DRAWN),
       WEEKS_DRAWN,
     )
