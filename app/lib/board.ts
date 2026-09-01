@@ -13,11 +13,21 @@
  */
 
 import { payFor, scoredHere, startedHere, type Pays, type Player } from "./scoring.ts";
+import type { Roster } from "./providers.ts";
+import { replacementBar } from "./replacementPool.ts";
+import { defenceWeeks, spreadOf } from "./spread.ts";
 
 export interface League {
   teams: number;
   slots?: string[] | null;
   pays: Pays;
+  /**
+   * Every team's players, when the league has told us. What a kicker or
+   * a defence is worth turns on how many of them the room keeps, and
+   * that is a fact about these twelve people rather than about leagues
+   * in general.
+   */
+  rosters?: Roster[] | null;
 }
 
 /** the same weights the board is built with, quarterbacks apart */
@@ -104,7 +114,60 @@ export function rescore(players: Player[], league: League): Player[] {
     };
   });
 
-  const bar = lastStarter(men, started, (p) => p.ppg);
+  /**
+   * The spreads were worked out under whatever the build scored, so
+   * they move with him rather than being recomputed.
+   *
+   * Measured against the file's own middle, not against what he scores
+   * here. Scaling from the scored number instead left the card showing
+   * 19.8 a game beside a value worked out from 20.1.
+   *
+   * It happens before anything is measured, because what a streamed
+   * position is worth comes off the spreads of the men left on waivers,
+   * and those have to be in this league's terms first.
+   */
+  for (const p of men) {
+    /**
+     * A defence ships the rates behind a spread rather than a spread,
+     * so its weeks are drawn here. Having no distribution at all was
+     * what left a defence with no range on its card and no way to say
+     * what the best one on waivers gives you.
+     */
+    const drawn = p.position === "DEF" && p.simulated
+      ? spreadOf(defenceWeeks(p.simulated, pays, p.key))
+      : null;
+
+    if (drawn) {
+      const moved = drawn.ev > 0 ? (p.ppg ?? 0) / drawn.ev : 0;
+      p.game = scaled({ ...drawn }, moved, 1);
+      p.sim = { ...scaled({ ...drawn }, moved * 17, 0), games: 17 };
+      continue;
+    }
+
+    const built = p.game?.["ev"] ?? 0;
+
+    // nothing to scale from, so there is no spread to show rather than
+    // one that disagrees with the number beside it
+    if (built <= 0) {
+      p.game = null;
+      p.sim = p.sim ? { ev: 0, q1: 0, mid: 0, q3: 0, low: 0, high: 0, games: p.sim.games } : null;
+      continue;
+    }
+
+    const moved = (p.ppg ?? 0) / built;
+    p.game = scaled(p.game!, moved, 1);
+
+    if (p.sim) {
+      p.sim = { ...scaled(p.sim, moved, 0), games: p.sim.games };
+    }
+  }
+
+  const bar = replacementBar({
+    men,
+    teams: league.teams,
+    rosters: league.rosters ?? null,
+    lastStarter: lastStarter(men, started, (p) => p.ppg),
+  });
 
   /**
    * A man who misses four weeks gives you thirteen weeks of the gap to
@@ -227,6 +290,30 @@ export function rescore(players: Player[], league: League): Player[] {
   });
 
   /**
+   * A kicker or a defence read at the place the room puts him, off the
+   * same curve.
+   *
+   * Leaving them out of it was what let a defence show a bigger number
+   * than every skill player around it. Twelve teams start twelve
+   * defences, so twelve of them clear the last starter every year
+   * whatever happens, and the card was showing that arithmetic next to
+   * a number that meant something else. What his own projection says he
+   * is worth is still worth seeing, so it stays as his own value.
+   */
+  let skillAhead = 0;
+
+  for (const p of men) {
+    if (!OWN_ORDER.has(p.position)) {
+      skillAhead++;
+      continue;
+    }
+
+    const at = Math.min(skillAhead, curve.length - 1);
+    p.vor = Number((curve[at] ?? 0).toFixed(1));
+    p.perGameVor = Number((p.vor / Math.max(1, p.games ?? 17)).toFixed(1));
+  }
+
+  /**
    * Where the room takes him, as a place rather than an average.
    * Writing an average as a round and a pick left 1.02 empty and put
    * two men on 1.05, since nobody averages between 1.5 and 2.4.
@@ -235,34 +322,6 @@ export function rescore(players: Player[], league: League): Player[] {
     .filter((p) => p.adp)
     .sort((a, b) => a.adp! - b.adp!)
     .forEach((p, i) => { p.adpRank = i + 1; });
-
-
-  /**
-   * The spreads were worked out under whatever the build scored, so
-   * they move with him rather than being recomputed.
-   *
-   * Measured against the file's own middle, not against what he scores
-   * here. Scaling from the scored number instead left the card showing
-   * 19.8 a game beside a value worked out from 20.1.
-   */
-  for (const p of men) {
-    const built = p.game?.["ev"] ?? 0;
-
-    // nothing to scale from, so there is no spread to show rather than
-    // one that disagrees with the number beside it
-    if (built <= 0) {
-      p.game = null;
-      p.sim = p.sim ? { ev: 0, q1: 0, mid: 0, q3: 0, low: 0, high: 0, games: p.sim.games } : null;
-      continue;
-    }
-
-    const moved = (p.ppg ?? 0) / built;
-    p.game = scaled(p.game!, moved, 1);
-
-    if (p.sim) {
-      p.sim = { ...scaled(p.sim, moved, 0), games: p.sim.games };
-    }
-  }
 
   return men;
 }
