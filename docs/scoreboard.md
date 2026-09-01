@@ -627,3 +627,33 @@ So the habit is the man's, and moving it between shirts buys nothing
 measurable at the team level. If it pays anywhere it is inside the
 walk, where the defenders on the field are known one at a time and
 nothing has to be aggregated. That is untested.
+
+## Drafting by wins against drafting by points
+
+Two drafters take the same seat in the same room off the same
+projection, one ordering by value over replacement and one by what a
+man adds to the weeks you win. Both sides are then scored on what
+actually happened, against the other eleven teams, week by week.
+
+The projection is last season played forward for both, so what is
+measured is the ordering and not the model. The room drafts on the
+real draft position for that year, which is a better projection than
+either rule is given, which is why both sit under half.
+
+| season | points only | with roster sense | by war | war ahead |
+|---|---|---|---|---|
+| 2023 | 15.0% | 49.0% | 55.9% | 9 of 12 |
+| 2024 | 38.7% | 45.9% | 50.8% | 7 of 12 |
+| 2025 | 35.6% | 46.3% | 51.8% | 10 of 12 |
+
+Points alone is not a rule anybody uses and is there to show why: it
+takes ten quarterbacks, since they score the most, and eight of them
+cannot start. With roster sense is the fair comparison.
+
+Wins beat points by 6.9, 4.9 and 5.5 across the three, and in 26 of the
+36 seats. A coin flip gives 26 or better about once in two hundred.
+
+What this does not settle: only the skill positions are drafted, and
+both rules are handed a crude projection. Whether the same gap holds
+when the ordering runs on the blended board rather than on last season
+is untested.
