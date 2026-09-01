@@ -11,6 +11,7 @@ import type { ComponentChildren } from "preact";
 import type { Player } from "../lib/scoring.ts";
 import { asRound, roundsOfGap, usuallyAt } from "../lib/picks.ts";
 import type { Finish } from "../lib/finish.ts";
+import { STREAMED } from "../lib/replacementPool.ts";
 import { lineOver, movedBy } from "../lib/statLine.ts";
 
 export interface Range {
@@ -263,7 +264,10 @@ function Facts({ p, teams, costs, aside }: {
           worth. This is what his own projection says he is worth, shown
           when the two disagree, which is when the room and the model
           disagree about him. */}
-      {p.ownVor !== undefined && p.vor !== undefined &&
+      {/* a kicker and a defence lead with this number already, so
+          printing it again here says the same thing twice */}
+      {!STREAMED.has(p.position) &&
+        p.ownVor !== undefined && p.vor !== undefined &&
         Math.abs(p.ownVor - p.vor) >= 10 && (
         <span
           class="f"

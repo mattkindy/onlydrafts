@@ -925,3 +925,50 @@ describe("the whole board as cards", () => {
     expect(at.querySelectorAll("table.ranks tbody tr").length).toBe(men.length);
   });
 });
+
+/**
+ * You have to start a kicker and a defence, so what a pick at their
+ * place on the board is worth answers a question nobody is asking:
+ * there is no lineup without one. Every kicker read a negative value
+ * next to a positive one labelled ours alone, twenty one points apart.
+ */
+describe("a slot you cannot leave empty", () => {
+  const league = aLeague();
+  const men = boardFor(league);
+
+  const cardFor = (position: string) => {
+    const at = document.createElement("div");
+    document.body.appendChild(at);
+    render(
+      <DraftView men={men} state={NO_DRAFT} teams={12} snake
+        posFilter={position} query="" order="rank" slots={league.slots}
+        onMore={() => {}} />,
+      at,
+    );
+
+    return at.querySelector(".card")!;
+  };
+
+  it("leads a kicker and a defence with what he beats the wire by", () => {
+    for (const position of ["K", "DEF"]) {
+      const card = cardFor(position);
+
+      expect(card.textContent, position).toContain("over the wire");
+      expect(card.textContent, position).not.toContain("value here");
+    }
+  });
+
+  it("says it once, not twice", () => {
+    for (const position of ["K", "DEF"]) {
+      expect(cardFor(position).textContent, position)
+        .not.toContain("ours alone");
+    }
+  });
+
+  it("leaves everybody else on what the pick is worth", () => {
+    const card = cardFor("RB");
+
+    expect(card.textContent).toContain("value here");
+    expect(card.textContent).not.toContain("over the wire");
+  });
+});
