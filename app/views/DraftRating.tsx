@@ -143,11 +143,11 @@ export function DraftRating(props: Props) {
                       : asRound(Math.round(pick.adp), league.size)}
                   </td>
                   <td>
-                    {pick.waited === null
+                    {pick.fell === null
                       ? ""
-                      : pick.waited > 0
-                      ? `${pick.waited.toFixed(0)} late`
-                      : `${(-pick.waited).toFixed(0)} early`}
+                      : pick.fell > 0
+                      ? `${pick.fell.toFixed(0)} late`
+                      : `${(-pick.fell).toFixed(0)} early`}
                   </td>
                   <td>
                     {pick.over > 0

@@ -15,8 +15,17 @@
 
 import { lineupOf, type Player } from "./scoring.ts";
 
-/** the room's say against our own, and the room says more */
-export const RATING_LEAN = { adp: 0.65, ours: 0.35 };
+/**
+ * A pick is judged on what the market says, and nothing else.
+ *
+ * Blending our own value in here was wrong twice. The two live on
+ * different scales, so averaging them and then comparing against the
+ * whole curve docked everybody. And it made a column that reads as
+ * "did you get a bargain" quietly mean "do we rate him", which is why
+ * Derrick Henry at 1.04 came back at minus six when he went three
+ * picks before ADP. What we think of a player belongs in the team
+ * ratings, where it is labelled as ours.
+ */
 
 /**
  * A bench man plays only when somebody ahead of him is hurt or on a
@@ -68,13 +77,12 @@ export function worthAt(curve: number[], pick: number): number {
  * A man nobody priced is ours alone to judge.
  */
 export function worthOf(p: Player, curve: number[]): number {
-  const ours = p.vor ?? 0;
-
   if (p.adp === null || p.adp === undefined) {
-    return ours;
+    // nobody priced him, so the last slot on the curve is what he is
+    return worthAt(curve, curve.length);
   }
 
-  return RATING_LEAN.adp * worthAt(curve, p.adp) + RATING_LEAN.ours * ours;
+  return worthAt(curve, p.adp);
 }
 
 export interface RosterWorth {
@@ -131,6 +139,13 @@ export interface TeamRating {
   expected: number;
   /** the difference, which is the rating */
   over: number;
+  /**
+   * and that over the picks it took, which is what teams get compared
+   * on. One side made fifteen picks and another made nine, so a total
+   * rewards whoever had the most turns.
+   */
+  perPick: number;
+  picks: number;
   starters: { p: Player; slot: string }[];
   bench: Player[];
 }
@@ -161,16 +176,20 @@ export function rateTeams(
         .reduce((sum, pick, i) =>
           sum + worthAt(curve, pick) * (i < starts ? 1 : ON_THE_BENCH), 0);
 
+      const over = filled.worth - expected;
+
       return {
         owner: team.owner,
         got: filled.worth,
         expected,
-        over: filled.worth - expected,
+        over,
+        perPick: over / Math.max(1, team.took.length),
+        picks: team.took.length,
         starters: filled.starters,
         bench: filled.bench,
       };
     })
-    .sort((a, b) => b.over - a.over);
+    .sort((a, b) => b.perPick - a.perPick);
 }
 
 export interface PickRating {
@@ -178,8 +197,8 @@ export interface PickRating {
   p: Player;
   /** where the room had him, absent for a man nobody priced */
   adp: number | null;
-  /** picks later than the room would have taken him, negative is a reach */
-  waited: number | null;
+  /** how far he fell past ADP, so a minus is you reaching for him */
+  fell: number | null;
   /** what he is worth against what the slot should have bought */
   over: number;
 }
@@ -192,32 +211,44 @@ export function ratePicks(
     at,
     p,
     adp: p.adp ?? null,
-    waited: p.adp === null || p.adp === undefined ? null : p.adp - at,
+    fell: p.adp === null || p.adp === undefined ? null : at - p.adp,
     over: worthOf(p, curve) - worthAt(curve, at),
   }));
 }
 
 /**
- * A grade a person can read, against how the rest of this league did.
+ * A grade a person can read, against how the rest of the league did.
  *
- * Measured from the middle of the room rather than from nothing,
- * because the overs do not average out to nothing. A league where
- * everybody came in a little under otherwise reads as six Cs.
+ * Measured off the middle of the room and a robust spread rather than
+ * a mean and a standard deviation, because one team that sets fire to
+ * its draft drags the average down and squashes everybody else into
+ * the same letter. The median and the median distance from it do not
+ * care what the two worst teams did.
  */
+const BANDS: [number, string][] = [
+  [0.95, "A"], [0.85, "A-"], [0.55, "B+"], [0.25, "B"], [0.05, "B-"],
+  [-0.3, "C+"], [-0.6, "C"], [-1.05, "C-"], [-1.6, "D"], [-2.5, "D-"],
+];
+
+const middleOf = (of: number[]): number => {
+  const sorted = [...of].sort((a, b) => a - b);
+  const at = Math.floor(sorted.length / 2);
+
+  return sorted.length % 2 ? sorted[at]! : (sorted[at - 1]! + sorted[at]!) / 2;
+};
+
 export function gradesFor(rated: TeamRating[]): Map<string, string> {
-  const overs = rated.map((t) => t.over);
-  const middle = overs.reduce((a, b) => a + b, 0) / Math.max(1, overs.length);
-  const spread = Math.sqrt(overs.reduce(
-    (sum, v) => sum + (v - middle) ** 2, 0) / Math.max(1, overs.length));
+  const overs = rated.map((t) => t.perPick);
+  const middle = middleOf(overs);
+  // 1.4826 turns a median distance into something a normal spread's
+  // worth of bands can be read against
+  const spread = 1.4826 *
+    middleOf(overs.map((v) => Math.abs(v - middle)));
   const said = new Map<string, string>();
 
   for (const team of rated) {
-    const by = spread > 0 ? (team.over - middle) / spread : 0;
-    said.set(
-      team.owner,
-      by > 1.2 ? "A" : by > 0.55 ? "B" : by > -0.2 ? "C"
-        : by > -0.9 ? "D" : "F",
-    );
+    const by = spread > 0 ? (team.perPick - middle) / spread : 0;
+    said.set(team.owner, BANDS.find(([edge]) => by > edge)?.[1] ?? "F");
   }
 
   return said;

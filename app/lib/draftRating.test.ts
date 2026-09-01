@@ -35,16 +35,18 @@ describe("the market curve", () => {
 });
 
 describe("what a man is worth", () => {
-  it("leans on the room, so a cheap man our numbers love is not a steal", () => {
+  it("goes on where he is drafted, not on what we think of him", () => {
     const curve = marketCurve(board);
+    // our own numbers adore him, the market does not, and the market wins
     const loved = man("loved", "RB", 100, 118);
     const priced = man("priced", "RB", 2, 118);
     expect(worthOf(priced, curve)).toBeGreaterThan(worthOf(loved, curve));
   });
 
-  it("judges a man nobody priced on our numbers alone", () => {
+  it("prices a man nobody drafted at the bottom of the curve", () => {
     const curve = marketCurve(board);
-    expect(worthOf(man("nobody", "RB", null, 42), curve)).toBe(42);
+    expect(worthOf(man("nobody", "RB", null, 42), curve))
+      .toBe(worthAt(curve, curve.length));
   });
 });
 
@@ -107,18 +109,20 @@ describe("rating teams", () => {
 });
 
 describe("rating one draft's picks", () => {
-  it("says how long a man lasted past where the room had him", () => {
+  it("says how far a man fell past ADP, and a minus means you reached", () => {
     const curve = marketCurve(board);
-    const [waited, reached] = ratePicks(
+    const [fell, reached] = ratePicks(
       [{ at: 40, p: board[9]! }, { at: 10, p: board[59]! }], curve,
     );
-    expect(waited!.waited).toBe(-30);
-    expect(reached!.waited).toBe(50);
+    // ADP had him 10th and he lasted to 40
+    expect(fell!.fell).toBe(30);
+    // ADP had him 60th and you took him at 10
+    expect(reached!.fell).toBe(-50);
   });
 
-  it("leaves a man nobody priced without a verdict on waiting", () => {
+  it("leaves a man nobody priced without a verdict on falling", () => {
     const curve = marketCurve(board);
     const [only] = ratePicks([{ at: 90, p: man("free", "K", null, 0) }], curve);
-    expect(only!.waited).toBeNull();
+    expect(only!.fell).toBeNull();
   });
 });
