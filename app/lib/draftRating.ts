@@ -73,6 +73,68 @@ export function worthAt(curve: number[], pick: number): number {
 }
 
 /**
+ * What a pick at each place actually buys, from rooms that drafted on
+ * draft position with the spread the room has shown.
+ *
+ * Reading the curve at the pick number was wrong and it charged you for
+ * having an early one. At the third pick the best man left is priced
+ * about third, so your ceiling is nothing and every deviation is a loss
+ * on the steepest part of the curve. At the hundred and eighteenth a
+ * man can fall eighty places and the gap is large and positive. Over
+ * one draft that came out at minus 6.3 a pick in the first two rounds
+ * and plus 5.2 in the middle ones.
+ */
+export function marketBar(
+  men: Player[], picks: number, kept: { key: string; at: number }[] = [],
+  draws = 200,
+): number[] {
+  const curve = marketCurve(men);
+  const gone = new Set(kept.map((k) => k.key));
+  /**
+   * Whoever was kept comes out of the pool, since nobody could draft
+   * him. Thirty three were kept in a twelve team league, so the man on
+   * the board at the third pick is nothing like the third best by draft
+   * position, and comparing him to one made every early pick a reach.
+   *
+   * Where they were kept matters as much as that they were. A keeper
+   * takes up a slot without taking anybody off the board, so by the
+   * twentieth pick the room has chosen fewer than twenty times. Leaving
+   * that out ran the pool down too fast and turned every pick in the
+   * draft into a bargain.
+   */
+  const priced = men.filter((p) => p.adp && !gone.has(p.key));
+  const keptBy = (pick: number) =>
+    kept.filter((k) => k.at <= pick).length;
+  const total = new Array(picks).fill(0) as number[];
+  let seed = 20260901;
+  const next = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+
+    return seed / 2147483648;
+  };
+
+  for (let draw = 0; draw < draws; draw++) {
+    const order = priced
+      .map((p) => {
+        const early = p.adpHigh ?? p.adp!;
+        const late = p.adpLow ?? p.adp!;
+
+        return { p, at: early + next() * Math.max(0, late - early) };
+      })
+      .sort((a, b) => a.at - b.at);
+
+    for (let pick = 0; pick < picks; pick++) {
+      const chosen = pick - keptBy(pick + 1);
+      const him = chosen >= 0 ? order[chosen]?.p : undefined;
+      total[pick] = (total[pick] ?? 0) +
+        (him ? worthAt(curve, him.adp!) : 0);
+    }
+  }
+
+  return total.map((n) => n / draws);
+}
+
+/**
  * What one man is worth, the room's price and our own number together.
  * A man nobody priced is ours alone to judge.
  */
@@ -162,7 +224,12 @@ export function rateTeams(
   teams: { owner: string; took: { at: number; p: Player }[] }[],
   slots: string[] | null | undefined,
   curve: number[],
+  /** what a pick at each place buys, when it has been worked out */
+  bar?: number[],
 ): TeamRating[] {
+  const buys = (pick: number) =>
+    bar?.[Math.max(0, Math.round(pick) - 1)] ?? worthAt(curve, pick);
+
   return teams
     .map((team) => {
       const men = team.took.map((t) => t.p);
@@ -174,7 +241,7 @@ export function rateTeams(
         .map((t) => t.at)
         .sort((a, b) => a - b)
         .reduce((sum, pick, i) =>
-          sum + worthAt(curve, pick) * (i < starts ? 1 : ON_THE_BENCH), 0);
+          sum + buys(pick) * (i < starts ? 1 : ON_THE_BENCH), 0);
 
       const over = filled.worth - expected;
 
@@ -205,14 +272,17 @@ export interface PickRating {
 
 /** each pick of one draft, against where the room had the man */
 export function ratePicks(
-  made: { at: number; p: Player }[], curve: number[],
+  made: { at: number; p: Player }[], curve: number[], bar?: number[],
 ): PickRating[] {
+  const buys = (pick: number) =>
+    bar?.[Math.max(0, Math.round(pick) - 1)] ?? worthAt(curve, pick);
+
   return made.map(({ at, p }) => ({
     at,
     p,
     adp: p.adp ?? null,
     fell: p.adp === null || p.adp === undefined ? null : at - p.adp,
-    over: worthOf(p, curve) - worthAt(curve, at),
+    over: worthOf(p, curve) - buys(at),
   }));
 }
 

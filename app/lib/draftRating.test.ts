@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  fillLineup, marketCurve, ratePicks, rateTeams, worthAt, worthOf,
+  fillLineup, marketBar, marketCurve, ratePicks, rateTeams, worthAt, worthOf,
 } from "./draftRating.ts";
 import type { Player } from "./scoring.ts";
 
@@ -124,5 +124,57 @@ describe("rating one draft's picks", () => {
     const curve = marketCurve(board);
     const [only] = ratePicks([{ at: 90, p: man("free", "K", null, 0) }], curve);
     expect(only!.fell).toBeNull();
+  });
+});
+
+/**
+ * The bar a pick is judged against used to be the smoothed curve read
+ * at the pick number, which charged a team for owning an early pick.
+ * At the third pick the best man left is priced about third, so the
+ * ceiling is nothing and any deviation is a loss on the steepest part
+ * of the curve. At the hundredth a man can fall eighty places.
+ */
+describe("what a pick at each place actually buys", () => {
+  const men: Player[] = Array.from({ length: 200 }, (_, i) => ({
+    name: `p${i}`,
+    key: `p${i}`,
+    position: ["RB", "WR", "TE", "QB"][i % 4]!,
+    adp: i + 1,
+    adpHigh: Math.max(1, i - 4),
+    adpLow: i + 8,
+    vor: Math.max(0, 240 - i * 1.4),
+  }) as Player);
+
+  it("falls away down the board, the way the curve does", () => {
+    const bar = marketBar(men, 150, [], 40);
+
+    expect(bar[0]!).toBeGreaterThan(bar[40]!);
+    expect(bar[40]!).toBeGreaterThan(bar[120]!);
+  });
+
+  /**
+   * A keeper takes a slot without taking anybody off the board, so by
+   * the twentieth pick the room has chosen fewer than twenty times.
+   * Leaving that out ran the pool down too fast and turned every pick
+   * in the draft into a bargain.
+   */
+  it("counts a keeper's slot as spending no one", () => {
+    const plain = marketBar(men, 150, [], 40);
+    const withKeepers = marketBar(
+      men,
+      150,
+      Array.from({ length: 20 }, (_, i) => ({ key: `p${i}`, at: i * 3 + 1 })),
+      40,
+    );
+
+    /**
+     * The two effects cancel when the kept men are the good ones and
+     * their slots are spread through the draft: twenty fewer men on the
+     * board and twenty fewer choices made, so the sixtieth pick buys
+     * about what it did. What must not happen is the pool running down
+     * twice as fast, which is what the bug did.
+     */
+    expect(Math.abs(withKeepers[60]! - plain[60]!)).toBeLessThan(5);
+    expect(withKeepers[60]!).toBeGreaterThan(plain[120]! + 20);
   });
 });

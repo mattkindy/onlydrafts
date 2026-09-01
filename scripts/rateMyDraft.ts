@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { rescore } from "../app/lib/board.ts";
 import { normalizeName } from "../app/lib/store.ts";
 import {
-  gradesFor, keyForPick, marketCurve, rateTeams, ratePicks,
+  gradesFor, keyForPick, marketBar, marketCurve, rateTeams, ratePicks,
 } from "../app/lib/draftRating.ts";
 import type { Player } from "../app/lib/scoring.ts";
 
@@ -144,10 +144,33 @@ for (const pick of picks) {
 }
 
 const curve = marketCurve(men);
+/** the men who were kept, so the simulated room does not draft them */
+const kept = picks
+  .filter((k: any) => k.is_keeper)
+  .map((k: any) => {
+    const said = everyone[k.player_id];
+
+    return said
+      ? {
+        key: keyForPick(
+          {
+            name: said.full_name ?? said.last_name,
+            position: said.position,
+            team: said.team,
+          },
+          normalizeName,
+        ),
+        at: k.pick_no as number,
+      }
+      : null;
+  })
+  .filter(Boolean) as { key: string; at: number }[];
+const bar = marketBar(men, 260, kept);
 const rated = rateTeams(
   [...took].map(([owner, its]) => ({ owner, took: its })),
   league.roster_positions ?? null,
   curve,
+  bar,
 );
 const grades = gradesFor(rated);
 
@@ -169,7 +192,7 @@ const mine = took.get(who);
 if (mine) {
   console.log(`\n${who}, pick by pick\n`);
 
-  for (const r of ratePicks([...mine].sort((a, b) => a.at - b.at), curve)) {
+  for (const r of ratePicks([...mine].sort((a, b) => a.at - b.at), curve, bar)) {
     console.log(
       `  ${String(r.at).padStart(3)} ${r.p.name.padEnd(22)}` +
       ` ${r.p.position.padEnd(4)}` +
@@ -199,7 +222,7 @@ for (const [owner, its] of took) {
  * more than beating an early pick's high bar ever can, and a team with
  * more late turns collects more surplus without drafting better.
  */
-const everyPick = [...took].flatMap(([, its]) => ratePicks(its, curve));
+const everyPick = [...took].flatMap(([, its]) => ratePicks(its, curve, bar));
 const BUCKETS: [string, number, number][] = [
   ["1 to 24", 1, 24], ["25 to 60", 25, 60], ["61 to 96", 61, 96],
   ["97 to 132", 97, 132], ["133 and later", 133, 999],
