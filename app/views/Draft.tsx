@@ -11,13 +11,11 @@ import { useState } from "preact/hooks";
 import type { Player } from "../lib/scoring.ts";
 import { asRound, expectedBestAt, type Draft as DraftPicks } from "../lib/picks.ts";
 import {
-  needScorer, openingsAfter, stillNeeded, type Openings,
+  needScorer, openingsAfter, stillNeeded,
+  type NeedScore, type Openings,
 } from "../lib/need.ts";
 import { finishRange } from "../lib/finish.ts";
 import { SeasonCard, seasonScale } from "./Card.tsx";
-
-/** how many the shortlist shows before the full rankings take over */
-const MOST_SHOWN = 24;
 
 export interface Pick {
   overall: number;
@@ -197,23 +195,27 @@ function StillNeeded(
 
   return (
     <div class="needs">
-      <span class="over">you still need</span>
-      {WHERE.map((where) => {
-        const mine = open.named[where] ?? 0;
+      <div class="line">
+        <span class="over">you still need</span>
+        {WHERE.map((where) => {
+          const mine = open.named[where] ?? 0;
 
-        return mine > 0
-          ? <span class="f" key={where}><i>{where}</i>{mine}</span>
-          : null;
-      })}
-      {open.flex > 0 && <span class="f"><i>flex</i>{open.flex}</span>}
-      {open.full && <span class="f">your lineup is full</span>}
-      <span class="over">taken so far</span>
-      {WHERE.map((where) => (
-        <span class="f" key={"gone" + where}>
-          <i>{where}</i>{gone[where] ?? 0}
-          <small>of {teams}</small>
-        </span>
-      ))}
+          return mine > 0
+            ? <span class="f" key={where}><i>{where}</i>{mine}</span>
+            : null;
+        })}
+        {open.flex > 0 && <span class="f"><i>flex</i>{open.flex}</span>}
+        {open.full && <span class="f">your lineup is full</span>}
+      </div>
+      <div class="line">
+        <span class="over">taken so far</span>
+        {WHERE.map((where) => (
+          <span class="f" key={"gone" + where}>
+            <i>{where}</i>{gone[where] ?? 0}
+            <small>of {teams}</small>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -259,11 +261,31 @@ function Clock({ state, teams }: { state: DraftNow; teams: number }) {
 /** how many cards the whole board opens with, and steps by */
 const A_PAGE = 60;
 
+interface Scored {
+  p: Player;
+  score: number;
+  drop: number;
+  need: NeedScore | null;
+}
+
+/**
+ * One list, best first, however far down you care to read.
+ *
+ * There used to be a shortlist of the next two dozen above this, from
+ * when the whole board was a table and cards were the only place a man
+ * was drawn properly. Both said the same thing in the same order, so
+ * the shortlist went and what was worth keeping came here: your turns
+ * drawn where they fall, and the note on why a man is worth taking now.
+ */
 function FullRankings(
-  { men, gone, board, state, teams, posFilter, order, onMore }:
   {
-    men: Player[]; gone: Player[]; board: Player[]; state: DraftNow;
+    scored, gone, board, state, teams, posFilter, order, byNeed, lineAfter,
+    staleAt, onMore,
+  }:
+  {
+    scored: Scored[]; gone: Player[]; board: Player[]; state: DraftNow;
     teams: number; posFilter: string; order: "rank" | "adp";
+    byNeed: boolean; lineAfter: Map<number, string>; staleAt?: string;
     onMore: (p: Player) => void;
   },
 ) {
@@ -273,15 +295,18 @@ function FullRankings(
   const [shown, setShown] = useState(A_PAGE);
 
   // the ones already drafted keep their place, after the men you can have
+  const men = scored.map(({ p }) => p);
   const all = [...men, ...gone];
   const left = all.filter((p) => !state.taken.has(p.key)).length;
-  const page = all.slice(0, shown);
+  const page = scored.slice(0, shown);
+  const max = seasonScale(page.map(({ p }) => p));
 
   return (
     <>
       <h2>
-        the whole board
+        who to take
         {posFilter !== "ALL" && ", " + posFilter.toLowerCase() + " only"}
+        {staleAt && " as of " + staleAt}
       </h2>
       <p class="hint">{left} of {all.length} still on the board</p>
       <div class="how noprint">
@@ -302,26 +327,45 @@ function FullRankings(
       {how === "cards" && (
         <>
           <div class="cards">
-            {page.map((p) => (
-              <SeasonCard
-                key={p.key}
-                p={p}
-                max={seasonScale(page)}
-                teams={teams}
-                lead={order}
-                teamsInLeague={teams}
-                finish={finishRange(p, board)}
-                mine={state.mine.has(p.key)}
-                gone={state.taken.has(p.key) && !state.mine.has(p.key)}
-                {...(injuryBadge(state.hurt?.[p.key]) ?? {})}
-                onMore={() => onMore(p)}
-              />
+            {page.map(({ p, score, drop, need }, i) => (
+              <>
+                {lineAfter.has(i) && (
+                  <div class="pickline" key={"line" + i}>
+                    <span>your {lineAfter.get(i)}</span>
+                  </div>
+                )}
+                <SeasonCard
+                  key={p.key}
+                  p={p}
+                  max={max}
+                  teams={teams}
+                  lead={order}
+                  teamsInLeague={teams}
+                  finish={finishRange(p, board)}
+                  mine={state.mine.has(p.key)}
+                  {...(injuryBadge(state.hurt?.[p.key]) ?? {})}
+                  aside={byNeed && need
+                    ? { label: "to your lineup", value: need.score.toFixed(1) }
+                    : { label: "value here", value: score.toFixed(1) }}
+                  tag={byNeed && need?.fills === "bench"
+                    ? "you would be benching him behind what you have"
+                    : i < 3
+                      ? "best left at " + p.position
+                      : state.rosteredBy[p.key]
+                        ? "was on " + state.rosteredBy[p.key] + " last season"
+                        : drop > 8
+                          ? `waiting a turn costs ${drop.toFixed(0)} at ${p.position}`
+                          : ""}
+                  warn={i >= 3 && Boolean(state.rosteredBy[p.key])}
+                  onMore={() => onMore(p)}
+                />
+              </>
             ))}
           </div>
-          {shown < all.length && (
+          {shown < scored.length && (
             <div class="row">
               <button onClick={() => setShown((n) => n + A_PAGE)}>
-                show {Math.min(A_PAGE, all.length - shown)} more
+                show {Math.min(A_PAGE, scored.length - shown)} more
               </button>
             </div>
           )}
@@ -498,8 +542,6 @@ export function DraftView(props: Props) {
         : (a.p.rank ?? 9999) - (b.p.rank ?? 9999);
     });
 
-  const shortlist = scored.slice(0, MOST_SHOWN);
-  const max = seasonScale(shortlist.map(({ p }) => p));
   const counted = drafted.reduce<Record<string, number>>((tally, p) => {
     tally[p.position] = (tally[p.position] ?? 0) + 1;
 
@@ -514,7 +556,7 @@ export function DraftView(props: Props) {
   const lineAfter = new Map<number, string>();
   let nextPick = 0;
 
-  for (let shown = 0; shown < shortlist.length; shown++) {
+  for (let shown = 0; shown < scored.length; shown++) {
     while (nextPick < upcoming.length &&
       shown >= upcoming[nextPick]!.after) {
       lineAfter.set(shown, upcoming[nextPick]!.label);
@@ -526,54 +568,18 @@ export function DraftView(props: Props) {
     <>
       <Clock state={state} teams={teams} />
       <StillNeeded open={open} state={state} teams={teams} />
-      <h2>
-        best available for your draft roster
-        {props.staleAt && " as of " + props.staleAt}
-      </h2>
-      <div class="cards shortlist">
-        {shortlist.map(({ p, score, drop, need }, i) => (
-          <>
-            {lineAfter.has(i) && (
-              <div class="pickline" key={"line" + i}>
-                <span>your {lineAfter.get(i)}</span>
-              </div>
-            )}
-            <SeasonCard
-              key={p.key}
-              p={p}
-              max={max}
-              teams={teams}
-              lead={props.order}
-              teamsInLeague={teams}
-              finish={finishRange(p, men)}
-              {...(injuryBadge(state.hurt?.[p.key]) ?? {})}
-              aside={props.byNeed && need
-                ? { label: "to your lineup", value: need.score.toFixed(1) }
-                : { label: "value here", value: score.toFixed(1) }}
-              tag={props.byNeed && need?.fills === "bench"
-                ? `you would be benching him behind what you have`
-                : i < 3
-                  ? "best left at " + p.position
-                  : state.rosteredBy[p.key]
-                    ? "was on " + state.rosteredBy[p.key] + " last season"
-                    : drop > 8
-                      ? `waiting a turn costs ${drop.toFixed(0)} at ${p.position}`
-                      : ""}
-              warn={i >= 3 && Boolean(state.rosteredBy[p.key])}
-              onMore={() => props.onMore(p)}
-            />
-          </>
-        ))}
-      </div>
 
       <FullRankings
-        men={scored.map(({ p }) => p)}
+        scored={scored}
         board={men}
         order={props.order}
+        byNeed={Boolean(props.byNeed)}
+        lineAfter={lineAfter}
         gone={men.filter((p) => state.taken.has(p.key)).filter(wanted)}
         state={state}
         teams={teams}
         posFilter={posFilter}
+        staleAt={props.staleAt}
         onMore={props.onMore}
       />
 
