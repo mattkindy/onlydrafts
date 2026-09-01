@@ -15,6 +15,7 @@ import {
   type NeedScore, type Openings,
 } from "../lib/need.ts";
 import { finishRange } from "../lib/finish.ts";
+import { STREAMED } from "../lib/replacementPool.ts";
 import { SeasonCard, seasonScale } from "./Card.tsx";
 
 export interface Pick {
@@ -346,7 +347,16 @@ function FullRankings(
                   {...(injuryBadge(state.hurt?.[p.key]) ?? {})}
                   aside={byNeed && need
                     ? { label: "to your lineup", value: need.score.toFixed(1) }
-                    : { label: "value here", value: score.toFixed(1) }}
+                    : STREAMED.has(p.position)
+                      /**
+                       * You have to start a kicker and a defence, so
+                       * what a pick here is worth is the wrong question
+                       * for them: there is no lineup without one. What
+                       * he beats the man off waivers by is the whole
+                       * decision, and it is a different number.
+                       */
+                      ? { label: "over the wire", value: (p.ownVor ?? 0).toFixed(1) }
+                      : { label: "value here", value: score.toFixed(1) }}
                   tag={byNeed && need?.fills === "bench"
                     ? "you would be benching him behind what you have"
                     : i < 3
