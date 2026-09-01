@@ -14,7 +14,7 @@
  */
 
 import { lineupOf, type Player } from "./scoring.ts";
-import { DRAWS, weeksFromSpread } from "./spread.ts";
+import { DRAWS, streamFor, weeksFromSpread } from "./spread.ts";
 
 const FLEX_POSITIONS = ["RB", "WR", "TE"];
 
@@ -59,10 +59,9 @@ export function weeksOf(p: Player, draws = DRAWS): number[] {
     draws,
   );
 
-  // which weeks he misses comes off the same seed as the weeks
-  // themselves, so a man is drawn once rather than twice
-  return weeks.map((week, i) =>
-    ((i * 2654435761) % 1000) / 1000 < plays ? week : 0);
+  const out = streamFor(p.key + "|out", draws);
+
+  return weeks.map((week, i) => (out[i]! < plays ? week : 0));
 }
 
 interface Seat {
@@ -197,6 +196,67 @@ export function typicalWeek(
 
   return Array.from({ length: draws }, (_, i) =>
     weeks.reduce((sum, its) => sum + (its[i] ?? 0), 0));
+}
+
+/**
+ * Your roster as it will look when the draft ends: what you have, plus
+ * the man you would expect to get at each seat you have not filled.
+ *
+ * Measuring against what you have today says nothing on the first pick,
+ * because one man against a whole side loses every week whoever he is,
+ * and every candidate reads nought. It also makes an empty seat look
+ * enormous when a late round would fill it nearly as well.
+ *
+ * Filling the seats first fixes both. A defence you take now is then
+ * worth what he beats a fourteenth round defence by, and a back is
+ * worth what he beats the back you would have got in the eighth.
+ */
+export function projectedRoster(
+  mine: Player[], slots: string[] | null | undefined, left: Player[],
+  turns: number[],
+): Player[] {
+  const seats = seatsOf(slots);
+  const filled = [...mine].sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0));
+  const spare = new Set(left.map((p) => p.key));
+  const roster = [...mine];
+
+  for (const p of filled) {
+    const seat = seats.find((s) => !s.taken && s.where.includes(p.position));
+
+    if (seat) {
+      seat.taken = { expect: p.ppg ?? 0, score: 0 };
+    }
+  }
+
+  /**
+   * Turn by turn rather than seat by seat, taking the best man still
+   * expected to be there who fits somewhere. Going down the seats in
+   * order instead had you spending the third pick of the draft on a
+   * quarterback, because the quarterback seat is listed first.
+   */
+  for (const at of turns) {
+    const seat = seats.find((s) => !s.taken);
+
+    if (!seat) {
+      break;
+    }
+
+    const him = left.find((p) =>
+      spare.has(p.key) &&
+      (!p.adp || p.adp >= at) &&
+      seats.some((s) => !s.taken && s.where.includes(p.position)));
+
+    if (!him) {
+      continue;
+    }
+
+    const his = seats.find((s) => !s.taken && s.where.includes(him.position))!;
+    his.taken = { expect: him.ppg ?? 0, score: 0 };
+    roster.push(him);
+    spare.delete(him.key);
+  }
+
+  return roster;
 }
 
 /** how often the first beats the second, week for week */

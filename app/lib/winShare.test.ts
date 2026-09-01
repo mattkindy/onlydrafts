@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  baselineFor, weeksOf, winChance, winShareFor,
+  baselineFor, projectedRoster, weeksOf, winChance, winShareFor,
 } from "./winShare.ts";
 import type { Player } from "./scoring.ts";
 
@@ -172,5 +172,64 @@ describe("what a point is worth depends on the week", () => {
     ];
 
     expect(worthOn(aRoster())).toBeGreaterThan(worthOn(runaway));
+  });
+});
+
+/**
+ * Two things the raw change in win chance cannot do on its own, and the
+ * projected roster fixes both.
+ */
+describe("against the side you would have finished with", () => {
+  const board = [
+    aMan("elite", "RB", 22), aMan("good", "RB", 16), aMan("okay", "RB", 12),
+    aMan("thin", "RB", 8), aMan("wr1", "WR", 20), aMan("wr2", "WR", 15),
+    aMan("wr3", "WR", 12), aMan("wr4", "WR", 10), aMan("wr5", "WR", 9),
+    aMan("qb1", "QB", 22), aMan("qb2", "QB", 18), aMan("te1", "TE", 13),
+    aMan("te2", "TE", 10), aMan("k1", "K", 9.4), aMan("k2", "K", 9.2),
+    aMan("d1", "DEF", 8.5), aMan("d2", "DEF", 8.2),
+  ].map((p, i) => ({ ...p, adp: i + 1, vor: 200 - i * 10 })) as Player[];
+
+  const turns = [1, 5, 9, 13, 16];
+
+  it("fills the seats you have not drafted yet", () => {
+    const projected = projectedRoster([], SLOTS, board, turns);
+
+    expect(projected.length).toBe(turns.length);
+    // and only with men you could still expect to be there
+    for (const p of projected) {
+      expect(p.adp).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  /**
+   * A seat a late round fills nearly as well is worth little now. Every
+   * kicker is much the same, so taking one early buys almost nothing;
+   * the backs run out, so the best one is worth a great deal.
+   */
+  it("prices a seat by what you would get there later", () => {
+    const projected = projectedRoster([], SLOTS, board, turns);
+    const worth = winShareFor(
+      baselineFor(projected, SLOTS, DRAWN), anOpponent(DRAWN), DRAWN,
+    );
+
+    expect(worth(board.find((p) => p.name === "elite")!).added)
+      .toBeGreaterThan(worth(board.find((p) => p.name === "k1")!).added);
+  });
+
+  it("says something about the first pick, where a bare roster cannot", () => {
+    const onNothing = winShareFor(
+      baselineFor([], SLOTS, DRAWN), anOpponent(DRAWN), DRAWN,
+    );
+    const onProjected = winShareFor(
+      baselineFor(projectedRoster([], SLOTS, board, turns), SLOTS, DRAWN),
+      anOpponent(DRAWN),
+      DRAWN,
+    );
+    const him = board.find((p) => p.name === "elite")!;
+
+    // one man against a whole side loses every week, so the bare
+    // version reads nought for the best player in the draft
+    expect(onNothing(him).added).toBe(0);
+    expect(onProjected(him).added).toBeGreaterThan(0);
   });
 });

@@ -67,6 +67,20 @@ function poisson(rate: number, rand: () => number): number {
 const AT = [0.1, 0.25, 0.5, 0.75, 0.9];
 
 /**
+ * A run of numbers between nought and one, this name's own.
+ *
+ * Keyed on the name and not on the week, because a coin flipped from
+ * the week alone comes up the same for everybody: every man in the
+ * league was then hurt in the same weeks, and a typical side's worst
+ * week came out at five points.
+ */
+export function streamFor(name: string, draws = DRAWS): number[] {
+  const rand = mulberry32(seedOf(name));
+
+  return Array.from({ length: draws }, () => rand());
+}
+
+/**
  * Weeks drawn from a shipped spread, reading its five figures as points
  * on the inverse of his distribution and going straight between them.
  * Outside the tenth and the ninetieth it keeps the slope it arrived
