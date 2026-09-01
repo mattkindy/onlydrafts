@@ -88,6 +88,20 @@ beforeEach(() => {
   document.body.appendChild(where);
 });
 
+/**
+ * The whole board opens as cards, so a test that wants the table has to
+ * ask for it the way a reader does.
+ */
+const showTable = (at: HTMLElement) => {
+  const button = Array.from(at.querySelectorAll(".how button"))
+    .find((b) => b.textContent === "table") as HTMLButtonElement | undefined;
+
+  button?.click();
+};
+
+/** the shortlist at the top, apart from the whole board under it */
+const shortlist = (at: HTMLElement) => at.querySelector(".shortlist")!;
+
 describe("the views", () => {
   const league = aLeague();
   const men = boardFor(league);
@@ -130,7 +144,7 @@ describe("the views", () => {
     }
   });
 
-  it("draws the draft board", () => {
+  it("draws the draft board", async () => {
     render(
       <DraftView
         men={men} state={NO_DRAFT} teams={12} snake posFilter="ALL"
@@ -139,6 +153,12 @@ describe("the views", () => {
       where,
     );
     expect(where.querySelectorAll(".card").length).toBeGreaterThan(5);
+
+    // the whole board is cards now, and the table is still a click away.
+    // preact batches the redraw, so it lands on the next tick.
+    showTable(where);
+    await Promise.resolve();
+
     expect(where.querySelectorAll("table.ranks tbody tr").length)
       .toBe(men.length);
   });
@@ -243,21 +263,32 @@ describe("the rate and the season agree", () => {
       />,
       where,
     );
+    showTable(where);
   });
 
   it("says the same points per game on the card and in the table", () => {
-    const onCard = where.querySelector(".card .big")!.textContent!;
+    // the pick leads the card now, so his rate is down among the facts
+    const onCard = shortlist(where).querySelector(".facts")!.textContent!;
     const row = where.querySelector("table.ranks tbody tr")!;
     const inTable = row.children[2]!.textContent!;
 
     expect(onCard).toContain(inTable);
   });
 
+  it("leads the card with the pick the list is ordered by", () => {
+    const big = shortlist(where).querySelector(".big")!.textContent!;
+    const first = where.querySelector("table.ranks tbody tr")!
+      .children[0]!.textContent!;
+
+    expect(big).toContain(first);
+  });
+
   it("shows expected games next to both", () => {
     const first = men[0]!;
     const games = first.games!.toFixed(1);
 
-    expect(where.querySelector(".card .note")!.textContent).toContain(games);
+    expect(shortlist(where).querySelector(".note")!.textContent)
+      .toContain(games);
     expect(where.querySelector("table.ranks tbody tr")!.children[3]!.textContent)
       .toBe(games);
   });
@@ -489,12 +520,21 @@ describe("the draft list runs down the value", () => {
       where,
     );
     const worth = new Map(men.map((p) => [p.name, p.vor ?? 0]));
-    const shown = Array.from(where.querySelectorAll(".card .who"))
-      .map((n) => n.textContent!);
 
-    for (let i = 1; i < shown.length; i++) {
-      expect(worth.get(shown[i]!)!, shown[i])
-        .toBeLessThanOrEqual(worth.get(shown[i - 1]!)!);
+    /**
+     * Each list on its own. The whole board is drawn as cards under the
+     * shortlist and starts again from the best man, so reading every
+     * card on the page as one run says Bijan Robinson comes after a
+     * fiftieth pick.
+     */
+    for (const list of Array.from(where.querySelectorAll(".cards"))) {
+      const shown = Array.from(list.querySelectorAll(".who"))
+        .map((n) => n.textContent!);
+
+      for (let i = 1; i < shown.length; i++) {
+        expect(worth.get(shown[i]!)!, shown[i])
+          .toBeLessThanOrEqual(worth.get(shown[i - 1]!)!);
+      }
     }
   });
 });
@@ -578,5 +618,303 @@ describe("a card shows both values when they disagree", () => {
     );
 
     expect(where.textContent).toContain("ours alone");
+  });
+});
+
+/**
+ * Twelve teams start twelve defences, so twelve of them clear the last
+ * starter at the position every year whatever happens. Reading a
+ * defence that way and everybody else off the curve put +47 on a
+ * defence at pick 128 next to -4 on the skill players around it, and
+ * the card called both of them value.
+ */
+describe("a defence costs what the pick costs", () => {
+  const men = boardFor(aLeague());
+
+  it("never puts a later pick above an earlier one", () => {
+    const inOrder = [...men]
+      .filter((p) => p.rank !== undefined)
+      .sort((a, b) => a.rank! - b.rank!);
+
+    for (let i = 1; i < inOrder.length; i++) {
+      const here = inOrder[i]!;
+      const before = inOrder[i - 1]!;
+
+      expect(here.vor!, `${here.position} ${here.name} at ${here.rank}`)
+        .toBeLessThanOrEqual(before.vor!);
+    }
+  });
+
+  it("keeps what he beats the last starter by as his own", () => {
+    const defences = men
+      .filter((p) => p.position === "DEF")
+      .sort((a, b) => (b.ownVor ?? 0) - (a.ownVor ?? 0));
+
+    // the one signal worth having about a defence, which is why it
+    // survives the curve rather than being replaced by it
+    expect(defences[0]!.ownVor!).toBeGreaterThan(0);
+    expect(defences[0]!.ownVor!)
+      .toBeGreaterThan(defences[defences.length - 1]!.ownVor!);
+  });
+});
+
+/**
+ * The two draft-night controls do different jobs and are easy to
+ * conflate: one hides men you cannot start, the other reorders by what
+ * a man adds to the lineup you have left.
+ */
+describe("drafting for what you still need", () => {
+  const league = aLeague();
+  const men = boardFor(league);
+  const backs = men.filter((p) => p.position === "RB").slice(0, 4);
+  const mine = new Set(backs.map((p) => p.key));
+
+  const withMine = {
+    ...NO_DRAFT,
+    mine,
+    taken: new Set(mine),
+    grid: { teams: 12, rounds: 15, mySlot: 3, cells: {} },
+    clock: { who: "you", mine: true, overall: 27, untilMine: 0 },
+  };
+
+  /**
+   * The shortlist only. The page draws your own drafted men further
+   * down in cards of their own, and counting those made the filter look
+   * broken: the four backs it had correctly hidden from the shortlist
+   * were still on screen, because you drafted them.
+   */
+  const namesIn = (where: HTMLElement) =>
+    Array.from(where.querySelector(".cards")?.querySelectorAll(".who") ?? [])
+      .map((n) => n.textContent!);
+
+  it("says which slots are open and what the room has taken", () => {
+    render(
+      <DraftView men={men} state={withMine} teams={12} snake posFilter="ALL"
+        query="" order="rank" slots={league.slots} onMore={() => {}} />,
+      where,
+    );
+
+    expect(where.querySelector(".needs")).toBeTruthy();
+    expect(where.textContent).toContain("you still need");
+  });
+
+  it("hides a position once you cannot start another of them", () => {
+    render(
+      <DraftView men={men} state={withMine} teams={12} snake posFilter="ALL"
+        query="" order="rank" slots={league.slots} needOnly
+        onMore={() => {}} />,
+      where,
+    );
+    const shown = new Set(
+      namesIn(where).map((name) => men.find((p) => p.name === name)?.position),
+    );
+
+    // four backs drafted fills both slots and the flexes, so a fifth
+    // cannot start and the filter should have taken him out
+    expect(shown.has("RB")).toBe(false);
+    expect(shown.size).toBeGreaterThan(0);
+  });
+
+  it("reorders when weighted by need, and leaves the board alone otherwise", () => {
+    render(
+      <DraftView men={men} state={withMine} teams={12} snake posFilter="ALL"
+        query="" order="rank" slots={league.slots} onMore={() => {}} />,
+      where,
+    );
+    const byBoard = namesIn(where);
+
+    const other = document.createElement("div");
+    document.body.appendChild(other);
+    render(
+      <DraftView men={men} state={withMine} teams={12} snake posFilter="ALL"
+        query="" order="rank" slots={league.slots} byNeed
+        onMore={() => {}} />,
+      other,
+    );
+    const byNeed = namesIn(other);
+
+    expect(byNeed.length).toBe(byBoard.length);
+    expect(byNeed).not.toEqual(byBoard);
+  });
+});
+
+/**
+ * The board had no idea who was hurt, which is the one fact a drafter
+ * checks before every pick and the one the page could not answer.
+ */
+describe("who the league office has listed", () => {
+  const league = aLeague();
+  const men = boardFor(league);
+  const hurtOne = men[2]!;
+  const outOne = men[4]!;
+
+  const state = {
+    ...NO_DRAFT,
+    hurt: {
+      [hurtOne.key]: { status: "Questionable", part: "Hamstring" },
+      [outOne.key]: { status: "IR", part: "Achilles" },
+    },
+  };
+
+  it("puts the word on his card and the detail on the hover", () => {
+    render(
+      <DraftView men={men} state={state} teams={12} snake posFilter="ALL"
+        query="" order="rank" slots={league.slots} onMore={() => {}} />,
+      where,
+    );
+    const badges = Array.from(where.querySelectorAll(".card .badge"));
+    const said = badges.map((b) => b.textContent);
+
+    expect(said).toContain("questionable");
+    expect(said).toContain("ir");
+    expect(badges.find((b) => b.textContent === "questionable")
+      ?.getAttribute("title")).toBe("Questionable, Hamstring");
+  });
+
+  /** questionable on a Sunday and out for the year read differently */
+  it("tells a knock apart from a season ending one", () => {
+    render(
+      <DraftView men={men} state={state} teams={12} snake posFilter="ALL"
+        query="" order="rank" slots={league.slots} onMore={() => {}} />,
+      where,
+    );
+    const classOf = (word: string) =>
+      Array.from(where.querySelectorAll(".card .badge"))
+        .find((b) => b.textContent === word)?.className ?? "";
+
+    expect(classOf("questionable")).toContain("warn");
+    expect(classOf("ir")).toContain("bad");
+  });
+
+  it("says nothing about a man with nothing wrong with him", () => {
+    render(
+      <DraftView men={men} state={NO_DRAFT} teams={12} snake posFilter="ALL"
+        query="" order="rank" slots={league.slots} onMore={() => {}} />,
+      where,
+    );
+
+    expect(where.querySelectorAll(".card .badge").length).toBe(0);
+  });
+});
+
+/**
+ * The card was a per-game number and two rows of chips. At a draft the
+ * question is where he goes and how he could finish, so the pick leads,
+ * the bar under it is picks rather than points, and the categories
+ * share one set of headings instead of repeating them.
+ */
+describe("the card reads like a draft card", () => {
+  const league = aLeague();
+  const men = boardFor(league);
+
+  const draw = (order: "rank" | "adp") => {
+    const at = document.createElement("div");
+    document.body.appendChild(at);
+    render(
+      <DraftView men={men} state={NO_DRAFT} teams={12} snake posFilter="ALL"
+        query="" order={order} slots={league.slots} onMore={() => {}} />,
+      at,
+    );
+
+    return at;
+  };
+
+  it("leads with whichever pick the list is sorted by", () => {
+    const byOurs = draw("rank").querySelector(".card .big")!.textContent!;
+    const byRoom = draw("adp").querySelector(".card .big")!.textContent!;
+
+    expect(byOurs).toContain("ours");
+    expect(byOurs).toContain("adp");
+    expect(byRoom.indexOf("adp")).toBeLessThan(byRoom.indexOf("ours"));
+  });
+
+  it("draws the room's range and our pick on one scale of picks", () => {
+    const at = draw("rank");
+    const board = at.querySelector(".card .board")!;
+
+    expect(board.querySelector(".room")).toBeTruthy();
+    expect(board.querySelector(".ours")).toBeTruthy();
+    // and no points spread beside it, which is the thing it replaced
+    expect(at.querySelector(".card .range")).toBeNull();
+  });
+
+  it("says how he could finish at his position", () => {
+    const at = draw("rank");
+
+    expect(at.querySelector(".card .finish")!.textContent)
+      .toContain("could finish");
+  });
+
+  it("gives the two stat rows one set of headings", () => {
+    const at = draw("rank");
+    const table = at.querySelector(".card table.line")!;
+    const rows = Array.from(table.querySelectorAll("tbody tr"));
+
+    expect(rows.length).toBe(2);
+    expect(rows.map((r) => r.children[0]!.textContent))
+      .toEqual(["season", "a game"]);
+    expect(table.querySelectorAll("thead th").length)
+      .toBe(rows[0]!.children.length);
+  });
+});
+
+/**
+ * The whole board was a table because seven hundred cards at once is
+ * slow. A page at a time is not, and a row of numbers cannot say what a
+ * card says.
+ */
+describe("the whole board as cards", () => {
+  const league = aLeague();
+  const men = boardFor(league);
+
+  const draw = () => {
+    const at = document.createElement("div");
+    document.body.appendChild(at);
+    render(
+      <DraftView men={men} state={NO_DRAFT} teams={12} snake posFilter="ALL"
+        query="" order="rank" slots={league.slots} onMore={() => {}} />,
+      at,
+    );
+
+    return at;
+  };
+
+  it("opens as cards, without waiting to be asked", () => {
+    const at = draw();
+
+    expect(at.querySelectorAll(".cards").length).toBeGreaterThan(1);
+    expect(at.querySelector("table.ranks")).toBeNull();
+  });
+
+  it("draws a page of them rather than the whole file", () => {
+    const at = draw();
+    const whole = Array.from(at.querySelectorAll(".cards"))
+      .find((list) => !list.classList.contains("shortlist"))!;
+
+    expect(whole.querySelectorAll(".card").length).toBe(60);
+    expect(at.textContent).toContain("show 60 more");
+  });
+
+  it("takes the next page when asked", async () => {
+    const at = draw();
+    const more = Array.from(at.querySelectorAll("button"))
+      .find((b) => b.textContent!.startsWith("show ")) as HTMLButtonElement;
+
+    more.click();
+    await Promise.resolve();
+
+    const whole = Array.from(at.querySelectorAll(".cards"))
+      .find((list) => !list.classList.contains("shortlist"))!;
+
+    expect(whole.querySelectorAll(".card").length).toBe(120);
+  });
+
+  it("still has the table for looking a man up", async () => {
+    const at = draw();
+
+    showTable(at);
+    await Promise.resolve();
+
+    expect(at.querySelectorAll("table.ranks tbody tr").length).toBe(men.length);
   });
 });

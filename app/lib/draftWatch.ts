@@ -47,6 +47,8 @@ interface Options {
   manual: string;
   nameFor: (key: string) => string;
   positionFor: (key: string) => string;
+  /** who the league office has listed, by the board's own key */
+  hurt?: Record<string, { status: string; part?: string }>;
 }
 
 export async function draftNow(options: Options): Promise<DraftNow> {
@@ -58,6 +60,7 @@ export async function draftNow(options: Options): Promise<DraftNow> {
     rosteredBy: {},
     grid: null,
     made: [],
+    hurt: options.hurt ?? {},
   };
 
   for (const line of manual.split("\n")) {

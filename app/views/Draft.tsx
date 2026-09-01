@@ -6,8 +6,14 @@
  * full, for looking someone up or seeing how far a run has gone.
  */
 
+import { useState } from "preact/hooks";
+
 import type { Player } from "../lib/scoring.ts";
 import { asRound, expectedBestAt, type Draft as DraftPicks } from "../lib/picks.ts";
+import {
+  needScorer, openingsAfter, stillNeeded, type Openings,
+} from "../lib/need.ts";
+import { finishRange } from "../lib/finish.ts";
 import { SeasonCard, seasonScale } from "./Card.tsx";
 
 /** how many the shortlist shows before the full rankings take over */
@@ -39,6 +45,32 @@ export interface DraftNow {
   filled?: number[];
   status?: string;
   clock?: { who: string; mine: boolean; overall: number; untilMine: number | null };
+  /** who the league office has listed, by the board's own key */
+  hurt?: Record<string, { status: string; part?: string }>;
+}
+
+/**
+ * What the league office says about him, short enough for a card.
+ *
+ * Sleeper writes these as Questionable, Doubtful, Out, IR, PUP, Sus and
+ * a few others. The word alone is the news; the body part goes on the
+ * hover, since a card has no room for it and a reader who cares will
+ * ask.
+ */
+const WORRYING = new Set(["Out", "IR", "PUP", "Sus", "NA", "Doubtful", "DNR"]);
+
+export function injuryBadge(
+  hurt: { status: string; part?: string } | undefined,
+): { badge: string; badgeHow: string; badgeTitle: string } | null {
+  if (!hurt?.status) {
+    return null;
+  }
+
+  return {
+    badge: hurt.status.toLowerCase(),
+    badgeHow: WORRYING.has(hurt.status) ? "bad" : "warn",
+    badgeTitle: hurt.part ? `${hurt.status}, ${hurt.part}` : hurt.status,
+  };
 }
 
 interface Props {
@@ -51,6 +83,12 @@ interface Props {
   order: "rank" | "adp";
   onMore: (p: Player) => void;
   staleAt?: string;
+  /** the lineup this league starts, for working out what you still need */
+  slots?: string[] | null;
+  /** hide men who cannot start for you yet */
+  needOnly?: boolean;
+  /** order by what he adds to your lineup rather than by the board */
+  byNeed?: boolean;
 }
 
 export function matchesFilter(p: Player, posFilter: string) {
@@ -138,6 +176,48 @@ function dropOffBy(men: Player[], draft: DraftPicks, nextTurn: number | null) {
   };
 }
 
+/**
+ * The slots you still have to fill, and what the rest of the room still
+ * needs at each position. The second half is the one you cannot get
+ * from your own roster page: four teams still wanting a tight end is
+ * how a run starts.
+ */
+function StillNeeded(
+  { open, state, teams }: {
+    open: Openings; state: DraftNow; teams: number;
+  },
+) {
+  const WHERE = ["QB", "RB", "WR", "TE", "K", "DEF"];
+  /** how many at each position the room has taken, so a run is visible */
+  const gone: Record<string, number> = {};
+
+  for (const pick of state.made ?? []) {
+    gone[pick.position] = (gone[pick.position] ?? 0) + 1;
+  }
+
+  return (
+    <div class="needs">
+      <span class="over">you still need</span>
+      {WHERE.map((where) => {
+        const mine = open.named[where] ?? 0;
+
+        return mine > 0
+          ? <span class="f" key={where}><i>{where}</i>{mine}</span>
+          : null;
+      })}
+      {open.flex > 0 && <span class="f"><i>flex</i>{open.flex}</span>}
+      {open.full && <span class="f">your lineup is full</span>}
+      <span class="over">taken so far</span>
+      {WHERE.map((where) => (
+        <span class="f" key={"gone" + where}>
+          <i>{where}</i>{gone[where] ?? 0}
+          <small>of {teams}</small>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function Clock({ state, teams }: { state: DraftNow; teams: number }) {
   const { status, clock } = state;
 
@@ -176,16 +256,26 @@ function Clock({ state, teams }: { state: DraftNow; teams: number }) {
   );
 }
 
+/** how many cards the whole board opens with, and steps by */
+const A_PAGE = 60;
+
 function FullRankings(
-  { men, gone, state, teams, posFilter, onMore }:
+  { men, gone, board, state, teams, posFilter, order, onMore }:
   {
-    men: Player[]; gone: Player[]; state: DraftNow; teams: number;
-    posFilter: string; onMore: (p: Player) => void;
+    men: Player[]; gone: Player[]; board: Player[]; state: DraftNow;
+    teams: number; posFilter: string; order: "rank" | "adp";
+    onMore: (p: Player) => void;
   },
 ) {
+  // cards by default, a page at a time, since seven hundred at once is
+  // slow and the table stays for looking a man up
+  const [how, setHow] = useState<"cards" | "table">("cards");
+  const [shown, setShown] = useState(A_PAGE);
+
   // the ones already drafted keep their place, after the men you can have
   const all = [...men, ...gone];
   const left = all.filter((p) => !state.taken.has(p.key)).length;
+  const page = all.slice(0, shown);
 
   return (
     <>
@@ -194,6 +284,51 @@ function FullRankings(
         {posFilter !== "ALL" && ", " + posFilter.toLowerCase() + " only"}
       </h2>
       <p class="hint">{left} of {all.length} still on the board</p>
+      <div class="how noprint">
+        <button
+          class={how === "cards" ? "on" : ""}
+          onClick={() => setHow("cards")}
+        >
+          cards
+        </button>
+        <button
+          class={how === "table" ? "on" : ""}
+          onClick={() => setHow("table")}
+        >
+          table
+        </button>
+      </div>
+
+      {how === "cards" && (
+        <>
+          <div class="cards">
+            {page.map((p) => (
+              <SeasonCard
+                key={p.key}
+                p={p}
+                max={seasonScale(page)}
+                teams={teams}
+                lead={order}
+                teamsInLeague={teams}
+                finish={finishRange(p, board)}
+                mine={state.mine.has(p.key)}
+                gone={state.taken.has(p.key) && !state.mine.has(p.key)}
+                {...(injuryBadge(state.hurt?.[p.key]) ?? {})}
+                onMore={() => onMore(p)}
+              />
+            ))}
+          </div>
+          {shown < all.length && (
+            <div class="row">
+              <button onClick={() => setShown((n) => n + A_PAGE)}>
+                show {Math.min(A_PAGE, all.length - shown)} more
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {how === "table" && (
       <div class="scroll">
         <table class="ranks">
           <thead>
@@ -220,6 +355,15 @@ function FullRankings(
                   <td>
                     <b>{p.name}</b>{" "}
                     <span class="pos">{p.position} &middot; {p.team ?? ""}</span>
+                    {state.hurt?.[p.key] && (
+                      <span
+                        class={"badge " +
+                          (injuryBadge(state.hurt[p.key])?.badgeHow ?? "")}
+                        title={injuryBadge(state.hurt[p.key])?.badgeTitle}
+                      >
+                        {injuryBadge(state.hurt[p.key])?.badge}
+                      </span>
+                    )}
                   </td>
                   <td class="n">{(p.game?.["ev"] ?? p.ppg)?.toFixed(1) ?? ""}</td>
                   <td class="n">{p.games?.toFixed(1) ?? ""}</td>
@@ -239,6 +383,7 @@ function FullRankings(
           </tbody>
         </table>
       </div>
+      )}
     </>
   );
 }
@@ -326,19 +471,35 @@ export function DraftView(props: Props) {
   const wanted = (p: Player) =>
     matchesFilter(p, posFilter) && (!query || p.key.includes(query));
 
-  const scored = men
-    .filter((p) => !state.taken.has(p.key))
+  const drafted = men.filter((p) => state.mine.has(p.key));
+  const open = openingsAfter(props.slots, drafted);
+  const left = men.filter((p) => !state.taken.has(p.key));
+  const needs = needScorer({
+    men: left, draft, nextTurn: upcoming[1]?.overall ?? null, open,
+  });
+
+  const scored = left
     .filter(wanted)
-    .map((p) => ({ p, score: p.vor ?? 0, drop: dropOff(p) }))
-    // our value and our order are the same thing now: what a pick at
-    // his place on the board is worth
-    .sort((a, b) => props.order === "adp"
-      ? (a.p.adp ?? 999) - (b.p.adp ?? 999)
-      : (a.p.rank ?? 9999) - (b.p.rank ?? 9999));
+    .filter((p) => !props.needOnly || stillNeeded(p.position, open))
+    .map((p) => ({ p, score: p.vor ?? 0, drop: dropOff(p), need: needs(p) }))
+    /**
+     * By the board, or by what he adds to your lineup once the slots
+     * you have left are counted. A man the need score cannot speak for,
+     * because too few at his slot are priced, keeps his place on the
+     * board rather than being dropped to the bottom of the list.
+     */
+    .sort((a, b) => {
+      if (props.byNeed && a.need && b.need) {
+        return b.need.score - a.need.score;
+      }
+
+      return props.order === "adp"
+        ? (a.p.adp ?? 999) - (b.p.adp ?? 999)
+        : (a.p.rank ?? 9999) - (b.p.rank ?? 9999);
+    });
 
   const shortlist = scored.slice(0, MOST_SHOWN);
   const max = seasonScale(shortlist.map(({ p }) => p));
-  const drafted = men.filter((p) => state.mine.has(p.key));
   const counted = drafted.reduce<Record<string, number>>((tally, p) => {
     tally[p.position] = (tally[p.position] ?? 0) + 1;
 
@@ -364,12 +525,13 @@ export function DraftView(props: Props) {
   return (
     <>
       <Clock state={state} teams={teams} />
+      <StillNeeded open={open} state={state} teams={teams} />
       <h2>
         best available for your draft roster
         {props.staleAt && " as of " + props.staleAt}
       </h2>
-      <div class="cards">
-        {shortlist.map(({ p, score, drop }, i) => (
+      <div class="cards shortlist">
+        {shortlist.map(({ p, score, drop, need }, i) => (
           <>
             {lineAfter.has(i) && (
               <div class="pickline" key={"line" + i}>
@@ -381,14 +543,22 @@ export function DraftView(props: Props) {
               p={p}
               max={max}
               teams={teams}
-              aside={{ label: "value here", value: score.toFixed(1) }}
-              tag={i < 3
-                ? "best left at " + p.position
-                : state.rosteredBy[p.key]
-                  ? "was on " + state.rosteredBy[p.key] + " last season"
-                  : drop > 8
-                    ? `waiting a turn costs ${drop.toFixed(0)} at ${p.position}`
-                    : ""}
+              lead={props.order}
+              teamsInLeague={teams}
+              finish={finishRange(p, men)}
+              {...(injuryBadge(state.hurt?.[p.key]) ?? {})}
+              aside={props.byNeed && need
+                ? { label: "to your lineup", value: need.score.toFixed(1) }
+                : { label: "value here", value: score.toFixed(1) }}
+              tag={props.byNeed && need?.fills === "bench"
+                ? `you would be benching him behind what you have`
+                : i < 3
+                  ? "best left at " + p.position
+                  : state.rosteredBy[p.key]
+                    ? "was on " + state.rosteredBy[p.key] + " last season"
+                    : drop > 8
+                      ? `waiting a turn costs ${drop.toFixed(0)} at ${p.position}`
+                      : ""}
               warn={i >= 3 && Boolean(state.rosteredBy[p.key])}
               onMore={() => props.onMore(p)}
             />
@@ -398,6 +568,8 @@ export function DraftView(props: Props) {
 
       <FullRankings
         men={scored.map(({ p }) => p)}
+        board={men}
+        order={props.order}
         gone={men.filter((p) => state.taken.has(p.key)).filter(wanted)}
         state={state}
         teams={teams}
