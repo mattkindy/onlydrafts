@@ -14,6 +14,7 @@
     "scripts/rateMyDraft.ts",
     "scripts/checkDefenceValue.ts",
     "scripts/checkKickersAndDefences.ts",
-    "scripts/checkPositionHeight.ts"
+    "scripts/checkPositionHeight.ts",
+    "scripts/checkWinShare.ts"
   ]
 }
