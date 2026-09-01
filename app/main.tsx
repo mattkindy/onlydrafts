@@ -112,6 +112,8 @@ function App() {
   const [posFilter, setPosFilter] = useState("ALL");
   const [query, setQuery] = useState("");
   const [order, setOrder] = useState<"rank" | "adp">("rank");
+  const [needOnly, setNeedOnly] = useState(false);
+  const [byNeed, setByNeed] = useState(false);
   const [manual, setManual] = useState(() => stored("manual", ""));
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -172,6 +174,21 @@ function App() {
           manual,
           nameFor: (id) => all[id]?.n ?? "",
           positionFor: (id) => all[id]?.p ?? "",
+          /**
+           * Keyed the way the board keys a man, since the page looks
+           * him up by name and not by whatever id a provider uses.
+           */
+          hurt: Object.values(all).reduce<
+            Record<string, { status: string; part?: string }>
+          >((so, man) => {
+            if (man.hurt) {
+              so[normalizeName(man.n)] = {
+                status: man.hurt, ...(man.part ? { part: man.part } : {}),
+              };
+            }
+
+            return so;
+          }, {}),
         }))
         .then(setDraft)
         .catch((e: Error) => setStatus(e.message));
@@ -340,6 +357,23 @@ function App() {
                 <option value="adp">adp</option>
               </select>
             </label>
+            {/* A filter and a sort, kept apart: one hides men you cannot
+                start, the other reorders by what they add to the lineup
+                you have left. */}
+            <label>
+              <input
+                type="checkbox" checked={needOnly}
+                onChange={(e) => setNeedOnly(e.currentTarget.checked)}
+              />{" "}
+              only what I still need
+            </label>
+            <label>
+              <input
+                type="checkbox" checked={byNeed}
+                onChange={(e) => setByNeed(e.currentTarget.checked)}
+              />{" "}
+              weight by need
+            </label>
             <label>
               find{" "}
               <input
@@ -448,6 +482,9 @@ function App() {
             posFilter={posFilter}
             query={query}
             order={order}
+            slots={active?.slots ?? null}
+            needOnly={needOnly}
+            byNeed={byNeed}
             onMore={setShowing}
           />
         )}

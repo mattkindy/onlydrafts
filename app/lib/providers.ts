@@ -91,8 +91,19 @@ const ESPN_SLOTS: Record<number, string> = {
   23: "FLEX", 7: "FLEX",
 };
 
+export interface SleeperMan {
+  n: string;
+  p: string;
+  /** what the league office says: questionable, out, ir, and the rest */
+  hurt?: string;
+  /** and where, since a hamstring and a thumb are different news */
+  part?: string;
+}
+
+export type SleeperMen = Record<string, SleeperMan>;
+
 /** Sleeper's whole player file, trimmed and kept for the day */
-let sleeperMen: Record<string, { n: string; p: string }> | null = null;
+let sleeperMen: SleeperMen | null = null;
 
 export async function sleeperPlayers() {
   if (sleeperMen) {
@@ -106,8 +117,8 @@ export async function sleeperPlayers() {
    * the draft it was watching.
    */
   const cached = stored<{
-    at: number; men: Record<string, { n: string; p: string }>;
-  } | null>("players.v3", null);
+    at: number; men: SleeperMen;
+  } | null>("players.v4", null);
 
   if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) {
     sleeperMen = cached.men;
@@ -117,16 +128,22 @@ export async function sleeperPlayers() {
 
   const raw = await ask("/players/nfl") as Record<string, {
     full_name?: string; position?: string;
+    injury_status?: string | null; injury_body_part?: string | null;
   }>;
-  const trimmed: Record<string, { n: string; p: string }> = {};
+  const trimmed: SleeperMen = {};
 
   for (const [id, p] of Object.entries(raw)) {
     if (p.full_name && p.position) {
-      trimmed[id] = { n: p.full_name, p: p.position };
+      trimmed[id] = {
+        n: p.full_name,
+        p: p.position,
+        ...(p.injury_status ? { hurt: p.injury_status } : {}),
+        ...(p.injury_body_part ? { part: p.injury_body_part } : {}),
+      };
     }
   }
 
-  keep("players.v3", { at: Date.now(), men: trimmed });
+  keep("players.v4", { at: Date.now(), men: trimmed });
   sleeperMen = trimmed;
 
   return trimmed;
