@@ -99,8 +99,8 @@ const showTable = (at: HTMLElement) => {
   button?.click();
 };
 
-/** the shortlist at the top, apart from the whole board under it */
-const shortlist = (at: HTMLElement) => at.querySelector(".shortlist")!;
+/** the board itself, apart from the cards of your own drafted men */
+const shortlist = (at: HTMLElement) => at.querySelector(".cards")!;
 
 describe("the views", () => {
   const league = aLeague();
@@ -263,34 +263,41 @@ describe("the rate and the season agree", () => {
       />,
       where,
     );
-    showTable(where);
   });
 
-  it("says the same points per game on the card and in the table", () => {
+  /**
+   * The cards and the table are the same list drawn two ways now, so
+   * only one is on screen at a time and a test that compares them has
+   * to read the card, then ask for the table.
+   */
+  const firstRow = async () => {
+    showTable(where);
+    await Promise.resolve();
+
+    return where.querySelector("table.ranks tbody tr")!;
+  };
+
+  it("says the same points per game on the card and in the table", async () => {
     // the pick leads the card now, so his rate is down among the facts
     const onCard = shortlist(where).querySelector(".facts")!.textContent!;
-    const row = where.querySelector("table.ranks tbody tr")!;
-    const inTable = row.children[2]!.textContent!;
+    const inTable = (await firstRow()).children[2]!.textContent!;
 
     expect(onCard).toContain(inTable);
   });
 
-  it("leads the card with the pick the list is ordered by", () => {
+  it("leads the card with the pick the list is ordered by", async () => {
     const big = shortlist(where).querySelector(".big")!.textContent!;
-    const first = where.querySelector("table.ranks tbody tr")!
-      .children[0]!.textContent!;
+    const first = (await firstRow()).children[0]!.textContent!;
 
     expect(big).toContain(first);
   });
 
-  it("shows expected games next to both", () => {
-    const first = men[0]!;
-    const games = first.games!.toFixed(1);
+  it("shows expected games next to both", async () => {
+    const games = men[0]!.games!.toFixed(1);
+    const onCard = shortlist(where).querySelector(".note")!.textContent!;
 
-    expect(shortlist(where).querySelector(".note")!.textContent)
-      .toContain(games);
-    expect(where.querySelector("table.ranks tbody tr")!.children[3]!.textContent)
-      .toBe(games);
+    expect(onCard).toContain(games);
+    expect((await firstRow()).children[3]!.textContent).toBe(games);
   });
 
   it("takes expected games from the simulation, not a flat season", () => {
@@ -882,16 +889,19 @@ describe("the whole board as cards", () => {
   it("opens as cards, without waiting to be asked", () => {
     const at = draw();
 
-    expect(at.querySelectorAll(".cards").length).toBeGreaterThan(1);
+    expect(at.querySelectorAll(".cards").length).toBe(1);
     expect(at.querySelector("table.ranks")).toBeNull();
   });
 
+  /**
+   * One list and not two. A shortlist of the next two dozen used to sit
+   * above this saying the same men in the same order, from when cards
+   * were the only place a man was drawn properly.
+   */
   it("draws a page of them rather than the whole file", () => {
     const at = draw();
-    const whole = Array.from(at.querySelectorAll(".cards"))
-      .find((list) => !list.classList.contains("shortlist"))!;
 
-    expect(whole.querySelectorAll(".card").length).toBe(60);
+    expect(at.querySelectorAll(".card").length).toBe(60);
     expect(at.textContent).toContain("show 60 more");
   });
 
@@ -903,10 +913,7 @@ describe("the whole board as cards", () => {
     more.click();
     await Promise.resolve();
 
-    const whole = Array.from(at.querySelectorAll(".cards"))
-      .find((list) => !list.classList.contains("shortlist"))!;
-
-    expect(whole.querySelectorAll(".card").length).toBe(120);
+    expect(at.querySelectorAll(".card").length).toBe(120);
   });
 
   it("still has the table for looking a man up", async () => {

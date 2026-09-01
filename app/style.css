@@ -321,10 +321,13 @@
     color: var(--ink); }
   /* the slots you have left, and what the room has taken, so neither
      has to be counted off the draft board in another tab */
-  .needs { display: flex; flex-wrap: wrap; align-items: baseline;
-    gap: .35rem .7rem; margin: .5rem 0 1rem; font-size: .78rem; }
+  .needs { margin: .5rem 0 1rem; font-size: .78rem; }
+  /* a row each, since the two run together when they wrap into one
+     another and neither label is findable */
+  .needs .line { display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: .35rem .5rem; margin-bottom: .4rem; }
   .needs .over { color: var(--faint); text-transform: uppercase;
-    letter-spacing: .05em; font-size: .66rem; }
+    letter-spacing: .05em; font-size: .66rem; flex: 0 0 100%; }
   .needs .f { background: var(--chip); border-radius: 999px;
     padding: .1rem .5rem; font-weight: 600; color: var(--ink);
     font-variant-numeric: tabular-nums; }
