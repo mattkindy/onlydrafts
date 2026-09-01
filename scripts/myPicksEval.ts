@@ -137,15 +137,50 @@ console.log(
   "   weeks   starts  better still there",
 );
 
-const myTurns: number[] = picks
-  .filter((k: any) => (nameOf.get(k.picked_by) ?? k.picked_by) === who)
-  .map((k: any) => k.pick_no);
+/**
+ * A keeper is nobody's decision on draft night. Everyone knew before
+ * the first pick who was kept, so they come off the board now rather
+ * than when the draft reaches their slot, and your own sit on your
+ * roster from the start. Counting them as picks had Smith-Njigba
+ * offered as the better man at pick three, when Sprg had kept him.
+ */
+const kept = picks.filter((k: any) => k.is_keeper);
 const taken = new Set<string>();
 const mine: Player[] = [];
+
+for (const k of kept) {
+  const p = manFor(k);
+
+  if (!p) {
+    continue;
+  }
+
+  taken.add(p.key);
+
+  if ((nameOf.get(k.picked_by) ?? k.picked_by) === who) {
+    mine.push(p);
+  }
+}
+
+console.log(
+  `${kept.length} kept league wide, ${mine.length} of them yours: ` +
+  `${mine.map((p) => p.name).join(", ")}\n`,
+);
+
+/** the turns where you actually chose somebody */
+const myTurns: number[] = picks
+  .filter((k: any) =>
+    !k.is_keeper && (nameOf.get(k.picked_by) ?? k.picked_by) === who)
+  .map((k: any) => k.pick_no);
 
 for (const pick of picks) {
   const p = manFor(pick);
   const owner = nameOf.get(pick.picked_by) ?? pick.picked_by;
+
+  // already off the board and already on somebody's roster
+  if (pick.is_keeper) {
+    continue;
+  }
 
   if (!p) {
     taken.add(pick.player_id);
