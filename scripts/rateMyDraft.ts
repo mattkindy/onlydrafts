@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { rescore } from "../app/lib/board.ts";
 import { normalizeName } from "../app/lib/store.ts";
 import {
-  gradesFor, keyForPick, marketBar, marketCurve, rateTeams, ratePicks,
+  barFromPicks, gradesFor, keyForPick, marketCurve, rateTeams, ratePicks,
 } from "../app/lib/draftRating.ts";
 import type { Player } from "../app/lib/scoring.ts";
 
@@ -165,7 +165,9 @@ const kept = picks
       : null;
   })
   .filter(Boolean) as { key: string; at: number }[];
-const bar = marketBar(men, 260, kept);
+/** every pick the room made, which is the bar each of them is judged against */
+const everyMade = [...took].flatMap(([, its]) => its);
+const bar = barFromPicks(everyMade, curve, 260);
 const rated = rateTeams(
   [...took].map(([owner, its]) => ({ owner, took: its })),
   league.roster_positions ?? null,

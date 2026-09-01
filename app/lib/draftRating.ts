@@ -73,65 +73,52 @@ export function worthAt(curve: number[], pick: number): number {
 }
 
 /**
- * What a pick at each place actually buys, from rooms that drafted on
- * draft position with the spread the room has shown.
+ * What a pick at each place bought in the draft in front of you.
  *
- * Reading the curve at the pick number was wrong and it charged you for
- * having an early one. At the third pick the best man left is priced
- * about third, so your ceiling is nothing and every deviation is a loss
- * on the steepest part of the curve. At the hundred and eighteenth a
- * man can fall eighty places and the gap is large and positive. Over
- * one draft that came out at minus 6.3 a pick in the first two rounds
- * and plus 5.2 in the middle ones.
+ * A simulated room drafting on draft position is a guess at how far men
+ * fall, and this room is the answer. Smoothed wide, over two rounds
+ * either side, so the trend across the slots survives and one team's
+ * choice does not become its own bar.
+ *
+ * This makes the rating relative to the room, which is what a draft
+ * grade is. The middle of the table lands near nothing by construction
+ * and the grades measure who beat the room, which is what they are read
+ * as anyway.
  */
-export function marketBar(
-  men: Player[], picks: number, kept: { key: string; at: number }[] = [],
-  draws = 200,
+export function barFromPicks(
+  made: { at: number; p: Player }[], curve: number[], picks: number,
+  smoothOver = 12,
 ): number[] {
-  const curve = marketCurve(men);
-  const gone = new Set(kept.map((k) => k.key));
-  /**
-   * Whoever was kept comes out of the pool, since nobody could draft
-   * him. Thirty three were kept in a twelve team league, so the man on
-   * the board at the third pick is nothing like the third best by draft
-   * position, and comparing him to one made every early pick a reach.
-   *
-   * Where they were kept matters as much as that they were. A keeper
-   * takes up a slot without taking anybody off the board, so by the
-   * twentieth pick the room has chosen fewer than twenty times. Leaving
-   * that out ran the pool down too fast and turned every pick in the
-   * draft into a bargain.
-   */
-  const priced = men.filter((p) => p.adp && !gone.has(p.key));
-  const keptBy = (pick: number) =>
-    kept.filter((k) => k.at <= pick).length;
-  const total = new Array(picks).fill(0) as number[];
-  let seed = 20260901;
-  const next = () => {
-    seed = (seed * 1103515245 + 12345) % 2147483648;
+  const worth = made
+    .map((m) => ({ at: m.at, is: worthOf(m.p, curve) }))
+    .sort((a, b) => a.at - b.at);
 
-    return seed / 2147483648;
-  };
+  return Array.from({ length: picks }, (_, i) => {
+    const pick = i + 1;
+    const near = worth.filter((w) =>
+      w.at >= pick - smoothOver && w.at <= pick + smoothOver);
 
-  for (let draw = 0; draw < draws; draw++) {
-    const order = priced
-      .map((p) => {
-        const early = p.adpHigh ?? p.adp!;
-        const late = p.adpLow ?? p.adp!;
-
-        return { p, at: early + next() * Math.max(0, late - early) };
-      })
-      .sort((a, b) => a.at - b.at);
-
-    for (let pick = 0; pick < picks; pick++) {
-      const chosen = pick - keptBy(pick + 1);
-      const him = chosen >= 0 ? order[chosen]?.p : undefined;
-      total[pick] = (total[pick] ?? 0) +
-        (him ? worthAt(curve, him.adp!) : 0);
+    if (near.length < 4) {
+      return worthAt(curve, pick);
     }
-  }
 
-  return total.map((n) => n / draws);
+    /**
+     * A straight line through the window rather than its average. What
+     * a pick buys falls steeply at the top, and at the third pick a
+     * window either side reaches down to the twenty seventh and has
+     * nothing above, so an average there falls far below the truth and
+     * handed the first two rounds thirteen points of surplus.
+     */
+    const meanAt = near.reduce((s, w) => s + w.at, 0) / near.length;
+    const meanIs = near.reduce((s, w) => s + w.is, 0) / near.length;
+    const top = near.reduce(
+      (s, w) => s + (w.at - meanAt) * (w.is - meanIs), 0,
+    );
+    const bottom = near.reduce((s, w) => s + (w.at - meanAt) ** 2, 0);
+    const slope = bottom ? top / bottom : 0;
+
+    return meanIs + slope * (pick - meanAt);
+  });
 }
 
 /**
