@@ -551,12 +551,25 @@ export function DraftView(props: Props) {
    * why a first kicker is worth anything or a fifth back is worth
    * something, and the whole board is scored off one baseline.
    */
+  /**
+   * Your turns still to come. Before the commissioner starts the draft
+   * there is no grid and so no turns, and with none of them the seats
+   * never get filled: every man on the board then reads a fraction of a
+   * percent and the order is noise. So a plain schedule fills in, one
+   * turn a round from the middle of the room.
+   */
+  const rounds = props.slots?.length ?? 15;
+  const turns = upcoming.length
+    ? upcoming.map((u) => u.overall)
+    : Array.from(
+      { length: rounds },
+      (_, r) => r * teams + Math.ceil(teams / 2),
+    );
+
   const worth = props.byNeed
     ? winShareFor(
       baselineFor(
-        projectedRoster(
-          drafted, props.slots, left, upcoming.map((u) => u.overall),
-        ),
+        projectedRoster(drafted, props.slots, left, turns),
         props.slots,
         WEEKS_DRAWN,
       ),

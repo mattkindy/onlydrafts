@@ -16,6 +16,7 @@
     "scripts/checkKickersAndDefences.ts",
     "scripts/checkPositionHeight.ts",
     "scripts/checkWinShare.ts",
-    "scripts/myPicksEval.ts"
+    "scripts/myPicksEval.ts",
+    "scripts/betterDraft.ts"
   ]
 }

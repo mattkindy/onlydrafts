@@ -40,6 +40,12 @@ const seasonOf = (p: Player, at: "low" | "ev" | "high"): number | null => {
  * ship.
  */
 export function finishRange(p: Player, men: Player[]): Finish | null {
+  // a man too thin to have a spread has no range to give, and reading
+  // one off his average alone says he could finish exactly where he is
+  if (!p.game?.["ev"]) {
+    return null;
+  }
+
   const mine = {
     best: seasonOf(p, "high"),
     mid: seasonOf(p, "ev"),

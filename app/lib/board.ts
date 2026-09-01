@@ -146,9 +146,19 @@ export function rescore(players: Player[], league: League): Player[] {
 
     const built = p.game?.["ev"] ?? 0;
 
-    // nothing to scale from, so there is no spread to show rather than
-    // one that disagrees with the number beside it
-    if (built <= 0) {
+    /**
+     * Nothing to scale from, so there is no spread to show rather than
+     * one that disagrees with the number beside it.
+     *
+     * A tenth of a point counts as nothing here. The spread is moved by
+     * the ratio of what he scores to what the file had, and off a
+     * number that small the ratio runs away: Travis Homer is a tenth a
+     * game in the file and 1.2 in a league paying for catches, so his
+     * spread was multiplied by twelve and the card gave a man with two
+     * carries a sixty seven point week and a chance of finishing second
+     * among all backs.
+     */
+    if (built <= 0.5) {
       p.game = null;
       p.sim = p.sim ? { ev: 0, q1: 0, mid: 0, q3: 0, low: 0, high: 0, games: p.sim.games } : null;
       continue;
