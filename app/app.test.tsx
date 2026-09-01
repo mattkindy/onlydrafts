@@ -972,3 +972,43 @@ describe("a slot you cannot leave empty", () => {
     expect(card.textContent).not.toContain("over the wire");
   });
 });
+
+/**
+ * The board ships a few men at a tenth of a point a game, and the
+ * spread on the card is moved by the ratio of what he scores here to
+ * what the file had. Off a tenth that ratio runs away: Travis Homer
+ * came out with a sixty seven point week, a season low of minus a
+ * hundred and fifty six, and a claim on finishing second among backs.
+ */
+describe("a man too thin to have a spread", () => {
+  const league = aLeague();
+  const men = boardFor(league);
+
+  it("is given no spread rather than an enormous one", () => {
+    const thin = men.filter((p) => (p.ppg ?? 0) > 0 && (p.ppg ?? 0) < 3);
+
+    expect(thin.length).toBeGreaterThan(0);
+
+    /**
+     * The shape of a spread survives the scaling, since every figure
+     * moves by the same ratio, so this is the file's own opinion of how
+     * a man varies. Fifteen passes the widest we ship, which is a
+     * fringe receiver at fourteen, and catches Homer at fifty six.
+     */
+    for (const p of men) {
+      if (!p.game?.["ev"]) {
+        continue;
+      }
+
+      expect(p.game["high"]! / p.game["ev"]!, p.name).toBeLessThan(15);
+    }
+  });
+
+  it("never claims a season worth minus a hundred points", () => {
+    for (const p of men) {
+      if (p.sim) {
+        expect(p.sim["low"]!, p.name).toBeGreaterThan(-100);
+      }
+    }
+  });
+});
