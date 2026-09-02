@@ -575,20 +575,17 @@ function espnOrder(said: {
   return order;
 }
 
-async function espnLeagues(leagueId: string, season: number): Promise<League[]> {
-  const said = await espnAnswer(leagueId, season);
+export interface EspnScoringItem {
+  statId: number;
+  points?: number;
+  pointsOverrides?: Record<string, number>;
+}
 
-  if (!said?.teams) {
-    throw new Error("ESPN has no league with that id for this season.");
-  }
-
-  const settings = said.settings ?? {};
+/** a league's scoring, in the board's categories */
+export function espnPays(items: EspnScoringItem[]): Pays {
   const worth = new Map<number, number>();
 
-  for (const item of (settings.scoringSettings?.scoringItems ?? []) as {
-    statId: number; points?: number;
-    pointsOverrides?: Record<string, number>;
-  }[]) {
+  for (const item of items) {
     worth.set(item.statId, espnWorthOf(item));
   }
 
@@ -610,15 +607,26 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     ids.some((id) => worth.has(id)));
 
   for (const [category, ids] of ESPN_PTS_ALLOWED) {
-    const said = ids.map((id) => worth.get(id)).filter((v) => v !== undefined);
+    const said = ids.map((id) => worth.get(id) ?? (laddered ? 0 : undefined))
+      .filter((v) => v !== undefined);
 
     if (said.length) {
       pays[category] = said.reduce((a, b) => a + b, 0) / said.length;
-    } else if (laddered) {
-      pays[category] = 0;
     }
   }
 
+  return pays;
+}
+
+async function espnLeagues(leagueId: string, season: number): Promise<League[]> {
+  const said = await espnAnswer(leagueId, season);
+
+  if (!said?.teams) {
+    throw new Error("ESPN has no league with that id for this season.");
+  }
+
+  const settings = said.settings ?? {};
+  const pays = espnPays(settings.scoringSettings?.scoringItems ?? []);
   const slots: string[] = [];
 
   for (const [slot, howMany] of Object.entries<number>(
