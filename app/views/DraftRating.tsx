@@ -63,11 +63,19 @@ export function DraftRating(props: Props) {
   const drafted = new Map<string, Took[]>();
   const kept: Took[] = [];
   const took: Took[] = [];
+  /**
+   * The picks the board has no man for, so a reader knows a team was
+   * rated on fewer picks than it made. Left silent, a side that took a
+   * man the board spells differently was rated as if it had skipped
+   * the turn.
+   */
+  const unmatched: Pick[] = [];
 
   for (const pick of props.made) {
     const p = byKey.get(keyForPick(pick, normalizeName));
 
     if (!p) {
+      unmatched.push(pick);
       continue;
     }
 
@@ -162,6 +170,18 @@ export function DraftRating(props: Props) {
           ))}
         </tbody>
       </table>
+
+      {unmatched.length > 0 && (
+        <div class="empty">
+          <b>{unmatched.length} {unmatched.length === 1 ? "pick" : "picks"}</b>
+          {" "}the board has no man for, so {unmatched.length === 1
+            ? "that team is"
+            : "those teams are"} rated on the rest:{" "}
+          {unmatched.map((pick) =>
+            `${pick.name} (${pick.position}, ${pick.who}, ${asRound(pick.overall, league.size)})`)
+            .join(", ")}.
+        </div>
+      )}
 
       {picks.length > 0 && (
         <>

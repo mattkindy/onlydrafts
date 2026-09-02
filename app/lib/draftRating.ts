@@ -341,6 +341,25 @@ export function gradesFor(rated: TeamRating[]): Map<string, string> {
 const SAME_SIDE: Record<string, string> = { LAR: "LA" };
 
 /**
+ * Men the providers spell differently from the board, normalized
+ * spelling to the board's key. The board goes by the league's roster
+ * name, so Joshua Palmer is joshpalmer there while ESPN and Sleeper
+ * both write him out in full, and Marquise Brown goes by Hollywood on
+ * ESPN. Found by matching one league's picks against the board.
+ */
+const SAME_MAN: Record<string, string> = {
+  joshuapalmer: "joshpalmer",
+  hollywoodbrown: "marquisebrown",
+  drewogletree: "andrewogletree",
+  matthibner: "matthewhibner",
+  mitchtinsley: "mitchelltinsley",
+  scottymiller: "scottmiller",
+  zonovanknight: "bamknight",
+  deamontetrayanum: "chiptrayanum",
+  joshuapitsenberger: "joshpitsenberger",
+};
+
+/**
  * The board's key for a man a provider named. A defence comes back as
  * "Los Angeles Rams" where the board has it as the three letters the
  * league writes on a scoreboard, so it is looked up by its team.
@@ -350,7 +369,9 @@ export function keyForPick(
   normalize: (s: string) => string,
 ): string {
   if (pick.position !== "DEF" || !pick.team) {
-    return normalize(pick.name);
+    const key = normalize(pick.name);
+
+    return SAME_MAN[key] ?? key;
   }
 
   return normalize(SAME_SIDE[pick.team.toUpperCase()] ?? pick.team);
