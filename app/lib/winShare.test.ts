@@ -9,7 +9,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  baselineFor, projectedRoster, weeksOf, winChance, winShareFor,
+  baselineFor, projectedRoster, takeNowFor, weeksOf, winChance,
+  winShareFor,
 } from "./winShare.ts";
 import type { Player } from "./scoring.ts";
 
@@ -231,5 +232,71 @@ describe("against the side you would have finished with", () => {
     // version reads nought for the best player in the draft
     expect(onNothing(him).added).toBe(0);
     expect(onProjected(him).added).toBeGreaterThan(0);
+  });
+});
+
+describe("taking a man now, with the rest of the draft filled around him", () => {
+  const board = [
+    aMan("elite", "RB", 22), aMan("good", "RB", 16), aMan("okay", "RB", 12),
+    aMan("thin", "RB", 8), aMan("wr1", "WR", 20), aMan("wr2", "WR", 15),
+    aMan("wr3", "WR", 12), aMan("wr4", "WR", 10), aMan("wr5", "WR", 9),
+    aMan("qb1", "QB", 22), aMan("qb2", "QB", 18), aMan("te1", "TE", 13),
+    aMan("te2", "TE", 10), aMan("k1", "K", 9.4), aMan("k2", "K", 9.2),
+    aMan("d1", "DEF", 8.5), aMan("d2", "DEF", 8.2),
+  ].map((p, i) => ({ ...p, adp: i + 1, vor: 200 - i * 10 })) as Player[];
+  const turns = [1, 5, 9, 13, 16];
+  const him = (name: string) => board.find((p) => p.name === name)!;
+
+  /**
+   * The old way assumed the best man left at every empty seat and then
+   * measured him against a roster he was already on, so he read nought
+   * and the second best at his position beat him.
+   */
+  it("does not read nought for the man the projection assumed", () => {
+    const assumed = projectedRoster([], SLOTS, board, turns);
+    const worth = takeNowFor([], SLOTS, board, turns, anOpponent(DRAWN), DRAWN);
+
+    expect(assumed).toContain(him("elite"));
+    expect(worth(him("elite")).added).toBeGreaterThan(0);
+    expect(worth(him("elite")).added).toBeGreaterThan(worth(him("good")).added);
+    expect(worth(him("qb1")).added).toBeGreaterThan(worth(him("qb2")).added);
+  });
+
+  it("pays nothing now for a man a later turn would get anyway", () => {
+    const assumed = projectedRoster([], SLOTS, board, turns.slice(1));
+    const worth = takeNowFor([], SLOTS, board, turns, anOpponent(DRAWN), DRAWN);
+
+    expect(assumed).toContain(him("d1"));
+    expect(worth(him("d1")).added).toBe(0);
+  });
+
+  /**
+   * With a quarterback on the roster a second one covers only the weeks
+   * the first sits, so he is worth far less than the first was.
+   */
+  it("pays a second quarterback less than the first", () => {
+    const first = takeNowFor([], SLOTS, board, turns, anOpponent(DRAWN), DRAWN);
+    const second = takeNowFor(
+      [him("qb1")], SLOTS, board.filter((p) => p.name !== "qb1"),
+      turns.slice(1), anOpponent(DRAWN), DRAWN,
+    );
+
+    expect(second(him("qb2")).added).toBeLessThan(first(him("qb1")).added / 2);
+  });
+
+  it("agrees with drawing the whole roster again with him on it", () => {
+    const opponent = anOpponent(DRAWN);
+    const worth = takeNowFor([], SLOTS, board, turns, opponent, DRAWN);
+    const passed = winChance(
+      baselineFor(projectedRoster([], SLOTS, board, turns.slice(1)), SLOTS, DRAWN).total,
+      opponent,
+    );
+
+    for (const p of board) {
+      const roster = projectedRoster([p], SLOTS, board, turns.slice(1));
+      const drawn = winChance(baselineFor(roster, SLOTS, DRAWN).total, opponent);
+
+      expect(worth(p).added).toBeCloseTo(drawn - passed, 10);
+    }
   });
 });

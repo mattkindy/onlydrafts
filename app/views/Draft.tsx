@@ -12,9 +12,7 @@ import type { Player } from "../lib/scoring.ts";
 import { asRound, expectedBestAt, type Draft as DraftPicks } from "../lib/picks.ts";
 import { openingsAfter, stillNeeded, type Openings } from "../lib/need.ts";
 import { finishRange } from "../lib/finish.ts";
-import {
-  baselineFor, projectedRoster, typicalWeek, winShareFor, type WinShare,
-} from "../lib/winShare.ts";
+import { takeNowFor, typicalWeek, type WinShare } from "../lib/winShare.ts";
 import { STREAMED } from "../lib/replacementPool.ts";
 import { SeasonCard, seasonScale } from "./Card.tsx";
 
@@ -265,13 +263,13 @@ const A_PAGE = 60;
 
 /**
  * How many weeks to draw when the board is scored by what a man adds to
- * your wins. Two thousand takes about a fifth of a second on a laptop
- * for seven hundred men and the draft board redraws every ten seconds,
- * so this trades a little resolution for a page that keeps up. The
- * difference it reads is paired, both sides drawing the same weeks, so
- * it is steadier than the count on its own suggests.
+ * your wins. A dozen rosters are drawn for the whole board and this
+ * many weeks takes under a tenth of a second on a laptop, so the page
+ * keeps up with a draft that redraws every ten seconds. The difference
+ * it reads is paired, both sides drawing the same weeks, so it is
+ * steadier than the count on its own suggests.
  */
-const WEEKS_DRAWN = 1200;
+const WEEKS_DRAWN = 2000;
 
 interface Scored {
   p: Player;
@@ -545,10 +543,10 @@ export function DraftView(props: Props) {
   const open = openingsAfter(props.slots, drafted);
   const left = men.filter((p) => !state.taken.has(p.key));
   /**
-   * What he would add to how often you win a week, drawn against the
-   * roster you have. It replaces a points measure that could not say
-   * why a first kicker is worth anything or a fifth back is worth
-   * something, and the whole board is scored off one baseline.
+   * What taking him now would add to how often you win a week, with the
+   * rest of your draft filled in around him. It replaces a points
+   * measure that could not say why a first kicker is worth anything or
+   * a fifth back is worth something.
    */
   /**
    * Your turns still to come. Before the commissioner starts the draft
@@ -566,14 +564,9 @@ export function DraftView(props: Props) {
     );
 
   const worth = props.order === "war"
-    ? winShareFor(
-      baselineFor(
-        projectedRoster(drafted, props.slots, left, turns),
-        props.slots,
-        WEEKS_DRAWN,
-      ),
-      typicalWeek(men, props.slots, teams, WEEKS_DRAWN),
-      WEEKS_DRAWN,
+    ? takeNowFor(
+      drafted, props.slots, left, turns,
+      typicalWeek(men, props.slots, teams, WEEKS_DRAWN), WEEKS_DRAWN,
     )
     : null;
 
