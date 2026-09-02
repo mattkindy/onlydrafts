@@ -12,9 +12,16 @@
  * return nobody has announced. It is a floor rather than a forecast.
  */
 
-/** the words that mean he is gone for a while rather than a week */
+/**
+ * The words that mean he is gone for a while rather than a week.
+ *
+ * NA is not one of them, whatever it looks like. It means no
+ * designation, and the men carrying it are Peyton Hillis, Derek Carr
+ * and Adam Thielen: retired, or a stale note nobody cleared. Reading it
+ * as not active docked six games from anybody with an old flag on him.
+ */
 export const OUT_FOR_A_WHILE = new Set([
-  "IR", "NA", "PUP", "Sus", "DNR", "COV", "Out",
+  "IR", "PUP", "Sus", "DNR", "COV", "Out",
 ]);
 
 /** and how many games that costs him */
