@@ -274,6 +274,8 @@ export interface PickRating {
   fell: number | null;
   /** what he is worth against what the slot should have bought */
   over: number;
+  /** whether you kept him rather than drafting him */
+  kept: boolean;
 }
 
 /** each pick of one draft, against where the room had the man */
@@ -290,6 +292,7 @@ export function ratePicks(
     adp: p.adp ?? null,
     fell: p.adp === null || p.adp === undefined ? null : at - p.adp,
     over: worthOf(p, curve) - buys(at, Boolean(kept)),
+    kept: Boolean(kept),
   }));
 }
 

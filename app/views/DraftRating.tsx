@@ -3,7 +3,8 @@
 import type { Player } from "../lib/scoring.ts";
 import type { League } from "../lib/providers.ts";
 import {
-  gradesFor, keyForPick, marketCurve, ratePicks, rateTeams, type TeamRating,
+  barFromPicks, gradesFor, keyForPick, marketCurve, ratePicks, rateTeams,
+  worthAt, type TeamRating,
 } from "../lib/draftRating.ts";
 import { asRound } from "../lib/picks.ts";
 import { normalizeName } from "../lib/store.ts";
@@ -58,38 +59,65 @@ export function DraftRating(props: Props) {
    * rosters are the fallback for a league whose provider cannot say
    * what happened pick by pick.
    */
-  const drafted = new Map<string, { at: number; p: Player }[]>();
+  type Took = { at: number; p: Player; kept: boolean };
+  const drafted = new Map<string, Took[]>();
+  const kept: Took[] = [];
+  const took: Took[] = [];
 
   for (const pick of props.made) {
-    if (pick.keeper) {
+    const p = byKey.get(keyForPick(pick, normalizeName));
+
+    if (!p) {
       continue;
     }
 
-    const p = byKey.get(keyForPick(pick, normalizeName));
-
-    if (p) {
-      drafted.set(pick.who, [
-        ...(drafted.get(pick.who) ?? []), { at: pick.overall, p },
-      ]);
-    }
+    const one = { at: pick.overall, p, kept: pick.keeper };
+    drafted.set(pick.who, [...(drafted.get(pick.who) ?? []), one]);
+    (pick.keeper ? kept : took).push(one);
   }
 
+  /**
+   * Two bars, because keeping a man costs the pick he is kept at and he
+   * is nearly always cheaper than one drafted there. Against a single
+   * bar, keeping looked good for everybody and drafting looked bad for
+   * nine sides out of twelve.
+   */
+  const lastPick = props.made.length
+    ? Math.max(...props.made.map((m) => m.overall))
+    : league.size * (league.slots?.length ?? 15);
+  const keptBar = barFromPicks(kept, curve, lastPick);
+  const tookBar = barFromPicks(took, curve, lastPick);
+  const buysAt = (pick: number, wasKept: boolean) => {
+    const bar = wasKept ? keptBar : tookBar;
+
+    if (bar.length === 0) {
+      return worthAt(curve, pick);
+    }
+
+    return bar[Math.max(0, Math.min(bar.length - 1, Math.round(pick) - 1))]!;
+  };
+
   const teams = drafted.size > 0
-    ? [...drafted.entries()].map(([owner, took]) => ({ owner, took }))
+    ? [...drafted.entries()].map(([owner, men]) => ({ owner, took: men }))
     : league.allRosters.map((r) => ({
         owner: r.owner,
         took: r.keys
-          .map((m, i) => ({ at: r.picks[i] ?? 999, p: byKey.get(m.key) }))
-          .filter((x): x is { at: number; p: Player } => Boolean(x.p)),
+          .map((m, i) => ({ at: r.picks[i] ?? 999, p: byKey.get(m.key), kept: false }))
+          .filter((x): x is Took => Boolean(x.p)),
       }));
-  const rated = rateTeams(teams, league.slots, curve);
+  const rated = rateTeams(teams, league.slots, curve, buysAt);
   const grades = gradesFor(rated);
 
   const mine = props.made
-    .filter((pick) => pick.mine && !pick.keeper)
-    .map((pick) => ({ at: pick.overall, p: byKey.get(keyForPick(pick, normalizeName)) }))
-    .filter((x): x is { at: number; p: Player } => Boolean(x.p));
-  const picks = ratePicks(mine, curve);
+    .filter((pick) => pick.mine)
+    .map((pick) => ({
+      at: pick.overall,
+      p: byKey.get(keyForPick(pick, normalizeName)),
+      kept: pick.keeper,
+    }))
+    .filter((x): x is Took => Boolean(x.p))
+    .sort((a, b) => a.at - b.at);
+  const picks = ratePicks(mine, curve, buysAt);
 
   if (rated.length === 0) {
     return (
@@ -107,8 +135,11 @@ export function DraftRating(props: Props) {
         picks were worth. A team picking third should come away with more than
         one picking tenth, so only beating your own slots counts.
         {drafted.size > 0
-          ? " Only the men who were drafted count, so a free agent taken the moment the draft ended is nobody's pick."
+          ? " Only the men who were picked count, so a free agent taken the moment the draft ended is nobody's pick."
           : " Read off the rosters, since this league cannot say what happened pick by pick."}
+        {kept.length > 0 && " Keepers count too, against what the rest of the" +
+          " league kept at that pick rather than what it drafted there," +
+          " since a man kept is nearly always cheaper than one drafted."}
       </div>
 
       <table class="rating">
@@ -145,7 +176,10 @@ export function DraftRating(props: Props) {
             <tbody>
               {picks.map((pick) => (
                 <tr key={pick.at}>
-                  <td>{asRound(pick.at, league.size)}</td>
+                  <td>
+                    {asRound(pick.at, league.size)}
+                    {pick.kept ? <i class="kept"> kept</i> : ""}
+                  </td>
                   <td>{pick.p.name} <i>{pick.p.position}</i></td>
                   <td>
                     {pick.adp === null
