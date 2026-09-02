@@ -262,7 +262,7 @@ function App() {
     <div class="wrap">
       <nav>
         <span class="brand" onClick={() => setView("leagues")}>
-          depth<b>chart</b>
+          only<b>drafts</b>
         </span>
         {active && view !== "leagues" && (
           <span id="crumb">
