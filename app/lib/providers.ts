@@ -116,28 +116,48 @@ const ESPN_STATS: Record<number, string[]> = {
   // and the board counts them all as the same thing
   101: ["def_td"], 93: ["def_td"], 102: ["def_td"], 103: ["def_td"],
   104: ["def_td"],
-  89: ["pts_allow_0"], 90: ["pts_allow_1_6"], 91: ["pts_allow_7_13"],
-  122: ["pts_allow_21_27"], 123: ["pts_allow_28_34"],
 };
 
 /**
- * What ESPN pays for holding a side to a score when nobody has said
- * otherwise. It leaves out any item still sitting at its own default,
- * and without these the board would reach for a ladder built to
- * Sleeper's numbers and hand every defence points it never earned.
+ * What one line of ESPN's scoring is actually worth.
+ *
+ * The same play can pay different men differently, a quarterback and a
+ * defence for one interception being the case that matters, so ESPN
+ * puts a price per position beside the plain one and leaves the plain
+ * one at nought. Reading only the plain one made every sack, pick and
+ * shutout in the league look free. 16 is its number for a defence.
  */
-const ESPN_PTS_ALLOWED: Record<number, number> = {
-  89: 5, 90: 4, 91: 3, 92: 1, 121: 0, 122: -1, 123: -3, 124: -5, 125: -6,
-};
+export function espnWorthOf(item: {
+  points?: number; pointsOverrides?: Record<string, number>;
+}): number {
+  const perPosition = item.pointsOverrides ?? {};
+  const forDefence = perPosition["16"];
+
+  if (forDefence !== undefined) {
+    return forDefence;
+  }
+
+  const only = Object.values(perPosition);
+
+  return only.length === 1 ? only[0]! : item.points ?? 0;
+}
 
 /**
- * The two sites cut the middle and the top of that ladder in different
- * places, so where two of ESPN's steps cover one of the board's the
- * price is split between them.
+ * What a defence gets for holding a side to a score.
+ *
+ * ESPN steps at nought, 1-6, 7-13, 14-17, 18-21, 22-27, 28-34, 35-45
+ * and 46 up. The board steps in different places, so where two of
+ * ESPN's cover one of ours the two prices are averaged. Anything ESPN
+ * leaves out of the list is worth nothing, which is why it is missing.
  */
-const ESPN_STRADDLES: [number, number, string][] = [
-  [92, 121, "pts_allow_14_20"],
-  [124, 125, "pts_allow_35p"],
+const ESPN_PTS_ALLOWED: [string, number[]][] = [
+  ["pts_allow_0", [89]],
+  ["pts_allow_1_6", [90]],
+  ["pts_allow_7_13", [91]],
+  ["pts_allow_14_20", [92, 121]],
+  ["pts_allow_21_27", [122]],
+  ["pts_allow_28_34", [123]],
+  ["pts_allow_35p", [124, 125]],
 ];
 
 /** and what it calls the slots a lineup is made of */
@@ -552,19 +572,11 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
   const settings = said.settings ?? {};
   const worth = new Map<number, number>();
 
-  for (const item of (settings.scoringSettings?.scoringItems ?? []) as
-    { statId: number; points?: number }[]) {
-    worth.set(item.statId, item.points ?? 0);
-  }
-
-  // only for a league that prices the ladder at all, so one that pays a
-  // defence nothing for a score is left paying nothing
-  if (Object.keys(ESPN_PTS_ALLOWED).some((id) => worth.has(Number(id)))) {
-    for (const [id, fallback] of Object.entries(ESPN_PTS_ALLOWED)) {
-      if (!worth.has(Number(id))) {
-        worth.set(Number(id), fallback);
-      }
-    }
+  for (const item of (settings.scoringSettings?.scoringItems ?? []) as {
+    statId: number; points?: number;
+    pointsOverrides?: Record<string, number>;
+  }[]) {
+    worth.set(item.statId, espnWorthOf(item));
   }
 
   const pays: Pays = {};
@@ -579,12 +591,18 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     }
   }
 
-  for (const [low, high, category] of ESPN_STRADDLES) {
-    const under = worth.get(low);
-    const over = worth.get(high);
+  // a league that prices the ladder at all prices the whole of it, so
+  // the steps ESPN left out are worth nothing rather than left unsaid
+  const laddered = ESPN_PTS_ALLOWED.some(([, ids]) =>
+    ids.some((id) => worth.has(id)));
 
-    if (under !== undefined && over !== undefined) {
-      pays[category] = (under + over) / 2;
+  for (const [category, ids] of ESPN_PTS_ALLOWED) {
+    const said = ids.map((id) => worth.get(id)).filter((v) => v !== undefined);
+
+    if (said.length) {
+      pays[category] = said.reduce((a, b) => a + b, 0) / said.length;
+    } else if (laddered) {
+      pays[category] = 0;
     }
   }
 
