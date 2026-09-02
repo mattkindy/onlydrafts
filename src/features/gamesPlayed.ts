@@ -72,6 +72,9 @@ export function availabilityRow(r: AvailabilityRow): number[] {
     r.position === "TE" ? 1 : 0,
     r.touchesPerGame / 20,
     r.position === "RB" ? r.touchesPerGame / 20 : 0,
+    // a quarterback's dropbacks run to thirty odd a game where a back's
+    // carries run to twenty, so what the number means to him is his own
+    r.position === "QB" ? r.touchesPerGame / 20 : 0,
     ((r.weightPounds ?? 210) - 210) / 40,
     r.weeksOut / ROOM,
     r.weeksListed / ROOM,
