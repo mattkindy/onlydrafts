@@ -1,9 +1,10 @@
 /**
- * The draft as it stands right now.
+ * The draft as it is right now.
  *
- * Sleeper answers with the picks made so far; ESPN keeps its draft
- * behind a view we cannot reach, so a league there is watched by hand
- * through the marks and the typed names.
+ * Sleeper and ESPN both give back the picks made so far, in their own
+ * shapes, and each provider turns its own into the one shape used here.
+ * Anything typed in by hand is added on top, for a league neither site
+ * is running.
  */
 
 import { normalizeName, keep } from "./store.ts";
@@ -99,7 +100,7 @@ export async function draftNow(options: Options): Promise<DraftNow> {
   for (const pick of picks as (typeof picks[number] & {
     round: number; draft_slot: number; metadata?: { position?: string };
   })[]) {
-    const name = options.nameFor(pick.player_id);
+    const name = pick.name || options.nameFor(pick.player_id);
 
     if (!name) {
       continue;
@@ -122,7 +123,8 @@ export async function draftNow(options: Options): Promise<DraftNow> {
       round: pick.round,
       slot: pick.draft_slot,
       name,
-      position: pick.metadata?.position ?? options.positionFor(pick.player_id),
+      position: pick.position ?? pick.metadata?.position ??
+        options.positionFor(pick.player_id),
       who,
       mine,
       keeper: Boolean(pick.is_keeper),
@@ -139,7 +141,7 @@ export async function draftNow(options: Options): Promise<DraftNow> {
   for (const pick of picks as (typeof picks[number] & {
     round: number; draft_slot: number;
   })[]) {
-    const name = options.nameFor(pick.player_id);
+    const name = pick.name || options.nameFor(pick.player_id);
     cells[pick.round + "|" + pick.draft_slot] =
       name ? name.split(" ").at(-1)! : "?";
   }

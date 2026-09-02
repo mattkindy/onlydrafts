@@ -43,6 +43,7 @@ function aLeague(named = "Mildred League XIV", team = "mattkindy"): League {
   return {
     provider: "sleeper",
     leagueId: "1315886179668729856",
+    season: 2026,
     name: named,
     size: 12,
     pays: STANDARD,
