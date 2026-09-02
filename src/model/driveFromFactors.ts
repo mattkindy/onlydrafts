@@ -118,7 +118,7 @@ const IN_RANGE = 45;
  * player eval prints kick against punt against go by where the ball is,
  * which is how the decision model was cleared of the extra kicking.
  */
-let chose: ((yardline: number, choice: string) => void) | undefined;
+let chose: ((yardline: number, choice: string, toGo: number) => void) | undefined;
 
 /** how far a drive got, and whether it scored, for a check */
 export const reached: { best: number; td: boolean }[] = [];
@@ -126,6 +126,10 @@ export const reached: { best: number; td: boolean }[] = [];
 export const gainedAt = new Map<string, { n: number; yards: number }>();
 /** how often the sampled draw gives up, by where the ball is */
 export const gaveUpAt = new Map<string, { n: number; pooled: number }>();
+/** the fourth downs it went for, by the distance, and how many it made */
+export const wentFor = new Map<string, { n: number; made: number }>();
+/** how gains on an early down and long are spread, by the call */
+export const spread = new Map<string, number>();
 export let watchReach = false;
 export const watchHowFar = () => { watchReach = true; };
 
@@ -258,7 +262,7 @@ export function walkDrive(
     if (state.down === 4) {
       facedAt.push(state.yardline);
       const choice = fourth.choose(state, uniform);
-      chose?.(state.yardline, choice);
+      chose?.(state.yardline, choice, state.toGo);
 
       /**
        * Whether the staff actually sends him out. In the cold they go
@@ -418,10 +422,34 @@ export function walkDrive(
       const y = state.yardline;
       const b = y <= 10 ? "inside 10" : y <= 20 ? "11-20" : y <= 30 ? "21-30"
         : y <= 50 ? "31-50" : y <= 70 ? "51-70" : "past 70";
-      const seen = gainedAt.get(b) ?? { n: 0, yards: 0 };
-      seen.n++;
-      seen.yards += gained;
-      gainedAt.set(b, seen);
+      // counted whole, and again by the call and by which path drew
+      // it, since a band that is short can be short on one call alone
+      for (const key of [b, `${b}|${call}`, `${b}|${call}|${own ? "own" : "pool"}`]) {
+        const seen = gainedAt.get(key) ?? { n: 0, yards: 0 };
+        seen.n++;
+        seen.yards += gained;
+        gainedAt.set(key, seen);
+      }
+
+      const early = state.down <= 2 && state.toGo >= 7 && y > 20;
+      if (early) {
+        const g = gained < 0 ? "loss" : gained === 0 ? "none" : gained <= 3 ? "1-3"
+          : gained <= 9 ? "4-9" : gained <= 19 ? "10-19" : "20+";
+        const seen = spread.get(`${call}|${g}`) ?? 0;
+        spread.set(`${call}|${g}`, seen + 1);
+      }
+
+      if (state.down >= 3) {
+        const t = state.toGo;
+        const d = t <= 1 ? "1" : t <= 2 ? "2" : t <= 3 ? "3" : t <= 5 ? "4-5"
+          : t <= 8 ? "6-8" : "9+";
+        for (const key of [`${state.down}|${d}`, `${state.down}|${d}|${call}`]) {
+          const went = wentFor.get(key) ?? { n: 0, made: 0 };
+          went.n++;
+          if (gained >= t) went.made++;
+          wentFor.set(key, went);
+        }
+      }
     }
 
     plays.push({ state: { ...state }, call, player, yards: gained, scored, caught });

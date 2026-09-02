@@ -32,7 +32,7 @@ import { weatherLift } from "../src/features/weatherLift.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { playGame, linesFrom } from "../src/model/gameFromDrives.js";
 import {
-  gainedAt, gaveUpAt, reached, watchFourths, watchHowFar,
+  gainedAt, gaveUpAt, reached, spread, watchFourths, watchHowFar, wentFor,
 } from "../src/model/driveFromFactors.js";
 import { myShare } from "../src/sim/acrossCores.js";
 import { buildWorld } from "../src/features/playedWorld.js";
@@ -120,14 +120,18 @@ async function main(): Promise<void> {
     const band = (y: number) =>
       y <= 20 ? "inside 20" : y <= 30 ? "21-30" : y <= 40 ? "31-40"
         : y <= 50 ? "41-50" : "past 50";
-    watchFourths((yardline: number, choice: string) => {
-      const b = band(yardline);
-      const seen = fourthsAt.get(b) ?? { n: 0, kick: 0, punt: 0, go: 0 };
-      seen.n++;
-      if (choice === "kick") seen.kick++;
-      else if (choice === "punt") seen.punt++;
-      else seen.go++;
-      fourthsAt.set(b, seen);
+    const distance = (t: number) =>
+      t <= 1 ? "1" : t <= 2 ? "2" : t <= 3 ? "3" : t <= 5 ? "4-5"
+        : t <= 8 ? "6-8" : "9+";
+    watchFourths((yardline: number, choice: string, toGo: number) => {
+      for (const b of [band(yardline), `to go ${distance(toGo)}`]) {
+        const seen = fourthsAt.get(b) ?? { n: 0, kick: 0, punt: 0, go: 0 };
+        seen.n++;
+        if (choice === "kick") seen.kick++;
+        else if (choice === "punt") seen.punt++;
+        else seen.go++;
+        fourthsAt.set(b, seen);
+      }
     });
   }
 
@@ -682,12 +686,14 @@ async function main(): Promise<void> {
           .join(" ") + `\n  really:        ` +
         `1:5% 2:3% 3:25% 4:9% 5:9% 6:10% 7:8% 8:7% 9:6% 10:5% 11:4% 12:8%`,
       );
+      // what sides chose in 2025, which goes for it more than the
+      // seasons before it did
       const truth: Record<string, string> = {
-        "inside 20": "kick 69% punt 0% go 31%",
-        "21-30": "kick 73% punt 0% go 27%",
-        "31-40": "kick 54% punt 9% go 36%",
-        "41-50": "kick 3% punt 64% go 33%",
-        "past 50": "kick 0% punt 88% go 12%",
+        "inside 20": "kick 65% punt 0% go 35%",
+        "21-30": "kick 75% punt 0% go 25%",
+        "31-40": "kick 57% punt 8% go 35%",
+        "41-50": "kick 4% punt 60% go 36%",
+        "past 50": "kick 0% punt 87% go 13%",
       };
       if (reached.length) {
         const truth: Record<number, [number, number]> = {
@@ -724,6 +730,52 @@ async function main(): Promise<void> {
             `(really ${truth[b]!.toFixed(2)})`,
           );
         }
+
+        /**
+         * The same by the call, and by which path drew it, against
+         * the 2025 plays. A band can be right whole and wrong on both
+         * calls, and the pooled path gains far less than a man's own.
+         */
+        const byCall: Record<string, [number, number, number]> = {
+          "inside 10": [1.85, 1.76, 48.1], "11-20": [3.87, 4.25, 54.1],
+          "21-30": [4.48, 5.76, 55.0], "31-50": [4.81, 6.49, 57.0],
+          "51-70": [4.95, 6.68, 59.3], "past 70": [5.00, 6.82, 58.8],
+        };
+        console.error("  and by the call: run, pass, pass share, then the pass by path");
+
+        for (const b of ["inside 10", "11-20", "21-30", "31-50", "51-70", "past 70"]) {
+          const run = gainedAt.get(`${b}|run`);
+          const pass = gainedAt.get(`${b}|pass`);
+          if (!run || !pass) continue;
+          const mean = (v?: { n: number; yards: number }) =>
+            v ? (v.yards / v.n).toFixed(2) : "-";
+          const [r, p, share] = byCall[b]!;
+          const own = gainedAt.get(`${b}|pass|own`);
+          const pool = gainedAt.get(`${b}|pass|pool`);
+          console.error(
+            `    ${b.padEnd(10)} run ${mean(run)} (${r.toFixed(2)})  ` +
+            `pass ${mean(pass)} (${p.toFixed(2)})  ` +
+            `passes ${(100 * pass.n / (pass.n + run.n)).toFixed(1)}% (${share}%)  ` +
+            `own ${mean(own)} x${own?.n ?? 0}  pool ${mean(pool)} x${pool?.n ?? 0}`,
+          );
+        }
+
+        // 2025, first or second down with seven or more to go, past the twenty
+        const spreadTruth: Record<string, number[]> = {
+          run: [8.0, 6.8, 34.1, 38.8, 9.5, 2.7],
+          pass: [7.4, 32.3, 6.1, 26.5, 18.3, 9.5],
+        };
+        const buckets = ["loss", "none", "1-3", "4-9", "10-19", "20+"];
+        console.error("  how an early down and long gain is spread (really)");
+        for (const call of ["run", "pass"]) {
+          const n = buckets.reduce((a, g) => a + (spread.get(`${call}|${g}`) ?? 0), 0);
+          if (!n) continue;
+          console.error(
+            `    ${call.padEnd(4)} ` + buckets.map((g, i) =>
+              `${g} ${(100 * (spread.get(`${call}|${g}`) ?? 0) / n).toFixed(1)}% ` +
+              `(${spreadTruth[call]![i]})`).join("  "),
+          );
+        }
       }
 
       if (gaveUpAt.size) {
@@ -737,6 +789,43 @@ async function main(): Promise<void> {
         }
       }
 
+      if (wentFor.size) {
+        // 2025, reaching the line on third down and on the fourths gone for
+        const made: Record<number, Record<string, number>> = {
+          3: { "1": 68, "2": 57, "3": 53, "4-5": 44, "6-8": 36, "9+": 22 },
+          4: { "1": 69, "2": 58, "3": 53, "4-5": 51, "6-8": 35, "9+": 22 },
+        };
+        const overall: Record<number, number> = { 3: 40, 4: 55 };
+
+        for (const down of [3, 4]) {
+          const every = [...wentFor.entries()]
+            .filter(([k]) => k.startsWith(`${down}|`) && k.split("|").length === 2)
+            .reduce(
+              (a, [, v]) => ({ n: a.n + v.n, made: a.made + v.made }),
+              { n: 0, made: 0 },
+            );
+          if (!every.n) continue;
+          console.error(
+            `  played ${down === 3 ? "third" : "fourth"} down ${every.n} times and made ` +
+            `${(100 * every.made / every.n).toFixed(0)}% (really ${overall[down]}%)`,
+          );
+
+          for (const d of ["1", "2", "3", "4-5", "6-8", "9+"]) {
+            const v = wentFor.get(`${down}|${d}`);
+            if (!v) continue;
+            const rate = (k: string) => {
+              const c = wentFor.get(`${down}|${d}|${k}`);
+              return c ? `${k} ${(100 * c.made / c.n).toFixed(0)}% of ${c.n}` : "";
+            };
+            console.error(
+              `    to go ${d.padEnd(4)} n=${String(v.n).padStart(5)} ` +
+              `made ${(100 * v.made / v.n).toFixed(0)}% (really ${made[down]![d]}%)` +
+              `  ${rate("run")}  ${rate("pass")}`,
+            );
+          }
+        }
+      }
+
       console.error("  on fourth down, by where the ball is");
       for (const b of ["inside 20", "21-30", "31-40", "41-50", "past 50"]) {
         const v = fourthsAt.get(b);
@@ -746,6 +835,24 @@ async function main(): Promise<void> {
           `kick ${(100 * v.kick / v.n).toFixed(0)}% ` +
           `punt ${(100 * v.punt / v.n).toFixed(0)}% ` +
           `go ${(100 * v.go / v.n).toFixed(0)}%   really ${truth[b]}`,
+        );
+      }
+
+      // 2025: the share of fourth downs at each distance, and how often they went
+      const byDistance: Record<string, [number, number]> = {
+        "1": [12, 77], "2": [8, 44], "3": [7, 34], "4-5": [15, 22],
+        "6-8": [21, 10], "9+": [36, 7],
+      };
+      const fourthsFaced = ["1", "2", "3", "4-5", "6-8", "9+"]
+        .reduce((n, d) => n + (fourthsAt.get(`to go ${d}`)?.n ?? 0), 0);
+      console.error("  on fourth down, by the distance");
+      for (const d of ["1", "2", "3", "4-5", "6-8", "9+"]) {
+        const v = fourthsAt.get(`to go ${d}`);
+        if (!v) continue;
+        const [share, went] = byDistance[d]!;
+        console.error(
+          `    to go ${d.padEnd(4)} faced ${(100 * v.n / fourthsFaced).toFixed(0)}% ` +
+          `went ${(100 * v.go / v.n).toFixed(0)}%   really faced ${share}% went ${went}%`,
         );
       }
       const faced = [...droveHere.faced].sort((a, b) => a - b);
