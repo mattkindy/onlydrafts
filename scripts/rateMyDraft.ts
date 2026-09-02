@@ -19,7 +19,7 @@ import {
 } from "../app/lib/draftRating.ts";
 import type { Player } from "../app/lib/scoring.ts";
 
-const [who = "mattkindy", wanted] = process.argv.slice(2);
+const [who = "mattkindy", wanted, detail] = process.argv.slice(2);
 const SEASON = 2026;
 
 const ask = async (path: string) => {
@@ -231,10 +231,10 @@ for (const team of rated) {
 }
 
 /** the picks that moved most, so a change to the board is visible */
-const mine = took.get(who);
+const mine = took.get(detail ?? who);
 
 if (mine) {
-  console.log(`\n${who}, pick by pick\n`);
+  console.log(`\n${detail ?? who}, pick by pick\n`);
 
   for (const r of ratePicks([...mine].sort((a, b) => a.at - b.at), curve, bar)) {
     console.log(

@@ -126,12 +126,23 @@ export function barFromPicks(
  * A man nobody priced is ours alone to judge.
  */
 export function worthOf(p: Player, curve: number[]): number {
-  if (p.adp === null || p.adp === undefined) {
+  /**
+   * What the room pays for him, docked by how much of the season he is
+   * expected to play.
+   *
+   * Draft position is set nationally in the summer and a room knows
+   * more by draft night. Josh Jacobs went forty three picks past his,
+   * because everybody in the room knew he could not play, and reading
+   * him at his draft position handed one side fifty four points of
+   * surplus, more than half of everything it gained by drafting.
+   */
+  const plays = Math.min(1, Math.max(0, (p.games ?? 17) / 17));
+  const priced = p.adp === null || p.adp === undefined
     // nobody priced him, so the last slot on the curve is what he is
-    return worthAt(curve, curve.length);
-  }
+    ? worthAt(curve, curve.length)
+    : worthAt(curve, p.adp);
 
-  return worthAt(curve, p.adp);
+  return priced > 0 ? priced * plays : priced;
 }
 
 export interface RosterWorth {
