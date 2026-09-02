@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  barFromPicks, fillLineup, marketCurve, ratePicks, rateTeams, worthAt,
-  worthOf,
+  barFromPicks, fillLineup, keyForPick, marketCurve, ratePicks, rateTeams,
+  worthAt, worthOf,
 } from "./draftRating.ts";
 import type { Player } from "./scoring.ts";
+import { normalizeName } from "./store.ts";
 
 const man = (
   name: string, position: string, adp: number | null, vor: number,
@@ -217,5 +218,27 @@ describe("keeping and drafting are different markets", () => {
     )[0]!;
 
     expect(costly.over).toBeLessThan(cheap.over);
+  });
+});
+
+describe("finding a provider's pick on the board", () => {
+  const key = (name: string, position = "WR", team: string | null = "ANY") =>
+    keyForPick({ name, position, team }, normalizeName);
+
+  it("drops accents, suffixes and punctuation", () => {
+    expect(key("Audric Estimé")).toBe("audricestime");
+    expect(key("Brian Thomas Jr.")).toBe("brianthomas");
+    expect(key("D'Andre Swift")).toBe("dandreswift");
+  });
+
+  it("knows the spellings the providers use for a man the board spells another way", () => {
+    expect(key("Joshua Palmer")).toBe("joshpalmer");
+    expect(key("Hollywood Brown")).toBe("marquisebrown");
+    expect(key("Zonovan Knight", "RB")).toBe("bamknight");
+  });
+
+  it("looks a defence up by its team, in the board's letters", () => {
+    expect(key("Los Angeles Rams", "DEF", "LAR")).toBe("la");
+    expect(key("Steelers D/ST", "DEF", "PIT")).toBe("pit");
   });
 });
