@@ -24,6 +24,8 @@ export interface Pick {
   slot: number;
   name: string;
   position: string;
+  /** the side, without which a defence matches nothing on the board */
+  team?: string | null;
   who: string;
   mine: boolean;
   keeper: boolean;

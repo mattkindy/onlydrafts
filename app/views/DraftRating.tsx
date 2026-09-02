@@ -26,7 +26,16 @@ function TeamRow(
       <td>{at}</td>
       <td>{team.owner}</td>
       <td>{grade}</td>
+      {/* a pick leads, since that is what the order and the grade are
+          read off. A side with fifteen turns beats one with nine on the
+          total without having drafted any better */}
+      <td>
+        {team.perPick > 0
+          ? `+${team.perPick.toFixed(1)}`
+          : team.perPick.toFixed(1)}
+      </td>
       <td>{team.over > 0 ? `+${team.over.toFixed(1)}` : team.over.toFixed(1)}</td>
+      <td>{team.picks}</td>
       <td>{team.got.toFixed(1)}</td>
       <td>{team.expected.toFixed(1)}</td>
       <td>
@@ -105,7 +114,8 @@ export function DraftRating(props: Props) {
       <table class="rating">
         <thead>
           <tr>
-            <th>#</th><th>team</th><th>grade</th><th>over</th>
+            <th>#</th><th>team</th><th>grade</th><th>a pick</th>
+            <th>all told</th><th>picks</th>
             <th>got</th><th>slots worth</th><th>best three</th>
           </tr>
         </thead>
