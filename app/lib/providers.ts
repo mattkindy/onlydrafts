@@ -87,36 +87,58 @@ const ask = (path: string) => fetch(SLEEPER + path).then((r) => r.json());
  * numbered items, so the numbers are named here and anything without a
  * name is left alone rather than guessed at.
  */
-const ESPN_STATS: Record<number, string> = {
-  3: "pass_yd", 4: "pass_td", 20: "int", 24: "rush_yd", 25: "rush_td",
-  42: "rec_yd", 43: "rec_td", 53: "rec", 72: "fum_lost",
-  // running one in, catching one, and throwing one all pay the same
+const ESPN_STATS: Record<number, string[]> = {
+  3: ["pass_yd"], 4: ["pass_td"], 20: ["pass_int"], 24: ["rush_yd"],
+  25: ["rush_td"], 42: ["rec_yd"], 43: ["rec_td"], 53: ["rec"],
+  72: ["fum_lost"],
+  // running one in, catching one and throwing one all pay the same
   // here, which is the one rate the board keeps for two point plays
-  19: "rush_2pt", 26: "rush_2pt", 44: "rush_2pt",
+  19: ["rush_2pt"], 26: ["rush_2pt"], 44: ["rush_2pt"],
   /**
-   * Kicking runs in threes: made, attempted, missed, a set per band.
-   * Attempts are skipped since nobody pays for them. The bands used to
-   * be read one place short, which handed a missed forty yarder the
-   * price of a fifty yard make and lost the long ones altogether.
+   * Kicking comes in threes, made then attempted then missed, and ESPN
+   * counts everything under forty yards as one band where the board
+   * splits it three ways. Its rolled up totals, every field goal and
+   * every one from fifty out, are skipped: pricing those as well as the
+   * bands they are made of would pay a long kick twice.
    */
-  74: "xpm", 76: "xpmiss",
-  77: "fgm_0_19", 79: "fgmiss_0_19",
-  80: "fgm_20_29", 82: "fgmiss_20_29",
-  83: "fgm_30_39", 85: "fgmiss_30_39",
-  86: "fgm_40_49", 88: "fgmiss_40_49",
-  198: "fgm_50_59", 200: "fgmiss_50_59",
-  201: "fgm_60p", 203: "fgmiss_60p",
-  /**
-   * A defence's interception is left out on purpose. The board pays a
-   * quarterback and a defence for one out of the same figure, so taking
-   * ESPN's would decide the quarterback's price by whichever of the two
-   * ESPN happened to list last. His is the one that matters more.
-   */
-  99: "sack", 96: "fum_rec", 97: "blk_kick", 98: "safe",
-  // ESPN prices a defence's touchdown once per way of scoring it, and
-  // the board counts them all as the one thing
-  101: "def_td", 93: "def_td", 102: "def_td", 103: "def_td", 104: "def_td",
+  86: ["xpm"], 88: ["xpmiss"],
+  80: ["fgm_0_19", "fgm_20_29", "fgm_30_39"],
+  77: ["fgm_40_49"], 198: ["fgm_50_59"], 201: ["fgm_60p"],
+  85: [
+    "fgmiss_0_19", "fgmiss_20_29", "fgmiss_30_39",
+    "fgmiss_40_49", "fgmiss_50_59", "fgmiss_60p",
+  ],
+  82: ["fgmiss_0_19", "fgmiss_20_29", "fgmiss_30_39"],
+  79: ["fgmiss_40_49"], 200: ["fgmiss_50_59"], 203: ["fgmiss_60p"],
+  99: ["sack"], 95: ["int"], 96: ["fum_rec"], 97: ["blk_kick"],
+  98: ["safe"],
+  // ESPN prices a defence's touchdown once for each way of scoring one,
+  // and the board counts them all as the same thing
+  101: ["def_td"], 93: ["def_td"], 102: ["def_td"], 103: ["def_td"],
+  104: ["def_td"],
+  89: ["pts_allow_0"], 90: ["pts_allow_1_6"], 91: ["pts_allow_7_13"],
+  122: ["pts_allow_21_27"], 123: ["pts_allow_28_34"],
 };
+
+/**
+ * What ESPN pays for holding a side to a score when nobody has said
+ * otherwise. It leaves out any item still sitting at its own default,
+ * and without these the board would reach for a ladder built to
+ * Sleeper's numbers and hand every defence points it never earned.
+ */
+const ESPN_PTS_ALLOWED: Record<number, number> = {
+  89: 5, 90: 4, 91: 3, 92: 1, 121: 0, 122: -1, 123: -3, 124: -5, 125: -6,
+};
+
+/**
+ * The two sites cut the middle and the top of that ladder in different
+ * places, so where two of ESPN's steps cover one of the board's the
+ * price is split between them.
+ */
+const ESPN_STRADDLES: [number, number, string][] = [
+  [92, 121, "pts_allow_14_20"],
+  [124, 125, "pts_allow_35p"],
+];
 
 /** and what it calls the slots a lineup is made of */
 const ESPN_SLOTS: Record<number, string> = {
@@ -528,13 +550,41 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
   }
 
   const settings = said.settings ?? {};
+  const worth = new Map<number, number>();
+
+  for (const item of (settings.scoringSettings?.scoringItems ?? []) as
+    { statId: number; points?: number }[]) {
+    worth.set(item.statId, item.points ?? 0);
+  }
+
+  // only for a league that prices the ladder at all, so one that pays a
+  // defence nothing for a score is left paying nothing
+  if (Object.keys(ESPN_PTS_ALLOWED).some((id) => worth.has(Number(id)))) {
+    for (const [id, fallback] of Object.entries(ESPN_PTS_ALLOWED)) {
+      if (!worth.has(Number(id))) {
+        worth.set(Number(id), fallback);
+      }
+    }
+  }
+
   const pays: Pays = {};
 
-  for (const item of settings.scoringSettings?.scoringItems ?? []) {
-    const named = ESPN_STATS[item.statId as number];
+  for (const [id, named] of Object.entries(ESPN_STATS)) {
+    const paid = worth.get(Number(id));
 
-    if (named) {
-      pays[named] = item.points ?? 0;
+    if (paid !== undefined) {
+      for (const category of named) {
+        pays[category] = paid;
+      }
+    }
+  }
+
+  for (const [low, high, category] of ESPN_STRADDLES) {
+    const under = worth.get(low);
+    const over = worth.get(high);
+
+    if (under !== undefined && over !== undefined) {
+      pays[category] = (under + over) / 2;
     }
   }
 

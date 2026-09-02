@@ -470,6 +470,21 @@ describe("the scoring in play is on screen", () => {
     expect(payFor(line, { rec: 1, rec_yd: 0.1, rec_td: 6, rush_yd: 0.1, rush_td: 6 }))
       .toBeCloseTo(25.18, 1);
   });
+
+  /**
+   * Both sites price a quarterback throwing one and a defence catching
+   * one apart, under two names. The board read a quarterback's off the
+   * defence's, so every pick he threw paid him two instead of costing
+   * him two, and no test noticed.
+   */
+  it("docks a quarterback for a pick and pays a defence for one", async () => {
+    const { payFor } = await import("./lib/scoring.ts");
+    const pays = { pass_yd: 0.04, pass_td: 4, pass_int: -2, int: 2 };
+
+    expect(payFor({ passYds: 250, passTd: 2, interceptions: 1 }, pays))
+      .toBeCloseTo(10 + 8 - 2, 5);
+    expect(payFor({ int: 1 }, pays)).toBeCloseTo(2, 5);
+  });
 });
 
 /**
