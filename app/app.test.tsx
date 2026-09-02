@@ -734,14 +734,14 @@ describe("drafting for what you still need", () => {
     document.body.appendChild(other);
     render(
       <DraftView men={men} state={withMine} teams={12} snake posFilter="ALL"
-        query="" order="rank" slots={league.slots} byNeed
+        query="" order="war" slots={league.slots}
         onMore={() => {}} />,
       other,
     );
-    const byNeed = namesIn(other);
+    const byWins = namesIn(other);
 
-    expect(byNeed.length).toBe(byBoard.length);
-    expect(byNeed).not.toEqual(byBoard);
+    expect(byWins.length).toBe(byBoard.length);
+    expect(byWins).not.toEqual(byBoard);
   });
 });
 

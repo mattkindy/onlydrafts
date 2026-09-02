@@ -79,15 +79,14 @@ interface Props {
   snake: boolean;
   posFilter: string;
   query: string;
-  order: "rank" | "adp";
+  /** the weeks he wins you, our own value, or where the room takes him */
+  order: "war" | "rank" | "adp";
   onMore: (p: Player) => void;
   staleAt?: string;
   /** the lineup this league starts, for working out what you still need */
   slots?: string[] | null;
   /** hide men who cannot start for you yet */
   needOnly?: boolean;
-  /** order by what he adds to your lineup rather than by the board */
-  byNeed?: boolean;
 }
 
 export function matchesFilter(p: Player, posFilter: string) {
@@ -295,7 +294,7 @@ function FullRankings(
   }:
   {
     scored: Scored[]; gone: Player[]; board: Player[]; state: DraftNow;
-    teams: number; posFilter: string; order: "rank" | "adp";
+    teams: number; posFilter: string; order: "war" | "rank" | "adp";
     byNeed: boolean; lineAfter: Map<number, string>; staleAt?: string;
     onMore: (p: Player) => void;
   },
@@ -350,7 +349,7 @@ function FullRankings(
                   p={p}
                   max={max}
                   teams={teams}
-                  lead={order}
+                  lead={order === "adp" ? "adp" : "rank"}
                   teamsInLeague={teams}
                   finish={finishRange(p, board)}
                   mine={state.mine.has(p.key)}
@@ -566,7 +565,7 @@ export function DraftView(props: Props) {
       (_, r) => r * teams + Math.ceil(teams / 2),
     );
 
-  const worth = props.byNeed
+  const worth = props.order === "war"
     ? winShareFor(
       baselineFor(
         projectedRoster(drafted, props.slots, left, turns),
@@ -591,7 +590,7 @@ export function DraftView(props: Props) {
      * board rather than being dropped to the bottom of the list.
      */
     .sort((a, b) => {
-      if (props.byNeed && a.need && b.need) {
+      if (props.order === "war" && a.need && b.need) {
         return b.need.added - a.need.added;
       }
 
@@ -631,7 +630,7 @@ export function DraftView(props: Props) {
         scored={scored}
         board={men}
         order={props.order}
-        byNeed={Boolean(props.byNeed)}
+        byNeed={props.order === "war"}
         lineAfter={lineAfter}
         gone={men.filter((p) => state.taken.has(p.key)).filter(wanted)}
         state={state}
