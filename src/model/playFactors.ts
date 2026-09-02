@@ -73,14 +73,16 @@ export interface PlayFactors {
   /** how often it ends in the end zone from here, given the yards */
   scores: (state: PlayState, call: Call, gained: number) => number;
   /**
-   * Whether a draw that crossed the goal line really scores. Draws
-   * near the goal are transplanted from spots with more room and then
-   * capped, so they cross more often than plays from this state score;
-   * this rolls the surplus back to the one.
+   * The yards a pooled draw near the goal ends up with, once it is
+   * checked against how often plays from this spot score. Draws near the goal
+   * are transplanted from spots with more room: close in they cross
+   * more often than plays from here score, and the surplus is put
+   * down at the one; from the six to the ten they fall short more
+   * often, and the shortfall is carried over.
    */
-  crossedStands?: (
-    state: PlayState, call: Call, uniform: () => number,
-  ) => boolean;
+  atTheGoal?: (
+    state: PlayState, call: Call, gained: number, uniform: () => number,
+  ) => number;
   /** whether a throw for this many yards was caught, drawn */
   caught: (gained: number, uniform: () => number) => boolean;
   /**

@@ -1617,7 +1617,100 @@ export function fitPlayFactors(
     return found;
   };
 
-  const crossRemembered = new Map<string, number>();
+  /**
+   * How often a play from this yardline scores, for standing a draw
+   * that crossed the goal against.
+   *
+   * The state cell widens along the field before it lets go of the
+   * down or the distance, and near the goal that is the wrong way
+   * round: a pass at the five was priced on passes from the fifteen,
+   * and said 30% where passes inside the ten score 39%. The sampled
+   * throws crossed 39% of the time and were cut down to the cell. So
+   * this one keeps to the yardline and lets go of the distance, the
+   * score, and then the down, and only then reaches along the field.
+   */
+  const scoreRemembered = new Map<string, number | undefined>();
+  const scoreRateAt = (state: PlayState, call: Call): number | undefined => {
+    const key = `${call}|${state.down}|${state.yardline}`;
+
+    if (scoreRemembered.has(key)) {
+      return scoreRemembered.get(key);
+    }
+
+    const downs = [[Math.min(4, state.down)], [1, 2, 3, 4]];
+    let rate: number | undefined;
+
+    outer: for (const reach of [0, 1, 2, 3, 5, 8]) {
+      for (const some of downs) {
+        let plays = 0;
+        let scores = 0;
+
+        for (let yard = state.yardline - reach; yard <= state.yardline + reach; yard++) {
+          if (yard < 1 || yard > 99) {
+            continue;
+          }
+
+          for (const down of some) {
+            for (let toGo = 1; toGo <= Math.min(40, yard); toGo++) {
+              const cell = cells.get(`${call}|${down}|${toGo}|${yard}|any`);
+
+              if (cell) {
+                plays += cell.plays;
+                scores += cell.scores;
+              }
+            }
+          }
+        }
+
+        if (plays >= settings.leastForSide) {
+          rate = scores / plays;
+          break outer;
+        }
+      }
+    }
+
+    scoreRemembered.set(key, rate);
+
+    return rate;
+  };
+
+  /**
+   * Where a draw near the goal ends up, given how often the sample it
+   * came from crosses and how often plays from here score.
+   *
+   * It goes both ways. Cutting alone, which is what this did, means a
+   * man whose sample crosses less often than his spot scores is left
+   * there, and the average over every spot comes out under life: from
+   * the six to the ten a receiver's catches from further out fall a
+   * yard or two short, and passes inside the ten scored 29% where they
+   * score 39%. So a draw that crossed is kept as often as the spot
+   * scores, and one that gained something without crossing is carried
+   * over often enough to make up the difference.
+   */
+  const settleAtGoal = (
+    state: PlayState, drawn: number, uniform: () => number,
+    sample: { crossShare: number; gainfulShare: number }, scoreRate: number,
+  ): number => {
+    if (drawn >= state.yardline) {
+      const keeps = sample.crossShare > 0
+        ? Math.min(1, scoreRate / sample.crossShare)
+        : 1;
+
+      return uniform() < keeps ? drawn : Math.max(0, state.yardline - 1);
+    }
+
+    if (drawn > 0 && scoreRate > sample.crossShare &&
+        sample.gainfulShare > sample.crossShare) {
+      const lifts = (scoreRate - sample.crossShare) /
+        (sample.gainfulShare - sample.crossShare);
+
+      return uniform() < lifts ? state.yardline : drawn;
+    }
+
+    return drawn;
+  };
+
+  const crossRemembered = new Map<string, { crossShare: number; gainfulShare: number }>();
   const cellsRemembered = new Map<string, Counted[]>();
   const atCells = (state: PlayState, least: number, call?: Call) => {
     makeRoom(cellsRemembered);
@@ -1892,20 +1985,33 @@ export function fitPlayFactors(
             }
           }
 
-          // his sample crosses the goal more often than plays from
-          // this state score, so the surplus is put down at the one
-          if (state.yardline <= 20 && plays.yards[at]! >= state.yardline &&
-              crossedWeight > 0) {
-            const counted = atCounts(state, settings.leastForSide, call);
-            const scoreRate = counted.plays === 0
-              ? crossedWeight / weight
-              : counted.scores / counted.plays;
-            const keeps = Math.min(1, scoreRate / (crossedWeight / weight));
+          // his sample crosses the goal more or less often than plays
+          // from this spot score, and is settled to how often they do
+          if (state.yardline <= 20) {
+            /**
+             * The cells count sacks and throwaways among the passes,
+             * and those were drawn before this, so the rate is put on
+             * the throws that reached somebody or the cut lands twice.
+             */
+            const wasted = call === "pass" ? plays.wastedShareAt(state.yardline) : 0;
+            const found = scoreRateAt(state, call);
+            const sample = {
+              crossShare: crossedWeight / weight,
+              gainfulShare: (weight - dryWeight) / weight,
+            };
+            const scoreRate = found === undefined
+              ? sample.crossShare
+              : found / Math.max(0.5, 1 - wasted);
+            const settled = settleAtGoal(
+              state, plays.yards[at]!, uniform, sample, scoreRate,
+            );
 
-            if (uniform() >= keeps) {
+            // a draw that scores is done with: the tilts below would
+            // scale a five yard catch at the five to four and a half
+            if (settled !== plays.yards[at]! || settled >= state.yardline) {
               return {
-                yards: Math.max(0, state.yardline - 1),
-                caught: plays.caught[at] === 1,
+                yards: Math.min(state.yardline, settled),
+                caught: settled > 0 || plays.caught[at] === 1,
               };
             }
           }
@@ -2527,33 +2633,36 @@ export function fitPlayFactors(
       const cell = atCounts(state, settings.least, call);
       return cell.plays === 0 ? 0 : cell.scores / cell.plays;
     },
-    crossedStands: (state, call, uniform) => {
+    atTheGoal: (state, call, gained, uniform) => {
       makeRoom(crossRemembered);
       const key = `${call}|${stateKey(
         state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
       )}`;
-      let keeps = crossRemembered.get(key);
+      let sample = crossRemembered.get(key);
 
-      if (keeps === undefined) {
+      if (sample === undefined) {
         const cell = at(state, settings.least, call);
         let crossed = 0;
+        let gainful = 0;
 
-        for (const gained of cell.yards) {
-          if (gained >= state.yardline) {
+        for (const yards of cell.yards) {
+          if (yards >= state.yardline) {
             crossed++;
+          }
+
+          if (yards > 0) {
+            gainful++;
           }
         }
 
-        const crossShare = crossed / Math.max(1, cell.yards.length);
-        const counted = atCounts(state, settings.leastForSide, call);
-        const scoreRate = counted.plays === 0
-          ? crossShare
-          : counted.scores / counted.plays;
-        keeps = crossShare > 0 ? Math.min(1, scoreRate / crossShare) : 1;
-        crossRemembered.set(key, keeps);
+        const drawn = Math.max(1, cell.yards.length);
+        sample = { crossShare: crossed / drawn, gainfulShare: gainful / drawn };
+        crossRemembered.set(key, sample);
       }
 
-      return uniform() < keeps;
+      const scoreRate = scoreRateAt(state, call) ?? sample.crossShare;
+
+      return settleAtGoal(state, gained, uniform, sample, scoreRate);
     },
   };
 }
