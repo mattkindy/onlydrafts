@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     "level", "games last year", "two years ago", "three years ago",
     "no second season", "age over 26", "age over 29",
     "is a back", "is a quarterback", "is a tight end",
-    "touches a game", "touches a game, backs",
+    "touches a game", "touches a game, backs", "touches a game, passers",
     "weight", "weeks out", "weeks listed", "ended the year hurt", "plays on turf",
     "weeks on reserve", "opened the year on reserve",
   ];

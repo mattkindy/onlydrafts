@@ -54,9 +54,21 @@ async function readSeason(season: number): Promise<Season> {
 
     out.games.set(w.playerId, (out.games.get(w.playerId) ?? 0) + 1);
     out.lastWeek.set(w.playerId, Math.max(out.lastWeek.get(w.playerId) ?? 0, w.week));
+    /**
+     * A quarterback's work is his dropbacks, so they count here.
+     *
+     * Counting only what he was handed or thrown made every starting
+     * quarterback look like a five touch player, which is a backup's
+     * profile, and how much a man is given is the second strongest
+     * signal of whether he stays on the field. The board came out
+     * expecting quarterbacks to play 8.8 games where the rest of the
+     * board got 12.7 to 13.3, and the men who finish worth starting
+     * play about 14.8 whatever they do.
+     */
     out.touches.set(
       w.playerId,
-      (out.touches.get(w.playerId) ?? 0) + (w.targets ?? 0) + (w.carries ?? 0),
+      (out.touches.get(w.playerId) ?? 0) + (w.targets ?? 0) +
+        (w.carries ?? 0) + (w.passing?.attempts ?? 0),
     );
     out.position.set(w.playerId, w.position);
     out.team.set(w.playerId, w.teamId);
