@@ -451,15 +451,13 @@ export function walkDrive(
     );
 
     /**
-     * A draw that crossed the goal is asked to stand against how often
-     * plays from this state really score. Near the goal the draws come
-     * from spots with more room and get capped, so they cross more
-     * often than sides score; the surplus is put down at the one.
+     * A pooled draw near the goal is settled against how often plays
+     * from this spot really score. The draws come from spots with more
+     * room and get capped, so close in they cross more often than
+     * sides score, and further out they fall short more often.
      */
-    if (!own && gained >= state.yardline && state.yardline <= 20 &&
-        factors.crossedStands &&
-        !factors.crossedStands(state, call, uniform)) {
-      gained = state.yardline - 1;
+    if (!own && state.yardline <= 20 && factors.atTheGoal) {
+      gained = factors.atTheGoal(state, call, gained, uniform);
     }
 
     const scored = state.yardline - gained <= 0;
