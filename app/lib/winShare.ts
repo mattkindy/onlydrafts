@@ -34,6 +34,8 @@ export interface Baseline {
    * happened to beat the first.
    */
   displaced: Record<string, { expect: number; score: number }[]>;
+  /** how many drawn weeks each man was in the lineup, by his key */
+  started: Record<string, number>;
 }
 
 /**
@@ -42,6 +44,33 @@ export interface Baseline {
  * fragile man misses weeks here rather than being marked down evenly.
  */
 export function weeksOf(p: Player, draws = DRAWS): number[] {
+  let his = drawn.get(p);
+
+  if (!his) {
+    his = new Map();
+    drawn.set(p, his);
+  }
+
+  const had = his.get(draws);
+
+  if (had) {
+    return had;
+  }
+
+  const weeks = drawWeeks(p, draws);
+  his.set(draws, weeks);
+
+  return weeks;
+}
+
+/**
+ * Kept per man, because scoring a board the exact way fills a roster
+ * once for every candidate and drew every man's weeks again each time.
+ * The arrays are shared, so nobody writes into one.
+ */
+const drawn = new WeakMap<Player, Map<number, number[]>>();
+
+function drawWeeks(p: Player, draws: number): number[] {
   const g = p.game;
   const plays = (p.games ?? 17) / 17;
 
@@ -99,9 +128,13 @@ export function baselineFor(
   roster: Player[], slots: string[] | null | undefined, draws = DRAWS,
 ): Baseline {
   const seats = seatsOf(slots);
-  const weeks = roster.map((p) => ({ p, its: weeksOf(p, draws) }));
+  // by what you expect of him, since that is what a lineup is set on
+  const weeks = roster
+    .map((p) => ({ p, its: weeksOf(p, draws), expect: p.ppg ?? 0 }))
+    .sort((a, b) => b.expect - a.expect);
   const total: number[] = [];
   const displaced: Record<string, { expect: number; score: number }[]> = {};
+  const started: Record<string, number> = {};
 
   for (const where of WHERE) {
     displaced[where] = [];
@@ -109,19 +142,21 @@ export function baselineFor(
 
   for (let i = 0; i < draws; i++) {
     const seated = seats.map((seat) => ({ ...seat }));
-    // by what you expect of him, since that is what a lineup is set on,
-    // and only among the men who are playing at all
-    const men = weeks
-      .map(({ p, its }) => ({ p, score: its[i]!, expect: p.ppg ?? 0 }))
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => b.expect - a.expect);
 
-    for (const man of men) {
+    for (const man of weeks) {
+      const score = man.its[i]!;
+
+      // only among the men who are playing at all
+      if (score <= 0) {
+        continue;
+      }
+
       const seat = seated.find((s) =>
         !s.taken && s.where.includes(man.p.position));
 
       if (seat) {
-        seat.taken = { expect: man.expect, score: man.score };
+        seat.taken = { expect: man.expect, score };
+        started[man.p.key] = (started[man.p.key] ?? 0) + 1;
       }
     }
 
@@ -141,7 +176,7 @@ export function baselineFor(
     }
   }
 
-  return { total, displaced };
+  return { total, displaced, started };
 }
 
 /**
@@ -220,6 +255,10 @@ export function projectedRoster(
   const spare = new Set(left.map((p) => p.key));
   const roster = [...mine];
 
+  for (const p of mine) {
+    spare.delete(p.key);
+  }
+
   for (const p of filled) {
     const seat = seats.find((s) => !s.taken && s.where.includes(p.position));
 
@@ -281,11 +320,73 @@ export interface WinShare {
 }
 
 /**
+ * What taking each man at this turn does to your week, with the rest of
+ * the draft filled in around him.
+ *
+ * He goes on the roster, the turns after this one are filled with the
+ * best men expected to be there, and the lineup is drawn week by week.
+ * That is set against the same roster with this turn passed over, so
+ * the figure is what the pick itself is worth to you.
+ *
+ * The cheaper way, one baseline for the whole board, assumed the best
+ * man left at every empty seat before asking what anybody added. He
+ * then read nought, being measured against himself, and a second
+ * quarterback read as much as a first with the assumed one still there.
+ */
+export function takeNowFor(
+  mine: Player[], slots: string[] | null | undefined, left: Player[],
+  turns: number[], opponent: number[], draws = DRAWS,
+): (p: Player) => WinShare {
+  const later = turns.slice(1);
+  const passed = baselineFor(
+    projectedRoster(mine, slots, left, later), slots, draws,
+  );
+  const without = winChance(passed.total, opponent);
+  /**
+   * The rest of the roster depends on where he plays and little else,
+   * so a few rosters serve the whole board. Each is drawn once and he
+   * is set into it by displacement, which comes to the same lineup as
+   * drawing the roster again with him on it and costs one subtraction
+   * a week.
+   */
+  const around = new Map<
+    string, { chance: number; share: (p: Player) => WinShare }
+  >();
+
+  return (p: Player) => {
+    const rest = projectedRoster([...mine, p], slots, left, later)
+      .filter((q) => q.key !== p.key);
+    const key = rest.map((q) => q.key).sort().join("|");
+    let his = around.get(key);
+
+    if (!his) {
+      const base = baselineFor(rest, slots, draws);
+      his = {
+        chance: winChance(base.total, opponent),
+        share: winShareFor(base, opponent, draws),
+      };
+      around.set(key, his);
+    }
+
+    const with_ = his.share(p);
+
+    return {
+      added: his.chance + with_.added - without,
+      starts: with_.starts,
+    };
+  };
+}
+
+/**
  * What each man on the board would add, all against one baseline.
  *
  * He goes in only where he beats the man he would push out, so a fifth
  * back gets the weeks the four above him miss and nothing else, and a
  * first kicker gets every week because the seat is empty.
+ *
+ * Quick, since the lineup is filled once for everybody, and right for
+ * any man the baseline did not already assume. The board uses
+ * takeNowFor, which has no such exception.
  */
 export function winShareFor(
   baseline: Baseline, opponent: number[], draws = DRAWS,
