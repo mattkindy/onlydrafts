@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 
 import { rescore } from "../app/lib/board.ts";
 import { normalizeName } from "../app/lib/store.ts";
+import { gamesLeft } from "../app/lib/availability.ts";
 import {
   barFromPicks, gradesFor, keyForPick, marketCurve, rateTeams, ratePicks,
   worthAt,
@@ -113,6 +114,17 @@ const men = rescore(boardPlayers, {
   pays,
   rosters: asRoster,
 });
+
+/**
+ * What the league office says today, put onto the board. The board is
+ * built in the summer and a man goes on a list in September.
+ */
+for (const p of men) {
+  const said = Object.values<any>(everyone).find((s: any) =>
+    s.full_name && normalizeName(s.full_name) === p.key);
+
+  p.games = gamesLeft(p.games, said?.injury_status);
+}
 
 const byKey = new Map(men.map((p) => [p.key, p]));
 
