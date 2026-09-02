@@ -23,6 +23,17 @@ import { splitLine } from "../src/data/csv.js";
 const SEASONS = [2022, 2023, 2024, 2025];
 const OUT = join(RAW_DIR, "..", "curated", "plays.csv");
 
+/**
+ * A flag that wipes out the snap is a no_play in the release, and it
+ * is written as its own kind of play with the penalty yards as the
+ * yards. `penalty` is a defensive one that hands over a first down:
+ * it happens on 16% of drives and keeps them alive, which nothing
+ * else here can do. `offenceFlag` is a false start or a hold, on 4.5%
+ * of snaps, that replays the down from further back; `defenceFlag` is
+ * an offside that moves the ball without moving the chains.
+ */
+const FLAGS = ["penalty", "offenceFlag", "defenceFlag"];
+
 const offenceGroup = (text: string): string => {
   const backs = Number(/(\d+) RB/.exec(text)?.[1] ?? NaN);
   const tightEnds = Number(/(\d+) TE/.exec(text)?.[1] ?? NaN);
@@ -110,7 +121,7 @@ async function main(): Promise<void> {
           "down", "ydstogo", "yardline_100", "score_differential",
           "game_seconds_remaining", "play_type", "yards_gained",
           "first_down", "touchdown", "interception", "fumble_lost",
-          "first_down_penalty", "penalty_yards",
+          "first_down_penalty", "penalty_yards", "penalty", "penalty_team",
           // at one state these move the call by 26 points, and a
           // side's habit is its own season to season at .61
           "shotgun", "no_huddle",
@@ -122,14 +133,13 @@ async function main(): Promise<void> {
 
       const c = splitLine(line);
       const raw = c[at["play_type"]!] ?? "";
-      // A defensive penalty that moves the chains wipes out the snap,
-      // so it is a no_play in the release. It happens on 16% of drives
-      // and keeps them alive, which nothing else here can do, so it is
-      // written as its own kind of play.
       const movedByPenalty = c[at["first_down_penalty"]!] === "1";
-      const type = movedByPenalty ? "penalty" : raw;
+      const type = movedByPenalty ? "penalty"
+        : raw === "no_play" && c[at["penalty"]!] === "1"
+          ? (c[at["penalty_team"]!] === c[at["posteam"]!] ? "offenceFlag" : "defenceFlag")
+          : raw;
 
-      if (!["run", "pass", "punt", "field_goal", "penalty"].includes(type)) {
+      if (!FLAGS.includes(type) && !["run", "pass", "punt", "field_goal"].includes(type)) {
         continue;
       }
 
@@ -150,7 +160,7 @@ async function main(): Promise<void> {
         c[at["score_differential"]!] || 0, c[at["game_seconds_remaining"]!] || 0,
         found?.offence ?? "", found?.defence ?? "", found?.box || "",
         type,
-        movedByPenalty
+        FLAGS.includes(type)
           ? c[at["penalty_yards"]!] || 0
           : c[at["yards_gained"]!] || 0,
         c[at["first_down"]!] === "1" ? 1 : 0,
