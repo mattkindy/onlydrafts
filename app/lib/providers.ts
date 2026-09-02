@@ -89,10 +89,33 @@ const ask = (path: string) => fetch(SLEEPER + path).then((r) => r.json());
  */
 const ESPN_STATS: Record<number, string> = {
   3: "pass_yd", 4: "pass_td", 20: "int", 24: "rush_yd", 25: "rush_td",
-  42: "rec_yd", 43: "rec_td", 53: "rec", 72: "fum_lost", 74: "xpm",
-  77: "fgm_0_19", 80: "fgm_20_29", 83: "fgm_30_39", 86: "fgm_40_49",
-  88: "fgm_50p", 89: "fgmiss_0_19", 99: "sack", 95: "int", 96: "fum_rec",
-  97: "blk_kick", 98: "safe", 101: "def_td",
+  42: "rec_yd", 43: "rec_td", 53: "rec", 72: "fum_lost",
+  // running one in, catching one, and throwing one all pay the same
+  // here, which is the one rate the board keeps for two point plays
+  19: "rush_2pt", 26: "rush_2pt", 44: "rush_2pt",
+  /**
+   * Kicking runs in threes: made, attempted, missed, a set per band.
+   * Attempts are skipped since nobody pays for them. The bands used to
+   * be read one place short, which handed a missed forty yarder the
+   * price of a fifty yard make and lost the long ones altogether.
+   */
+  74: "xpm", 76: "xpmiss",
+  77: "fgm_0_19", 79: "fgmiss_0_19",
+  80: "fgm_20_29", 82: "fgmiss_20_29",
+  83: "fgm_30_39", 85: "fgmiss_30_39",
+  86: "fgm_40_49", 88: "fgmiss_40_49",
+  198: "fgm_50_59", 200: "fgmiss_50_59",
+  201: "fgm_60p", 203: "fgmiss_60p",
+  /**
+   * A defence's interception is left out on purpose. The board pays a
+   * quarterback and a defence for one out of the same figure, so taking
+   * ESPN's would decide the quarterback's price by whichever of the two
+   * ESPN happened to list last. His is the one that matters more.
+   */
+  99: "sack", 96: "fum_rec", 97: "blk_kick", 98: "safe",
+  // ESPN prices a defence's touchdown once per way of scoring it, and
+  // the board counts them all as the one thing
+  101: "def_td", 93: "def_td", 102: "def_td", 103: "def_td", 104: "def_td",
 };
 
 /** and what it calls the slots a lineup is made of */
@@ -530,19 +553,26 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
   const teams = said.teams as EspnTeam[];
   const nameOf = (team: EspnTeam) =>
     (team.name ?? [team.location, team.nickname].filter(Boolean).join(" ")).trim();
+  // a roster entry usually spells the man out, but sometimes gives only
+  // his number, and then the player list is the only way to know him
+  const men = await espnPlayers(season).catch(() => ({} as EspnMen));
   const menOf = (team: EspnTeam): Man[] => (team.roster?.entries ?? [])
-    .map((e) => ({
-      ...e.playerPoolEntry?.player,
-      id: e.playerPoolEntry?.player?.id ?? e.playerId,
-    }))
-    .filter((p): p is { id: number; fullName: string;
-      defaultPositionId?: number } => Boolean(p.fullName && p.id))
-    .map((p) => {
-      const pos = ESPN_POSITIONS[p.defaultPositionId ?? -1] ?? "";
-      const name = espnNameOf(p.id, p.fullName, pos);
+    .map((e) => {
+      const man = e.playerPoolEntry?.player;
+      const id = man?.id ?? e.playerId;
+      const listed = id ? men[id] : undefined;
 
-      return { name, key: normalizeName(name), pos };
-    });
+      if (man?.fullName) {
+        const pos = ESPN_POSITIONS[man.defaultPositionId ?? -1] ??
+          listed?.p ?? "";
+
+        return { name: espnNameOf(id!, man.fullName, pos), pos };
+      }
+
+      return listed ? { name: listed.n, pos: listed.p } : null;
+    })
+    .filter((m): m is { name: string; pos: string } => Boolean(m))
+    .map((m) => ({ name: m.name, key: normalizeName(m.name), pos: m.pos }));
   const rounds = Math.max(
     ...(said.draftDetail?.picks ?? []).map((p: EspnPick) => p.roundId),
     ROUNDS,
