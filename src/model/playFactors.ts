@@ -137,6 +137,19 @@ export interface Spot {
   looseness: number;
 }
 
+/**
+ * Whether a distance is short enough that a pool keeps to it however
+ * far it reaches along the field.
+ *
+ * Going for it falls from 77% on fourth and one to 44% at two and 34%
+ * at three, and the run share falls with it, then both flatten. Fourth
+ * downs are rare enough that a pool at one score reaches the whole
+ * field before it fills, and at that reach fourth and one was priced
+ * on fourth and three as well: a run 61% of the time where sides run
+ * 75%, made 63% where they make 69%.
+ */
+export const holdsDistance = (toGo: number) => toGo <= 3;
+
 function* ring(state: PlayState, looseness: number): Generator<Spot> {
   for (const reach of [0, 1, 2, 3, 5, 8, 12, 20, 35, 60, 99]) {
     for (let yard = state.yardline - reach; yard <= state.yardline + reach; yard++) {
@@ -153,7 +166,8 @@ function* ring(state: PlayState, looseness: number): Generator<Spot> {
        * the two out together reached third and four to fill a thin
        * third and one, and said 46% where sides run 72%.
        */
-      const near = reach < 12 ? 0 : reach < 35 ? 1 : 2;
+      const near = holdsDistance(state.toGo) || reach < 12 ? 0
+        : reach < 35 ? 1 : 2;
 
       for (let toGo = state.toGo - near; toGo <= state.toGo + near; toGo++) {
         if (toGo < 1 || toGo > 40) {

@@ -11,7 +11,7 @@
  * than as a coin flip with a kick bolted on.
  */
 
-import { marginBand, timeBand } from "../model/playFactors.js";
+import { holdsDistance, marginBand, timeBand } from "../model/playFactors.js";
 import type { PlayState } from "../model/playFactors.js";
 
 export type FourthChoice = "go" | "kick" | "punt";
@@ -26,6 +26,24 @@ export type FourthChoice = "go" | "kick" | "punt";
  * thirty to the forty where sides punt 11%.
  */
 const REACHES = [0, 1, 2, 3];
+
+/**
+ * How far along the distance to reach. Letting it out with the field
+ * pooled fourth and one with fourth and three from the second step, and
+ * the walk went 61% at one and 41% at three; from four to five a yard
+ * still moves the answer a little, and past that hardly at all.
+ */
+export const distanceReach = (toGo: number, reach: number): number => {
+  if (holdsDistance(toGo)) {
+    return 0;
+  }
+
+  if (toGo <= 5) {
+    return Math.min(1, reach);
+  }
+
+  return Math.min(2, Math.ceil(reach / 2));
+};
 
 export interface FourthDown {
   /** the chance of each, adding to one */
@@ -167,7 +185,7 @@ export function fitFourthDown(
             continue;
           }
 
-          const near = Math.min(2, Math.ceil(reach / 2));
+          const near = distanceReach(state.toGo, reach);
 
           for (let toGo = state.toGo - near; toGo <= state.toGo + near; toGo++) {
             if (toGo < 1 || toGo > 40) {
