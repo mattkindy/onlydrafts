@@ -244,6 +244,18 @@ function Facts({ p, teams, costs, aside }: {
         <i>pts/g</i>{(p.game?.["ev"] ?? p.ppg ?? 0).toFixed(1)}
       </span>
       {aside && <span class="f"><i>{aside.label}</i>{aside.value}</span>}
+      {/* what he beats the last starter by, over the middle ninety of
+          his seasons, since the same average can be two different bets */}
+      {p.par && (
+        <span
+          class="f"
+          title="what he beats the last man your league starts by over a season, from the tenth to the ninetieth of the seasons played out for him. The middle figure is the median, which he beats half the time."
+        >
+          <i>over a season</i>
+          {p.par.low.toFixed(0)} to {p.par.high.toFixed(0)}
+          <small>usually {p.par.mid.toFixed(0)}</small>
+        </span>
+      )}
       {costs ? <span class="f"><i>costs</i>{ordinal(costs)}</span> : null}
       {rounds !== 0 && (
         <span class={"chip " + (rounds > 0 ? "up" : "down")}>
