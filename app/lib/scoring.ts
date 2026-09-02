@@ -60,7 +60,10 @@ export interface Player {
 
 /** the skill categories, under the names a league already uses */
 const SKILL: Record<string, string> = {
-  passYds: "pass_yd", passTd: "pass_td", interceptions: "int",
+  // a quarterback throwing one and a defence catching one are priced
+  // apart, and both sites call them different things. Sharing the one
+  // name paid a quarterback two for a pick instead of docking him two.
+  passYds: "pass_yd", passTd: "pass_td", interceptions: "pass_int",
   rushYds: "rush_yd", rushTd: "rush_td",
   receptions: "rec", recYds: "rec_yd", recTd: "rec_td",
   fumblesLost: "fum_lost",
@@ -70,7 +73,7 @@ const SKILL: Record<string, string> = {
 };
 
 const SKILL_FALLBACK: Pays = {
-  pass_yd: 0.04, pass_td: 4, int: -2, rush_yd: 0.1, rush_td: 6,
+  pass_yd: 0.04, pass_td: 4, pass_int: -2, rush_yd: 0.1, rush_td: 6,
   rec: 0, rec_yd: 0.1, rec_td: 6, fum_lost: -2, rush_2pt: 2,
 };
 
