@@ -191,11 +191,30 @@ export function rescore(players: Player[], league: League): Player[] {
    */
   for (const p of men) {
     const plays = p.games!;
+    const against = (bar[p.position] ?? 0) * plays;
     p.perGameVor = Number(((p.ppg ?? 0) - (bar[p.position] ?? 0)).toFixed(1));
     p.vor = Number((plays * ((p.ppg ?? 0) - (bar[p.position] ?? 0))).toFixed(1));
     // kept aside, because the curve below replaces vor with what a pick
     // at his place is worth and a reader deserves to see both
     p.ownVor = p.vor;
+
+    /**
+     * The same over the middle ninety of his seasons, since two men on
+     * the same number are not the same bet: Bijan Robinson's band never
+     * goes below nothing and every quarterback's does.
+     *
+     * The low end is harsher than it should be, because each quantile
+     * is charged the same expected games of replacement where a short
+     * season would owe fewer. One man's width against another's is the
+     * part worth reading.
+     */
+    if (p.sim?.["ev"]) {
+      p.par = {
+        low: Number((p.sim["low"]! - against).toFixed(1)),
+        mid: Number((p.sim["mid"]! - against).toFixed(1)),
+        high: Number((p.sim["high"]! - against).toFixed(1)),
+      };
+    }
   }
 
   const onTheCurve = men.filter((p) => !OWN_ORDER.has(p.position));

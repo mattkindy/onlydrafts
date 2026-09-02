@@ -44,6 +44,12 @@ export interface Player {
    * projection do.
    */
   ownVor?: number;
+  /**
+   * What he beats the last man his league starts by, over the middle
+   * ninety of his simulated seasons. Two men on the same average are
+   * not the same bet and this is where that shows.
+   */
+  par?: { low: number; mid: number; high: number };
   /** the regression's game on its own, one voice of the blend */
   regressionPpg?: number;
   rank?: number;

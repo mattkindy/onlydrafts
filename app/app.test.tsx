@@ -1012,3 +1012,55 @@ describe("a man too thin to have a spread", () => {
     }
   });
 });
+
+/**
+ * Two men on the same average are not the same bet. Brock Purdy's
+ * simulated seasons run 15 to 262 where C.J. Stroud's run 114 to 324,
+ * and a single number cannot say so. His are skewed too, so his average
+ * is a figure he beats less than half the time.
+ */
+describe("what a man is worth, over the middle of his seasons", () => {
+  const men = boardFor(aLeague());
+
+  it("gives a band that contains its own middle", () => {
+    const withBands = men.filter((p) => p.par);
+
+    expect(withBands.length).toBeGreaterThan(100);
+
+    for (const p of withBands) {
+      expect(p.par!.low, p.name).toBeLessThanOrEqual(p.par!.mid);
+      expect(p.par!.mid, p.name).toBeLessThanOrEqual(p.par!.high);
+    }
+  });
+
+  /**
+   * A man who misses half a year is a wider bet than one who does not,
+   * whatever the two averages say, and that is the thing the band is
+   * for.
+   */
+  it("is wider for a man the simulation is less sure of", () => {
+    const wide = men
+      .filter((p) => p.par && (p.games ?? 17) < 11 && (p.ppg ?? 0) > 12);
+    const sure = men
+      .filter((p) => p.par && (p.games ?? 17) > 15 && (p.ppg ?? 0) > 12);
+
+    expect(wide.length).toBeGreaterThan(0);
+    expect(sure.length).toBeGreaterThan(0);
+
+    const spread = (its: typeof men) =>
+      its.reduce((sum, p) => sum + (p.par!.high - p.par!.low), 0) / its.length;
+
+    expect(spread(wide)).toBeGreaterThan(spread(sure));
+  });
+
+  it("draws it on the card next to the number it qualifies", () => {
+    render(
+      <DraftView men={men} state={NO_DRAFT} teams={12} snake posFilter="ALL"
+        query="" order="rank" slots={aLeague().slots} onMore={() => {}} />,
+      where,
+    );
+
+    expect(where.querySelector(".card .facts")!.textContent)
+      .toContain("over a season");
+  });
+});
