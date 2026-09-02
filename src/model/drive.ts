@@ -65,6 +65,11 @@ export interface DriveRules {
   penaltyFirstDown: number;
   /** what such a penalty is worth */
   penaltyYards: (uniform: () => number) => number;
+  /** how often a false start or a hold replays the down from further back */
+  offenceFlag?: number;
+  offenceFlagYards?: (uniform: () => number) => number;
+  /** how often a defensive offside moves the ball five yards short of the chains */
+  defenceFlag?: number;
   /** the most snaps a drive gets before the clock is called on it */
   maxPlays: number;
 }

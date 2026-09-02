@@ -42,8 +42,57 @@ export interface EndingRules {
    */
   penaltyFirstDown: number;
   penaltyYards: (uniform: () => number) => number;
+  /**
+   * A flag on the offence that replays the down from further back: a
+   * false start or a hold, on 4.5% of snaps, five yards two times in
+   * three and ten the rest. Without it every first down is first and
+   * ten, and the walk ends on downs on 8.5% of drives where sides end
+   * on 6.4%.
+   */
+  offenceFlag?: number;
+  offenceFlagYards?: (uniform: () => number) => number;
+  /** and a defensive offside that moves the ball five yards short of the chains */
+  defenceFlag?: number;
   maxPlays: number;
 }
+
+export type PreSnapFlag = "offence" | "defence";
+
+/**
+ * Whether a flag wipes out this snap before it happens, and where the
+ * ball goes if one does. The offence is set back by the flag or half
+ * the distance to its own goal, whichever is less, and the down stays
+ * as it was. A defensive one moves the ball up five, and reaches the
+ * chains only when they were closer than that.
+ */
+export const preSnapFlag = (
+  state: PlayState, rules: EndingRules, uniform: () => number,
+): PreSnapFlag | undefined => {
+  if (rules.offenceFlag && uniform() < rules.offenceFlag) {
+    const drawn = rules.offenceFlagYards ? rules.offenceFlagYards(uniform) : 5;
+    const back = Math.min(drawn, Math.floor((100 - state.yardline) / 2));
+    state.yardline += back;
+    state.toGo = Math.min(state.toGo + back, state.yardline);
+
+    return "offence";
+  }
+
+  if (rules.defenceFlag && uniform() < rules.defenceFlag) {
+    const up = Math.min(5, Math.floor(state.yardline / 2));
+    state.yardline -= up;
+
+    if (up >= state.toGo) {
+      state.down = 1;
+      state.toGo = Math.min(10, state.yardline);
+    } else {
+      state.toGo -= up;
+    }
+
+    return "defence";
+  }
+
+  return undefined;
+};
 
 /**
  * Which drive the half runs out on.
@@ -297,6 +346,15 @@ export function walkDrive(
       state.yardline = Math.max(1, state.yardline - rules.penaltyYards(uniform));
       state.down = 1;
       state.toGo = Math.min(10, state.yardline);
+      plays.push({
+        state: { ...state }, call: "pass", player: "", yards: 0, scored: false,
+        caught: false,
+      });
+      tick("pass", 0);
+      continue;
+    }
+
+    if (preSnapFlag(state, rules, uniform)) {
       plays.push({
         state: { ...state }, call: "pass", player: "", yards: 0, scored: false,
         caught: false,

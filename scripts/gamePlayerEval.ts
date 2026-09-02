@@ -429,13 +429,16 @@ async function main(): Promise<void> {
       }
 
       for (const one of game.possessions) {
+        // a flag that wiped out the snap is in the walk's list and not
+        // in the release's play count, so it is left out here too
+        const snapped = one.drive.plays.filter((play) => play.player !== "").length;
         droveHere.drives++;
-        droveHere.plays += one.drive.plays.length;
+        droveHere.plays += snapped;
         droveHere.seconds += one.drive.took;
         droveHere.ends.set(one.drive.ending, (droveHere.ends.get(one.drive.ending) ?? 0) + 1);
-        const n = Math.min(one.drive.plays.length, 12);
+        const n = Math.min(snapped, 12);
         droveHere.spread.set(n, (droveHere.spread.get(n) ?? 0) + 1);
-        if (one.drive.plays.length <= 3) droveHere.quick++;
+        if (snapped <= 3) droveHere.quick++;
         droveHere.faced.push(...one.drive.facedAt);
         droveHere.startedAt += one.drive.plays[0]?.state.yardline ?? 0;
 

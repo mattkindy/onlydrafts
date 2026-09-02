@@ -77,6 +77,17 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
   // why the walk stalled more often than drives really do.
   const flagged = rows.filter((r) => r["playType"] === "penalty");
   const penaltyYards = flagged.map((r) => Number(r["yards"]) || 0);
+  /**
+   * Fourth down is left out of the flag rates. The rows there are
+   * mostly false starts before a punt or a kick, and the walk only
+   * snaps a fourth down it goes for.
+   */
+  const snapped = (r: Row) => Number(r["down"]) <= 3;
+  const setBack = rows.filter((r) => r["playType"] === "offenceFlag" && snapped(r));
+  const setBackYards = setBack.map((r) => Number(r["yards"]) || 5);
+  const nudged = rows.filter((r) => r["playType"] === "defenceFlag" && snapped(r));
+  const snaps = scrimmage.filter(snapped).length + flagged.filter(snapped).length +
+    setBack.length + nudged.length;
 
   // how often it is a run, per down and distance band
   const runs = new Map<string, { runs: number; plays: number }>();
@@ -246,6 +257,14 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
         : penaltyYards.length === 0
           ? 10
           : penaltyYards[Math.floor(uniform() * penaltyYards.length)]!,
+    offenceFlag: pulled(setBack.length / Math.max(1, snaps), snaps, fallback?.offenceFlag),
+    offenceFlagYards: (uniform) =>
+      setBackYards.length < ENOUGH && fallback?.offenceFlagYards
+        ? fallback.offenceFlagYards(uniform)
+        : setBackYards.length === 0
+          ? 5
+          : setBackYards[Math.floor(uniform() * setBackYards.length)]!,
+    defenceFlag: pulled(nudged.length / Math.max(1, snaps), snaps, fallback?.defenceFlag),
     runRate: (down, toGo) => {
       const tally = runs.get(`${down}|${distanceBand(toGo)}`);
       const league = fallback ? fallback.runRate(down, toGo) : 0.45;
