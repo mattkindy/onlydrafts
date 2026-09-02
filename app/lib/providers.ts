@@ -25,6 +25,8 @@ export interface Roster {
 export interface League {
   provider: "sleeper" | "espn";
   leagueId: string;
+  /** which season this is, since watching the draft has to ask again */
+  season: number;
   name: string;
   size: number;
   pays: Pays;
@@ -44,7 +46,6 @@ export interface Provider {
   asks: string;
   wants: string;
   leaguesFor: (who: string, season: number) => Promise<League[]>;
-  /** espn keeps a draft behind its own view, so only Sleeper is live */
   draftNow: ((league: League) => Promise<DraftNow | null>) | null;
 }
 
@@ -61,6 +62,15 @@ export interface DraftNow {
     roster_id?: number;
     pick_no: number;
     is_keeper?: boolean;
+    round?: number;
+    draft_slot?: number;
+    /**
+     * Who he is, when the provider already knows. Sleeper hands back an
+     * id and the page looks it up in the file it keeps; ESPN numbers its
+     * own men and there is no such file, so its picks arrive named.
+     */
+    name?: string;
+    position?: string;
   }[];
 }
 
@@ -90,6 +100,34 @@ const ESPN_SLOTS: Record<number, string> = {
   0: "QB", 2: "RB", 4: "WR", 6: "TE", 16: "DEF", 17: "K",
   23: "FLEX", 7: "FLEX",
 };
+
+/**
+ * What position a man plays. ESPN numbers a lineup slot and a position
+ * separately and the two disagree: 4 is the wide receiver slot but a
+ * tight end, so reading one with the other quietly mislabels people.
+ */
+const ESPN_POSITIONS: Record<number, string> = {
+  1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DEF",
+};
+
+/** ESPN's number for each pro team, against the code the board uses */
+const ESPN_TEAMS: Record<number, string> = {
+  1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN",
+  8: "DET", 9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV", 14: "LA",
+  15: "MIA", 16: "MIN", 17: "NE", 18: "NO", 19: "NYG", 20: "NYJ",
+  21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC", 25: "SF", 26: "SEA",
+  27: "TB", 28: "WAS", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU",
+};
+
+/**
+ * What to call an ESPN man.
+ *
+ * A defence there is "Falcons D/ST" under a made up id of -16000 minus
+ * its pro team, while the board goes by team code. Left alone the two
+ * never match, so a defence would stay on the board after it was taken.
+ */
+const espnNameOf = (id: number, fullName: string, pos: string) =>
+  pos === "DEF" ? ESPN_TEAMS[-id - 16000] ?? fullName : fullName;
 
 export interface SleeperMan {
   n: string;
@@ -145,6 +183,68 @@ export async function sleeperPlayers() {
 
   keep("players.v4", { at: Date.now(), men: trimmed });
   sleeperMen = trimmed;
+
+  return trimmed;
+}
+
+export interface EspnMan {
+  n: string;
+  p: string;
+}
+
+export type EspnMen = Record<string, EspnMan>;
+
+/** ESPN's whole player list, trimmed and kept for the day */
+let espnMen: EspnMen | null = null;
+
+/**
+ * Everyone ESPN has, by the numbers it gives them.
+ *
+ * A pick arrives as a number and nothing else. The rosters in the same
+ * answer name only the men already handed out, which before a draft is
+ * nobody, so the board would sit blank until somebody picked. This is
+ * the list the public site reads and it needs no cookie.
+ */
+export async function espnPlayers(season: number): Promise<EspnMen> {
+  if (espnMen) {
+    return espnMen;
+  }
+
+  const key = "espnPlayers." + season;
+  const cached = stored<{ at: number; men: EspnMen } | null>(key, null);
+
+  if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) {
+    espnMen = cached.men;
+
+    return cached.men;
+  }
+
+  const answered = await fetch(
+    "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/" +
+      season + "/players?scoringPeriodId=0&view=players_wl",
+    // asked without a limit it returns only the first fifty men
+    { headers: { "x-fantasy-filter": '{"players":{"limit":4000}}' } },
+  );
+
+  if (!answered.ok) {
+    throw new Error("ESPN would not hand over its player list.");
+  }
+
+  const raw = await answered.json() as {
+    id: number; fullName?: string; defaultPositionId?: number;
+  }[];
+  const trimmed: EspnMen = {};
+
+  for (const man of raw) {
+    const pos = ESPN_POSITIONS[man.defaultPositionId ?? -1];
+
+    if (man.fullName && pos) {
+      trimmed[man.id] = { n: espnNameOf(man.id, man.fullName, pos), p: pos };
+    }
+  }
+
+  keep(key, { at: Date.now(), men: trimmed });
+  espnMen = trimmed;
 
   return trimmed;
 }
@@ -229,6 +329,7 @@ async function sleeperLeagues(username: string): Promise<League[]> {
     out.push({
       provider: "sleeper",
       leagueId: String(lg["league_id"]),
+      season: Number(lg["season"] ?? state.season),
       name: String(lg["name"]),
       size: Number(lg["total_rosters"]),
       pays: (lg["scoring_settings"] ?? {}) as Pays,
@@ -324,21 +425,80 @@ export function espnCookiesFrom(pasted: string) {
   return { swid: swid?.[1] ?? "", s2: s2?.[1] ?? "" };
 }
 
-async function espnLeagues(leagueId: string, season: number): Promise<League[]> {
+/**
+ * One league, however it has to be reached.
+ *
+ * A page here cannot read the cookies espn.com keeps, and never will:
+ * that rule is what stops any site reading your bank session. It can
+ * ask the browser to send them, and whether the browser agrees is
+ * ESPN's choice. So a private league is tried this way first, in case
+ * it opens for nothing, and only then does it come down to the relay.
+ */
+async function espnAnswer(leagueId: string, season: number) {
   const at = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/" +
     season + "/segments/0/leagues/" + encodeURIComponent(leagueId) +
     "?view=mTeam&view=mSettings&view=mRoster&view=mDraftDetail";
-  /**
-   * A page here cannot read the cookies espn.com keeps, and never will:
-   * that rule is what stops any site reading your bank session. It can
-   * ask the browser to send them, and whether the browser agrees is
-   * ESPN's choice. So a private league is tried this way first, in case
-   * it opens for nothing, and only then does it come down to the relay.
-   */
   const answered = await fetch(at, { credentials: "include" }).catch(() => null);
-  const said = answered?.ok
+
+  return answered?.ok
     ? await answered.json()
     : await throughTheWorker(leagueId, season);
+}
+
+interface EspnTeam {
+  id: number;
+  name?: string;
+  location?: string;
+  nickname?: string;
+  roster?: { entries?: { playerId?: number; playerPoolEntry?: { player?: {
+    id?: number; fullName?: string; defaultPositionId?: number;
+  } } }[] };
+}
+
+interface EspnPick {
+  playerId: number;
+  teamId: number;
+  roundId: number;
+  roundPickNumber: number;
+  overallPickNumber: number;
+  keeper?: boolean;
+  reservedForKeeper?: boolean;
+}
+
+/**
+ * Which slot each team picks from.
+ *
+ * ESPN lists the teams in the order they pick, so a team's place in
+ * that list is its slot. The list gets shuffled an hour before the
+ * draft starts, so it is read fresh every time rather than kept. Round
+ * one gives the same order, and is used if the list is missing.
+ */
+function espnOrder(said: {
+  settings?: { draftSettings?: { pickOrder?: number[] } };
+  draftDetail?: { picks?: EspnPick[] };
+}): Record<string, number> {
+  const order: Record<string, number> = {};
+
+  for (const [i, teamId] of (said.settings?.draftSettings?.pickOrder ?? [])
+    .entries()) {
+    order[String(teamId)] = i + 1;
+  }
+
+  if (Object.keys(order).length) {
+    return order;
+  }
+
+  for (const pick of said.draftDetail?.picks ?? []) {
+    if (pick.roundId === 1) {
+      order[String(pick.teamId)] = pick.roundPickNumber;
+    }
+  }
+
+  return order;
+}
+
+async function espnLeagues(leagueId: string, season: number): Promise<League[]> {
+  const said = await espnAnswer(leagueId, season);
 
   if (!said?.teams) {
     throw new Error("ESPN has no league with that id for this season.");
@@ -367,37 +527,36 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     }
   }
 
-  interface EspnTeam {
-    id: number;
-    name?: string;
-    location?: string;
-    nickname?: string;
-    draftDayProjectedRank?: number;
-    roster?: { entries?: { playerPoolEntry?: { player?: {
-      fullName?: string; defaultPositionId?: number;
-    } } }[] };
-  }
-
   const teams = said.teams as EspnTeam[];
   const nameOf = (team: EspnTeam) =>
     (team.name ?? [team.location, team.nickname].filter(Boolean).join(" ")).trim();
   const menOf = (team: EspnTeam): Man[] => (team.roster?.entries ?? [])
-    .map((e) => e.playerPoolEntry?.player)
-    .filter((p): p is { fullName: string; defaultPositionId?: number } =>
-      Boolean(p?.fullName))
-    .map((p) => ({
-      name: p.fullName,
-      key: normalizeName(p.fullName),
-      pos: ESPN_SLOTS[p.defaultPositionId ?? -1] ?? "",
-    }));
-  const everyRound = Array.from({ length: ROUNDS }, (_, i) => i + 1);
+    .map((e) => ({
+      ...e.playerPoolEntry?.player,
+      id: e.playerPoolEntry?.player?.id ?? e.playerId,
+    }))
+    .filter((p): p is { id: number; fullName: string;
+      defaultPositionId?: number } => Boolean(p.fullName && p.id))
+    .map((p) => {
+      const pos = ESPN_POSITIONS[p.defaultPositionId ?? -1] ?? "";
+      const name = espnNameOf(p.id, p.fullName, pos);
+
+      return { name, key: normalizeName(name), pos };
+    });
+  const rounds = Math.max(
+    ...(said.draftDetail?.picks ?? []).map((p: EspnPick) => p.roundId),
+    ROUNDS,
+  );
+  const everyRound = Array.from({ length: rounds }, (_, i) => i + 1);
+  const order = espnOrder(said);
 
   // every team is offered, since ESPN will not say which one is yours
   // unless you are signed in to it
   return teams.map((team) => ({
     provider: "espn" as const,
     leagueId: String(leagueId),
-    name: (settings.name ?? "ESPN league") + " (" + nameOf(team) + ")",
+    season,
+    name: (settings.name ?? "ESPN league").trim() + " (" + nameOf(team) + ")",
     size: teams.length,
     pays,
     slots,
@@ -406,12 +565,82 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     members: Object.fromEntries(teams.map((t) => [String(t.id), nameOf(t)])),
     myRoster: menOf(team),
     myPicks: everyRound,
-    draftSlot: team.draftDayProjectedRank ?? null,
+    draftSlot: order[String(team.id)] ?? null,
     snake: true,
     allRosters: teams.map((t) => ({
       owner: nameOf(t), picks: everyRound, keys: menOf(t),
     })),
   }));
+}
+
+/**
+ * An ESPN draft as it is right now.
+ *
+ * The whole board exists before anyone picks: every slot is listed with
+ * a player id of -1 until somebody fills it. Those empty slots are
+ * dropped here, so what comes back is the picks actually made, which is
+ * what Sleeper gives too.
+ *
+ * A pick has only a number in it, so names come from the player list.
+ * Where ESPN has already put a man on a roster it gives his name in
+ * this same answer, and that wins, since it cannot be out of date.
+ */
+async function espnDraft(league: League): Promise<DraftNow | null> {
+  const said = await espnAnswer(league.leagueId, league.season);
+  const detail = said?.draftDetail;
+
+  if (!detail?.picks) {
+    return null;
+  }
+
+  const picks = detail.picks as EspnPick[];
+  const men = await espnPlayers(league.season).catch(() => ({} as EspnMen));
+  const named = new Map<number, { name: string; pos: string }>();
+
+  for (const [id, man] of Object.entries(men)) {
+    named.set(Number(id), { name: man.n, pos: man.p });
+  }
+
+  for (const team of (said.teams ?? []) as EspnTeam[]) {
+    for (const entry of team.roster?.entries ?? []) {
+      const man = entry.playerPoolEntry?.player;
+      const id = man?.id ?? entry.playerId;
+
+      if (id && man?.fullName) {
+        const pos = ESPN_POSITIONS[man.defaultPositionId ?? -1] ?? "";
+        named.set(id, { name: espnNameOf(id, man.fullName, pos), pos });
+      }
+    }
+  }
+
+  const teams = (said.teams ?? []).length || league.size;
+  const order = espnOrder(said);
+
+  return {
+    draft: {
+      settings: { teams, rounds: Math.max(...picks.map((p) => p.roundId), 1) },
+      draft_order: order,
+      status: detail.drafted
+        ? "complete"
+        : detail.inProgress ? "drafting" : "pre_draft",
+    },
+    picks: picks
+      .filter((pick) => named.has(pick.playerId))
+      .map((pick) => ({
+        player_id: String(pick.playerId),
+        picked_by: String(pick.teamId),
+        pick_no: pick.overallPickNumber ||
+          (pick.roundId - 1) * teams + pick.roundPickNumber,
+        round: pick.roundId,
+        // the slot is where the team picks from, not where the pick
+        // falls in the round: those two run opposite ways every other
+        // round of a snake, which would mirror half the board
+        draft_slot: order[String(pick.teamId)] ?? pick.roundPickNumber,
+        is_keeper: Boolean(pick.keeper ?? pick.reservedForKeeper),
+        name: named.get(pick.playerId)!.name,
+        position: named.get(pick.playerId)!.pos,
+      })),
+  };
 }
 
 export const PROVIDERS: Record<string, Provider> = {
@@ -427,7 +656,7 @@ export const PROVIDERS: Record<string, Provider> = {
     asks: "espn league id",
     wants: "league id",
     leaguesFor: espnLeagues,
-    draftNow: null,
+    draftNow: espnDraft,
   },
 };
 
