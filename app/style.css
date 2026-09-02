@@ -36,6 +36,10 @@
   #posfilter button.on { background: var(--go); color: #0C1117; }
   /* cards or a table for the whole board, since one is for reading and
      the other for looking a man up */
+  /* what the ordering you picked actually means, since the three
+     answer different questions and the same man moves between them */
+  .says { flex: 1 1 100%; color: var(--muted); font-size: .78rem;
+    line-height: 1.35; margin: -.2rem 0 .2rem; max-width: 46ch; }
   .how { margin: -.3rem 0 .8rem; }
   .how button { font: inherit; font-size: .78rem; font-weight: 600;
     background: var(--chip); color: var(--muted); border: none;
