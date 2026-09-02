@@ -485,6 +485,21 @@ describe("the scoring in play is on screen", () => {
       .toBeCloseTo(10 + 8 - 2, 5);
     expect(payFor({ int: 1 }, pays)).toBeCloseTo(2, 5);
   });
+
+  /**
+   * ESPN prices a play per position where two men are paid differently
+   * for it, and parks the plain price at nought when it does. Reading
+   * the plain one left every sack, pick and shutout looking free.
+   */
+  it("takes ESPN's price for a defence over the blank one beside it", async () => {
+    const { espnWorthOf } = await import("./lib/providers.ts");
+
+    expect(espnWorthOf({ points: 0, pointsOverrides: { "16": 1 } })).toBe(1);
+    expect(espnWorthOf({ points: 0, pointsOverrides: { "16": -5 } })).toBe(-5);
+    // a plain one with nothing beside it still counts
+    expect(espnWorthOf({ points: 6, pointsOverrides: {} })).toBe(6);
+    expect(espnWorthOf({ points: 0.04 })).toBe(0.04);
+  });
 });
 
 /**
