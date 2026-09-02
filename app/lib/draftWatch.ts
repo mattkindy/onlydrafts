@@ -9,6 +9,7 @@
 
 import { normalizeName, keep } from "./store.ts";
 import { providerOf, type League } from "./providers.ts";
+import { keyForPick } from "./draftRating.ts";
 import type { DraftNow, Pick } from "../views/Draft.tsx";
 
 /**
@@ -48,6 +49,8 @@ interface Options {
   manual: string;
   nameFor: (key: string) => string;
   positionFor: (key: string) => string;
+  /** the side he plays for, which is how a defence is looked up */
+  teamFor?: (key: string) => string;
   /** who the league office has listed, by the board's own key */
   hurt?: Record<string, { status: string; part?: string }>;
 }
@@ -106,7 +109,15 @@ export async function draftNow(options: Options): Promise<DraftNow> {
       continue;
     }
 
-    const key = normalizeName(name);
+    const position = pick.position ?? pick.metadata?.position ??
+      options.positionFor(pick.player_id);
+    const team = pick.team ?? options.teamFor?.(pick.player_id) ?? null;
+    /**
+     * A defence is put on the board under the three letters a
+     * scoreboard writes, never under a name, so keying one off the name
+     * left every defence taken sitting there as though it were free.
+     */
+    const key = keyForPick({ name, position, team }, normalizeName);
     const mine = pick.picked_by === league.userId;
     const who = mine
       ? league.team
@@ -123,8 +134,8 @@ export async function draftNow(options: Options): Promise<DraftNow> {
       round: pick.round,
       slot: pick.draft_slot,
       name,
-      position: pick.position ?? pick.metadata?.position ??
-        options.positionFor(pick.player_id),
+      position,
+      team,
       who,
       mine,
       keeper: Boolean(pick.is_keeper),

@@ -71,6 +71,8 @@ export interface DraftNow {
      */
     name?: string;
     position?: string;
+    /** the side, which is how a defence is looked up on the board */
+    team?: string | null;
   }[];
 }
 
@@ -197,6 +199,8 @@ const espnNameOf = (id: number, fullName: string, pos: string) =>
 export interface SleeperMan {
   n: string;
   p: string;
+  /** the side he plays for, which is the whole of who a defence is */
+  t?: string;
   /** what the league office says: questionable, out, ir, and the rest */
   hurt?: string;
   /** and where, since a hamstring and a thumb are different news */
@@ -221,7 +225,7 @@ export async function sleeperPlayers() {
    */
   const cached = stored<{
     at: number; men: SleeperMen;
-  } | null>("players.v4", null);
+  } | null>("players.v5", null);
 
   if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) {
     sleeperMen = cached.men;
@@ -230,23 +234,32 @@ export async function sleeperPlayers() {
   }
 
   const raw = await ask("/players/nfl") as Record<string, {
-    full_name?: string; position?: string;
+    full_name?: string; position?: string; team?: string | null;
     injury_status?: string | null; injury_body_part?: string | null;
   }>;
   const trimmed: SleeperMen = {};
 
   for (const [id, p] of Object.entries(raw)) {
-    if (p.full_name && p.position) {
+    /**
+     * Not one of the thirty two defences is given a full name, so all
+     * of them used to be dropped here. A defence taken on draft night
+     * then stayed on the board, and none of them counted for anybody in
+     * the draft rating. The side is the whole of who a defence is.
+     */
+    const name = p.full_name ?? (p.position === "DEF" ? p.team ?? "" : "");
+
+    if (name && p.position) {
       trimmed[id] = {
-        n: p.full_name,
+        n: name,
         p: p.position,
+        ...(p.team ? { t: p.team } : {}),
         ...(p.injury_status ? { hurt: p.injury_status } : {}),
         ...(p.injury_body_part ? { part: p.injury_body_part } : {}),
       };
     }
   }
 
-  keep("players.v4", { at: Date.now(), men: trimmed });
+  keep("players.v5", { at: Date.now(), men: trimmed });
   sleeperMen = trimmed;
 
   return trimmed;
@@ -737,6 +750,11 @@ async function espnDraft(league: League): Promise<DraftNow | null> {
         is_keeper: Boolean(pick.keeper ?? pick.reservedForKeeper),
         name: named.get(pick.playerId)!.name,
         position: named.get(pick.playerId)!.pos,
+        // a defence is already down as its code, which is what the
+        // board looks one up by
+        team: named.get(pick.playerId)!.pos === "DEF"
+          ? named.get(pick.playerId)!.name
+          : null,
       })),
   };
 }

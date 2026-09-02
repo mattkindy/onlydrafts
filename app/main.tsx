@@ -214,6 +214,7 @@ function App() {
           manual,
           nameFor: (id) => all[id]?.n ?? "",
           positionFor: (id) => all[id]?.p ?? "",
+          teamFor: (id) => all[id]?.t ?? "",
           /**
            * Keyed the way the board keys a man, since the page looks
            * him up by name and not by whatever id a provider uses.
@@ -355,7 +356,12 @@ function App() {
         <p>{blurb}</p>
       </div>
 
-      <div class="controls">
+      {/* every other view leaves this bar with nothing in it, and an
+          empty one still draws as a white strip across the page */}
+      <div
+        class="controls"
+        hidden={!["leagues", "keepers", "draft"].includes(view)}
+      >
         {view === "leagues" && (
           <>
             <label>
