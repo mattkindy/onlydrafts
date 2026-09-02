@@ -118,6 +118,20 @@ function SeasonNotStarted() {
   );
 }
 
+/**
+ * One team in one league.
+ *
+ * ESPN will not say which of the teams is yours unless you are signed
+ * in to it, so it offers every one and they all carry the same league
+ * number. Which team it is has to be part of telling two of them apart.
+ */
+const sameSeat = (a: League | null, b: League | null) =>
+  Boolean(a && b && a.provider === b.provider &&
+    a.leagueId === b.leagueId && a.userId === b.userId);
+
+/** where the team you picked in a league is remembered */
+const seatKey = (lg: League) => "seat." + lg.provider + "." + lg.leagueId;
+
 function App() {
   const [season, setSeason] = useState<number | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
@@ -129,6 +143,7 @@ function App() {
   const [perTeam, setPerTeam] = useState(() => stored("keepn", 3));
   const [posFilter, setPosFilter] = useState("ALL");
   const [query, setQuery] = useState("");
+  const [everyTeam, setEveryTeam] = useState(false);
   /**
    * The weeks he wins you leads, because ordering that way beat
    * ordering by value over replacement in 26 of 36 seats across three
@@ -240,6 +255,17 @@ function App() {
       keep("leagues", found);
       keep("username", who);
       keep("provider", provider);
+
+      // looking again is how you pick up a draft order drawn since, or
+      // a roster that has moved on, so the league you are on is
+      // replaced by the one this read returned
+      const again = found.find((lg) => sameSeat(lg, active));
+
+      if (again) {
+        setActive(again);
+        keep("active", again);
+      }
+
       setStatus(found.length ? "" : "no leagues there");
     } catch (e) {
       if (e instanceof NeedsEspnCookies) {
@@ -252,9 +278,21 @@ function App() {
     }
   };
 
+  /**
+   * Every team in a league where only one of them is yours. Once you
+   * have said which, the others are put away until you ask for them.
+   */
+  const shown = useMemo(() => everyTeam ? leagues : leagues.filter((lg) => {
+    const picked = stored(seatKey(lg), "");
+
+    return !picked || picked === lg.userId;
+  }), [leagues, everyTeam, active]);
+
   const open = (lg: League) => {
     setActive(lg);
     keep("active", lg);
+    keep(seatKey(lg), lg.userId);
+    setEveryTeam(false);
     setView("draft");
   };
 
@@ -444,12 +482,20 @@ function App() {
                   A league you joined since you last looked will not be
                   here until you look again.
                 </p>
+                {leagues.length > shown.length && (
+                  <p class="hint">
+                    Showing the team you picked.{" "}
+                    <button onClick={() => setEveryTeam(true)}>
+                      pick a different one
+                    </button>
+                  </p>
+                )}
                 <div class="cards">
-                  {leagues.map((lg) => (
+                  {shown.map((lg) => (
                     <div
                       key={lg.leagueId + lg.userId}
                       class={"card league-card" +
-                        (active?.leagueId === lg.leagueId ? " mine" : "")}
+                        (sameSeat(active, lg) ? " mine" : "")}
                       onClick={() => open(lg)}
                     >
                       <div class="nm">{lg.name}</div>
