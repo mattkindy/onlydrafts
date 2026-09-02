@@ -31,6 +31,22 @@ import { DraftView, type DraftNow } from "./views/Draft.tsx";
 
 export type Order = "war" | "rank" | "adp";
 
+/**
+ * What each ordering means, said once you have chosen it. The three
+ * answer different questions and the same man moves a long way between
+ * them, so a reader wondering why Puka Nacua is top of one list and
+ * eighth on another should not have to work it out.
+ */
+const ORDER_MEANS: Record<Order, string> = {
+  war: "what he adds over the man you would otherwise end up with at " +
+    "his seat, so it ranks upgrades rather than players and everyone " +
+    "in your league sees a different order",
+  rank: "where we rank him whoever drafts him, from the regression, " +
+    "his share of the work, the room and the games played out",
+  adp: "where the room is taking him, which says who will last until " +
+    "your next turn",
+};
+
 type View = "leagues" | "roster" | "keepers" | "draft" | "rating" | "start" | "waivers";
 
 const COPY: Record<View, [string, string, string]> = {
@@ -369,6 +385,7 @@ function App() {
                 <option value="adp">adp</option>
               </select>
             </label>
+            <span class="says">{ORDER_MEANS[order]}</span>
             {/* the filter is its own thing: it hides men you cannot start
                 rather than changing the order of the ones you can */}
             <label>
