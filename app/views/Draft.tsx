@@ -349,17 +349,15 @@ function FullRankings(
                   p={p}
                   max={max}
                   teams={teams}
-                  lead={order === "adp" ? "adp" : "rank"}
+                  lead={order}
+                  wins={need ? (need.added * 100).toFixed(1) + "%" : undefined}
                   teamsInLeague={teams}
                   finish={finishRange(p, board)}
                   mine={state.mine.has(p.key)}
                   {...(injuryBadge(state.hurt?.[p.key]) ?? {})}
-                  aside={byNeed && need
-                    ? {
-                      label: "weeks won",
-                      value: (need.added * 100).toFixed(1) + "%",
-                    }
-                    : STREAMED.has(p.position)
+                  // the weeks he wins you lead the card when they are
+                  // the order, so what is left down here is his value
+                  aside={STREAMED.has(p.position)
                       /**
                        * You have to start a kicker and a defence, so
                        * what a pick here is worth is the wrong question

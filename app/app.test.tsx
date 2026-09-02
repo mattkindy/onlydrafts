@@ -1064,3 +1064,65 @@ describe("what a man is worth, over the middle of his seasons", () => {
       .toContain("over a season");
   });
 });
+
+/**
+ * Whatever the list is sorted by has to lead the card. Ordering by the
+ * weeks a man wins you while the card led with his place on our board
+ * put Puka Nacua top of the list with 1.08 beside him, which reads as a
+ * broken sort.
+ */
+describe("the card leads with the order it is in", () => {
+  const league = aLeague();
+  const men = boardFor(league);
+
+  const draw = (order: "war" | "rank" | "adp") => {
+    const at = document.createElement("div");
+    document.body.appendChild(at);
+    render(
+      <DraftView men={men} state={NO_DRAFT} teams={12} snake posFilter="ALL"
+        query="" order={order} slots={league.slots} onMore={() => {}} />,
+      at,
+    );
+
+    return at.querySelector(".card .big")!.textContent!;
+  };
+
+  it("leads with the weeks he wins you when that is the order", () => {
+    const big = draw("war");
+
+    expect(big).toContain("weeks won");
+    expect(big).toContain("%");
+    // and his place on our board goes underneath, small
+    expect(big).toContain("ours");
+  });
+
+  it("leads with our own place when that is the order", () => {
+    const big = draw("rank");
+
+    expect(big).toContain("ours");
+    expect(big).not.toContain("weeks won");
+  });
+
+  it("leads with the room's place when that is the order", () => {
+    const big = draw("adp");
+
+    expect(big.indexOf("adp")).toBeLessThan(big.indexOf("ours"));
+  });
+
+  it("puts the man it leads with at the top of the list", () => {
+    const at = document.createElement("div");
+    document.body.appendChild(at);
+    render(
+      <DraftView men={men} state={NO_DRAFT} teams={12} snake posFilter="ALL"
+        query="" order="war" slots={league.slots} onMore={() => {}} />,
+      at,
+    );
+    const shown = Array.from(at.querySelectorAll(".cards .card .big"))
+      .slice(0, 6)
+      .map((n) => Number(n.textContent!.match(/([\d.]+)%/)?.[1] ?? 0));
+
+    for (let i = 1; i < shown.length; i++) {
+      expect(shown[i]!).toBeLessThanOrEqual(shown[i - 1]!);
+    }
+  });
+});

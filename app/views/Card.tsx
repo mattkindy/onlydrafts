@@ -344,27 +344,40 @@ export function SeasonCard(
     teams: number;
     costs?: number | null;
     /** which way of counting him the list is ordered by */
-    lead?: "rank" | "adp";
+    lead?: "war" | "rank" | "adp";
+    /** what he adds to the weeks you win, when that is the order */
+    wins?: string;
   },
 ) {
   const { p, teams } = props;
   const g = p.game;
   const ours = p.rank ? asRound(p.rank, teams) : null;
   const room = p.adpRank ? asRound(p.adpRank, teams) : null;
-  const leading = props.lead === "adp" ? room : ours;
-  const then = props.lead === "adp" ? ours : room;
+
+  /**
+   * Whatever the list is sorted by leads, since a reader going down the
+   * page is reading that. Ordering by the weeks a man wins you while
+   * the card led with his place on our board put Puka Nacua top of the
+   * list with 1.08 beside him, which reads as a broken sort.
+   */
+  const leading = props.lead === "war" && props.wins
+    ? { label: "weeks won", value: props.wins }
+    : props.lead === "adp"
+      ? room && { label: "adp", value: room }
+      : ours && { label: "ours", value: ours };
+  const then = props.lead === "war"
+    ? ours && { label: "ours", value: ours }
+    : props.lead === "adp"
+      ? ours && { label: "ours", value: ours }
+      : room && { label: "adp", value: room };
 
   return (
     <Card
       {...props}
       value={g?.["ev"] ?? p.ppg ?? 0}
       unit="pts/g"
-      leadPick={leading
-        ? { label: props.lead === "adp" ? "adp" : "ours", value: leading }
-        : undefined}
-      thenPick={then
-        ? { label: props.lead === "adp" ? "ours" : "adp", value: then }
-        : undefined}
+      leadPick={leading || undefined}
+      thenPick={then || undefined}
       range={g
         ? {
             low: g["q1"]!, mid: g["ev"]!, high: g["q3"]!,
