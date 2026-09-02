@@ -29,6 +29,8 @@ import { DraftRating } from "./views/DraftRating.tsx";
 import { Keepers } from "./views/Keepers.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
 
+export type Order = "war" | "rank" | "adp";
+
 type View = "leagues" | "roster" | "keepers" | "draft" | "rating" | "start" | "waivers";
 
 const COPY: Record<View, [string, string, string]> = {
@@ -50,7 +52,7 @@ const COPY: Record<View, [string, string, string]> = {
   draft: [
     "Draft help",
     "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
-    "The big number is value over a replacement starter. Players stay on the board until they are actually kept or drafted.",
+    "The board leads with what a man adds to the weeks you win, given the side you would finish with. Players stay on the board until they are actually kept or drafted.",
   ],
   rating: [
     "How the draft went",
@@ -111,14 +113,16 @@ function App() {
   const [perTeam, setPerTeam] = useState(() => stored("keepn", 3));
   const [posFilter, setPosFilter] = useState("ALL");
   const [query, setQuery] = useState("");
-  const [order, setOrder] = useState<"rank" | "adp">("rank");
-  const [needOnly, setNeedOnly] = useState(false);
   /**
-   * On by default. Ordering by what a man adds to the weeks you win
-   * beat ordering by value over replacement in 26 of 36 seats across
-   * three finished seasons, by about five points of weekly win rate.
+   * The weeks he wins you leads, because ordering that way beat
+   * ordering by value over replacement in 26 of 36 seats across three
+   * finished seasons, by about five points of weekly win rate. It used
+   * to be a checkbox called weight by need, which described the measure
+   * it replaced rather than this one and quietly overrode the order
+   * chosen here.
    */
-  const [byNeed, setByNeed] = useState(() => stored("byneed", true));
+  const [order, setOrder] = useState<Order>(() => stored<Order>("order", "war"));
+  const [needOnly, setNeedOnly] = useState(false);
   const [manual, setManual] = useState(() => stored("manual", ""));
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -355,32 +359,24 @@ function App() {
               order by{" "}
               <select
                 value={order}
-                onChange={(e) =>
-                  setOrder(e.currentTarget.value as "rank" | "adp")}
+                onChange={(e) => {
+                  setOrder(e.currentTarget.value as Order);
+                  keep("order", e.currentTarget.value);
+                }}
               >
+                <option value="war">the weeks he wins you</option>
                 <option value="rank">our value</option>
                 <option value="adp">adp</option>
               </select>
             </label>
-            {/* A filter and a sort, kept apart: one hides men you cannot
-                start, the other reorders by what they add to the lineup
-                you have left. */}
+            {/* the filter is its own thing: it hides men you cannot start
+                rather than changing the order of the ones you can */}
             <label>
               <input
                 type="checkbox" checked={needOnly}
                 onChange={(e) => setNeedOnly(e.currentTarget.checked)}
               />{" "}
               only what I still need
-            </label>
-            <label>
-              <input
-                type="checkbox" checked={byNeed}
-                onChange={(e) => {
-                  setByNeed(e.currentTarget.checked);
-                  keep("byneed", e.currentTarget.checked);
-                }}
-              />{" "}
-              weight by need
             </label>
             <label>
               find{" "}
@@ -492,7 +488,6 @@ function App() {
             order={order}
             slots={active?.slots ?? null}
             needOnly={needOnly}
-            byNeed={byNeed}
             onMore={setShowing}
           />
         )}
