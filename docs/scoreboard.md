@@ -22,16 +22,18 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7492 | .6961 | .7004 | .343 |
+| now | .7479 | .7128 | .7037 | .344 |
 
-This .343 is the first time the walk has beaten saying every week is a
-man's average so far, which reads .340. An earlier .343 in this table
-did not reproduce. walkWeeklyEval seeds its rng off the season, the
-week and the two sides, so it repeats to four figures, and the build
-that was shipped at the time read .327 twice. That older number had
-been measured while the kept files still carried the formation counts,
-which a checkout put back. This one is the goal line change and it
-reproduces.
+The .344 beats saying every week is a man's average so far, which
+reads .340. Two earlier figures in this table need a note. An early
+.343 did not reproduce: walkWeeklyEval seeds its rng off the season,
+the week and the two sides, so it repeats to four figures, and the
+build shipped at the time read .327 twice, because the kept files
+still carried the formation counts a checkout had put back. And the
+.343 the goal line change earned had fallen to .319 by early
+September, across three walk commits that were judged on the drive
+check alone (the fourth down pooling, the replayed downs, the goal
+line settle). Which of the three cost it is worked out below.
 
 The walk's seat on the board is twenty percent. It is swept after every
 change, and swept out to the whole board below.
@@ -48,6 +50,8 @@ change, and swept out to the whole board below.
 | what a side's formation does to a play | .7487 | .7050 | .6971 | .327 |
 | room asked of the depth pools near the line | .7497 | .7012 | .6981 | .331 |
 | the goal line asking for five plays a man | .7492 | .6961 | .7004 | .343 |
+| the fourth down, flag and goal fixes, judged on drives | | | | .319 |
+| a man's leaning believed by his own count | .7479 | .7128 | .7037 | .344 |
 
 The walk's own column is the best it has been on a season, .7004, and
 on every place worth less than the one above, .7070. The board's first
@@ -105,8 +109,10 @@ it toward the downs a man is used on. Moving the level onto the counts
 lifts the average share to 24.0% and drops the top of the list to
 28.4%, because the counts the walk has are conditioned on the state and
 faded over several seasons, so a man who started two years ago
-still has weight at 0.7 squared. Stale rather than wrong, and that is
-the lead worth following.
+still has weight at 0.7 squared. Stale rather than wrong, and that
+looked like the lead worth following. It was not: the level was fine
+and the leaning was the problem, which is worked out below under who
+gets the ball.
 
 **What he makes with it is level with the average**, 5.55 yards out
 against 5.40. That first read 7.42 and it was wrong: the walk draws a
@@ -408,6 +414,75 @@ measured, and both were the same mistake: comparing a draw, or a
 ranking, against something that already knows the answer. Measure what
 the model actually claims.
 
+## Who gets the ball, and what was spoiling it
+
+The man a snap goes to is weighted by his projected share times a
+leaning, which is his share of the plays counted in this state cell
+divided by his share of plays overall. A man used on third down leans
+that way. The section above had blamed stale counts for the walk
+putting the wrong man top of the list, and that was wrong: the counts
+set the level only for men the projection does not price. What spoils
+the allocation is the leaning. It is the ratio of two thin shares, and
+off two or three plays in a cell it can be ten to one either way.
+
+scripts/playLayerEval.ts scores the allocation on its own, off the
+plays that happened, with the walk built from what it knows at week one. Two
+figures: how often the man it puts first was the man who took it, and
+the average share it gave the man who took it.
+
+| top of the list | 2023 | 2024 | 2025 |
+|---|---|---|---|
+| last season's counts | 33.4% | 34.6% | 31.6% |
+| the leaning as it shipped | 29.6% | 29.4% | 29.6% |
+| no leaning at all | 34.3% | 34.8% | 34.6% |
+| believed by his own count, sixty plays | 34.3% | 35.0% | 34.9% |
+
+The shipped walk was worse than last season's raw counts at naming the
+man. Turning the leaning off beats the counts, but tight ends get
+worse, .238 a week against .244, and the drive check pays: 5.08 yards a
+play against 5.21, because more targets go to men too thin to sample
+and the pooled draw is shorter. Shrinking the leaning instead, so it
+is believed in proportion to his own plays in the cell, n over n plus
+sixty, matches turning it off everywhere and puts tight ends at .282.
+His own count and not the cell's, because a cell of four hundred plays
+says nothing about a man who took three of them. Five and twenty were
+both worse than sixty for quarterbacks, .183 a week against .206 for
+the shipped walk and .223 at sixty, so the setting is not smooth in
+the middle, and sixty is the default.
+
+| weekly | all | QB | RB | WR | TE |
+|---|---|---|---|---|---|
+| shipped | .319 | .206 | .315 | .250 | .244 |
+| no leaning | .345 | .231 | .367 | .266 | .238 |
+| sixty | .344 | .223 | .369 | .265 | .282 |
+
+On a season, replayed forty times, the priced men gain in all three
+seasons and the whole list gives some back in two of them, because the
+leaning had been ordering the deep, unpriced men the board never
+shows.
+
+| 2023 to 2025, 40 runs | shipped | sixty |
+|---|---|---|
+| the whole list, 2023 / 2024 / 2025 | .730 / .724 / .731 | .737 / .712 / .725 |
+| the men ADP priced | .617 / .554 / .673 | .637 / .569 / .671 |
+| the first 60 picks | .482 / .336 / .503 | .484 / .437 / .545 |
+
+The board's first 24 goes from .6961 to .7128, the largest move that
+column has had, the walk's own column to .7037, and the season gives
+back .0013. The seat was swept again and stays at twenty percent: the
+season is best at fifty, .7522, but the first 24 is best at twenty and
+falls from there.
+
+The drive level does not come back with the shrinkage. At sixty the
+walk still gives up on 12% of midfield throws where the shipped one
+gave up on 8.6%, and reads 5.10 yards a play. The pooled draw being
+short is its own problem and is the next thing to fix.
+
+Blending the projected level toward what a man has taken lately, his
+shares in the current season weighted by weeks over weeks plus four,
+did not help, .317 a week at a quarter and .311 at a half, and stays
+off behind RECENT_LEVEL.
+
 ## The snap chain, four ways
 
 Drawing the formation and the defence's shell before the call, so the
@@ -456,6 +531,19 @@ So the term that would carry a matchup is not in four seasons of this
 data, whichever way it is asked for. Treat it as settled rather than
 unlucky.
 
+## After the touchdown
+
+Every touchdown scored seven. Sides make 95.2% of extra points and go
+for two after 9.5% of touchdowns over 2022 to 2025, 81% of the time
+when the six leaves them down two and 88% when it puts them up one,
+three times as often inside the last five minutes, and they convert
+47.4%. The game now draws the kick or the try off the margin and the
+clock, so the late margins that decide play calling are right by a
+point, and a converted try is credited to the man who got the ball and
+to the passer. The drive check moved within noise, which is what it
+should do. It was not benched on the board or on weeks, because two
+point conversions are too rare to move either.
+
 ## What did not work, so nobody tries it twice
 
 Each of these was built, measured and reverted or left switched off.
@@ -491,6 +579,11 @@ Each of these was built, measured and reverted or left switched off.
 - Giving the formation model more seasons. Its thinnest cell already
   has 1,541 plays and most have four to twenty two thousand, so the
   extra history buys nothing and costs staleness.
+- Moving a man's projected share toward what he has taken this season
+  (RECENT_LEVEL). It costs weeks at every strength tried.
+- Turning the state leaning off outright rather than shrinking it. The
+  same play layer gain, but tight ends lose and the pooled draw is
+  asked more often.
 
 Nor do they help each other. Three pairs have been tried, the
 coverage lean with the look tilt, the whole snap chain with the
