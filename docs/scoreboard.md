@@ -27,7 +27,7 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7477 | .7128 | .7043 | .339 |
+| now | .7480 | .7128 | .7039 | .339 |
 
 The .339 is a two seed mean at forty draws and is level with the
 yardstick of a man's average so far, .340. The walk has not beaten
@@ -60,6 +60,7 @@ change, and swept out to the whole board below.
 | the fourth down, flag and goal fixes, judged on drives | | | | .319 at ten draws |
 | a man's leaning believed by his own count | .7479 | .7128 | .7037 | .339 at forty |
 | the goal line carry switched off | .7477 | .7128 | .7043 | .339 |
+| the sacks taken out of the pooled throw | .7480 | .7128 | .7039 | .339 |
 
 The walk's own column is the best it has been on a season, .7004, and
 on every place worth less than the one above, .7070. The board's first
@@ -488,8 +489,8 @@ readings of 5.08 and 5.10 counted them as plays for no yards). The
 walk at sixty still gives up on 12% of midfield throws where the
 shipped one gave up on 8.6%, because more targets go to men too thin
 to sample and the pooled draw is shorter. Passes inside the ten score
-30.6% drawn against 39.3% played. The pooled draw being short is its
-own problem and is the next thing to fix.
+30.6% drawn against 39.3% played. The pooled draw being short is fixed
+in the next section.
 
 Blending the projected level toward what a man has taken lately, his
 shares in the current season weighted by weeks over weeks plus four,
@@ -497,6 +498,53 @@ did not help at ten draws (.317 a week at a quarter and .311 at a half,
 against .344) and stays off behind RECENT_LEVEL. Those gaps are larger
 than the noise, so the result is probably right, though it was not
 re-run at forty.
+
+## The pooled throw paid for the sack twice
+
+A pass is drawn one of two ways. A man with enough plays behind him
+has a whole play sampled from his own record; a thinner man falls back
+to a pool of passes at his depth, drawn from everyone. Both paths
+first draw whether the throw went nowhere, a sack or a ball thrown
+away, at about 10.5% of passes. The pools were built from every pass
+row with air yards, and the 10,637 passes credited to nobody all have
+air yards, so the sacks were in the pool as well. A throw that fell
+back paid for them twice. A sampled throw paid once.
+
+Measured on the 2025 throws, against what those plays gained:
+
+| the pooled path | played | before | after |
+|---|---|---|---|
+| yards a throw | 6.50 | 4.47 | 5.53 |
+| went nowhere | 39.2% | 48.9% | 42.0% |
+| caught | 64.8% | 53.6% | 59.6% |
+
+Once a pooled throw went anywhere it was already right, 10.61 drawn
+against 10.85 played, so the whole shortfall was the nothing rate and
+the catch rate followed it. The pools now keep only the passes
+somebody was credited with. POOL_WASTE=1 puts the sacks back.
+
+The drive check moves from 5.47 yards a play to 5.60 against 5.41
+played, and a pass from short to a little long, 6.42 against 6.09.
+Drives reaching the ten score 70.6% against 68.9% played, from 69.3%.
+The play layer does not move, the week reads .370 both ways on a
+matched forty-draw pair, and the seasons are within noise except 2023's
+priced men, .631 to .642. The board reads .7480, .7128 and .7039. It
+ships because it is a correction, and the parts downstream of it are
+now measured on the right draw.
+
+| 2023 to 2025, 40 runs | sixty, goal lift off | and the pool without sacks |
+|---|---|---|
+| the whole list, 2023 / 2024 / 2025 | .737 / .714 / .728 | .741 / .712 / .727 |
+| the men ADP priced | .631 / .568 / .673 | .642 / .569 / .673 |
+| the first 60 picks | .473 / .427 / .536 | .485 / .429 / .534 |
+
+Two things came out of it and were not fixed. A level for thin men,
+pulled toward one by the touch count, moved the pooled draw at
+midfield from 6.38 to 6.30 at full trust, so whatever makes those men
+worse than league is not in their prior yards. And inside the ten the
+gap that is left is on the sampled path, 30.7% touchdowns drawn on
+throws where those plays scored 39.3%, which is what GOAL_LIFT was
+aimed at.
 
 ## The snap chain, four ways
 
