@@ -129,3 +129,87 @@ describe("the pools kept by depth", () => {
     expect(depthPool(counted)).toContain(-7);
   });
 });
+
+// two backs at the four, one reaching the line on two runs in three
+// and the other on one in three, where sides score half the time
+const aCarry = (player: string, yardline: number, yards: number): PlayRow => ({
+  offence: "NE", defence: "NYJ", down: 1, toGo: yardline, yardline,
+  margin: 0, secondsLeft: 1800, call: "run", yards,
+  touchdown: yards >= yardline ? 1 : 0, player,
+});
+
+const nearTheGoal = (): PlayRow[] => {
+  const rows: PlayRow[] = [];
+
+  for (let i = 0; i < 60; i++) {
+    const yardline = 4 + (i % 3);
+    rows.push(aCarry("Hare", yardline, i % 3 === 2 ? 1 : 6));
+    rows.push(aCarry("Tortoise", yardline, i % 3 === 2 ? 6 : 1));
+  }
+
+  return rows;
+};
+
+/** the same seeded draw every time, so the two settings are comparable */
+const steady = () => {
+  let seed = 7;
+
+  return () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+
+    return seed / 0x7fffffff;
+  };
+};
+
+const scoresAtTheFour = async (cutsHisOwn: boolean) => {
+  vi.resetModules();
+
+  if (cutsHisOwn) {
+    process.env["GOAL_CUT_HIS_OWN"] = "1";
+  } else {
+    delete process.env["GOAL_CUT_HIS_OWN"];
+  }
+
+  const loaded = await import("./fitPlayFactors.js");
+  delete process.env["GOAL_CUT_HIS_OWN"];
+
+  const rows = nearTheGoal();
+  const factors = loaded.fitPlayFactors(rows, loaded.FACTOR_DEFAULTS, {
+    plays: loaded.storePlays(rows),
+  });
+  const state: PlayState = {
+    down: 1, toGo: 4, yardline: 4, margin: 0, secondsLeft: 1800,
+  };
+  const uniform = steady();
+
+  return (player: string) => {
+    let scored = 0;
+
+    for (let i = 0; i < 4000; i++) {
+      const own = factors.hisOwnPlay?.(state, "run", player, uniform);
+
+      if (own && own.yards >= state.yardline) {
+        scored++;
+      }
+    }
+
+    return scored / 4000;
+  };
+};
+
+describe("a man's own draw near the goal", () => {
+  it("keeps the two backs apart, cut by the one factor the spot needs", async () => {
+    const scores = await scoresAtTheFour(false);
+
+    expect(scores("Hare")).toBeGreaterThan(0.6);
+    expect(scores("Tortoise")).toBeLessThan(0.4);
+  });
+
+  it("holds the better one to the league rate when he is cut by his own", async () => {
+    const scores = await scoresAtTheFour(true);
+
+    expect(scores("Hare")).toBeLessThan(0.56);
+    expect(scores("Hare")).toBeGreaterThan(0.44);
+    expect(scores("Tortoise")).toBeLessThan(0.4);
+  });
+});

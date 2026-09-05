@@ -496,6 +496,21 @@ const GOAL_LIFT = process.env["GOAL_LIFT"];
 const GOAL_LIFT_CALLS: Record<Call, boolean> = { run: false, pass: true };
 
 /**
+ * Puts back the cut that held a man to his own crossing share.
+ *
+ * Cutting a man by his own share pins every one of them to the league
+ * rate from above and leaves the ones below it where they are, so the
+ * men come out flatter than they are and the whole thing lands under
+ * the rate it settles to: inside the ten the sampled throws crossed
+ * 30.7% where the spot's own rate on throws that reached a man is
+ * 34.9%. Cutting everybody by the one factor the yardline needs puts
+ * the sampled throws at 33.2% and keeps a goal line tight end above a
+ * receiver. Set it to cut a man by his own share again, which takes
+ * about a point and a half off drives that reach the ten.
+ */
+const GOAL_CUT_HIS_OWN = Boolean(process.env["GOAL_CUT_HIS_OWN"]);
+
+/**
  * What a draw near the goal is settled against: how often the pool it
  * came from reaches this goal line, how often it gained anything, and
  * how often sides really score from this spot.
@@ -1811,7 +1826,79 @@ export function fitPlayFactors(
     return rate;
   };
 
+  /**
+   * The yardline's score rate over the throws that reached a man.
+   *
+   * The cells count a sack as a throw that did not score, and neither
+   * the pool nor a man's own record keeps the sacks, so a draw made
+   * out of throws that reached somebody has to be settled against the
+   * rate over those throws. Reading the rate over every throw cut a
+   * pooled throw inside the ten to 34.8% where those plays scored
+   * 39.3%.
+   */
+  const scoreRateToAMan = (
+    state: PlayState, call: Call,
+  ): number | undefined => {
+    const found = scoreRateAt(state, call);
+
+    if (found === undefined || call === "run" || !plays) {
+      return found;
+    }
+
+    return found / Math.max(0.5, 1 - plays.wastedShareAt(state.yardline));
+  };
+
+  /**
+   * What a pooled draw near the goal is settled against, read once per
+   * state: how often the pool a draw here comes from reaches the goal
+   * line, how often it gained anything, and how often sides score from
+   * here. With the sacks back in the pool the whole rate is the one
+   * that matches it.
+   */
   const crossRemembered = new Map<string, GoalSample>();
+  const goalSample = (state: PlayState, call: Call): GoalSample => {
+    makeRoom(crossRemembered);
+    const key = `${call}|${stateKey(
+      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
+    )}`;
+    const already = crossRemembered.get(key);
+
+    if (already) {
+      return already;
+    }
+
+    // the pool a draw here actually comes from, so the crossing share
+    // is measured over the gains being settled and not over a wider
+    // pool the draw never sees
+    const cell = at(state, goalPoolLeast(state), call);
+    let crossed = 0;
+    let gainful = 0;
+
+    for (const yards of cell.yards) {
+      if (yards >= state.yardline) {
+        crossed++;
+      }
+
+      if (yards > 0) {
+        gainful++;
+      }
+    }
+
+    const drawn = Math.max(1, cell.yards.length);
+    const crossShare = crossed / drawn;
+    const found = POOL_WASTE
+      ? scoreRateAt(state, call)
+      : scoreRateToAMan(state, call);
+    const sample: GoalSample = {
+      crossShare,
+      gainfulShare: gainful / drawn,
+      scoreRate: found ?? crossShare,
+    };
+    crossRemembered.set(key, sample);
+
+    return sample;
+  };
+
   const cellsRemembered = new Map<string, Counted[]>();
   const atCells = (state: PlayState, least: number, call?: Call) => {
     makeRoom(cellsRemembered);
@@ -1930,6 +2017,72 @@ export function fitPlayFactors(
       centreOf.set(call, weighted / touches);
     }
   }
+
+  /**
+   * How often anybody's play reaches the goal once it is moved here
+   * the way a man's own plays are, counted over the same window his
+   * draw uses.
+   *
+   * Moving a play in from further out is what makes a draw cross too
+   * often: five yards gained at the nine is a touchdown at the four.
+   * That happens to everybody's plays alike, so it is the number a
+   * man's own crossing share has to be read against. His share on its
+   * own says both what the move did and what kind of player he is,
+   * and cutting him against it throws the second away.
+   */
+  const rowsOfCall = new Map<Call, number[]>();
+  const crossedByAnyone = new Map<string, number>();
+  const anyoneCrossesAt = (
+    call: Call, yardline: number, room: number,
+  ): number => {
+    if (!plays) {
+      return 0;
+    }
+
+    const key = `${call}|${yardline}|${room}`;
+    const already = crossedByAnyone.get(key);
+
+    if (already !== undefined) {
+      return already;
+    }
+
+    let rows = rowsOfCall.get(call);
+
+    if (!rows) {
+      rows = [];
+
+      for (const [who, his] of plays.ofMan) {
+        if (who.endsWith(`|${call}`)) {
+          rows.push(...his);
+        }
+      }
+
+      rowsOfCall.set(call, rows);
+    }
+
+    let weight = 0;
+    let crossed = 0;
+
+    for (const i of rows) {
+      const from = plays.yardline[i]!;
+
+      if (from > yardline + room || from < yardline - CLOSER) {
+        continue;
+      }
+
+      const fade = FADES[plays.age[i]!] ?? FADES[5]!;
+      weight += fade;
+
+      if (plays.yards[i]! >= yardline) {
+        crossed += fade;
+      }
+    }
+
+    const share = weight > 0 ? crossed / weight : 0;
+    crossedByAnyone.set(key, share);
+
+    return share;
+  };
 
   const wasCaught = (gained: number, uniform: () => number) => {
     const own = caughtAt.get(Math.max(-8, Math.min(8, Math.round(gained))));
@@ -2089,20 +2242,14 @@ export function fitPlayFactors(
           // his sample crosses the goal more or less often than sides
           // score from this spot, and is settled to how often they do
           if (state.yardline <= 20) {
-            /**
-             * The cells count sacks and throwaways among the passes,
-             * and those were drawn before this, so the rate is put on
-             * the throws that reached somebody or the cut lands twice.
-             */
-            const wasted = call === "pass" ? plays.wastedShareAt(state.yardline) : 0;
-            const found = scoreRateAt(state, call);
-            const crossShare = crossedWeight / weight;
+            const crossShare = GOAL_CUT_HIS_OWN
+              ? crossedWeight / weight
+              : anyoneCrossesAt(call, state.yardline, room);
+            const found = scoreRateToAMan(state, call);
             const sample = {
               crossShare,
               gainfulShare: (weight - dryWeight) / weight,
-              scoreRate: found === undefined
-                ? crossShare
-                : found / Math.max(0.5, 1 - wasted),
+              scoreRate: found ?? crossShare,
             };
             const settled = settleAtGoal(
               state, call, plays.yards[at]!, uniform, sample,
@@ -2731,42 +2878,7 @@ export function fitPlayFactors(
       const cell = atCounts(state, settings.least, call);
       return cell.plays === 0 ? 0 : cell.scores / cell.plays;
     },
-    atTheGoal: (state, call, gained, uniform) => {
-      makeRoom(crossRemembered);
-      const key = `${call}|${stateKey(
-        state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
-      )}`;
-      let sample = crossRemembered.get(key);
-
-      if (sample === undefined) {
-        // the pool a draw here actually comes from, so the crossing
-        // share is measured over the gains being settled and not over
-        // a wider pool the draw never sees
-        const cell = at(state, goalPoolLeast(state), call);
-        let crossed = 0;
-        let gainful = 0;
-
-        for (const yards of cell.yards) {
-          if (yards >= state.yardline) {
-            crossed++;
-          }
-
-          if (yards > 0) {
-            gainful++;
-          }
-        }
-
-        const drawn = Math.max(1, cell.yards.length);
-        const crossShare = crossed / drawn;
-        sample = {
-          crossShare,
-          gainfulShare: gainful / drawn,
-          scoreRate: scoreRateAt(state, call) ?? crossShare,
-        };
-        crossRemembered.set(key, sample);
-      }
-
-      return settleAtGoal(state, call, gained, uniform, sample);
-    },
+    atTheGoal: (state, call, gained, uniform) =>
+      settleAtGoal(state, call, gained, uniform, goalSample(state, call)),
   };
 }
