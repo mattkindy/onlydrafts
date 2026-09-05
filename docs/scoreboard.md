@@ -544,7 +544,60 @@ midfield from 6.38 to 6.30 at full trust, so whatever makes those men
 worse than league is not in their prior yards. And inside the ten the
 gap that is left is on the sampled path, 30.7% touchdowns drawn on
 throws where those plays scored 39.3%, which is what GOAL_LIFT was
-aimed at.
+aimed at. That one is the next section.
+
+## Both sides of the goal line check, measured the same way
+
+The gap above is smaller than 30.7 against 39.3 makes it look. The
+39.3% is over throws that reached a man, and one throw in nine of the
+walk's is drawn as a sack or a ball thrown away before anybody is
+asked for a play, so a walk that had the rate exactly right would draw
+about 35% on those plays. Two things were still wrong, and both are
+one side of a comparison being counted over a different set of plays
+from the other.
+
+The pooled draw was cut against a rate that counted the sacks. The
+pools stopped keeping them in the section above, so the pool's
+crossing share is over throws that reached somebody while the
+yardline's score rate was still over every throw of the call. The rate
+now has the sacks taken out of it as well, which is what the sampled
+path had been doing all along.
+
+And a man was cut against his own crossing share. Moving a play in
+from further out is what makes a draw cross too often, since five
+yards gained at the nine is a touchdown at the four, and that happens
+to everybody's plays alike. Cutting each man by his own share instead
+pinned every man above the league rate down onto it and left the men
+below it alone, which both flattens the men and lands the whole thing
+under the rate it settles to. The cut is now the one factor the
+yardline needs, everybody's plays moved in through the same window
+against how often sides score from here, so a goal line tight end
+stays above a receiver. GOAL_CUT_HIS_OWN=1 puts the old cut back.
+
+Over the 2025 snaps inside the ten, drawn ten times each against what
+those plays did:
+
+| inside the ten | played | shipped | the rate fixed | and the one factor |
+|---|---|---|---|---|
+| touchdowns on a throw | 39.3% | 31.6% | 31.8% | 33.8% |
+| on the sampled path | | 30.7% | 30.7% | 33.2% |
+| on the pooled path | | 34.8% | 35.9% | 35.9% |
+| touchdowns on a run | 28.9% | 27.9% | 27.9% | 28.6% |
+
+The bands further out move the same way: from the eleven to the twenty
+a throw goes from 10.3% drawn to 11.2% against 15.4% played, and a run
+from 3.7% to 4.2% against 4.6%.
+
+The drive check cannot resolve either one. Its goal line line moves
+2.2 points between two seeds at two runs, which is as large as
+anything here: drives reaching the ten score 70.6% shipped, 68.4% and
+70.6% with the rate fixed, 71.0% twice with both, against 68.9%
+played. The touchdown share of drives is 22.1% shipped and 21.6% to
+22.0% either way. The week is flat, .3705 shipped and .3705 with both,
+over two seeds at forty draws, with tight ends the one row down in
+both seeds, .360 to .344 on 86 weeks of a man. The play layer does not
+move at all. Both changes ship on the argument above rather than on a
+bench: each puts two numbers that are compared on the same footing.
 
 ## The snap chain, four ways
 
