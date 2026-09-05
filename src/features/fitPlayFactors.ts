@@ -462,6 +462,81 @@ const GOAL_LEAST_PASS = Number(process.env["GOAL_LEAST_PASS"] ?? GOAL_LEAST);
 const GOAL_GAIN_LEAST = Number(process.env["GOAL_GAIN_LEAST"] ?? 300);
 
 /**
+ * Switched on, a short gain near the goal is carried up to the line;
+ * a crossing draw is cut back either way. It is off because the drives
+ * the walk gets inside the twenty already score more often than sides
+ * do, so anything that adds touchdowns pushes the wrong way, even
+ * though the goal line layer on its own draws too few of them.
+ */
+const GOAL_LIFT = process.env["GOAL_LIFT"];
+
+/**
+ * Which calls the carry applies to when it is on.
+ *
+ * Over 2025 snaps inside the ten, runs scored 28.9% and the walk drew
+ * 27.9% of them with nothing carried up and 30.0% with runs carried,
+ * so a run is already where runs end up and lifting it overshoots.
+ * Throws scored 39.3% against 30.6% drawn, and the carry is the only
+ * thing narrowing that.
+ */
+const GOAL_LIFT_CALLS: Record<Call, boolean> = { run: false, pass: true };
+
+/**
+ * What a draw near the goal is settled against: how often the pool it
+ * came from reaches this goal line, how often it gained anything, and
+ * how often sides really score from this spot.
+ *
+ * The first two are readings of the pool a draw is made from. The
+ * third has to be pinned to the yardline instead, because the pool's
+ * own plays were made further out and scored less often for that
+ * reason alone. Reading it off the pool as well drops the drawn
+ * touchdown rate inside the ten to 18% on runs where sides score 29%.
+ */
+export interface GoalSample {
+  crossShare: number;
+  gainfulShare: number;
+  scoreRate: number;
+}
+
+/**
+ * Where a draw near the goal ends up, given how often the pool it came
+ * from crosses and how often sides really score from here.
+ *
+ * Cutting alone, which is what this did, leaves a man whose pool
+ * crosses more often than sides score here short of the line every
+ * time, and throws inside the ten then scored 29% where sides score
+ * 39%. So a draw that crossed is kept as often as sides score, and a
+ * throw that gained something without crossing is carried over often
+ * enough to make up the rest.
+ */
+export const settleAtGoal = (
+  state: PlayState, call: Call, drawn: number, uniform: () => number,
+  sample: GoalSample,
+): number => {
+  if (drawn >= state.yardline) {
+    const keeps = sample.crossShare > 0
+      ? Math.min(1, sample.scoreRate / sample.crossShare)
+      : 1;
+
+    return uniform() < keeps ? drawn : Math.max(0, state.yardline - 1);
+  }
+
+  if (!GOAL_LIFT || !GOAL_LIFT_CALLS[call] || drawn <= 0) {
+    return drawn;
+  }
+
+  if (sample.scoreRate > sample.crossShare &&
+      sample.gainfulShare > sample.crossShare) {
+    const lifts = (sample.scoreRate - sample.crossShare) /
+      (sample.gainfulShare - sample.crossShare);
+
+    return uniform() < lifts ? state.yardline : drawn;
+  }
+
+  return drawn;
+};
+
+/**
  * Whether a man's level leaves his long gains out of both sides of it.
  *
  * It is the right shape, since whether this is one of his long ones is
@@ -1397,6 +1472,18 @@ export function fitPlayFactors(
   };
 
   /**
+   * Near the line the pool is asked for less, for the same reason the
+   * shares are. Asking three hundred plays out of the one reaches back
+   * up the field to fill itself, and what comes back scores 38% where
+   * a play from the one really scores 55%, and 43% from the three
+   * where one scores 33%. A side does not score more often from
+   * further away. The settle at the goal asks for the same pool, so
+   * that it reads the gains a draw actually came from.
+   */
+  const goalPoolLeast = (state: PlayState): number =>
+    state.yardline <= LINE_IS_NEAR ? GOAL_GAIN_LEAST : settings.least;
+
+  /**
    * What this game situation does to a play's yards, against the
    * any-score pool the draw came from.
    *
@@ -1708,43 +1795,7 @@ export function fitPlayFactors(
     return rate;
   };
 
-  /**
-   * Where a draw near the goal ends up, given how often the sample it
-   * came from crosses and how often plays from here score.
-   *
-   * It goes both ways. Cutting alone, which is what this did, means a
-   * man whose sample crosses less often than his spot scores is left
-   * there, and the average over every spot comes out under life: from
-   * the six to the ten a receiver's catches from further out fall a
-   * yard or two short, and passes inside the ten scored 29% where they
-   * score 39%. So a draw that crossed is kept as often as the spot
-   * scores, and one that gained something without crossing is carried
-   * over often enough to make up the difference.
-   */
-  const settleAtGoal = (
-    state: PlayState, drawn: number, uniform: () => number,
-    sample: { crossShare: number; gainfulShare: number }, scoreRate: number,
-  ): number => {
-    if (drawn >= state.yardline) {
-      const keeps = sample.crossShare > 0
-        ? Math.min(1, scoreRate / sample.crossShare)
-        : 1;
-
-      return uniform() < keeps ? drawn : Math.max(0, state.yardline - 1);
-    }
-
-    if (drawn > 0 && scoreRate > sample.crossShare &&
-        sample.gainfulShare > sample.crossShare) {
-      const lifts = (scoreRate - sample.crossShare) /
-        (sample.gainfulShare - sample.crossShare);
-
-      return uniform() < lifts ? state.yardline : drawn;
-    }
-
-    return drawn;
-  };
-
-  const crossRemembered = new Map<string, { crossShare: number; gainfulShare: number }>();
+  const crossRemembered = new Map<string, GoalSample>();
   const cellsRemembered = new Map<string, Counted[]>();
   const atCells = (state: PlayState, least: number, call?: Call) => {
     makeRoom(cellsRemembered);
@@ -2019,8 +2070,8 @@ export function fitPlayFactors(
             }
           }
 
-          // his sample crosses the goal more or less often than plays
-          // from this spot score, and is settled to how often they do
+          // his sample crosses the goal more or less often than sides
+          // score from this spot, and is settled to how often they do
           if (state.yardline <= 20) {
             /**
              * The cells count sacks and throwaways among the passes,
@@ -2029,15 +2080,16 @@ export function fitPlayFactors(
              */
             const wasted = call === "pass" ? plays.wastedShareAt(state.yardline) : 0;
             const found = scoreRateAt(state, call);
+            const crossShare = crossedWeight / weight;
             const sample = {
-              crossShare: crossedWeight / weight,
+              crossShare,
               gainfulShare: (weight - dryWeight) / weight,
+              scoreRate: found === undefined
+                ? crossShare
+                : found / Math.max(0.5, 1 - wasted),
             };
-            const scoreRate = found === undefined
-              ? sample.crossShare
-              : found / Math.max(0.5, 1 - wasted);
             const settled = settleAtGoal(
-              state, plays.yards[at]!, uniform, sample, scoreRate,
+              state, call, plays.yards[at]!, uniform, sample,
             );
 
             // a draw that scores is done with: the tilts below would
@@ -2391,19 +2443,7 @@ export function fitPlayFactors(
       return shares;
     },
     gains: (state, call, player, uniform, sides) => {
-      /**
-       * Near the line the pool is asked for less, for the same reason
-       * the shares are. Asking three hundred plays out of the one
-       * reaches back up the field to fill itself, and what comes back
-       * scores 38% where a play from the one really scores 55%, and
-       * 43% from the three where one really scores 33%. A side does
-       * not score more often from further away.
-       */
-      const cell = at(
-        state,
-        state.yardline <= LINE_IS_NEAR ? GOAL_GAIN_LEAST : settings.least,
-        call,
-      );
+      const cell = at(state, goalPoolLeast(state), call);
       const own = cell.byPlayer.get(player);
       const pool = cell.yards;
 
@@ -2683,7 +2723,10 @@ export function fitPlayFactors(
       let sample = crossRemembered.get(key);
 
       if (sample === undefined) {
-        const cell = at(state, settings.least, call);
+        // the pool a draw here actually comes from, so the crossing
+        // share is measured over the gains being settled and not over
+        // a wider pool the draw never sees
+        const cell = at(state, goalPoolLeast(state), call);
         let crossed = 0;
         let gainful = 0;
 
@@ -2698,13 +2741,16 @@ export function fitPlayFactors(
         }
 
         const drawn = Math.max(1, cell.yards.length);
-        sample = { crossShare: crossed / drawn, gainfulShare: gainful / drawn };
+        const crossShare = crossed / drawn;
+        sample = {
+          crossShare,
+          gainfulShare: gainful / drawn,
+          scoreRate: scoreRateAt(state, call) ?? crossShare,
+        };
         crossRemembered.set(key, sample);
       }
 
-      const scoreRate = scoreRateAt(state, call) ?? sample.crossShare;
-
-      return settleAtGoal(state, gained, uniform, sample, scoreRate);
+      return settleAtGoal(state, call, gained, uniform, sample);
     },
   };
 }

@@ -29,7 +29,14 @@ import { join } from "node:path";
 const SEASONS = (process.env["SEASONS_ARG"] ?? process.argv[2] ?? "2024,2025")
   .split(",").map(Number);
 const WEEKS = [3, 5, 7, 9, 11, 13, 15, 17];
-const RUNS = Number(process.env["RUNS"] ?? 10);
+/**
+ * Ten left about .012 on a single overall reading and .018 between two
+ * settings, so a setting worth a hundredth could not be told from the
+ * noise. Forty takes it near .006, and a second reading under another
+ * WALK_SEED averaged in takes it under .005. It costs about twenty
+ * minutes a reading against five and a half.
+ */
+const RUNS = Number(process.env["RUNS"] ?? 40);
 const RULES = presets.ppr;
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 

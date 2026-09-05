@@ -59,6 +59,13 @@ export interface EndingRules {
 export type PreSnapFlag = "offence" | "defence";
 
 /**
+ * Switched off, no snap is ever wiped out by a flag. The flags landed
+ * with the fourth down and goal line changes and the three together
+ * cost the weekly bench, so each needs to be priced on its own.
+ */
+const NO_FLAGS = process.env["NO_FLAGS"];
+
+/**
  * Whether a flag wipes out this snap before it happens, and where the
  * ball goes if one does. The offence is set back by the flag or half
  * the distance to its own goal, whichever is less, and the down stays
@@ -68,6 +75,10 @@ export type PreSnapFlag = "offence" | "defence";
 export const preSnapFlag = (
   state: PlayState, rules: EndingRules, uniform: () => number,
 ): PreSnapFlag | undefined => {
+  if (NO_FLAGS) {
+    return undefined;
+  }
+
   if (rules.offenceFlag && uniform() < rules.offenceFlag) {
     const drawn = rules.offenceFlagYards ? rules.offenceFlagYards(uniform) : 5;
     const back = Math.min(drawn, Math.floor((100 - state.yardline) / 2));

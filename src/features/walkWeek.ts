@@ -14,6 +14,14 @@ import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
 import { seededRng } from "../sim/rng.js";
 import type { PlayedWorld } from "./playedWorld.js";
 
+/**
+ * Shifts every seed the week is played under, so one setting can be
+ * read twice and the spread between readings measured. Without it the
+ * seeds follow the run index alone and a setting always reads the same
+ * number, which hides how much of a gap between two settings is noise.
+ */
+const WALK_SEED = Number(process.env["WALK_SEED"] ?? 0);
+
 export interface WalkedWeek {
   points: Map<string, number>;
   touches: Map<string, number>;
@@ -67,7 +75,7 @@ export function walkWeek(
       const rng = seededRng(
         season * 1000 + week * 37 +
         (r["home_team"]!.charCodeAt(0) * 131 + r["away_team"]!.charCodeAt(1)) +
-        run * 7919,
+        run * 7919 + WALK_SEED * 104729,
       );
       const game = playGame(home, away, {
         rules: { ...world.rules, kickSucceeds: world.kicking.kickSucceeds },
