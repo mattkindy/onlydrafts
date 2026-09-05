@@ -30,6 +30,16 @@ async function main(): Promise<void> {
   console.log("season   men   buckets: off by  order    model: off by  order");
   const summed = { bucketMae: 0, modelMae: 0, bucketRank: 0, modelRank: 0, n: 0 };
 
+  interface Scored {
+    position: string;
+    age?: number;
+    gamesPrev: number;
+    played: number;
+    saidBucket: number;
+    saidModel: number;
+  }
+  const pooled: Scored[] = [];
+
   for (const season of TEST) {
     const train = SEASONS.filter((s) => s < season).flatMap(rowsFor);
     const test = rowsFor(season);
@@ -66,6 +76,13 @@ async function main(): Promise<void> {
     summed.bucketRank += spearman(saidBucket, truth);
     summed.modelRank += spearman(saidModel, truth);
     summed.n++;
+
+    test.forEach((r, i) => {
+      pooled.push({
+        position: r.position, age: r.age, gamesPrev: r.gamesPrev,
+        played: truth[i]!, saidBucket: saidBucket[i]!, saidModel: saidModel[i]!,
+      });
+    });
   }
 
   const n = Math.max(1, summed.n);
@@ -94,6 +111,54 @@ async function main(): Promise<void> {
       console.log(`  ${name.padEnd(24)} ${moves > 0 ? "+" : ""}${moves.toFixed(2)}`);
     }
   });
+
+  /** average error can hide a bias that only shows up inside a group */
+  const ageBandOf = (age: number) =>
+    age <= 25 ? "25 and under" : age <= 28 ? "26 to 28" : age <= 30 ? "29 to 30" : "31 and over";
+  const gamesBandOf = (games: number) =>
+    games <= 8 ? "0 to 8" : games <= 14 ? "9 to 14" : "15 to 17";
+
+  const printGroup = (label: string, its: Scored[]) => {
+    const meanOf = (vs: number[]) => vs.reduce((a, b) => a + b, 0) / vs.length;
+    const played = meanOf(its.map((r) => r.played));
+    const bucket = meanOf(its.map((r) => r.saidBucket));
+    const model = meanOf(its.map((r) => r.saidModel));
+
+    console.log(
+      `${label.padEnd(20)} ${String(its.length).padStart(4)}   ` +
+      `${model.toFixed(2).padStart(7)}   ${played.toFixed(2).padStart(6)}   ` +
+      `${(model - played).toFixed(2).padStart(6)}      ` +
+      `${bucket.toFixed(2).padStart(7)}   ${(bucket - played).toFixed(2).padStart(6)}`,
+    );
+  };
+
+  console.log(
+    "\ncalibration, pooled across 2022 to 2025: is either signal biased for a group?",
+  );
+  console.log(
+    "group                  n   model: said  played   bias   buckets: said   bias",
+  );
+
+  for (const pos of ["QB", "RB", "WR", "TE"]) {
+    for (const band of ["25 and under", "26 to 28", "29 to 30", "31 and over"]) {
+      const its = pooled.filter((r) =>
+        r.position === pos && r.age !== undefined && ageBandOf(r.age) === band);
+
+      if (its.length) {
+        printGroup(`${pos} age ${band}`, its);
+      }
+    }
+  }
+
+  console.log();
+
+  for (const band of ["0 to 8", "9 to 14", "15 to 17"]) {
+    const its = pooled.filter((r) => gamesBandOf(r.gamesPrev) === band);
+
+    if (its.length) {
+      printGroup(`last season ${band}`, its);
+    }
+  }
 }
 
 await main();
