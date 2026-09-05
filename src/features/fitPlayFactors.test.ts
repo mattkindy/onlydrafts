@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GoalSample } from "./fitPlayFactors.js";
+import type { CountedPlays, GoalSample, PlayRow } from "./fitPlayFactors.js";
 import type { PlayState } from "../model/playFactors.js";
 
 /**
@@ -82,5 +82,50 @@ describe("settleAtGoal", () => {
     const settle = await settleWith(true);
 
     expect(settle(atTheFive, "pass", 0, always(0.01), crossesTooRarely)).toBe(0);
+  });
+});
+
+/** the counting reads the flag once at load, so each setting reloads it */
+const countWith = async (keepsWaste: boolean) => {
+  vi.resetModules();
+
+  if (keepsWaste) {
+    process.env["POOL_WASTE"] = "1";
+  } else {
+    delete process.env["POOL_WASTE"];
+  }
+
+  const loaded = await import("./fitPlayFactors.js");
+  delete process.env["POOL_WASTE"];
+
+  return loaded.countPlays;
+};
+
+const aThrow = (player: string, yards: number): PlayRow => ({
+  offence: "NE", defence: "NYJ", down: 1, toGo: 10, yardline: 60,
+  margin: 0, secondsLeft: 1800, call: "pass", yards, touchdown: 0,
+  player, airYards: 8, caught: yards > 0,
+});
+
+const depthPool = (counted: CountedPlays) =>
+  [...counted.cells.values()]
+    .flatMap((cell) => [...cell.byDepth.values()].flat());
+
+describe("the pools kept by depth", () => {
+  it("leaves out the sacks and the balls thrown away", async () => {
+    const countPlays = await countWith(false);
+    const counted = countPlays([aThrow("Diggs", 12), aThrow("", -7)]);
+
+    expect(depthPool(counted).every((yards) => yards === 12)).toBe(true);
+    // and the pool over the state itself still has the sack in it
+    expect([...counted.cells.values()].some((cell) => cell.yards.includes(-7)))
+      .toBe(true);
+  });
+
+  it("keeps them with the flag set", async () => {
+    const countPlays = await countWith(true);
+    const counted = countPlays([aThrow("Diggs", 12), aThrow("", -7)]);
+
+    expect(depthPool(counted)).toContain(-7);
   });
 });
