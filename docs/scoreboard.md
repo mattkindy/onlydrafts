@@ -27,7 +27,7 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7479 | .7128 | .7037 | .339 |
+| now | .7477 | .7128 | .7043 | .339 |
 
 The .339 is a two seed mean at forty draws and is level with the
 yardstick of a man's average so far, .340. The walk has not beaten
@@ -59,7 +59,7 @@ change, and swept out to the whole board below.
 | the goal line asking for five plays a man | .7492 | .6961 | .7004 | .343 |
 | the fourth down, flag and goal fixes, judged on drives | | | | .319 at ten draws |
 | a man's leaning believed by his own count | .7479 | .7128 | .7037 | .339 at forty |
-| the goal line carry switched off | not yet replayed | | | .339 |
+| the goal line carry switched off | .7477 | .7128 | .7043 | .339 |
 
 The walk's own column is the best it has been on a season, .7004, and
 on every place worth less than the one above, .7070. The board's first
@@ -468,17 +468,19 @@ seasons and the whole list gives some back in two of them, because the
 leaning had been ordering the deep, unpriced men the board never
 shows.
 
-| 2023 to 2025, 40 runs | shipped | sixty |
-|---|---|---|
-| the whole list, 2023 / 2024 / 2025 | .730 / .724 / .731 | .737 / .712 / .725 |
-| the men ADP priced | .617 / .554 / .673 | .637 / .569 / .671 |
-| the first 60 picks | .482 / .336 / .503 | .484 / .437 / .545 |
+| 2023 to 2025, 40 runs | shipped | sixty | sixty, goal lift off |
+|---|---|---|---|
+| the whole list, 2023 / 2024 / 2025 | .730 / .724 / .731 | .737 / .712 / .725 | .737 / .714 / .728 |
+| the men ADP priced | .617 / .554 / .673 | .637 / .569 / .671 | .631 / .568 / .673 |
+| the first 60 picks | .482 / .336 / .503 | .484 / .437 / .545 | .473 / .427 / .536 |
 
 The board's first 24 goes from .6961 to .7128, the largest move that
-column has had, the walk's own column to .7037, and the season gives
-back .0013. The seat was swept again and stays at twenty percent: the
+column has had, the walk's own column to .7043, and the season gives
+back .0015. The seat was swept again and stays at twenty percent: the
 season is best at fifty, .7522, but the first 24 is best at twenty and
-falls from there.
+falls from there. The last column is what ships: the kept files were
+replayed with the goal line carry off, and every figure moved less
+than the .006 a single forty-run reading moves on its own.
 
 The drive check reads 5.47 yards a play against 5.41 played, once the
 snaps wiped out by a flag are left out of the divisor (the older
