@@ -15,10 +15,13 @@
 
 import { walkDrive, type FactorDrive, type Opening } from "./driveFromFactors.js";
 import type { PlayerLine } from "./playerWeek.js";
-import type { PlayFactors } from "./playFactors.js";
+import type { Call, PlayFactors } from "./playFactors.js";
 import type { EndingRules, ClockRules } from "./driveFromFactors.js";
 import type { FourthDown } from "../features/fitFourthDown.js";
 import type { PlayClock } from "../features/fitPlayClock.js";
+import {
+  DEFAULT_AFTER_TOUCHDOWN, type AfterTouchdown,
+} from "../features/afterTouchdown.js";
 
 /** one side of a game, and everything needed to walk its drives */
 export interface Side {
@@ -47,6 +50,8 @@ export interface GameRules {
   ticking: PlayClock;
   season?: number;
   week?: number;
+  /** kick the extra point or go for two, off the six and the clock */
+  afterTouchdown?: AfterTouchdown;
 }
 
 export interface GameSettings {
@@ -78,12 +83,21 @@ export const GAME_DEFAULTS: GameSettings = {
   length: 3600, half: 1800, afterKickoff: 75, mostDrives: 40,
 };
 
+/** who went for two after a touchdown, and what came of it */
+export interface TwoPointTry {
+  call: Call;
+  player: string;
+  converted: boolean;
+}
+
 export interface Possession {
   team: string;
   drive: FactorDrive;
   /** the score for this side when the drive began */
   margin: number;
   startedAt: number;
+  /** set when a touchdown here went for two instead of kicking */
+  twoPointTry?: TwoPointTry;
 }
 
 export interface PlayedGame {
@@ -166,13 +180,26 @@ export function linesFrom(
     if (one.drive.ending === "turnover" && one.drive.thrownAway && passer) {
       lineOf(passer).interceptions++;
     }
+
+    // the try is not one of the drive's own plays, so the man who
+    // carried or caught it, and the passer behind a caught one, are
+    // credited here instead
+    if (one.twoPointTry?.converted && one.twoPointTry.player) {
+      const him = lineOf(one.twoPointTry.player);
+      him.twoPointConversions = (him.twoPointConversions ?? 0) + 1;
+
+      if (one.twoPointTry.call === "pass" && passer) {
+        const threw = lineOf(passer);
+        threw.twoPointConversions = (threw.twoPointConversions ?? 0) + 1;
+      }
+    }
   }
 
   return lines;
 }
 
 const pointsFor = (drive: FactorDrive) =>
-  drive.ending === "touchdown" ? 7 : drive.ending === "fieldGoal" ? 3 : 0;
+  drive.ending === "touchdown" ? 6 : drive.ending === "fieldGoal" ? 3 : 0;
 
 /**
  * Two sides alternating. The side that did not receive to start the
@@ -275,11 +302,6 @@ export function playGame(
       opening,
     );
 
-    possessions.push({
-      team: withBall.team, drive, margin, startedAt: startAt,
-    });
-    points[withBall.team] = points[withBall.team]! + pointsFor(drive);
-    drives[withBall.team] = drives[withBall.team]! + 1;
     /**
      * Trailing and late, a side spends its timeouts against the
      * leader's drives. The seconds each play takes were fitted on
@@ -287,6 +309,56 @@ export function playGame(
      * clock; what it changes is whether the leader can kneel out.
      */
     const took = Math.max(20, drive.took);
+    const leftAfter = Math.max(0, secondsLeft - took);
+
+    /**
+     * The extra point or the try that replaces it, drawn off the
+     * margin with the six already on the board. Neither is one of the
+     * drive's own plays, so a converted try is carried on the
+     * possession instead and credited once the game is over.
+     */
+    let scored = pointsFor(drive);
+    let twoPointTry: TwoPointTry | undefined;
+
+    if (drive.ending === "touchdown") {
+      const afterTd = rules.afterTouchdown ?? DEFAULT_AFTER_TOUCHDOWN;
+      const afterMargin = margin + 6;
+
+      if (uniform() < afterTd.goesForTwo(afterMargin, leftAfter)) {
+        const state = {
+          down: 1, toGo: 2, yardline: 2, margin: afterMargin, secondsLeft: leftAfter,
+        };
+        const snap = {
+          offence: withBall.team, defence: against.team, passer: withBall.passer,
+        };
+        const call: Call = uniform() < withBall.factors.runs(state, withBall.team, snap)
+          ? "run" : "pass";
+        const shares = withBall.factors.goesTo(state, call, withBall.among, snap);
+        let left = uniform();
+        let player = withBall.among[withBall.among.length - 1] ?? "";
+
+        for (const [who, share] of shares) {
+          left -= share;
+
+          if (left <= 0) {
+            player = who;
+            break;
+          }
+        }
+
+        const converted = uniform() < afterTd.convertRate;
+        scored = 6 + (converted ? 2 : 0);
+        twoPointTry = { call, player, converted };
+      } else {
+        scored = 6 + (uniform() < afterTd.extraPointRate ? 1 : 0);
+      }
+    }
+
+    possessions.push({
+      team: withBall.team, drive, margin, startedAt: startAt, twoPointTry,
+    });
+    points[withBall.team] = points[withBall.team]! + scored;
+    drives[withBall.team] = drives[withBall.team]! + 1;
 
     if (secondHalf && secondsLeft <= 300 && margin > 0 &&
         timeouts[against.team]! > 0) {
