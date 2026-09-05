@@ -62,7 +62,7 @@ change, and swept out to the whole board below.
 | the goal line carry switched off | .7477 | .7128 | .7043 | .339 |
 | the sacks taken out of the pooled throw | .7480 | .7128 | .7039 | .339 |
 | both sides of the goal check on the same plays | .7476 | .7128 | .7031 | .339 |
-| a sampled play that reached the line keeps its score | .7479 | .7128 | .7048 | not yet run |
+| a sampled play that reached the line keeps its score | .7479 | .7128 | .7048 | flat, .368 against .3705 on 2025 alone |
 
 The walk's own column is the best it has been on a season, .7004, and
 on every place worth less than the one above, .7070. The board's first
