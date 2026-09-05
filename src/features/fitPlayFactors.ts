@@ -397,6 +397,38 @@ const HOW_FAR = Number(process.env["HOW_FAR"] ?? 1);
 const FROM_COUNTS = Number(process.env["FROM_COUNTS"] ?? 0);
 
 /**
+ * How much of the level of who gets the ball comes off what a man has
+ * been taking lately rather than off the August projection, 1 being
+ * all of it.
+ *
+ * FROM_COUNTS reads the same level off the state-conditioned counts,
+ * which pool every season at the same weight and so say what a man was
+ * two seasons ago. This asks the plays season by season instead. It
+ * puts the right man top of the list a point more often, 35.6% against
+ * 34.8%, and gives a week back: .317 at a quarter and .311 at a half
+ * against .345 for standing the leaning down on its own. Off.
+ */
+const RECENT_LEVEL = Number(process.env["RECENT_LEVEL"] ?? 0);
+/**
+ * How many of a man's own plays in a cell it takes before his leaning
+ * is believed. 0 believes every leaning however thin, which is how it
+ * shipped until September 2026.
+ *
+ * The leaning is the ratio of two thin shares, and off three or four
+ * plays it can be ten to one either way. Shrinking it by his own count
+ * in the cell, not the cell's total, because a cell of four hundred
+ * plays says nothing about a man who took three of them, puts the
+ * right man top of the list 35% of the time against 29.6% over 2023 to
+ * 2025 and reads .344 a week against .319, tight ends included. On a
+ * season the first sixty picks order at .545 against .503 for 2025 and
+ * .437 against .336 for 2024, while the whole list gives back about
+ * .008 because the leaning was ordering the deep, unpriced men. Five
+ * and twenty were worse than sixty for quarterbacks, so the setting is
+ * not smooth in the middle.
+ */
+const LEAN_K = Number(process.env["LEAN_K"] ?? 60);
+
+/**
  * How near the line a throw has to be before room is asked of its pool.
  *
  * Twenty five reads .331 a week against .327 for asking nowhere, and
@@ -617,6 +649,8 @@ export interface FactorExtras {
   projected?: ProjectedShares;
   /** the same with the two halves kept apart, which wins if both given */
   split?: SplitProjected;
+  /** and the same again off the last seasons of play, latest first */
+  lately?: Map<string, { carries: number; targets: number }>;
   /** what one side does to another, from the network */
   pairing?: Pairing;
   runParts?: RunParts;
@@ -967,7 +1001,7 @@ export function fitPlayFactors(
   extras: FactorExtras = {},
 ): PlayFactors {
   const {
-    projected, split, pairing, playLevel, depth, people, plays,
+    projected, split, lately, pairing, playLevel, depth, people, plays,
     alike, formation, coverage, look, afterCatch,
   } = extras;
   const {
@@ -2300,8 +2334,9 @@ export function fitPlayFactors(
         // overall share turns out to be next season.
         const hisOverall = (overall.get(player) ?? 0) / Math.max(1, everyTouch);
         const hisHere = here > 0 ? touches / here : 0;
+        const believed = LEAN_K > 0 ? touches / (touches + LEAN_K) : 1;
         const leaning = hisOverall > 0 && hisHere > 0
-          ? hisHere / hisOverall
+          ? (hisHere / hisOverall) ** believed
           : 1;
         const half = split?.get(player);
         const projectedShare = half
@@ -2321,13 +2356,20 @@ export function fitPlayFactors(
             })()
           : 1;
         /**
-         * The projection says how big a share he wins and the counts
-         * only lean it toward the downs he is used on. Last season's
-         * counts on their own put the right man top of the list 34.6%
-         * of the time where all of this together manages 29.1%, so
-         * some of the level is theirs to say.
+         * The projection says how big a share he wins, and RECENT_LEVEL
+         * moves that toward what he has been taking lately. A man the
+         * projection does not price at all is left alone, so this only
+         * changes how big a share the men on the field win and never
+         * which of them are eligible for one.
          */
-        const said = projectedShare * leaning;
+        const shownLately = lately?.get(player);
+        const hisLately = shownLately
+          ? (call === "run" ? shownLately.carries : shownLately.targets)
+          : 0;
+        const level = RECENT_LEVEL <= 0 || hisLately <= 0 || projectedShare <= 0
+          ? projectedShare
+          : projectedShare ** (1 - RECENT_LEVEL) * hisLately ** RECENT_LEVEL;
+        const said = level * leaning;
         const weight = (FROM_COUNTS <= 0 || touches <= 0 || said <= 0
           ? said
           : said ** (1 - FROM_COUNTS) * touches ** FROM_COUNTS) *

@@ -39,6 +39,7 @@ import {
 import { loadDraftPicks } from "../data/draftPicks.js";
 import { buildMatchupTable } from "./matchupTable.js";
 import { countsFor } from "./countsCache.js";
+import { recentShares } from "./recentShares.js";
 import { buildPlayerVectors } from "./playerVector.js";
 import type { Side } from "../model/gameFromDrives.js";
 import type { Call } from "../model/playFactors.js";
@@ -340,11 +341,26 @@ export async function buildWorld(
   const counted = live
     ? countPlays(learnRows as PlayRow[])
     : await countsFor(SCORE_ON, () => learnRows as PlayRow[]);
+  /**
+   * The same rows the counts read, but season by season, so the level
+   * of who gets the ball can come off the latest evidence instead of a
+   * pool where every season weighs the same. Read off `kept` rather
+   * than `weighted` so that repeating this season's rows to make them
+   * count more does not also inflate its shares.
+   */
+  const lately = recentShares(
+    kept.map((r) => ({
+      season: Number(r["season"]), week: Number(r["week"]),
+      offence: r["offense"] ?? "", call: r["playType"] ?? "",
+      player: r["player"] ?? "",
+    })),
+    SCORE_ON,
+  );
   const factors = fitPlayFactors([], {
     ...FACTOR_DEFAULTS,
     readsTheScript: !process.env["NO_SCRIPT"],
   }, {
-    split, pairing: pairing.bend, counted,
+    split, lately, pairing: pairing.bend, counted,
     /**
      * Where a side stands before the snap. It says nothing about the
      * call that the pools do not already know, and a great deal about
