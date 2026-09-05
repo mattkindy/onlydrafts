@@ -14,7 +14,12 @@ Every row is the same three instruments:
   draft. The walk's own column is scored beside them.
 - **weekly** is scripts/walkWeeklyEval.ts over 2024 and 2025, men
   averaging ten points or more, against the yardstick of saying every
-  week is his average so far. That yardstick is .340.
+  week is his average so far. That yardstick is .340. Every weekly
+  figure before September 2026 was read at ten draws a week, where a
+  single reading has about .012 of noise and two settings differ by
+  .018 on noise alone. The bench now runs forty draws and a reading is
+  the mean of two WALK_SEED values, which takes the noise to about
+  .004. Treat any weekly gap under .01 in the older rows as nothing.
 - **game** is scripts/scorePredictionEval.ts, points off the margin
   over a season of fixtures, next to the betting line.
 
@@ -22,18 +27,20 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7479 | .7128 | .7037 | .344 |
+| now | .7479 | .7128 | .7037 | .339 |
 
-The .344 beats saying every week is a man's average so far, which
-reads .340. Two earlier figures in this table need a note. An early
-.343 did not reproduce: walkWeeklyEval seeds its rng off the season,
-the week and the two sides, so it repeats to four figures, and the
-build shipped at the time read .327 twice, because the kept files
-still carried the formation counts a checkout had put back. And the
-.343 the goal line change earned had fallen to .319 by early
-September, across three walk commits that were judged on the drive
-check alone (the fourth down pooling, the replayed downs, the goal
-line settle). Which of the three cost it is worked out below.
+The .339 is a two seed mean at forty draws and is level with the
+yardstick of a man's average so far, .340. The walk has not beaten
+that yardstick on weeks; the readings that said it had were noise.
+An early .343 did not reproduce: walkWeeklyEval seeds its rng off the
+season, the week and the two sides, so it repeats to four figures, and
+the build shipped at the time read .327 twice, because the kept files
+still carried the formation counts a checkout had put back. The .343
+the goal line change earned read .319 by early September, and a bisect
+across the three walk commits in between spread the fall over all of
+them, .004, .011 and .009. Every one of those gaps is inside the noise
+of the ten draw bench, so nothing is known to have moved the weekly
+figure since the goal line change.
 
 The walk's seat on the board is twenty percent. It is swept after every
 change, and swept out to the whole board below.
@@ -50,8 +57,9 @@ change, and swept out to the whole board below.
 | what a side's formation does to a play | .7487 | .7050 | .6971 | .327 |
 | room asked of the depth pools near the line | .7497 | .7012 | .6981 | .331 |
 | the goal line asking for five plays a man | .7492 | .6961 | .7004 | .343 |
-| the fourth down, flag and goal fixes, judged on drives | | | | .319 |
-| a man's leaning believed by his own count | .7479 | .7128 | .7037 | .344 |
+| the fourth down, flag and goal fixes, judged on drives | | | | .319 at ten draws |
+| a man's leaning believed by his own count | .7479 | .7128 | .7037 | .339 at forty |
+| the goal line carry switched off | not yet replayed | | | .339 |
 
 The walk's own column is the best it has been on a season, .7004, and
 on every place worth less than the one above, .7070. The board's first
@@ -438,23 +446,22 @@ the average share it gave the man who took it.
 | believed by his own count, sixty plays | 34.3% | 35.0% | 34.9% |
 
 The shipped walk was worse than last season's raw counts at naming the
-man. Turning the leaning off beats the counts, but tight ends get
-worse, .238 a week against .244, and the drive check pays: 5.08 yards a
-play against 5.21, because more targets go to men too thin to sample
-and the pooled draw is shorter. Shrinking the leaning instead, so it
-is believed in proportion to his own plays in the cell, n over n plus
-sixty, matches turning it off everywhere and puts tight ends at .282.
-His own count and not the cell's, because a cell of four hundred plays
-says nothing about a man who took three of them. Five and twenty were
-both worse than sixty for quarterbacks, .183 a week against .206 for
-the shipped walk and .223 at sixty, so the setting is not smooth in
-the middle, and sixty is the default.
+man. Turning the leaning off beats the counts. Shrinking it instead, so
+it is believed in proportion to his own plays in the cell, n over n
+plus sixty, matches turning it off at the play layer and keeps some of
+what the leaning knows about a man's role. His own count and not the
+cell's, because a cell of four hundred plays says nothing about a man
+who took three of them. Sixty is the default.
 
-| weekly | all | QB | RB | WR | TE |
-|---|---|---|---|---|---|
-| shipped | .319 | .206 | .315 | .250 | .244 |
-| no leaning | .345 | .231 | .367 | .266 | .238 |
-| sixty | .344 | .223 | .369 | .265 | .282 |
+The weekly bench cannot tell these apart. At ten draws it read .319
+shipped, .345 with no leaning and .344 at sixty, and those gaps looked
+like the point of the change. At forty draws and two seeds the walk
+with the leaning believed in full reads .336 and the walk at sixty
+reads .339, a gap inside the .004 the bench moves on its own. The
+position rows at ten draws (tight ends .282 at sixty against .238 with
+no leaning, quarterbacks worse at five and twenty than at sixty) were
+read off the same noise and are not claims. The evidence for the change
+is the play layer above and the season replays below.
 
 On a season, replayed forty times, the priced men gain in all three
 seasons and the whole list gives some back in two of them, because the
@@ -473,15 +480,21 @@ back .0013. The seat was swept again and stays at twenty percent: the
 season is best at fifty, .7522, but the first 24 is best at twenty and
 falls from there.
 
-The drive level does not come back with the shrinkage. At sixty the
-walk still gives up on 12% of midfield throws where the shipped one
-gave up on 8.6%, and reads 5.10 yards a play. The pooled draw being
-short is its own problem and is the next thing to fix.
+The drive check reads 5.47 yards a play against 5.41 played, once the
+snaps wiped out by a flag are left out of the divisor (the older
+readings of 5.08 and 5.10 counted them as plays for no yards). The
+walk at sixty still gives up on 12% of midfield throws where the
+shipped one gave up on 8.6%, because more targets go to men too thin
+to sample and the pooled draw is shorter. Passes inside the ten score
+30.6% drawn against 39.3% played. The pooled draw being short is its
+own problem and is the next thing to fix.
 
 Blending the projected level toward what a man has taken lately, his
 shares in the current season weighted by weeks over weeks plus four,
-did not help, .317 a week at a quarter and .311 at a half, and stays
-off behind RECENT_LEVEL.
+did not help at ten draws (.317 a week at a quarter and .311 at a half,
+against .344) and stays off behind RECENT_LEVEL. Those gaps are larger
+than the noise, so the result is probably right, though it was not
+re-run at forty.
 
 ## The snap chain, four ways
 
