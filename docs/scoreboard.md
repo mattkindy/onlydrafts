@@ -27,7 +27,7 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7480 | .7128 | .7039 | .339 |
+| now | .7476 | .7128 | .7031 | .339 |
 
 The .339 is a two seed mean at forty draws and is level with the
 yardstick of a man's average so far, .340. The walk has not beaten
@@ -61,6 +61,7 @@ change, and swept out to the whole board below.
 | a man's leaning believed by his own count | .7479 | .7128 | .7037 | .339 at forty |
 | the goal line carry switched off | .7477 | .7128 | .7043 | .339 |
 | the sacks taken out of the pooled throw | .7480 | .7128 | .7039 | .339 |
+| both sides of the goal check on the same plays | .7476 | .7128 | .7031 | .339 |
 
 The walk's own column is the best it has been on a season, .7004, and
 on every place worth less than the one above, .7070. The board's first
@@ -598,6 +599,23 @@ over two seeds at forty draws, with tight ends the one row down in
 both seeds, .360 to .344 on 86 weeks of a man. The play layer does not
 move at all. Both changes ship on the argument above rather than on a
 bench: each puts two numbers that are compared on the same footing.
+
+The seasons, replayed forty times, sit within noise of the row before:
+the whole list .737 / .708 / .728, the priced men .641 / .568 / .670,
+the first 60 .489 / .435 / .536 for 2023, 2024 and 2025. The board
+reads .7476 on the season, .7128 over the first 24 and .7031 on the
+walk's column.
+
+The touchdown distance tail is a separate problem and is still open.
+The walk draws 6.5% of its touchdowns from past the 40 where 9.8% of
+the played ones came from, and 11.1% from the 21 to the 40 against
+15.5%. Throws from that band score 2.9% drawn against 5.6% played. The
+mean gain out there is right or a little high, so it is the long tail
+of the sampled draw that is short, most likely the level and situation
+multipliers shaving draws that needed the whole distance. Tight ends
+near the goal are also still short, 28.2% against 33.8% on throws from
+the six to the ten and 10.9% against 18.8% from the eleven to the
+twenty.
 
 ## The snap chain, four ways
 
