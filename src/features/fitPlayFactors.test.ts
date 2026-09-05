@@ -213,3 +213,74 @@ describe("a man's own draw near the goal", () => {
     expect(scores("Tortoise")).toBeLessThan(0.4);
   });
 });
+
+/**
+ * A back who reaches the line from the thirty on half his carries, at
+ * a score where everybody gains far less than they do at other scores,
+ * so the situation tilt comes out under one.
+ */
+const atTheThirty = (): PlayRow[] => {
+  const carry = (player: string, margin: number, yards: number): PlayRow => ({
+    offence: "NE", defence: "NYJ", down: 1, toGo: 10, yardline: 30, margin,
+    secondsLeft: 1800, call: "run", yards,
+    touchdown: yards >= 30 ? 1 : 0, player,
+  });
+  const rows: PlayRow[] = [];
+
+  for (let i = 0; i < 40; i++) {
+    rows.push(carry("Bolt", 0, i % 2 === 0 ? 30 : 2));
+  }
+
+  for (let i = 0; i < 100; i++) {
+    rows.push(carry("Slug", 0, 1));
+  }
+
+  for (let i = 0; i < 400; i++) {
+    rows.push(carry("Slug", -20, 12));
+  }
+
+  return rows;
+};
+
+const crossesFromTheThirty = async (tiltsTakeScores: boolean) => {
+  vi.resetModules();
+
+  if (tiltsTakeScores) {
+    process.env["TILTS_TAKE_SCORES"] = "1";
+  } else {
+    delete process.env["TILTS_TAKE_SCORES"];
+  }
+
+  const loaded = await import("./fitPlayFactors.js");
+  delete process.env["TILTS_TAKE_SCORES"];
+
+  const rows = atTheThirty();
+  const factors = loaded.fitPlayFactors(rows, loaded.FACTOR_DEFAULTS, {
+    plays: loaded.storePlays(rows),
+  });
+  const state: PlayState = {
+    down: 1, toGo: 10, yardline: 30, margin: 0, secondsLeft: 1800,
+  };
+  const uniform = steady();
+  let crossed = 0;
+
+  for (let i = 0; i < 4000; i++) {
+    const own = factors.hisOwnPlay?.(state, "run", "Bolt", uniform);
+
+    if (own && own.yards >= state.yardline) {
+      crossed++;
+    }
+  }
+
+  return crossed / 4000;
+};
+
+describe("a man's own draw out in the field", () => {
+  it("keeps a sampled play that reached the goal line", async () => {
+    expect(await crossesFromTheThirty(false)).toBeGreaterThan(0.45);
+  });
+
+  it("lets the tilts take it back with the flag set", async () => {
+    expect(await crossesFromTheThirty(true)).toBeLessThan(0.05);
+  });
+});

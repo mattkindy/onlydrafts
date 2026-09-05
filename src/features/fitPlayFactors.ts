@@ -511,6 +511,21 @@ const GOAL_LIFT_CALLS: Record<Call, boolean> = { run: false, pass: true };
 const GOAL_CUT_HIS_OWN = Boolean(process.env["GOAL_CUT_HIS_OWN"]);
 
 /**
+ * Puts back the tilts on a sampled play that already reached the goal
+ * line, out beyond the twenty where the goal line settling does not
+ * reach.
+ *
+ * A man's own play that the end zone cut off gained exactly the yards
+ * to the line, and the tilts land either side of one, so about half
+ * of those draws came back short of the goal. Between the 21 and the
+ * 40, throws crossed on 2.8% of the walk's draws where those same
+ * throws really scored 5.3% of the time, and 3.5% with the tilts kept
+ * off a draw that crossed, which gives back 37 of the 217 touchdowns
+ * the 2025 snaps were missing. Set it to shave them again.
+ */
+const TILTS_TAKE_SCORES = Boolean(process.env["TILTS_TAKE_SCORES"]);
+
+/**
  * What a draw near the goal is settled against: how often the pool it
  * came from reaches this goal line, how often it gained anything, and
  * how often sides really score from this spot.
@@ -2273,6 +2288,20 @@ export function fitPlayFactors(
            */
           const tilt = situationTilt(state, call);
           const drawn = plays.yards[at]!;
+
+          /**
+           * A sampled play that already reached the goal line is a
+           * touchdown, and the tilts below take back about half of
+           * them. A play the end zone cut off gained exactly the
+           * yards to the line, so any multiplier under one leaves it
+           * short, and the multipliers land either side of one.
+           */
+          if (drawn >= state.yardline && !TILTS_TAKE_SCORES) {
+            return {
+              yards: state.yardline,
+              caught: plays.caught[at] === 1,
+            };
+          }
 
           /**
            * The level model, on the sampled path as well.
