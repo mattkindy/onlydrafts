@@ -34,7 +34,7 @@ import { playGame, linesFrom } from "../src/model/gameFromDrives.js";
 import {
   gainedAt, gaveUpAt, reached, spread, watchFourths, watchHowFar, wentFor,
 } from "../src/model/driveFromFactors.js";
-import { myShare } from "../src/sim/acrossCores.js";
+import { acrossCores, myShare, roomFor } from "../src/sim/acrossCores.js";
 import { buildWorld } from "../src/features/playedWorld.js";
 import type { Call } from "../src/model/playFactors.js";
 
@@ -71,7 +71,404 @@ const blankTotals = (): StatTotals => ({
 const middle = (values: number[]) =>
   values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
 
+interface FourthTally { n: number; kick: number; punt: number; go: number }
+
+const blankDroveHere = () => ({
+  drives: 0, plays: 0, seconds: 0, teamGames: 0, startedAt: 0, quick: 0,
+  gained: 0, calls: 0, noPlays: 0, runYards: 0, runs: 0, passYards: 0,
+  passes: 0,
+  spread: new Map<number, number>(),
+  faced: [] as number[],
+  ends: new Map<string, number>(),
+});
+
+type DroveHere = ReturnType<typeof blankDroveHere>;
+
+/** what a share reports about its drives, flattened for JSON */
+interface DriveCheckCounts {
+  drives: number; plays: number; seconds: number; teamGames: number;
+  startedAt: number; quick: number; gained: number; calls: number;
+  noPlays: number; runYards: number; runs: number; passYards: number;
+  passes: number;
+  spread: [number, number][];
+  faced: number[];
+  ends: [string, number][];
+  fourthsAt: [string, FourthTally][];
+}
+
+/** what a share reports about how far its drives reached, flattened for JSON */
+interface ReachCheckCounts {
+  reached: { best: number; td: boolean }[];
+  gainedAt: [string, { n: number; yards: number }][];
+  gaveUpAt: [string, { n: number; pooled: number }][];
+  wentFor: [string, { n: number; made: number }][];
+  spread: [string, number][];
+}
+
+const serializeDriveCheck = (
+  droveHere: DroveHere, fourthsAt: Map<string, FourthTally>,
+): DriveCheckCounts => ({
+  drives: droveHere.drives, plays: droveHere.plays, seconds: droveHere.seconds,
+  teamGames: droveHere.teamGames, startedAt: droveHere.startedAt,
+  quick: droveHere.quick, gained: droveHere.gained, calls: droveHere.calls,
+  noPlays: droveHere.noPlays, runYards: droveHere.runYards, runs: droveHere.runs,
+  passYards: droveHere.passYards, passes: droveHere.passes,
+  spread: [...droveHere.spread.entries()],
+  faced: droveHere.faced,
+  ends: [...droveHere.ends.entries()],
+  fourthsAt: [...fourthsAt.entries()],
+});
+
+/**
+ * A share's drive counts folded into the running total. Summed rather
+ * than averaged, since a rate (a percentage of drives, a mean per
+ * play) is only right once it comes from the summed counts, not from
+ * averaging each share's own rate.
+ */
+function mergeDriveCheck(
+  droveHere: DroveHere, fourthsAt: Map<string, FourthTally>,
+  from: DriveCheckCounts,
+): void {
+  droveHere.drives += from.drives;
+  droveHere.plays += from.plays;
+  droveHere.seconds += from.seconds;
+  droveHere.teamGames += from.teamGames;
+  droveHere.startedAt += from.startedAt;
+  droveHere.quick += from.quick;
+  droveHere.gained += from.gained;
+  droveHere.calls += from.calls;
+  droveHere.noPlays += from.noPlays;
+  droveHere.runYards += from.runYards;
+  droveHere.runs += from.runs;
+  droveHere.passYards += from.passYards;
+  droveHere.passes += from.passes;
+  droveHere.faced.push(...from.faced);
+
+  for (const [n, c] of from.spread) {
+    droveHere.spread.set(n, (droveHere.spread.get(n) ?? 0) + c);
+  }
+
+  for (const [k, c] of from.ends) {
+    droveHere.ends.set(k, (droveHere.ends.get(k) ?? 0) + c);
+  }
+
+  for (const [k, tally] of from.fourthsAt) {
+    const already = fourthsAt.get(k) ?? { n: 0, kick: 0, punt: 0, go: 0 };
+    already.n += tally.n;
+    already.kick += tally.kick;
+    already.punt += tally.punt;
+    already.go += tally.go;
+    fourthsAt.set(k, already);
+  }
+}
+
+const serializeReachCheck = (): ReachCheckCounts => ({
+  reached,
+  gainedAt: [...gainedAt.entries()],
+  gaveUpAt: [...gaveUpAt.entries()],
+  wentFor: [...wentFor.entries()],
+  spread: [...spread.entries()],
+});
+
+/** the same fold as mergeDriveCheck, over the reach counters */
+function mergeReachCheck(from: ReachCheckCounts): void {
+  reached.push(...from.reached);
+
+  for (const [k, v] of from.gainedAt) {
+    const already = gainedAt.get(k) ?? { n: 0, yards: 0 };
+    already.n += v.n;
+    already.yards += v.yards;
+    gainedAt.set(k, already);
+  }
+
+  for (const [k, v] of from.gaveUpAt) {
+    const already = gaveUpAt.get(k) ?? { n: 0, pooled: 0 };
+    already.n += v.n;
+    already.pooled += v.pooled;
+    gaveUpAt.set(k, already);
+  }
+
+  for (const [k, v] of from.wentFor) {
+    const already = wentFor.get(k) ?? { n: 0, made: 0 };
+    already.n += v.n;
+    already.made += v.made;
+    wentFor.set(k, already);
+  }
+
+  for (const [k, c] of from.spread) {
+    spread.set(k, (spread.get(k) ?? 0) + c);
+  }
+}
+
+/**
+ * The drive and reach check report, over whatever counts it is handed.
+ * A lone share calls this on its own counts; the fan-out below calls it
+ * once on every share's counts summed together, so the run reports the
+ * same numbers either way instead of one share's slice of them.
+ */
+function printDriveCheckReport(
+  droveHere: DroveHere, fourthsAt: Map<string, FourthTally>,
+): void {
+  const per = (n: number, of: number) => (n / Math.max(1, of)).toFixed(2);
+  console.error(
+    `  ${per(droveHere.drives, droveHere.teamGames)} drives a side ` +
+    `(really 10.7), ${per(droveHere.plays, droveHere.drives)} plays a ` +
+    `drive (really 5.98), ` +
+    `${(droveHere.seconds / Math.max(1, droveHere.drives)).toFixed(0)} ` +
+    `seconds (really 171)
+  ends: ` +
+    [...droveHere.ends.entries()].sort((a, b) => b[1] - a[1])
+      .map(([e, n]) => `${e} ${(100 * n / droveHere.drives).toFixed(1)}%`)
+      .join(", "),
+  );
+  console.error(
+    `  three plays or fewer ` +
+    `${(100 * droveHere.quick / droveHere.drives).toFixed(1)}% ` +
+    `(really 33.7%)\n  plays a drive: ` +
+    [...droveHere.spread.entries()].sort((a, b) => a[0] - b[0])
+      .map(([n, c]) => `${n}:${(100 * c / droveHere.drives).toFixed(0)}%`)
+      .join(" ") + `\n  really:        ` +
+    `1:5% 2:3% 3:25% 4:9% 5:9% 6:10% 7:8% 8:7% 9:6% 10:5% 11:4% 12:8%`,
+  );
+  // what sides chose in 2025, which goes for it more than the
+  // seasons before it did
+  const truth: Record<string, string> = {
+    "inside 20": "kick 65% punt 0% go 35%",
+    "21-30": "kick 75% punt 0% go 25%",
+    "31-40": "kick 57% punt 8% go 35%",
+    "41-50": "kick 4% punt 60% go 36%",
+    "past 50": "kick 0% punt 87% go 13%",
+  };
+  if (reached.length) {
+    const truth: Record<number, [number, number]> = {
+      10: [21.0, 68.9], 20: [31.6, 57.3], 30: [40.5, 49.1],
+      40: [49.6, 42.4], 50: [58.7, 37.2],
+    };
+    console.error("  how far a drive got, and whether it scored");
+
+    for (const b of [10, 20, 30, 40, 50]) {
+      const got = reached.filter((d) => d.best <= b);
+      const [reallyGot, reallyScored] = truth[b]!;
+      console.error(
+        `    reached the ${String(b).padStart(2)}: ` +
+        `${(100 * got.length / reached.length).toFixed(1)}% of drives ` +
+        `(really ${reallyGot}%), scoring ` +
+        `${(100 * got.filter((d) => d.td).length / Math.max(1, got.length)).toFixed(1)}% ` +
+        `(really ${reallyScored}%)`,
+      );
+    }
+  }
+
+  if (gainedAt.size) {
+    const truth: Record<string, number> = {
+      "inside 10": 1.80, "11-20": 4.09, "21-30": 5.13,
+      "31-50": 5.80, "51-70": 5.99, "past 70": 6.03,
+    };
+    console.error("  yards a play, by where the ball is");
+
+    for (const b of ["inside 10", "11-20", "21-30", "31-50", "51-70", "past 70"]) {
+      const v = gainedAt.get(b);
+      if (!v) continue;
+      console.error(
+        `    ${b.padEnd(10)} ${(v.yards / v.n).toFixed(2)} ` +
+        `(really ${truth[b]!.toFixed(2)})`,
+      );
+    }
+
+    /**
+     * The same by the call, and by which path drew it, against
+     * the 2025 plays. A band can be right whole and wrong on both
+     * calls, and the pooled path gains far less than a man's own.
+     */
+    const byCall: Record<string, [number, number, number]> = {
+      "inside 10": [1.85, 1.76, 48.1], "11-20": [3.87, 4.25, 54.1],
+      "21-30": [4.48, 5.76, 55.0], "31-50": [4.81, 6.49, 57.0],
+      "51-70": [4.95, 6.68, 59.3], "past 70": [5.00, 6.82, 58.8],
+    };
+    console.error("  and by the call: run, pass, pass share, then the pass by path");
+
+    for (const b of ["inside 10", "11-20", "21-30", "31-50", "51-70", "past 70"]) {
+      const run = gainedAt.get(`${b}|run`);
+      const pass = gainedAt.get(`${b}|pass`);
+      if (!run || !pass) continue;
+      const mean = (v?: { n: number; yards: number }) =>
+        v ? (v.yards / v.n).toFixed(2) : "-";
+      const [r, p, share] = byCall[b]!;
+      const own = gainedAt.get(`${b}|pass|own`);
+      const pool = gainedAt.get(`${b}|pass|pool`);
+      console.error(
+        `    ${b.padEnd(10)} run ${mean(run)} (${r.toFixed(2)})  ` +
+        `pass ${mean(pass)} (${p.toFixed(2)})  ` +
+        `passes ${(100 * pass.n / (pass.n + run.n)).toFixed(1)}% (${share}%)  ` +
+        `own ${mean(own)} x${own?.n ?? 0}  pool ${mean(pool)} x${pool?.n ?? 0}`,
+      );
+    }
+
+    // 2025, first or second down with seven or more to go, past the twenty
+    const spreadTruth: Record<string, number[]> = {
+      run: [8.0, 6.8, 34.1, 38.8, 9.5, 2.7],
+      pass: [7.4, 32.3, 6.1, 26.5, 18.3, 9.5],
+    };
+    const buckets = ["loss", "none", "1-3", "4-9", "10-19", "20+"];
+    console.error("  how an early down and long gain is spread (really)");
+    for (const call of ["run", "pass"]) {
+      const n = buckets.reduce((a, g) => a + (spread.get(`${call}|${g}`) ?? 0), 0);
+      if (!n) continue;
+      console.error(
+        `    ${call.padEnd(4)} ` + buckets.map((g, i) =>
+          `${g} ${(100 * (spread.get(`${call}|${g}`) ?? 0) / n).toFixed(1)}% ` +
+          `(${spreadTruth[call]![i]})`).join("  "),
+      );
+    }
+  }
+
+  if (gaveUpAt.size) {
+    console.error("  throws the sampled draw gave up on, by where the ball is");
+    for (const b of ["inside 10", "11-20", "21-30", "31-50", "51-70", "past 70"]) {
+      const v = gaveUpAt.get(b);
+      if (!v) continue;
+      console.error(
+        `    ${b.padEnd(10)} ${(100 * v.pooled / v.n).toFixed(1)}% of ${v.n}`,
+      );
+    }
+  }
+
+  if (wentFor.size) {
+    // 2025, reaching the line on third down and on the fourths gone for
+    const made: Record<number, Record<string, number>> = {
+      3: { "1": 68, "2": 57, "3": 53, "4-5": 44, "6-8": 36, "9+": 22 },
+      4: { "1": 69, "2": 58, "3": 53, "4-5": 51, "6-8": 35, "9+": 22 },
+    };
+    const overall: Record<number, number> = { 3: 40, 4: 55 };
+
+    for (const down of [3, 4]) {
+      const every = [...wentFor.entries()]
+        .filter(([k]) => k.startsWith(`${down}|`) && k.split("|").length === 2)
+        .reduce(
+          (a, [, v]) => ({ n: a.n + v.n, made: a.made + v.made }),
+          { n: 0, made: 0 },
+        );
+      if (!every.n) continue;
+      console.error(
+        `  played ${down === 3 ? "third" : "fourth"} down ${every.n} times and made ` +
+        `${(100 * every.made / every.n).toFixed(0)}% (really ${overall[down]}%)`,
+      );
+
+      for (const d of ["1", "2", "3", "4-5", "6-8", "9+"]) {
+        const v = wentFor.get(`${down}|${d}`);
+        if (!v) continue;
+        const rate = (k: string) => {
+          const c = wentFor.get(`${down}|${d}|${k}`);
+          return c ? `${k} ${(100 * c.made / c.n).toFixed(0)}% of ${c.n}` : "";
+        };
+        console.error(
+          `    to go ${d.padEnd(4)} n=${String(v.n).padStart(5)} ` +
+          `made ${(100 * v.made / v.n).toFixed(0)}% (really ${made[down]![d]}%)` +
+          `  ${rate("run")}  ${rate("pass")}`,
+        );
+      }
+    }
+  }
+
+  console.error("  on fourth down, by where the ball is");
+  for (const b of ["inside 20", "21-30", "31-40", "41-50", "past 50"]) {
+    const v = fourthsAt.get(b);
+    if (!v) continue;
+    console.error(
+      `    ${b.padEnd(10)} n=${String(v.n).padStart(5)} ` +
+      `kick ${(100 * v.kick / v.n).toFixed(0)}% ` +
+      `punt ${(100 * v.punt / v.n).toFixed(0)}% ` +
+      `go ${(100 * v.go / v.n).toFixed(0)}%   really ${truth[b]}`,
+    );
+  }
+
+  // 2025: the share of fourth downs at each distance, and how often they went
+  const byDistance: Record<string, [number, number]> = {
+    "1": [12, 77], "2": [8, 44], "3": [7, 34], "4-5": [15, 22],
+    "6-8": [21, 10], "9+": [36, 7],
+  };
+  const fourthsFaced = ["1", "2", "3", "4-5", "6-8", "9+"]
+    .reduce((n, d) => n + (fourthsAt.get(`to go ${d}`)?.n ?? 0), 0);
+  console.error("  on fourth down, by the distance");
+  for (const d of ["1", "2", "3", "4-5", "6-8", "9+"]) {
+    const v = fourthsAt.get(`to go ${d}`);
+    if (!v) continue;
+    const [share, went] = byDistance[d]!;
+    console.error(
+      `    to go ${d.padEnd(4)} faced ${(100 * v.n / fourthsFaced).toFixed(0)}% ` +
+      `went ${(100 * v.go / v.n).toFixed(0)}%   really faced ${share}% went ${went}%`,
+    );
+  }
+  const faced = [...droveHere.faced].sort((a, b) => a - b);
+  const at = (q: number) => faced[Math.floor(q * faced.length)] ?? 0;
+  console.error(
+    `  fourth downs faced ${faced.length}, yards from the posts: ` +
+    `a quarter inside ${at(0.25)}, half inside ${at(0.5)}, ` +
+    `three quarters inside ${at(0.75)}\n  ` +
+    `inside 40 (a kick) ` +
+    `${(100 * faced.filter((y) => y <= 40).length / faced.length).toFixed(1)}%` +
+    ` (really 37.4%)\n  starting ` +
+    `${(droveHere.startedAt / Math.max(1, droveHere.drives)).toFixed(1)} out ` +
+    `(really 70.6), so it makes ` +
+    `${(droveHere.startedAt / Math.max(1, droveHere.drives) - at(0.5)).toFixed(1)} ` +
+    `yards before a fourth down where a side really makes 19\n  ` +
+    `${(droveHere.gained / Math.max(1, droveHere.calls)).toFixed(2)} a play ` +
+    `(really 5.41), ` +
+    `${(droveHere.runYards / Math.max(1, droveHere.runs)).toFixed(2)} a carry ` +
+    `(really 4.50), ` +
+    `${(droveHere.passYards / Math.max(1, droveHere.passes)).toFixed(2)} a pass ` +
+    `(really 6.09, off a pool averaging 7.33)\n  ` +
+    `${(100 * droveHere.noPlays / Math.max(1, droveHere.noPlays + droveHere.calls)).toFixed(1)}% ` +
+    `of snaps were wiped out by a flag and are left out of those`,
+  );
+}
+
+/**
+ * The drive check fans out over its own cores instead of running the
+ * whole schedule on one, the way playPlayers.ts already fans out the
+ * player eval. Each share plays its slice of the schedule and reports
+ * its raw counts; this sums them and prints the report once, since a
+ * rate printed by each of eight shares would both be wrong (a share's
+ * own slice is a small sample) and repeat itself eight times over.
+ */
+async function fanOutForChecks(): Promise<void> {
+  const shares = Math.min(8, roomFor());
+  const printed = await acrossCores({
+    script: import.meta.filename,
+    shares,
+  });
+
+  const droveHere = blankDroveHere();
+  const fourthsAt = new Map<string, FourthTally>();
+
+  for (const line of printed) {
+    const got = JSON.parse(line) as {
+      driveCheck?: DriveCheckCounts; reachCheck?: ReachCheckCounts;
+    };
+
+    if (got.driveCheck) {
+      mergeDriveCheck(droveHere, fourthsAt, got.driveCheck);
+    }
+
+    if (got.reachCheck) {
+      mergeReachCheck(got.reachCheck);
+    }
+  }
+
+  if (process.env["DRIVE_CHECK"]) {
+    printDriveCheckReport(droveHere, fourthsAt);
+  }
+}
+
 async function main(): Promise<void> {
+  if (
+    process.env["DRIVE_CHECK"] && process.env["SHARE"] === undefined &&
+    !process.env["SHARES"] && !process.env["MERGED"]
+  ) {
+    await fanOutForChecks();
+    return;
+  }
+
   const positions = new Map<string, string>();
   const played = new Map<string, number>();
 
@@ -673,223 +1070,21 @@ async function main(): Promise<void> {
 
   if (process.env["SHARES"]) {
     if (process.env["REACH_CHECK"]) {
-    watchHowFar();
-  }
-
-  if (process.env["DRIVE_CHECK"]) {
-      const per = (n: number, of: number) => (n / Math.max(1, of)).toFixed(2);
-      console.error(
-        `  ${per(droveHere.drives, droveHere.teamGames)} drives a side ` +
-        `(really 10.7), ${per(droveHere.plays, droveHere.drives)} plays a ` +
-        `drive (really 5.98), ` +
-        `${(droveHere.seconds / Math.max(1, droveHere.drives)).toFixed(0)} ` +
-        `seconds (really 171)
-  ends: ` +
-        [...droveHere.ends.entries()].sort((a, b) => b[1] - a[1])
-          .map(([e, n]) => `${e} ${(100 * n / droveHere.drives).toFixed(1)}%`)
-          .join(", "),
-      );
-      console.error(
-        `  three plays or fewer ` +
-        `${(100 * droveHere.quick / droveHere.drives).toFixed(1)}% ` +
-        `(really 33.7%)\n  plays a drive: ` +
-        [...droveHere.spread.entries()].sort((a, b) => a[0] - b[0])
-          .map(([n, c]) => `${n}:${(100 * c / droveHere.drives).toFixed(0)}%`)
-          .join(" ") + `\n  really:        ` +
-        `1:5% 2:3% 3:25% 4:9% 5:9% 6:10% 7:8% 8:7% 9:6% 10:5% 11:4% 12:8%`,
-      );
-      // what sides chose in 2025, which goes for it more than the
-      // seasons before it did
-      const truth: Record<string, string> = {
-        "inside 20": "kick 65% punt 0% go 35%",
-        "21-30": "kick 75% punt 0% go 25%",
-        "31-40": "kick 57% punt 8% go 35%",
-        "41-50": "kick 4% punt 60% go 36%",
-        "past 50": "kick 0% punt 87% go 13%",
-      };
-      if (reached.length) {
-        const truth: Record<number, [number, number]> = {
-          10: [21.0, 68.9], 20: [31.6, 57.3], 30: [40.5, 49.1],
-          40: [49.6, 42.4], 50: [58.7, 37.2],
-        };
-        console.error("  how far a drive got, and whether it scored");
-
-        for (const b of [10, 20, 30, 40, 50]) {
-          const got = reached.filter((d) => d.best <= b);
-          const [reallyGot, reallyScored] = truth[b]!;
-          console.error(
-            `    reached the ${String(b).padStart(2)}: ` +
-            `${(100 * got.length / reached.length).toFixed(1)}% of drives ` +
-            `(really ${reallyGot}%), scoring ` +
-            `${(100 * got.filter((d) => d.td).length / Math.max(1, got.length)).toFixed(1)}% ` +
-            `(really ${reallyScored}%)`,
-          );
-        }
-      }
-
-      if (gainedAt.size) {
-        const truth: Record<string, number> = {
-          "inside 10": 1.80, "11-20": 4.09, "21-30": 5.13,
-          "31-50": 5.80, "51-70": 5.99, "past 70": 6.03,
-        };
-        console.error("  yards a play, by where the ball is");
-
-        for (const b of ["inside 10", "11-20", "21-30", "31-50", "51-70", "past 70"]) {
-          const v = gainedAt.get(b);
-          if (!v) continue;
-          console.error(
-            `    ${b.padEnd(10)} ${(v.yards / v.n).toFixed(2)} ` +
-            `(really ${truth[b]!.toFixed(2)})`,
-          );
-        }
-
-        /**
-         * The same by the call, and by which path drew it, against
-         * the 2025 plays. A band can be right whole and wrong on both
-         * calls, and the pooled path gains far less than a man's own.
-         */
-        const byCall: Record<string, [number, number, number]> = {
-          "inside 10": [1.85, 1.76, 48.1], "11-20": [3.87, 4.25, 54.1],
-          "21-30": [4.48, 5.76, 55.0], "31-50": [4.81, 6.49, 57.0],
-          "51-70": [4.95, 6.68, 59.3], "past 70": [5.00, 6.82, 58.8],
-        };
-        console.error("  and by the call: run, pass, pass share, then the pass by path");
-
-        for (const b of ["inside 10", "11-20", "21-30", "31-50", "51-70", "past 70"]) {
-          const run = gainedAt.get(`${b}|run`);
-          const pass = gainedAt.get(`${b}|pass`);
-          if (!run || !pass) continue;
-          const mean = (v?: { n: number; yards: number }) =>
-            v ? (v.yards / v.n).toFixed(2) : "-";
-          const [r, p, share] = byCall[b]!;
-          const own = gainedAt.get(`${b}|pass|own`);
-          const pool = gainedAt.get(`${b}|pass|pool`);
-          console.error(
-            `    ${b.padEnd(10)} run ${mean(run)} (${r.toFixed(2)})  ` +
-            `pass ${mean(pass)} (${p.toFixed(2)})  ` +
-            `passes ${(100 * pass.n / (pass.n + run.n)).toFixed(1)}% (${share}%)  ` +
-            `own ${mean(own)} x${own?.n ?? 0}  pool ${mean(pool)} x${pool?.n ?? 0}`,
-          );
-        }
-
-        // 2025, first or second down with seven or more to go, past the twenty
-        const spreadTruth: Record<string, number[]> = {
-          run: [8.0, 6.8, 34.1, 38.8, 9.5, 2.7],
-          pass: [7.4, 32.3, 6.1, 26.5, 18.3, 9.5],
-        };
-        const buckets = ["loss", "none", "1-3", "4-9", "10-19", "20+"];
-        console.error("  how an early down and long gain is spread (really)");
-        for (const call of ["run", "pass"]) {
-          const n = buckets.reduce((a, g) => a + (spread.get(`${call}|${g}`) ?? 0), 0);
-          if (!n) continue;
-          console.error(
-            `    ${call.padEnd(4)} ` + buckets.map((g, i) =>
-              `${g} ${(100 * (spread.get(`${call}|${g}`) ?? 0) / n).toFixed(1)}% ` +
-              `(${spreadTruth[call]![i]})`).join("  "),
-          );
-        }
-      }
-
-      if (gaveUpAt.size) {
-        console.error("  throws the sampled draw gave up on, by where the ball is");
-        for (const b of ["inside 10", "11-20", "21-30", "31-50", "51-70", "past 70"]) {
-          const v = gaveUpAt.get(b);
-          if (!v) continue;
-          console.error(
-            `    ${b.padEnd(10)} ${(100 * v.pooled / v.n).toFixed(1)}% of ${v.n}`,
-          );
-        }
-      }
-
-      if (wentFor.size) {
-        // 2025, reaching the line on third down and on the fourths gone for
-        const made: Record<number, Record<string, number>> = {
-          3: { "1": 68, "2": 57, "3": 53, "4-5": 44, "6-8": 36, "9+": 22 },
-          4: { "1": 69, "2": 58, "3": 53, "4-5": 51, "6-8": 35, "9+": 22 },
-        };
-        const overall: Record<number, number> = { 3: 40, 4: 55 };
-
-        for (const down of [3, 4]) {
-          const every = [...wentFor.entries()]
-            .filter(([k]) => k.startsWith(`${down}|`) && k.split("|").length === 2)
-            .reduce(
-              (a, [, v]) => ({ n: a.n + v.n, made: a.made + v.made }),
-              { n: 0, made: 0 },
-            );
-          if (!every.n) continue;
-          console.error(
-            `  played ${down === 3 ? "third" : "fourth"} down ${every.n} times and made ` +
-            `${(100 * every.made / every.n).toFixed(0)}% (really ${overall[down]}%)`,
-          );
-
-          for (const d of ["1", "2", "3", "4-5", "6-8", "9+"]) {
-            const v = wentFor.get(`${down}|${d}`);
-            if (!v) continue;
-            const rate = (k: string) => {
-              const c = wentFor.get(`${down}|${d}|${k}`);
-              return c ? `${k} ${(100 * c.made / c.n).toFixed(0)}% of ${c.n}` : "";
-            };
-            console.error(
-              `    to go ${d.padEnd(4)} n=${String(v.n).padStart(5)} ` +
-              `made ${(100 * v.made / v.n).toFixed(0)}% (really ${made[down]![d]}%)` +
-              `  ${rate("run")}  ${rate("pass")}`,
-            );
-          }
-        }
-      }
-
-      console.error("  on fourth down, by where the ball is");
-      for (const b of ["inside 20", "21-30", "31-40", "41-50", "past 50"]) {
-        const v = fourthsAt.get(b);
-        if (!v) continue;
-        console.error(
-          `    ${b.padEnd(10)} n=${String(v.n).padStart(5)} ` +
-          `kick ${(100 * v.kick / v.n).toFixed(0)}% ` +
-          `punt ${(100 * v.punt / v.n).toFixed(0)}% ` +
-          `go ${(100 * v.go / v.n).toFixed(0)}%   really ${truth[b]}`,
-        );
-      }
-
-      // 2025: the share of fourth downs at each distance, and how often they went
-      const byDistance: Record<string, [number, number]> = {
-        "1": [12, 77], "2": [8, 44], "3": [7, 34], "4-5": [15, 22],
-        "6-8": [21, 10], "9+": [36, 7],
-      };
-      const fourthsFaced = ["1", "2", "3", "4-5", "6-8", "9+"]
-        .reduce((n, d) => n + (fourthsAt.get(`to go ${d}`)?.n ?? 0), 0);
-      console.error("  on fourth down, by the distance");
-      for (const d of ["1", "2", "3", "4-5", "6-8", "9+"]) {
-        const v = fourthsAt.get(`to go ${d}`);
-        if (!v) continue;
-        const [share, went] = byDistance[d]!;
-        console.error(
-          `    to go ${d.padEnd(4)} faced ${(100 * v.n / fourthsFaced).toFixed(0)}% ` +
-          `went ${(100 * v.go / v.n).toFixed(0)}%   really faced ${share}% went ${went}%`,
-        );
-      }
-      const faced = [...droveHere.faced].sort((a, b) => a - b);
-      const at = (q: number) => faced[Math.floor(q * faced.length)] ?? 0;
-      console.error(
-        `  fourth downs faced ${faced.length}, yards from the posts: ` +
-        `a quarter inside ${at(0.25)}, half inside ${at(0.5)}, ` +
-        `three quarters inside ${at(0.75)}\n  ` +
-        `inside 40 (a kick) ` +
-        `${(100 * faced.filter((y) => y <= 40).length / faced.length).toFixed(1)}%` +
-        ` (really 37.4%)\n  starting ` +
-        `${(droveHere.startedAt / Math.max(1, droveHere.drives)).toFixed(1)} out ` +
-        `(really 70.6), so it makes ` +
-        `${(droveHere.startedAt / Math.max(1, droveHere.drives) - at(0.5)).toFixed(1)} ` +
-        `yards before a fourth down where a side really makes 19\n  ` +
-        `${(droveHere.gained / Math.max(1, droveHere.calls)).toFixed(2)} a play ` +
-        `(really 5.41), ` +
-        `${(droveHere.runYards / Math.max(1, droveHere.runs)).toFixed(2)} a carry ` +
-        `(really 4.50), ` +
-        `${(droveHere.passYards / Math.max(1, droveHere.passes)).toFixed(2)} a pass ` +
-        `(really 6.09, off a pool averaging 7.33)\n  ` +
-        `${(100 * droveHere.noPlays / Math.max(1, droveHere.noPlays + droveHere.calls)).toFixed(1)}% ` +
-        `of snaps were wiped out by a flag and are left out of those`,
-      );
+      watchHowFar();
     }
+
+    /**
+     * A lone share (SHARES=1, the manual single-process form) still
+     * prints its own report here, since it already has the whole
+     * run's counts. A fan-out across several shares (SHARES>1) leaves
+     * the report to the parent, which sums every share's counts
+     * first; printing it here too would both be wrong (a share's own
+     * slice) and repeat itself once per share.
+     */
+    if (process.env["DRIVE_CHECK"] && Number(process.env["SHARES"]) <= 1) {
+      printDriveCheckReport(droveHere, fourthsAt);
+    }
+
     console.log(JSON.stringify({
       // how many times each fixture was played and how many fixtures a
       // side got, since the kicks come back as a raw count and only
@@ -903,6 +1098,10 @@ async function main(): Promise<void> {
         // accuracy can be applied band by band
         from: its.from, conversions: its.conversions,
       }]),
+      ...(process.env["DRIVE_CHECK"]
+        ? { driveCheck: serializeDriveCheck(droveHere, fourthsAt) } : {}),
+      ...(process.env["REACH_CHECK"]
+        ? { reachCheck: serializeReachCheck() } : {}),
     }));
     return;
   }
