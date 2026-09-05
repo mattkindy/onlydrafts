@@ -137,7 +137,8 @@ async function main(): Promise<void> {
 
   const droveHere = {
     drives: 0, plays: 0, seconds: 0, teamGames: 0, startedAt: 0, quick: 0,
-    gained: 0, calls: 0, runYards: 0, runs: 0, passYards: 0, passes: 0,
+    gained: 0, calls: 0, noPlays: 0, runYards: 0, runs: 0, passYards: 0,
+    passes: 0,
     spread: new Map<number, number>(),
     faced: [] as number[],
     ends: new Map<string, number>(),
@@ -443,6 +444,14 @@ async function main(): Promise<void> {
         droveHere.startedAt += one.drive.plays[0]?.state.yardline ?? 0;
 
         for (const play of one.drive.plays) {
+          // a wiped-out snap comes back as a nameless zero-yard pass, so
+          // counting it would pull the yards a play down against a
+          // league average that never counted it
+          if (play.player === "") {
+            droveHere.noPlays++;
+            continue;
+          }
+
           droveHere.gained += play.yards;
           droveHere.calls++;
 
@@ -876,7 +885,9 @@ async function main(): Promise<void> {
         `${(droveHere.runYards / Math.max(1, droveHere.runs)).toFixed(2)} a carry ` +
         `(really 4.50), ` +
         `${(droveHere.passYards / Math.max(1, droveHere.passes)).toFixed(2)} a pass ` +
-        `(really 6.09, off a pool averaging 7.33)`,
+        `(really 6.09, off a pool averaging 7.33)\n  ` +
+        `${(100 * droveHere.noPlays / Math.max(1, droveHere.noPlays + droveHere.calls)).toFixed(1)}% ` +
+        `of snaps were wiped out by a flag and are left out of those`,
       );
     }
     console.log(JSON.stringify({
