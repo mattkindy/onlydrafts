@@ -440,6 +440,20 @@ const LEAN_K = Number(process.env["LEAN_K"] ?? 60);
 const DEPTH_ROOM_UPTO = Number(process.env["DEPTH_ROOM_UPTO"] ?? 25);
 
 /**
+ * Whether the pools kept by depth also keep the sacks and the balls
+ * thrown away.
+ *
+ * Every pass is offered one of those before anybody is asked for a
+ * play of his own, so a pool that also keeps them counts them twice,
+ * and only a throw that falls back to the pool pays for it. On the
+ * 2025 throws where the walk falls back, it said the throw went
+ * nowhere 48.9% of the time where those same throws really went
+ * nowhere 39.2%, and gained 4.47 yards against 6.50. Set it to put
+ * them back in.
+ */
+export const POOL_WASTE = Boolean(process.env["POOL_WASTE"]);
+
+/**
  * Where the goal line starts, and how many plays a man is asked for
  * there against the forty he is asked for anywhere else.
  *
@@ -947,7 +961,8 @@ export function countPlays(
     cell.from.push(row.yardline);
     cell.scores += row.touchdown;
 
-    if (row.call === "pass" && row.airYards !== undefined) {
+    if (row.call === "pass" && row.airYards !== undefined &&
+        (POOL_WASTE || row.player)) {
       const band = bandOf(row.airYards);
       cell.byDepth.set(band, [...(cell.byDepth.get(band) ?? []), row.yards]);
       cell.byDepthFrom.set(
@@ -980,7 +995,8 @@ export function countPlays(
     anyTime.from.push(row.yardline);
     anyTime.scores += row.touchdown;
 
-    if (row.call === "pass" && row.airYards !== undefined) {
+    if (row.call === "pass" && row.airYards !== undefined &&
+        (POOL_WASTE || row.player)) {
       const band = bandOf(row.airYards);
       anyTime.byDepth.set(band, [...(anyTime.byDepth.get(band) ?? []), row.yards]);
       anyTime.byDepthFrom.set(

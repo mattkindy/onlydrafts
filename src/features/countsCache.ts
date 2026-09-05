@@ -10,7 +10,7 @@
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  countPlays, type CountedPlays, type PlayRow,
+  countPlays, POOL_WASTE, type CountedPlays, type PlayRow,
 } from "./fitPlayFactors.js";
 
 const KEPT = join(import.meta.dirname, "..", "..", "data", "kept");
@@ -133,8 +133,10 @@ export async function countsFor(
 ): Promise<CountedPlays> {
   const stamp = await stat(TOUCHES).then((s) => s.mtimeMs).catch(() => 0);
   // the counting changes shape sometimes, and an older file would come
-  // back missing whatever was added since
-  const at = join(KEPT, `counts13-${maxSeason}-${Math.round(stamp)}.json`);
+  // back missing whatever was added since. What the depth pools keep
+  // is in the name for the same reason.
+  const at = join(KEPT, `counts14${POOL_WASTE ? "w" : ""}` +
+    `-${maxSeason}-${Math.round(stamp)}.json`);
   const already = await readFile(at, "utf8").catch(() => "");
 
   if (already) {
