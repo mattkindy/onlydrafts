@@ -28,6 +28,10 @@ import { Roster } from "./views/Roster.tsx";
 import { DraftRating } from "./views/DraftRating.tsx";
 import { Keepers } from "./views/Keepers.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
+import { Start } from "./views/Start.tsx";
+import {
+  loadSlate, rosterKeys, weekRefs, type Slate, type WeekRef,
+} from "./lib/slate.ts";
 
 export type Order = "war" | "rank" | "adp";
 
@@ -77,8 +81,8 @@ const COPY: Record<View, [string, string, string]> = {
   ],
   start: [
     "Who to start",
-    "Your roster for one week, ranked by projected points, so you can set a lineup.",
-    "",
+    "One week, ranked by projected points, with your own men marked so you can set a lineup.",
+    "Our number and Sleeper's sit side by side. Where they disagree by three points or more the row is marked, and Sleeper has the better of those about 55% of the time.",
   ],
   waivers: [
     "Who to add",
@@ -164,17 +168,48 @@ function App() {
   // bumped whenever a keeper price or a mark changes, since those live
   // in storage rather than in state
   const [marks, setMarks] = useState(0);
+  const [weeks, setWeeks] = useState<WeekRef[]>([]);
+  const [week, setWeek] = useState<WeekRef | null>(null);
+  const [slate, setSlate] = useState<Slate | null>(null);
+  const [weekStatus, setWeekStatus] = useState("");
 
   useEffect(() => {
     loadMeta()
       .then((meta) => {
         setSeason(meta.boardSeason);
 
+        const built = weekRefs(meta.weeks, meta.boardSeason);
+
+        setWeeks(built);
+        // the week you want on opening it is the newest one built
+        setWeek(built[built.length - 1] ?? null);
+
         return loadBoard(meta.boardSeason);
       })
       .then(setBoard)
       .catch((e: Error) => setStatus("could not read the board: " + e.message));
   }, []);
+
+  /** the week itself is only fetched once you ask for that tab */
+  useEffect(() => {
+    if (view !== "start" || !week) {
+      return;
+    }
+
+    let stale = false;
+
+    setSlate(null);
+    setWeekStatus("");
+    loadSlate(week.file)
+      .then((got) => { if (!stale) { setSlate(got); } })
+      .catch((e: Error) => {
+        if (!stale) {
+          setWeekStatus("could not read week " + week.week + ": " + e.message);
+        }
+      });
+
+    return () => { stale = true; };
+  }, [view, week]);
 
   /**
    * The board in this league's terms. Nothing here needs the model to
@@ -570,7 +605,18 @@ function App() {
           />
         )}
 
-        {(view === "start" || view === "waivers") && <SeasonNotStarted />}
+        {view === "start" && (
+          <Start
+            weeks={weeks}
+            picked={week}
+            onWeek={setWeek}
+            slate={slate}
+            roster={active ? rosterKeys(active.myRoster) : null}
+            status={weekStatus}
+          />
+        )}
+
+        {view === "waivers" && <SeasonNotStarted />}
       </div>
 
       <p class="hint">{legend}</p>

@@ -9,7 +9,12 @@
 import type { Player } from "./scoring.ts";
 
 export interface Meta {
-  weeks: number[];
+  /**
+   * The weeks with a slate file built. Older indexes list bare week
+   * numbers, so what comes back is put through weekRefs rather than
+   * read straight.
+   */
+  weeks: unknown;
   boardSeason: number;
   adpFormat?: string;
 }

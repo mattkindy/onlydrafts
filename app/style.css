@@ -367,3 +367,20 @@
   /* your own team, so it can be found without counting rows */
   table.rating tr.on td { background: var(--chip); color: var(--ink); }
   table.rating tr.on td:nth-child(2) { font-weight: 600; }
+
+  /* one week's board. Floor to ceiling is drawn small enough to sit in
+     a cell, since the number beside it is the one being read. */
+  .fc { position: relative; display: inline-block; width: 6rem; height: 10px;
+    background: var(--chip); border-radius: 999px; vertical-align: middle; }
+  .fc u { position: absolute; top: 0; bottom: 0;
+    background: color-mix(in srgb, var(--go) 45%, var(--chip));
+    border-radius: 999px; }
+  .fc b { position: absolute; top: -2px; width: 3px; height: 14px;
+    background: var(--mark); border-radius: 2px;
+    box-shadow: 0 0 0 2px var(--bg); }
+  /* the two projections disagreeing is worth a colour, since that is
+     where a lineup is actually decided. It comes after the roster
+     highlight so a man of yours still shows the disagreement. */
+  table.ranks tr.split td { background: color-mix(in srgb, var(--mark) 10%, transparent); }
+  table.ranks tr.picked td { background: color-mix(in srgb, var(--go) 16%, transparent); }
+  table.ranks .badge { margin-left: .3rem; }
