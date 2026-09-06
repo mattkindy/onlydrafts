@@ -22,6 +22,22 @@ export const BLEND_WEIGHTS: readonly number[] = Array.from(
   (_, i) => i / 20,
 );
 
+/**
+ * What the start/sit tools rank by. The fitted weight comes out near a
+ * half on both test seasons and the curve around it is flat, so an even
+ * average is what ships rather than a number that moves with the fit.
+ */
+export const SHIPPED_BLEND_WEIGHT = 0.5;
+
+/**
+ * How often Sleeper had the better of it when the two projections were
+ * three points or more apart, over the 2024 and 2025 slates.
+ */
+export const WIDE_SPLIT_SLEEPER_RATE = 0.55;
+
+/** a gap this wide is worth telling the reader about */
+export const WIDE_SPLIT_POINTS = 3;
+
 export function blendPoints(
   ours: number,
   sleeper: number,
