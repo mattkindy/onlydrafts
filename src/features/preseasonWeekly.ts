@@ -134,6 +134,8 @@ export function preseasonWeekly(
         prevPpg: e?.prevPpg ?? ppg,
         targetsRecent: e?.targetsPerGame ?? 0,
         carriesRecent: e?.carriesPerGame ?? 0,
+        // nobody has missed a game that has not been played
+        gamesMissedRecent: 0,
         // nobody is ruled out before the season starts, so there is
         // nothing to redistribute
         targetsExpected: e?.targetsPerGame ?? 0,

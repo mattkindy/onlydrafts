@@ -4,10 +4,26 @@ import type { WeeklyAvailability } from "../data/weeklyStatus.js";
 import type { RosterAppearance } from "../graph/build.js";
 import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
 import { buildWeeklyVolume, weeklyVolume } from "./weeklyVolume.js";
+import {
+  clubCalendar,
+  clubWeeksMissed,
+  recentClubWeeks,
+  RECENT_GAMES,
+  type ClubCalendar,
+} from "./recentWindow.js";
 
 /**
  * One player-week the weekly model predicts. Every feature is computed
  * from weeks strictly before the target week, plus the previous season.
+ *
+ * Two windows are called recent here, and which one a feature uses
+ * matters for a man who missed time. His own form is his last four
+ * games played, so a starter back from a month off is read at the level
+ * he last played at rather than at zero. Anything measuring a cut of a
+ * room is his club's last four game weeks, counting a week he missed as
+ * nothing, because the men in the room have to be measured over the
+ * same weeks for the shares to add up. Each field below says which one
+ * it uses.
  */
 export interface WeeklyExample {
   playerId: string;
@@ -23,11 +39,17 @@ export interface WeeklyExample {
   targetReceptions: number;
   targetRecYds: number;
   targetRushYds: number;
-  /** mean points over the last four games played before this week */
+  /** mean points over the last four games he played before this week */
   last4: number;
-  /** mean opportunity over the same games */
+  /** mean opportunity over the same four games he played */
   targetsRecent: number;
   carriesRecent: number;
+  /**
+   * club game weeks those four games span beyond the four themselves,
+   * which is how many he missed. 0 for a man who has played every week,
+   * and 4 for a starter who has been out a month.
+   */
+  gamesMissedRecent: number;
   /**
    * the same two numbers after the men his club ruled out, put on
    * reserve, or moved off the roster hand their recent work to whoever
@@ -37,6 +59,7 @@ export interface WeeklyExample {
    */
   targetsExpected: number;
   carriesExpected: number;
+  /** the same four games he played, per game */
   airYardsRecent: number;
   receptionsRecent: number;
   recYdsRecent: number;
@@ -45,7 +68,11 @@ export interface WeeklyExample {
   seasonPpg: number;
   /** previous season's points per game, 0 for rookies */
   prevPpg: number;
-  /** mean offensive snap share over the last two games with snap data */
+  /**
+   * mean offensive snap share over the last two games he played with
+   * snap data. This says how much he plays when he plays, so an absence
+   * does not belong in it; gamesMissedRecent says he was gone.
+   */
   snapRecent: number;
   /**
    * opponent's points allowed to this position so far this season,
@@ -57,11 +84,15 @@ export interface WeeklyExample {
   impliedTotal: number;
   /** points his own team is favored by, negative as an underdog, 0 with no line */
   spread: number;
-  /** mean share of his own offence's targets over the same recent games */
+  /**
+   * mean share of his own offence's targets over his club's last four
+   * game weeks, counting a week he missed as no share at all.
+   */
   targetShareRecent: number;
   /**
-   * mean share of the carries and targets his team gave its running backs,
-   * over the same recent games. 0 for a team-week with no back touches.
+   * mean share of the carries and targets his team gave its running
+   * backs, over his club's last four game weeks, again counting a week
+   * he missed as nothing. 0 for a team-week with no back touches.
    */
   backfieldShareRecent: number;
   /** team's neutral-situation pass rate before this week, 0.57 unknown */
@@ -71,9 +102,9 @@ export interface WeeklyExample {
   /** he was limited in practice this week, or did not practice */
   limitedPractice: boolean;
   /**
-   * the cut of his own room's recent touches that belongs to teammates
-   * his club ruled out this week. The backup of an injured starter sees
-   * a number near one.
+   * the cut of his own room's touches over the club's last four game
+   * weeks that belongs to teammates his club ruled out this week. The
+   * backup of an injured starter sees a number near one.
    */
   absenceShare: number;
   /** the same measure for his club's quarterbacks, 0 for a quarterback */
@@ -89,7 +120,6 @@ export interface WeeklyExample {
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 const FIRST_WEEK = 5;
 const MAX_WEEK = 18;
-const RECENT_GAMES = 4;
 
 interface TeamWeek {
   opponent: string;
@@ -123,7 +153,10 @@ function impliedFor(game: GameRow, home: boolean): number {
 }
 
 export interface Rooms {
-  /** the cut of a room's recent workload owned by men ruled out this week */
+  /**
+   * the cut of a room's workload over the club's last four game weeks
+   * that is owned by men ruled out this week
+   */
   shareOut(teamId: string, position: string, week: number): number;
 }
 
@@ -131,10 +164,15 @@ export interface Rooms {
  * A man's club and his room come from the last game he played before
  * the week in question, because a man who is out this week has no row
  * of his own to read them from.
+ *
+ * Every man in the room is averaged over the club's last four game
+ * weeks, so a starter who missed two of them counts for half of what he
+ * did when healthy and the room's totals add up over the same weeks.
  */
 function buildRooms(
   byPlayer: Map<string, PlayerWeekStats[]>,
   availability: WeeklyAvailability | undefined,
+  calendar: ClubCalendar,
 ): Rooms {
   const total = new Map<string, number>();
   const missing = new Map<string, number>();
@@ -145,15 +183,24 @@ function buildRooms(
     const sorted = [...rows].sort((a, b) => a.week - b.week);
 
     for (let week = 1; week <= MAX_WEEK; week++) {
-      const recent = sorted.filter((r) => r.week < week).slice(-RECENT_GAMES);
-      const last = recent[recent.length - 1];
+      const before = sorted.filter((r) => r.week < week);
+      const last = before[before.length - 1];
 
       if (!last) {
         continue;
       }
 
+      const window = recentClubWeeks(calendar, last.teamId, week);
+      const first = window[0];
+
+      if (first === undefined) {
+        continue;
+      }
+
       const volume =
-        recent.reduce((s, r) => s + weeklyVolume(r), 0) / recent.length;
+        before
+          .filter((r) => r.week >= first)
+          .reduce((s, r) => s + weeklyVolume(r), 0) / window.length;
       const key = roomKey(last.teamId, last.position, week);
       total.set(key, (total.get(key) ?? 0) + volume);
 
@@ -257,7 +304,8 @@ export function buildWeeklyExamples(
     );
   }
 
-  const rooms = buildRooms(byPlayer, availability);
+  const calendar = clubCalendar([...byPlayer.values()].flat());
+  const rooms = buildRooms(byPlayer, availability, calendar);
   const volume = buildWeeklyVolume(byPlayer, availability, rosters);
 
   // points allowed by each defense to each position, accumulated by week
@@ -345,7 +393,7 @@ export function buildWeeklyExamples(
     }
 
     const pointsOf = (r: PlayerWeekStats) => fantasyPoints(r.statLine, rules);
-    const recent = earlier.slice(-4);
+    const recent = earlier.slice(-RECENT_GAMES);
     const lastFour = recent.map(pointsOf);
     const all = earlier.map(pointsOf);
     const meanOf = (pick: (r: PlayerWeekStats) => number) =>
@@ -367,6 +415,23 @@ export function buildWeeklyExamples(
     if (!slot) {
       return undefined;
     }
+
+    // Everyone in a room has to be measured over the same weeks or their
+    // shares do not add up, so a share reads the club's calendar and a
+    // week he missed counts as no share at all.
+    const clubWindow = recentClubWeeks(calendar, teamId, week);
+    const windowStart = clubWindow[0];
+    const inWindow =
+      windowStart === undefined
+        ? []
+        : earlier.filter((r) => r.week >= windowStart);
+    const clubMeanOf = (pick: (r: PlayerWeekStats) => number) => {
+      if (clubWindow.length === 0) {
+        return 0;
+      }
+
+      return inWindow.reduce((s, r) => s + pick(r), 0) / clubWindow.length;
+    };
 
     const defWeeks = week - 1;
     const defAllowed = cumulativeMean(
@@ -409,6 +474,12 @@ export function buildWeeklyExamples(
       last4: lastFour.reduce((s, x) => s + x, 0) / lastFour.length,
       targetsRecent: meanOf((r) => r.targets),
       carriesRecent: meanOf((r) => r.carries),
+      gamesMissedRecent: clubWeeksMissed(
+        calendar,
+        teamId,
+        week,
+        recent.map((r) => r.week),
+      ),
       targetsExpected: expected.targets,
       carriesExpected: expected.carries,
       airYardsRecent: meanOf((r) => r.airYards),
@@ -425,9 +496,9 @@ export function buildWeeklyExamples(
       home: slot.home,
       impliedTotal: slot.impliedTotal,
       spread: slot.spread,
-      targetShareRecent: meanOf((r) => r.targetShare),
+      targetShareRecent: clubMeanOf((r) => r.targetShare),
       backfieldShareRecent:
-        reference.position === "RB" ? meanOf(backfieldShare) : 0,
+        reference.position === "RB" ? clubMeanOf(backfieldShare) : 0,
       passTendency: tendencyFor(teamId, week),
       questionable: status?.questionable ?? false,
       limitedPractice: status?.limitedPractice ?? false,

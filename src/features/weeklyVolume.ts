@@ -16,8 +16,13 @@
 import type { PlayerWeekStats } from "../data/nflverse.js";
 import type { WeeklyAvailability } from "../data/weeklyStatus.js";
 import type { RosterAppearance } from "../graph/build.js";
+import {
+  clubCalendar,
+  recentClubWeeks,
+  RECENT_GAMES,
+  type ClubCalendar,
+} from "./recentWindow.js";
 
-const RECENT_GAMES = 4;
 const MAX_WEEK = 18;
 const ACTIVE_STATUS = "ACT";
 
@@ -91,29 +96,6 @@ function meanTouches(rows: PlayerWeekStats[], over: number): Touches {
   };
 }
 
-/**
- * The weeks each club played, so a man who missed one is counted at
- * nothing for it. His own rows skip the weeks he sat out, and reading
- * four rows back reaches over an absence as though it never happened.
- */
-function weeksPlayedByTeam(
-  byPlayer: Map<string, PlayerWeekStats[]>,
-): Map<string, number[]> {
-  const weeks = new Map<string, Set<number>>();
-
-  for (const rows of byPlayer.values()) {
-    for (const row of rows) {
-      const seen = weeks.get(row.teamId) ?? new Set<number>();
-      seen.add(row.week);
-      weeks.set(row.teamId, seen);
-    }
-  }
-
-  return new Map(
-    [...weeks].map(([team, set]) => [team, [...set].sort((a, b) => a - b)]),
-  );
-}
-
 interface RosterView {
   /** the team he was active for that week, undefined when no row says */
   teamFor(playerId: string, week: number): string | undefined;
@@ -152,7 +134,7 @@ function standingsForWeek(
   availability: WeeklyAvailability | undefined,
   roster: RosterView,
   wasOut: (playerId: string, week: number) => boolean,
-  teamWeeks: Map<string, number[]>,
+  teamWeeks: ClubCalendar,
 ): Standing[] {
   const standings: Standing[] = [];
 
@@ -168,9 +150,7 @@ function standingsForWeek(
     const ruledOut = availability?.status.get(`${playerId}|${week}`)?.out === true;
     const activeWith = roster.teamFor(playerId, week);
     const unlisted = roster.known(playerId) && activeWith === undefined;
-    const window = (teamWeeks.get(last.teamId) ?? [])
-      .filter((w) => w < week)
-      .slice(-RECENT_GAMES);
+    const window = recentClubWeeks(teamWeeks, last.teamId, week);
     const first = window[0] ?? week;
     const current = meanTouches(
       before.filter((r) => r.week >= first),
@@ -288,7 +268,7 @@ export function buildWeeklyVolume(
   const expected = new Map<string, Touches>();
   const out = new Set<string>();
   const at = (playerId: string, week: number) => `${playerId}|${week}`;
-  const teamWeeks = weeksPlayedByTeam(byPlayer);
+  const teamWeeks = clubCalendar([...byPlayer.values()].flat());
 
   for (let week = 1; week <= MAX_WEEK; week++) {
     const standings = standingsForWeek(

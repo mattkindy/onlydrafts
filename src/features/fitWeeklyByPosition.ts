@@ -59,6 +59,7 @@ export const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
   snapSpread: (e) => e.snapRecent * e.spread,
   carriesExpected: (e) => e.carriesExpected,
   targetsExpected: (e) => e.targetsExpected,
+  gamesMissed: (e) => e.gamesMissedRecent,
   absence: (e) => e.absenceShare,
   qbAbsence: (e) => e.qbAbsenceShare,
   questionable: (e) => (e.questionable ? 1 : 0),
