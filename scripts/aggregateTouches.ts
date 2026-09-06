@@ -13,10 +13,15 @@
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
-import { RAW_DIR } from "../src/data/nflverse.js";
+import { currentSeason, RAW_DIR } from "../src/data/nflverse.js";
 import { splitLine } from "../src/data/csv.js";
 
-const SEASONS = [2021, 2022, 2023, 2024, 2025];
+const FIRST_SEASON = 2021;
+/** every season from 2021 to the one being played, so a refresh picks it up */
+const SEASONS = Array.from(
+  { length: Math.max(1, currentSeason() - FIRST_SEASON + 1) },
+  (_, i) => FIRST_SEASON + i,
+);
 const OUT = join(RAW_DIR, "..", "curated", "touches.csv");
 
 /**
