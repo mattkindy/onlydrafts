@@ -144,6 +144,11 @@ export function preseasonWeekly(
         impliedTotal: impliedTotal(
           team, slot.opponent, input.teamScoring, input.oppAdjust,
         ),
+        // nobody has hung a line on a game this far out, and there is no
+        // recent form to take a share of either
+        spread: 0,
+        targetShareRecent: 0,
+        backfieldShareRecent: 0,
         passTendency: input.passRate.get(team) ?? NEUTRAL_PASS_RATE,
         teamId: team,
         opponent: slot.opponent,
