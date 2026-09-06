@@ -892,7 +892,13 @@ export async function projectDraftExamples(
       expYears: entered === undefined ? undefined : target - entered,
       rookieCapital:
         context.rookieCapital.get(`${targetTeam}|${was.position}`) ?? 0,
-      snapPct: 0,
+      // last season's snap share, the same reading the training rows get.
+      // It was zero here, so the model met a feature at prediction time
+      // that it had never seen empty while it was learning.
+      snapPct:
+        prev.snapShare.get(
+          `${normalizeName(was.playerName)}|${was.primaryTeamId}`,
+        ) ?? 0,
       age: ageOf(context, playerId, target),
       gamesPrev: was.games,
       tdPointShare: was.tdPointShare,
