@@ -1,0 +1,69 @@
+{
+  "season": 2026,
+  "week": 3,
+  "players": [
+    {
+      "name": "Josh Allen", "key": "joshallen", "position": "QB",
+      "team": "BUF", "opponent": "v NYJ",
+      "ours": 25.1, "sleeper": 24.4, "average": 24.8,
+      "floor": 14.0, "ceiling": 38.2, "snaps": 99,
+      "questionable": false, "gamesMissed": 0, "absenceShare": 0.0
+    },
+    {
+      "name": "Jalen Hurts", "key": "jalenhurts", "position": "QB",
+      "team": "PHI", "opponent": "@ DAL",
+      "ours": 23.9, "sleeper": 23.1, "average": 23.5,
+      "floor": 13.2, "ceiling": 35.6, "snaps": 98,
+      "questionable": false, "gamesMissed": 0, "absenceShare": 0.11
+    },
+    {
+      "name": "Bo Nix", "key": "bonix", "position": "QB",
+      "team": "DEN", "opponent": "v LV",
+      "ours": 20.0, "sleeper": 20.6, "average": 20.3,
+      "floor": 11.4, "ceiling": 30.1, "snaps": 100,
+      "questionable": false, "gamesMissed": 0, "absenceShare": 0.0
+    },
+    {
+      "name": "Bijan Robinson", "key": "bijanrobinson", "position": "RB",
+      "team": "ATL", "opponent": "v NO",
+      "ours": 21.4, "sleeper": 19.0, "average": 20.2,
+      "floor": 9.1, "ceiling": 32.4, "snaps": 82,
+      "questionable": false, "gamesMissed": 0, "absenceShare": 0.02
+    },
+    {
+      "name": "Ja'Marr Chase", "key": "jamarrchase", "position": "WR",
+      "team": "CIN", "opponent": "@ BAL",
+      "ours": 22.8, "sleeper": 17.1, "average": 20.0,
+      "floor": 7.4, "ceiling": 38.0, "snaps": 91,
+      "questionable": true, "gamesMissed": 0, "absenceShare": 0.05
+    },
+    {
+      "name": "Puka Nacua", "key": "pukanacua", "position": "WR",
+      "team": "LAR", "opponent": "v SF",
+      "ours": 18.9, "sleeper": 18.2, "average": 18.6,
+      "floor": 8.2, "ceiling": 29.7, "snaps": 93,
+      "questionable": false, "gamesMissed": 0, "absenceShare": 0.0
+    },
+    {
+      "name": "Chase Brown", "key": "chasebrown", "position": "RB",
+      "team": "CIN", "opponent": "@ BAL",
+      "ours": 16.2, "sleeper": null, "average": 16.2,
+      "floor": 6.9, "ceiling": 27.3, "snaps": 74,
+      "questionable": false, "gamesMissed": 0, "absenceShare": 0.34
+    },
+    {
+      "name": "Caleb Williams", "key": "calebwilliams", "position": "QB",
+      "team": "CHI", "opponent": "@ GB",
+      "ours": 15.2, "sleeper": 14.6, "average": 14.9,
+      "floor": 7.8, "ceiling": 24.9, "snaps": 96,
+      "questionable": false, "gamesMissed": 1, "absenceShare": 0.24
+    },
+    {
+      "name": "Trey McBride", "key": "treymcbride", "position": "TE",
+      "team": "ARI", "opponent": "v SEA",
+      "ours": 13.6, "sleeper": 13.2, "average": 13.4,
+      "floor": 5.1, "ceiling": 22.8, "snaps": 88,
+      "questionable": false, "gamesMissed": 1, "absenceShare": 0.03
+    }
+  ]
+}
