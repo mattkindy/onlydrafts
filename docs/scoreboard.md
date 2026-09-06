@@ -27,7 +27,7 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7479 | .7128 | .7048 | .339 |
+| now | .7480 | .7128 | .7049 | .339 |
 
 The .339 is a two seed mean at forty draws and is level with the
 yardstick of a man's average so far, .340. The walk has not beaten
@@ -63,6 +63,9 @@ change, and swept out to the whole board below.
 | the sacks taken out of the pooled throw | .7480 | .7128 | .7039 | .339 |
 | both sides of the goal check on the same plays | .7476 | .7128 | .7031 | .339 |
 | a sampled play that reached the line keeps its score | .7479 | .7128 | .7048 | flat, .368 against .3705 on 2025 alone |
+| the live board reads last season's snap share instead of zero | .7480 | .7128 | .7049 | not run |
+
+The snap share row is a fix to the live path only. The backtest already fed the season model last season's snap share, so the bench did not move; the 2026 board did, with ten receivers in the top 60 moving five or more places.
 
 The walk's own column is the best it has been on a season, .7004, and
 on every place worth less than the one above, .7070. The board's first
