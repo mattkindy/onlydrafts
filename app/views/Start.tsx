@@ -239,6 +239,13 @@ export function Start(props: Props) {
 
       {!slate && <div class="empty">reading the week...</div>}
 
+      {slate?.preseason && (
+        <p class="hint">
+          Nobody has played a game yet, so these come from last season's
+          per-game rates over this season's schedule.
+        </p>
+      )}
+
       {pair && <Compare pair={pair} />}
 
       {picks.length === 1 && (

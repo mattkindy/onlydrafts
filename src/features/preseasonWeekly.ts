@@ -12,11 +12,19 @@
  * by different amounts because their usage rows differ.
  */
 
+import { loadPlayerStats } from "../data/nflverse.js";
 import type { GameRow } from "../data/nflverse.js";
+import { loadTendencies } from "../data/tendencies.js";
+import { loadWeeklyInjuryStatus } from "../data/weeklyStatus.js";
+import { fantasyPoints } from "../scoring/fantasyPoints.js";
+import { scoring } from "../scoring/active.js";
+import type { PreseasonWorld } from "./preseason.js";
 import type { SeasonExample } from "./seasonModel.js";
 import type { WeeklyExample } from "./weekly.js";
-import { weeklyRow } from "./weeklyModel.js";
-import { predictRidge } from "../backtest/ridge.js";
+import {
+  predictWeeklyByPosition,
+  type WeeklyByPosition,
+} from "./fitWeeklyByPosition.js";
 
 /** league-average implied points when no line exists, as the weekly model assumes */
 const NEUTRAL_TOTAL = 21.5;
@@ -25,12 +33,15 @@ const NEUTRAL_PASS_RATE = 0.57;
 export interface PreseasonWeeklyInput {
   season: number;
   games: GameRow[];
-  weeklyWeights: number[];
+  weekly: WeeklyByPosition;
   /** what the season model expects him to average */
   projectedPpg: Map<string, number>;
   exampleById: Map<string, SeasonExample>;
   positionById: Map<string, string>;
   teamById: Map<string, string>;
+  nameById: Map<string, string>;
+  /** whether his club listed him questionable that week, if it has yet */
+  isQuestionable: (playerId: string, week: number) => boolean;
   /** how soft each defence was against a position, 1 is average */
   oppAdjust: (position: string, opponent: string) => number;
   /**
@@ -97,11 +108,16 @@ function impliedTotal(
   return regressed * defence;
 }
 
-export function preseasonWeekly(
+/**
+ * The rows the weekly model would see for every player's every week,
+ * had the season started. The start-sit tool reads these directly, so
+ * it can rank a week before anyone has played one.
+ */
+export function preseasonWeeklyExamples(
   input: PreseasonWeeklyInput,
-): Map<string, WeeklyProjection[]> {
+): Map<string, WeeklyExample[]> {
   const schedule = scheduleOf(input.games, input.season);
-  const out = new Map<string, WeeklyProjection[]>();
+  const out = new Map<string, WeeklyExample[]>();
 
   for (const [playerId, ppg] of input.projectedPpg) {
     const team = input.teamById.get(playerId);
@@ -113,12 +129,12 @@ export function preseasonWeekly(
     }
 
     const e = input.exampleById.get(playerId);
-    const weeks: WeeklyProjection[] = [];
+    const weeks: WeeklyExample[] = [];
 
     for (const slot of slots) {
       const row: WeeklyExample = {
         playerId,
-        playerName: "",
+        playerName: input.nameById.get(playerId) ?? playerId,
         position,
         season: input.season,
         week: slot.week,
@@ -156,9 +172,11 @@ export function preseasonWeekly(
         targetShareRecent: 0,
         backfieldShareRecent: 0,
         passTendency: input.passRate.get(team) ?? NEUTRAL_PASS_RATE,
-        // in August no club has published an injury report for December
-        questionable: false,
+        // in August no club has published an injury report for December,
+        // so out of season this is false for everyone
+        questionable: input.isQuestionable(playerId, slot.week),
         limitedPractice: false,
+        // no rooms have lost anyone yet, so there is no share to move
         absenceShare: 0,
         qbAbsenceShare: 0,
         depthRank: 0,
@@ -166,12 +184,7 @@ export function preseasonWeekly(
         teamId: team,
         opponent: slot.opponent,
       };
-      weeks.push({
-        week: slot.week,
-        opponent: slot.opponent,
-        home: slot.home,
-        points: Math.max(0, predictRidge(input.weeklyWeights, weeklyRow(row))),
-      });
+      weeks.push(row);
     }
 
     weeks.sort((a, b) => a.week - b.week);
@@ -179,6 +192,80 @@ export function preseasonWeekly(
   }
 
   return out;
+}
+
+export function preseasonWeekly(
+  input: PreseasonWeeklyInput,
+): Map<string, WeeklyProjection[]> {
+  const out = new Map<string, WeeklyProjection[]>();
+
+  for (const [playerId, weeks] of preseasonWeeklyExamples(input)) {
+    out.set(
+      playerId,
+      weeks.map((row) => ({
+        week: row.week,
+        opponent: row.opponent,
+        home: row.home,
+        points: Math.max(0, predictWeeklyByPosition(input.weekly, row)),
+      })),
+    );
+  }
+
+  return out;
+}
+
+/**
+ * Everything the preseason weekly path needs, gathered from a world
+ * that is already built. Three callers want the same last-season
+ * scoring, pass tendency and injury report, so it is assembled once.
+ */
+export async function preseasonWeeklyInput(
+  world: PreseasonWorld,
+  exampleById: Map<string, SeasonExample>,
+): Promise<PreseasonWeeklyInput> {
+  const scored = new Map<string, { points: number; weeks: Set<number> }>();
+
+  for (const w of await loadPlayerStats(world.season - 1)) {
+    const entry = scored.get(w.teamId) ??
+      { points: 0, weeks: new Set<number>() };
+    entry.points += fantasyPoints(w.statLine, scoring());
+    entry.weeks.add(w.week);
+    scored.set(w.teamId, entry);
+  }
+
+  const passRate = new Map<string, number>();
+
+  for (const [key, tendency] of await loadTendencies()) {
+    const [team, at] = key.split("|");
+
+    if (Number(at) === world.season - 1) {
+      passRate.set(team!, tendency.neutralPassRate);
+    }
+  }
+
+  const status = await loadWeeklyInjuryStatus(world.season);
+
+  return {
+    season: world.season,
+    games: world.games,
+    weekly: world.weeklyByPosition,
+    projectedPpg: new Map(
+      world.players.map((p) => [p.playerId, p.projectedPpg]),
+    ),
+    exampleById,
+    positionById: new Map(world.players.map((p) => [p.playerId, p.position])),
+    teamById: new Map(world.players.map((p) => [p.playerId, p.teamId])),
+    nameById: new Map(world.players.map((p) => [p.playerId, p.name])),
+    isQuestionable: (playerId, week) =>
+      status.get(`${playerId}|${week}`)?.questionable ?? false,
+    oppAdjust: world.oppAdjust,
+    oppIndex: world.oppIndex,
+    teamScoring: new Map(
+      [...scored].map(([team, e]) =>
+        [team, e.points / Math.max(1, e.weeks.size)]),
+    ),
+    passRate,
+  };
 }
 
 /**
