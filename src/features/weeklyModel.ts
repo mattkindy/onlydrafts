@@ -10,6 +10,7 @@ import {
   loadTendencies,
   loadWeeklyTendencyCounts,
 } from "../data/tendencies.js";
+import { loadWeeklyAvailability } from "../data/weeklyStatus.js";
 
 export const WEEKLY_FEATURES = [
   "intercept",
@@ -85,6 +86,8 @@ export async function weeklyExamplesForSeason(
     await loadSnapCounts(season),
     scoring(),
     { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
+    undefined,
+    await loadWeeklyAvailability(season),
   );
 }
 
@@ -125,5 +128,6 @@ export async function weeklyProspectiveForWeek(
     scoring(),
     { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
     week,
+    await loadWeeklyAvailability(season),
   );
 }

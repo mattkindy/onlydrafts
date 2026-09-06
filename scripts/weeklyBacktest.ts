@@ -177,11 +177,11 @@ async function main(): Promise<void> {
   const testFlag = process.argv.indexOf("--test");
   const trainSeasons = parseList(
     trainFlag === -1 ? undefined : process.argv[trainFlag + 1],
-    [2016, 2017, 2018, 2019, 2020, 2021, 2022],
+    [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023],
   );
   const testSeasons = parseList(
     testFlag === -1 ? undefined : process.argv[testFlag + 1],
-    [2023, 2024],
+    [2024, 2025],
   );
 
   const games = await loadGames();
@@ -205,10 +205,12 @@ async function main(): Promise<void> {
     console.log(`  ${WEEKLY_FEATURES[i]!.padEnd(12)} ${weights[i]!.toFixed(3)}`);
   }
 
+  const perPosition = fitWeeklyByPosition(train);
   const variants: [string, (e: WeeklyExample) => number][] = [
     ["season-avg", (e) => e.seasonPpg],
     ["last4", (e) => e.last4],
     ["ridge", (e) => predictRidge(weights, weeklyRow(e))],
+    ["per-pos", (e) => predictWeeklyByPosition(perPosition, e)],
   ];
 
   const residualModel = buildResidualModel(
