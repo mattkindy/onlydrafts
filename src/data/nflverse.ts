@@ -5,6 +5,7 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseCsv } from "./csv.js";
 import type { Game } from "../graph/types.js";
@@ -131,6 +132,40 @@ export async function loadGames(): Promise<GameRow[]> {
     }));
 }
 
+/**
+ * The season being played or drafted for. A new one starts in March, so
+ * January and February still belong to the previous year's season.
+ */
+export function currentSeason(now: Date = new Date()): number {
+  return now.getUTCFullYear() - (now.getUTCMonth() < 2 ? 1 : 0);
+}
+
+/**
+ * The week to project next: the earliest one with a fixture nobody has a
+ * score for. A season whose games are all played returns its last week, so
+ * a caller reviewing an old season still gets something to look at.
+ */
+export function comingWeek(games: GameRow[], season: number): number {
+  const weeks = games.filter((game) => game.season === season);
+
+  if (weeks.length === 0) {
+    return 1;
+  }
+
+  const unplayed = weeks.filter((game) => game.homeScore === undefined);
+
+  if (unplayed.length === 0) {
+    return Math.max(...weeks.map((game) => game.week));
+  }
+
+  return Math.min(...unplayed.map((game) => game.week));
+}
+
+/** the latest season the schedule file knows about */
+export function latestSeason(games: GameRow[]): number {
+  return games.reduce((best, game) => Math.max(best, game.season), 0);
+}
+
 /** roster files spell a few teams differently from the schedule file */
 const TEAM_ALIASES: Record<string, string> = {
   AZ: "ARI",
@@ -253,6 +288,18 @@ export function blankPlayerWeek(): Omit<PlayerWeekStats,
       interceptions: 0, passesDefended: 0, forcedFumbles: 0,
     },
   };
+}
+
+/**
+ * Whether either weekly stats release for this season is on disk. A season
+ * nobody has fetched yet has no weekly examples to build, and a caller
+ * would rather say so than fail on a missing file.
+ */
+export function hasPlayerStats(season: number): boolean {
+  return (
+    existsSync(join(RAW_DIR, `stats_player_week_${season}.csv`)) ||
+    existsSync(join(RAW_DIR, `player_stats_${season}.csv`))
+  );
 }
 
 export async function loadPlayerStats(

@@ -1,50 +1,109 @@
-// Who do I start: predictions with floor and ceiling for a coming
-// week. Run: npx tsx scripts/start.ts --season 2025 --week 10 "st. brown" "nacua"
+// Who do I start: our projection, Sleeper's, and the average of the two,
+// with a floor and a ceiling for a coming week.
+// Run: npx tsx scripts/start.ts --season 2025 --week 10 "st. brown" "nacua"
 
-import { loadGames } from "../src/data/nflverse.js";
+import {
+  comingWeek,
+  hasPlayerStats,
+  latestSeason,
+  loadGames,
+} from "../src/data/nflverse.js";
 import { normalizeName } from "../src/data/names.js";
+import {
+  loadSleeperWeekly,
+  projectionKey,
+} from "../src/data/sleeperProjections.js";
 import {
   weeklyExamplesForSeason,
   weeklyProspectiveForWeek,
-  weeklyRow,
 } from "../src/features/weeklyModel.js";
 import type { WeeklyExample } from "../src/features/weekly.js";
-import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
+import {
+  fitWeeklyByPosition,
+  predictWeeklyByPosition,
+} from "../src/features/fitWeeklyByPosition.js";
+import {
+  blendPoints,
+  SHIPPED_BLEND_WEIGHT,
+  WIDE_SPLIT_POINTS,
+  WIDE_SPLIT_SLEEPER_RATE,
+} from "../src/features/sleeperBlend.js";
 import {
   buildResidualModel,
   outcomeQuantile,
 } from "../src/backtest/intervals.js";
 
-function argOf(flag: string, fallback: number): number {
+function argOf(flag: string): number | undefined {
   const index = process.argv.indexOf(flag);
-  return index === -1 ? fallback : Number(process.argv[index + 1]);
+  return index === -1 ? undefined : Number(process.argv[index + 1]);
+}
+
+interface Row {
+  example: WeeklyExample;
+  ours: number;
+  sleeper: number | undefined;
+  ranked: number;
+  floor: number;
+  ceiling: number;
+}
+
+function pointsOrBlank(points: number | undefined): string {
+  return points === undefined ? "     " : points.toFixed(1).padStart(5);
+}
+
+/** two projections this close apart have picked the winner at chance */
+const COIN_FLIP_POINTS = 2;
+
+function verdict(first: Row, second: Row): string {
+  const gap = first.ranked - second.ranked;
+  const lead = `${first.example.playerName} is ${gap.toFixed(1)} points ahead of ${second.example.playerName} on the average of the two projections.`;
+
+  if (gap < COIN_FLIP_POINTS) {
+    return `${lead} That is inside the two points where every method we have measured picks the winner at chance, so either one is defensible.`;
+  }
+
+  return `Start ${first.example.playerName}. ${lead}`;
 }
 
 async function main(): Promise<void> {
-  const season = argOf("--season", 2025);
-  const week = argOf("--week", 10);
+  const games = await loadGames();
+  const season = argOf("--season") ?? latestSeason(games);
+  const week = argOf("--week") ?? comingWeek(games, season);
+
+  if (!hasPlayerStats(season)) {
+    console.error(
+      `No weekly stats for ${season} on disk. Run npm run week to fetch them.`,
+    );
+    process.exit(1);
+  }
+
   const names = process.argv
     .slice(2)
-    .filter((a, i, all) => !a.startsWith("--") && all[i - 1] !== "--season" && all[i - 1] !== "--week")
+    .filter(
+      (a, i, all) =>
+        !a.startsWith("--") &&
+        all[i - 1] !== "--season" &&
+        all[i - 1] !== "--week",
+    )
     .map(normalizeName);
 
-  const games = await loadGames();
   const train: WeeklyExample[] = [];
 
   for (let s = 2016; s < season; s++) {
     train.push(...(await weeklyExamplesForSeason(s, games)));
   }
 
-  const weights = fitRidge(train.map(weeklyRow), train.map((e) => e.target), 25);
+  const model = fitWeeklyByPosition(train);
   const residuals = buildResidualModel(
     train.map((e) => ({
       position: e.position,
-      predicted: predictRidge(weights, weeklyRow(e)),
+      predicted: predictWeeklyByPosition(model, e),
       actual: e.target,
     })),
     5,
   );
 
+  const projections = await loadSleeperWeekly();
   const slate = await weeklyProspectiveForWeek(season, week, games);
   const requested =
     names.length > 0
@@ -53,36 +112,79 @@ async function main(): Promise<void> {
         )
       : slate;
 
-  const rows = requested
+  const rows: Row[] = requested
     .map((e) => {
-      const predicted = predictRidge(weights, weeklyRow(e));
+      const ours = predictWeeklyByPosition(model, e);
+      const sleeper = projections.get(
+        projectionKey(season, week, e.playerId),
+      )?.points;
+      const ranked =
+        sleeper === undefined
+          ? ours
+          : blendPoints(ours, sleeper, SHIPPED_BLEND_WEIGHT);
+
       return {
-        e,
-        predicted,
-        floor: outcomeQuantile(residuals, e.position, predicted, 0.1),
-        ceiling: outcomeQuantile(residuals, e.position, predicted, 0.9),
+        example: e,
+        ours,
+        sleeper,
+        ranked,
+        floor: outcomeQuantile(residuals, e.position, ranked, 0.1),
+        ceiling: outcomeQuantile(residuals, e.position, ranked, 0.9),
       };
     })
-    .sort((a, b) => b.predicted - a.predicted);
+    .sort((a, b) => b.ranked - a.ranked);
 
   const shown = names.length > 0 ? rows : rows.slice(0, 25);
+  const missing = shown.filter((r) => r.sleeper === undefined);
 
   console.log(`${season} week ${week}`);
   console.log(
-    "player                      pos  proj  floor  ceil  vs    implied recent-ppg snaps",
+    "player                      pos  ours sleep   avg  floor  ceil  vs    implied recent-ppg snaps",
   );
 
-  for (const { e, predicted, floor, ceiling } of shown) {
+  for (const row of shown) {
+    const e = row.example;
     const venue = e.home ? "v" : "@";
     console.log(
-      `${e.playerName.padEnd(27)} ${e.position.padEnd(3)} ${predicted.toFixed(1).padStart(5)} ${floor.toFixed(1).padStart(6)} ${ceiling.toFixed(1).padStart(5)}  ${venue}${e.opponent.padEnd(4)} ${e.impliedTotal.toFixed(1).padStart(6)} ${e.last4.toFixed(1).padStart(9)} ${(e.snapRecent * 100).toFixed(0).padStart(4)}%`,
+      `${e.playerName.padEnd(27)} ${e.position.padEnd(3)} ${row.ours.toFixed(1).padStart(5)} ${pointsOrBlank(row.sleeper)} ${row.ranked.toFixed(1).padStart(5)} ${row.floor.toFixed(1).padStart(6)} ${row.ceiling.toFixed(1).padStart(5)}  ${venue}${e.opponent.padEnd(4)} ${e.impliedTotal.toFixed(1).padStart(6)} ${e.last4.toFixed(1).padStart(9)} ${(e.snapRecent * 100).toFixed(0).padStart(4)}%`,
+    );
+  }
+
+  if (missing.length > 0) {
+    const who = missing.map((r) => r.example.playerName).join(", ");
+    console.log(
+      `\nSleeper has no projection for ${who}, so ${missing.length === 1 ? "he is" : "they are"} ranked on our number alone.`,
+    );
+  }
+
+  const split = shown.filter(
+    (r) =>
+      r.sleeper !== undefined &&
+      Math.abs(r.ours - r.sleeper) >= WIDE_SPLIT_POINTS,
+  );
+
+  if (split.length > 0) {
+    console.log("");
+  }
+
+  const rate = Math.round(WIDE_SPLIT_SLEEPER_RATE * 100);
+
+  for (const row of split.slice(0, 5)) {
+    const gap = row.ours - row.sleeper!;
+    const side = gap > 0 ? "higher" : "lower";
+    console.log(
+      `We are ${Math.abs(gap).toFixed(1)} points ${side} on ${row.example.playerName} than Sleeper. Sleeper has the better of a split that wide about ${rate}% of the time.`,
+    );
+  }
+
+  if (split.length > 5) {
+    console.log(
+      `${split.length - 5} more men split by three points or more, Sleeper the higher of the two on ${split.slice(5).filter((r) => r.sleeper! > r.ours).length} of them.`,
     );
   }
 
   if (names.length > 1 && shown.length > 1) {
-    console.log(
-      `\nstart ${shown[0]!.e.playerName}. He projects ${(shown[0]!.predicted - shown[1]!.predicted).toFixed(1)} points ahead of ${shown[1]!.e.playerName}, with a similar range.`,
-    );
+    console.log(`\n${verdict(shown[0]!, shown[1]!)}`);
   }
 }
 
