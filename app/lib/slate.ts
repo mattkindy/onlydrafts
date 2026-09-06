@@ -39,6 +39,8 @@ export interface Slate {
   season: number;
   week: number;
   generated: string;
+  /** nobody has played a game yet, so these come from last season's rates */
+  preseason: boolean;
   rows: SlateRow[];
 }
 
@@ -113,6 +115,7 @@ interface FileSlate {
   season: number;
   week: number;
   generated?: string;
+  preseason?: boolean;
   rows?: FileRow[];
   players?: FileRow[];
 }
@@ -144,6 +147,7 @@ export function readSlate(said: FileSlate): Slate {
     season: said.season,
     week: said.week,
     generated: said.generated ?? "",
+    preseason: said.preseason ?? false,
     rows: (said.rows ?? said.players ?? []).map(readRow),
   };
 }

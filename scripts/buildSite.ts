@@ -27,7 +27,11 @@ import {
   SHIPPED_BLEND_WEIGHT,
 } from "../src/features/sleeperBlend.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
-import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.js";
+import {
+  buildResidualModel,
+  outcomeQuantile,
+  type ResidualModel,
+} from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
 import { parseCsv } from "../src/data/csv.js";
 import { buildWorld } from "../src/features/playedWorld.js";
@@ -61,9 +65,9 @@ import { fitRoles } from "../src/features/fitRoles.js";
 import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
 import { normalDraw } from "../src/sim/normal.js";
 import { scoring } from "../src/scoring/active.js";
-import { loadTendencies } from "../src/data/tendencies.js";
 import {
-  preseasonWeekly, anchorToSeason, type WeeklyProjection,
+  preseasonWeekly, preseasonWeeklyExamples, preseasonWeeklyInput,
+  anchorToSeason, type WeeklyProjection,
 } from "../src/features/preseasonWeekly.js";
 import {
   experienceBefore,
@@ -92,6 +96,52 @@ const OLD = join(DOCS, "weekly");
 function argOf(flag: string, fallback: string): string {
   const index = process.argv.indexOf(flag);
   return index === -1 ? fallback : process.argv[index + 1]!;
+}
+
+/**
+ * One row a man, in the slate file the app reads. `ours` is our
+ * per-position ridge and `sleeper` is Sleeper's number, null when they
+ * have no row for him. `average` is the two averaged, or ours alone
+ * when Sleeper has nothing, and the file is sorted by it. `floor` and
+ * `ceiling` are the tenth and ninetieth of the outcome around that
+ * average. `snaps` is a whole percent; `gamesMissed` is out of his last
+ * four club weeks; `absenceShare` runs 0 to 1.
+ *
+ * Both the in-season slate and the preseason one below are written
+ * through here, so the two files have the same shape and the app does
+ * not have to know which it is reading.
+ */
+function slateRow(
+  residuals: ResidualModel,
+  e: WeeklyExample,
+  ours: number,
+  sleeper: number | undefined,
+) {
+  const average =
+    sleeper === undefined
+      ? ours
+      : blendPoints(ours, sleeper, SHIPPED_BLEND_WEIGHT);
+
+  return {
+    name: e.playerName,
+    key: normalizeName(e.playerName),
+    position: e.position,
+    team: e.teamId,
+    opponent: (e.home ? "v " : "@ ") + e.opponent,
+    ours: Number(ours.toFixed(1)),
+    sleeper: sleeper === undefined ? null : Number(sleeper.toFixed(1)),
+    average: Number(average.toFixed(1)),
+    floor: Number(
+      outcomeQuantile(residuals, e.position, average, 0.1).toFixed(1),
+    ),
+    ceiling: Number(
+      outcomeQuantile(residuals, e.position, average, 0.9).toFixed(1),
+    ),
+    snaps: Math.round(e.snapRecent * 100),
+    questionable: e.questionable,
+    gamesMissed: e.gamesMissedRecent,
+    absenceShare: Number(e.absenceShare.toFixed(2)),
+  };
 }
 
 /**
@@ -382,13 +432,14 @@ async function main(): Promise<void> {
       )
       : weeksArg.split(",").map(Number);
 
-  // Nobody has fetched this season's weekly stats yet, so there is no
-  // slate to write. The board is built from earlier seasons and still is.
+  // Nobody has played a game this season, so there is no recent form to
+  // read and nothing to walk. The preseason path writes the slate below.
   const weeks = hasPlayerStats(season) ? asked : [];
 
   if (weeks.length === 0) {
     console.log(
-      `no weekly stats for ${season} on disk, so no slate. Run npm run week.`,
+      `no weekly stats for ${season} on disk, so week ${asked[0]} comes ` +
+        "from the preseason path",
     );
   }
 
@@ -437,52 +488,19 @@ async function main(): Promise<void> {
     weekWalked.set(week, walked.points);
     console.log(`  the walk played ${walked.played} fixtures of week ${week}`);
 
-    /**
-     * One row a man, in the slate file the app reads. `ours` is our
-     * per-position ridge and `sleeper` is Sleeper's number, null when
-     * they have no row for him. `average` is the two averaged, or ours
-     * alone when Sleeper has nothing, and the file is sorted by it.
-     * `floor` and `ceiling` are the tenth and ninetieth of the outcome
-     * around that average. `snaps` is a whole percent; `gamesMissed` is
-     * out of his last four club weeks; `absenceShare` runs 0 to 1.
-     */
     const rows = (await weeklyProspectiveForWeek(season, week, games))
-      .map((e) => {
-        const ours = predictWeeklyByPosition(weekly, e);
-        const sleeper = projections.get(
-          projectionKey(season, week, e.playerId),
-        )?.points;
-        const average =
-          sleeper === undefined
-            ? ours
-            : blendPoints(ours, sleeper, SHIPPED_BLEND_WEIGHT);
-
-        return {
-          name: e.playerName,
-          key: normalizeName(e.playerName),
-          position: e.position,
-          team: e.teamId,
-          opponent: (e.home ? "v " : "@ ") + e.opponent,
-          ours: Number(ours.toFixed(1)),
-          sleeper: sleeper === undefined ? null : Number(sleeper.toFixed(1)),
-          average: Number(average.toFixed(1)),
-          floor: Number(
-            outcomeQuantile(residuals, e.position, average, 0.1).toFixed(1),
-          ),
-          ceiling: Number(
-            outcomeQuantile(residuals, e.position, average, 0.9).toFixed(1),
-          ),
-          snaps: Math.round(e.snapRecent * 100),
-          questionable: e.questionable,
-          gamesMissed: e.gamesMissedRecent,
-          absenceShare: Number(e.absenceShare.toFixed(2)),
-        };
-      })
+      .map((e) =>
+        slateRow(
+          residuals,
+          e,
+          predictWeeklyByPosition(weekly, e),
+          projections.get(projectionKey(season, week, e.playerId))?.points,
+        ))
       .sort((a, b) => b.average - a.average);
 
     await writeFile(
       join(DOCS, "data", `slate-${season}-${week}.json`),
-      JSON.stringify({ season, week, players: rows }),
+      JSON.stringify({ season, week, preseason: false, players: rows }),
     );
     index.push({ season, week });
     console.log(`week ${week}: ${rows.length} players`);
@@ -852,37 +870,9 @@ async function main(): Promise<void> {
    * and it says what it thinks of a matchup rather than what a
    * constant chosen by hand says.
    */
-  const teamScored = new Map<string, { points: number; weeks: Set<number> }>();
-
-  for (const w of await loadPlayerStats(season - 1)) {
-    const entry = teamScored.get(w.teamId) ?? { points: 0, weeks: new Set<number>() };
-    entry.points += fantasyPoints(w.statLine, scoring());
-    entry.weeks.add(w.week);
-    teamScored.set(w.teamId, entry);
-  }
-
-  const passRate = new Map<string, number>();
-
-  for (const [key, tendency] of await loadTendencies()) {
-    const [team, at] = key.split("|");
-
-    if (Number(at) === season - 1) {
-      passRate.set(team!, tendency.neutralPassRate);
-    }
-  }
-
   const weeklyByPlayer = new Map<string, WeeklyProjection[]>();
-  const saidWeekly = preseasonWeekly({
-    season, games: world.games, weeklyWeights: world.weeklyWeights,
-    projectedPpg: new Map(world.players.map((p) => [p.playerId, p.projectedPpg])),
-    exampleById,
-    positionById: new Map(world.players.map((p) => [p.playerId, p.position])),
-    teamById: new Map(world.players.map((p) => [p.playerId, p.teamId])),
-    oppAdjust: world.oppAdjust, oppIndex: world.oppIndex,
-    teamScoring: new Map([...teamScored].map(([team, e]) =>
-      [team, e.points / Math.max(1, e.weeks.size)])),
-    passRate,
-  });
+  const saidInput = await preseasonWeeklyInput(world, exampleById);
+  const saidWeekly = preseasonWeekly(saidInput);
 
   for (const p of world.players) {
     const his = saidWeekly.get(p.playerId);
@@ -923,6 +913,44 @@ async function main(): Promise<void> {
     });
 
     weeklyByPlayer.set(p.playerId, anchorToSeason(mixed, p.projectedPpg));
+  }
+
+  /**
+   * The coming week from the preseason path, for a season nobody has
+   * played yet. It is the same file the in-season slate writes, with
+   * `preseason` set so the app can say where the numbers came from.
+   * Only the one week is written: a slate is what you set a lineup
+   * against, and past week 1 nflverse has published weekly stats.
+   */
+  if (weeks.length === 0) {
+    const week = asked[0]!;
+    const saidExamples = preseasonWeeklyExamples(saidInput);
+    const rows = world.players
+      .filter((p) => ["QB", "RB", "WR", "TE"].includes(p.position))
+      .flatMap((p) => {
+        const row = saidExamples.get(p.playerId)?.find((e) => e.week === week);
+        const ours = weeklyByPlayer.get(p.playerId)
+          ?.find((w) => w.week === week)?.points;
+
+        if (!row || ours === undefined) {
+          return [];
+        }
+
+        return [slateRow(
+          residuals,
+          row,
+          ours,
+          projections.get(projectionKey(season, week, p.playerId))?.points,
+        )];
+      })
+      .sort((a, b) => b.average - a.average);
+
+    await writeFile(
+      join(DOCS, "data", `slate-${season}-${week}.json`),
+      JSON.stringify({ season, week, preseason: true, players: rows }),
+    );
+    index.push({ season, week });
+    console.log(`week ${week} from the preseason path: ${rows.length} players`);
   }
 
   console.log("simulating seasons for the board...");

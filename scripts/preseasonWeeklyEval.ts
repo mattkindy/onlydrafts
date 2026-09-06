@@ -10,12 +10,15 @@
 import { buildPreseasonWorld } from "../src/features/preseason.js";
 import { projectDraftExamples } from "../src/features/seasonModel.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
-import { loadTendencies } from "../src/data/tendencies.js";
 import { fantasyPoints } from "../src/scoring/fantasyPoints.js";
 import { scoring, setScoring } from "../src/scoring/active.js";
 import { presets } from "../src/scoring/fantasyPoints.js";
 import { spearman, rmse } from "../src/backtest/metrics.js";
-import { preseasonWeekly, anchorToSeason } from "../src/features/preseasonWeekly.js";
+import {
+  preseasonWeekly,
+  preseasonWeeklyInput,
+  anchorToSeason,
+} from "../src/features/preseasonWeekly.js";
 
 function argOf(flag: string, fallback: string): string {
   const i = process.argv.indexOf(flag);
@@ -29,37 +32,10 @@ async function main(): Promise<void> {
   const examples = await projectDraftExamples(season, world.data);
   const exampleById = new Map(examples.map((e) => [e.playerId, e]));
 
-  const projectedPpg = new Map(world.players.map((p) => [p.playerId, p.projectedPpg]));
-  const positionById = new Map(world.players.map((p) => [p.playerId, p.position]));
-  const teamById = new Map(world.players.map((p) => [p.playerId, p.teamId]));
-
-  // last season's scoring per team, for the implied total
-  const prevStats = await loadPlayerStats(season - 1);
-  const scored = new Map<string, { points: number; weeks: Set<number> }>();
-
-  for (const w of prevStats) {
-    const entry = scored.get(w.teamId) ?? { points: 0, weeks: new Set<number>() };
-    entry.points += fantasyPoints(w.statLine, scoring());
-    entry.weeks.add(w.week);
-    scored.set(w.teamId, entry);
-  }
-
-  const teamScoring = new Map(
-    [...scored].map(([team, e]) => [team, e.points / Math.max(1, e.weeks.size)]),
-  );
-  const passRate = new Map<string, number>();
-
-  for (const [key, tendency] of await loadTendencies()) {
-    const [team, s] = key.split("|");
-    if (Number(s) === season - 1) passRate.set(team!, tendency.neutralPassRate);
-  }
-
-  const weekly = preseasonWeekly({
-    season, games: world.games, weeklyWeights: world.weeklyWeights,
-    projectedPpg, exampleById, positionById, teamById,
-    oppAdjust: world.oppAdjust, oppIndex: world.oppIndex,
-    teamScoring, passRate,
-  });
+  const input = await preseasonWeeklyInput(world, exampleById);
+  const projectedPpg = input.projectedPpg;
+  const positionById = input.positionById;
+  const weekly = preseasonWeekly(input);
 
   // what actually happened
   const actual = new Map<string, number>();

@@ -27,6 +27,10 @@ import { scoring } from "../scoring/active.js";
 import {
   fitPartsModel, predictParts, partsByPosition, blankParts,
 } from "./partsModel.js";
+import {
+  fitWeeklyByPosition,
+  type WeeklyByPosition,
+} from "./fitWeeklyByPosition.js";
 import { fitAvailability, predictAvailability } from "./gamesPlayed.js";
 import { readAvailability } from "./availabilityData.js";
 import type { SeasonPlayer } from "../sim/playerSeason.js";
@@ -49,6 +53,12 @@ export interface PreseasonWorld {
   byeWeek: Map<string, number>;
   /** the weekly kernel's weights, trained on seasons before this one */
   weeklyWeights: number[];
+  /**
+   * The same training rows fit one ridge per position. Anything that
+   * projects a single week should use this one, so the board, the slate
+   * and the start-sit tool all say the same number for a player.
+   */
+  weeklyByPosition: WeeklyByPosition;
 }
 
 export async function buildPreseasonWorld(
@@ -137,6 +147,7 @@ export async function buildPreseasonWorld(
     weeklyTrain.map((e) => e.target),
     25,
   );
+  const weeklyByPosition = fitWeeklyByPosition(weeklyTrain);
   const seasonNoise = buildSeasonNoise(
     weeklyTrain.map((e) => ({
       playerId: e.playerId,
@@ -349,5 +360,6 @@ export async function buildPreseasonWorld(
     catcherLoading,
     byeWeek,
     weeklyWeights,
+    weeklyByPosition,
   };
 }

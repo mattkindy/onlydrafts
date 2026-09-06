@@ -7,7 +7,14 @@ import {
   hasPlayerStats,
   latestSeason,
   loadGames,
+  type GameRow,
 } from "../src/data/nflverse.js";
+import { buildPreseasonWorld } from "../src/features/preseason.js";
+import { projectDraftExamples } from "../src/features/seasonModel.js";
+import {
+  preseasonWeeklyExamples,
+  preseasonWeeklyInput,
+} from "../src/features/preseasonWeekly.js";
 import { normalizeName } from "../src/data/names.js";
 import {
   loadSleeperWeekly,
@@ -65,17 +72,44 @@ function verdict(first: Row, second: Row): string {
   return `Start ${first.example.playerName}. ${lead}`;
 }
 
+const SLATE_POSITIONS = ["QB", "RB", "WR", "TE"];
+
+/**
+ * Everyone's row for a coming week. Before the season's first game
+ * nflverse has published no weekly stats, so there is no recent form to
+ * read and the rows come from last season's per-game rates over this
+ * season's schedule, which is the path the board's own weeks take.
+ */
+async function slateFor(
+  season: number,
+  week: number,
+  games: GameRow[],
+): Promise<WeeklyExample[]> {
+  if (hasPlayerStats(season)) {
+    return weeklyProspectiveForWeek(season, week, games);
+  }
+
+  console.error(
+    `No weekly stats for ${season} yet, so week ${week} is projected from ` +
+      "last season's rates. Building that takes a minute.",
+  );
+  const world = await buildPreseasonWorld(season);
+  const examples = await projectDraftExamples(season, world.data);
+  const input = await preseasonWeeklyInput(
+    world,
+    new Map(examples.map((e) => [e.playerId, e])),
+  );
+
+  return [...preseasonWeeklyExamples(input).values()].flatMap((his) =>
+    his.filter(
+      (e) => e.week === week && SLATE_POSITIONS.includes(e.position),
+    ));
+}
+
 async function main(): Promise<void> {
   const games = await loadGames();
   const season = argOf("--season") ?? latestSeason(games);
   const week = argOf("--week") ?? comingWeek(games, season);
-
-  if (!hasPlayerStats(season)) {
-    console.error(
-      `No weekly stats for ${season} on disk. Run npm run week to fetch them.`,
-    );
-    process.exit(1);
-  }
 
   const names = process.argv
     .slice(2)
@@ -104,7 +138,7 @@ async function main(): Promise<void> {
   );
 
   const projections = await loadSleeperWeekly();
-  const slate = await weeklyProspectiveForWeek(season, week, games);
+  const slate = await slateFor(season, week, games);
   const requested =
     names.length > 0
       ? slate.filter((e) =>
@@ -137,7 +171,10 @@ async function main(): Promise<void> {
   const shown = names.length > 0 ? rows : rows.slice(0, 25);
   const missing = shown.filter((r) => r.sleeper === undefined);
 
-  console.log(`${season} week ${week}`);
+  const from = hasPlayerStats(season)
+    ? ""
+    : ", projected from last season's rates";
+  console.log(`${season} week ${week}${from}`);
   console.log(
     "player                      pos  ours sleep   avg  floor  ceil  vs    implied recent-ppg snaps",
   );
