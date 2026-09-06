@@ -56,22 +56,29 @@ export function addPairs(
 
       const higher = a.predicted > b.predicted ? a : b;
       const lower = a.predicted > b.predicted ? b : a;
-      const credit = creditFor(higher.actual, lower.actual);
-
-      for (const bucket of PAIR_GAPS) {
-        if (gap < bucket.min || gap >= bucket.max) {
-          continue;
-        }
-
-        const cell = tally.get(bucket.name)!;
-        cell.right += credit;
-        cell.total += 1;
-      }
+      addCredit(tally, gap, creditFor(higher.actual, lower.actual));
     }
   }
 }
 
-function creditFor(higherActual: number, lowerActual: number): number {
+/** one call, into whichever gap buckets it belongs to */
+export function addCredit(
+  tally: Map<string, PairTally>,
+  gap: number,
+  credit: number,
+): void {
+  for (const bucket of PAIR_GAPS) {
+    if (gap < bucket.min || gap >= bucket.max) {
+      continue;
+    }
+
+    const cell = tally.get(bucket.name)!;
+    cell.right += credit;
+    cell.total += 1;
+  }
+}
+
+export function creditFor(higherActual: number, lowerActual: number): number {
   if (higherActual > lowerActual) {
     return 1;
   }

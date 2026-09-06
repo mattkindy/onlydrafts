@@ -12,7 +12,9 @@
 
 import { spearman } from "../src/backtest/metrics.js";
 import {
+  addCredit,
   addPairs,
+  creditFor,
   emptyTally,
   PAIR_GAPS,
   pairRate,
@@ -22,10 +24,19 @@ import {
 import { predictRidge } from "../src/backtest/ridge.js";
 import { loadGames } from "../src/data/nflverse.js";
 import {
+  loadSleeperWeekly,
+  projectionKey,
+} from "../src/data/sleeperProjections.js";
+import {
   fitWeeklyByPosition,
   POSITION_EXTRAS,
   predictWeeklyByPosition,
 } from "../src/features/fitWeeklyByPosition.js";
+import {
+  blendPoints,
+  fitBlendWeight,
+  type BlendEntry,
+} from "../src/features/sleeperBlend.js";
 import type { WeeklyExample } from "../src/features/weekly.js";
 import { weeklyExamplesForSeason, weeklyRow } from "../src/features/weeklyModel.js";
 
@@ -101,6 +112,80 @@ function tallyFor(
 const pct = (value: number) =>
   Number.isNaN(value) ? "    -" : `${(value * 100).toFixed(1).padStart(5)}`;
 
+/**
+ * The pairs where our ridge and Sleeper made a call, split by whether they
+ * picked the same man. How far apart the two disagree is taken as the mean
+ * of the two gaps, so a pair both methods see as close does not land in the
+ * same bucket as one they both see as wide but opposite.
+ */
+function duelTallies(
+  examples: WeeklyExample[],
+  ours: Predict,
+  sleeper: Predict,
+): { agree: Map<string, PairTally>; disagree: Map<string, PairTally> } {
+  const agree = emptyTally();
+  const disagree = emptyTally();
+
+  for (const list of groupBySlate(examples).values()) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i]!;
+        const b = list[j]!;
+        const ourGap = ours(a) - ours(b);
+        const theirGap = sleeper(a) - sleeper(b);
+
+        if (ourGap === 0 || theirGap === 0) {
+          continue;
+        }
+
+        const ourPick = ourGap > 0 ? a : b;
+        const other = ourGap > 0 ? b : a;
+        const size = (Math.abs(ourGap) + Math.abs(theirGap)) / 2;
+        const credit = creditFor(ourPick.target, other.target);
+        const sameMan = ourGap > 0 === theirGap > 0;
+        addCredit(sameMan ? agree : disagree, size, credit);
+      }
+    }
+  }
+
+  return { agree, disagree };
+}
+
+interface SeasonSet {
+  season: number;
+  played: WeeklyExample[];
+  covered: WeeklyExample[];
+  ours: Predict;
+  pooled: Predict;
+  sleeper: Predict;
+}
+
+/** the slates one position played, as the blend fitter wants them */
+function blendSlates(set: SeasonSet, position: string): BlendEntry[][] {
+  const rows = set.covered.filter((e) => e.position === position);
+
+  return [...groupBySlate(rows).values()].map((list) =>
+    list.map((e) => ({
+      ours: set.ours(e),
+      sleeper: set.sleeper(e),
+      actual: e.target,
+    })),
+  );
+}
+
+function fitWeights(sources: SeasonSet[]): Map<string, number> {
+  const weights = new Map<string, number>();
+
+  for (const position of POSITIONS) {
+    weights.set(
+      position,
+      fitBlendWeight(sources.flatMap((set) => blendSlates(set, position))),
+    );
+  }
+
+  return weights;
+}
+
 async function main(): Promise<void> {
   const testFlag = process.argv.indexOf("--test");
   const testSeasons = parseList(
@@ -125,32 +210,70 @@ async function main(): Promise<void> {
   );
   console.log("average across his weeks at -.002.\n");
 
+  const projections = await loadSleeperWeekly();
+  const sets: SeasonSet[] = [];
+
   for (const season of testSeasons) {
     const train = [...cache.keys()]
       .filter((s) => s < season)
       .flatMap((s) => cache.get(s)!);
-    const test = cache.get(season)!.filter(played);
-
     const perPosition = fitWeeklyByPosition(train);
     const flat = fitWeeklyByPosition(train, {});
-    const baseOnly = fitWeeklyByPosition(
-      train,
-      Object.fromEntries(POSITIONS.map((p) => [p, []])),
+    const playedRows = cache.get(season)!.filter(played);
+    const covered = playedRows.filter((e) =>
+      projections.has(projectionKey(e.season, e.week, e.playerId)),
     );
+
+    sets.push({
+      season,
+      played: playedRows,
+      covered,
+      ours: (e) => predictWeeklyByPosition(perPosition, e),
+      pooled: (e) => predictRidge(flat.pooled, weeklyRow(e)),
+      sleeper: (e) =>
+        projections.get(projectionKey(e.season, e.week, e.playerId))!.points,
+    });
+  }
+
+  for (const set of sets) {
+    const { season, played: all, covered, ours, pooled, sleeper } = set;
+    const weights = fitWeights(sets.filter((s) => s.season !== season));
+    const blended: Predict = (e) =>
+      blendPoints(ours(e), sleeper(e), weights.get(e.position) ?? 0.5);
 
     const methods: [string, Predict][] = [
       ["his average", (e) => e.seasonPpg],
       ["last four", (e) => e.last4],
-      ["ridge pooled", (e) => predictRidge(flat.pooled, weeklyRow(e))],
-      ["ridge per pos (base)", (e) => predictWeeklyByPosition(baseOnly, e)],
-      ["ridge per pos", (e) => predictWeeklyByPosition(perPosition, e)],
+      ["ridge pooled", pooled],
+      ["ridge per pos", ours],
+      ["sleeper", sleeper],
+      ["half and half", (e) => blendPoints(ours(e), sleeper(e), 0.5)],
+      ["fitted blend", blended],
     ];
 
-    console.log(`${season}: ${test.length} player-weeks who played`);
+    console.log(`${season}: ${all.length} player-weeks who played`);
+    console.log(
+      `sleeper covers ${pct(covered.length / all.length)}% of them, ` +
+        `${POSITIONS.map(
+          (p) =>
+            `${p} ${pct(
+              covered.filter((e) => e.position === p).length /
+                Math.max(all.filter((e) => e.position === p).length, 1),
+            ).trim()}`,
+        ).join(", ")}`,
+    );
+    console.log(
+      `everything below is scored on the ${covered.length} covered weeks only`,
+    );
     console.log(
       `extras: ${Object.entries(POSITION_EXTRAS)
         .map(([p, names]) => `${p} ${names.join("+")}`)
         .join(", ")}`,
+    );
+    console.log(
+      `blend weight on sleeper, fit on the other season: ${POSITIONS.map(
+        (p) => `${p} ${weights.get(p)!.toFixed(2)}`,
+      ).join(", ")}`,
     );
     console.log(
       "pos  method                " +
@@ -160,8 +283,8 @@ async function main(): Promise<void> {
 
     for (const position of [...POSITIONS, undefined]) {
       const rows = position
-        ? test.filter((e) => e.position === position)
-        : test;
+        ? covered.filter((e) => e.position === position)
+        : covered;
 
       for (const [name, predict] of methods) {
         const tally = tallyFor(rows, predict);
@@ -175,6 +298,33 @@ async function main(): Promise<void> {
 
       console.log("");
     }
+
+    console.log(
+      `${season} where the ridge and sleeper pick different men: how often the`,
+    );
+    console.log("ridge was right, by how far apart the two calls were.");
+    console.log(
+      "pos  " +
+        PAIR_GAPS.map((g) => g.name.padStart(6)).join(" ") +
+        "  disagreed     agreed  agree right",
+    );
+
+    for (const position of [...POSITIONS, undefined]) {
+      const rows = position
+        ? covered.filter((e) => e.position === position)
+        : covered;
+      const { agree, disagree } = duelTallies(rows, ours, sleeper);
+      const cells = PAIR_GAPS.map((g) => pct(pairRate(disagree, g.name))).join(" ");
+      console.log(
+        `${(position ?? "all").padEnd(4)} ${cells} ${String(
+          disagree.get("all")!.total,
+        ).padStart(10)} ${String(agree.get("all")!.total).padStart(10)} ${pct(
+          pairRate(agree, "all"),
+        )}`,
+      );
+    }
+
+    console.log("");
   }
 }
 

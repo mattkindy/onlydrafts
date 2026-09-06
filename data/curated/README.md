@@ -17,3 +17,9 @@ that staff. The ones this repo has leaned on so far are the 2026
 offensive coordinators, used for draft advice, and the 2022 to 2025
 staffs, used for the measurements of what a coordinator carries with
 him.
+
+`sleeperWeekly.csv` comes from someone else's live API rather than from
+the raw downloads, so `scripts/fetchSleeperProjections.ts` reproduces it
+only as long as Sleeper keeps serving those weeks. Sleeper projects
+about 350 men a week at the four positions, which is fewer than play, so
+anything scored against it has to say what share of the slate it covered.
