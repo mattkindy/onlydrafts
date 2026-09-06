@@ -8,7 +8,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.app.json",
     "fetch": "tsx scripts/fetchData.ts",
-    "build": "tsx scripts/buildSite.ts"
+    "build": "tsx scripts/buildSite.ts",
+    "week": "tsx scripts/week.ts",
+    "start-sit": "tsx scripts/start.ts"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",
