@@ -251,6 +251,51 @@ describe("absence share", () => {
   });
 });
 
+describe("the recent window around an absence", () => {
+  const games = [1, 2, 3, 4, 5, 6].map(game);
+  // the starter is hurt after week 3 and comes back in week 6; the
+  // backup plays every week, which is what gives DET its calendar
+  const rows = [
+    ...[1, 2, 3, 6].map((w) => backWeek("starter", w, 12, 3)),
+    ...[1, 2, 3, 4, 5, 6].map((w) => backWeek("backup", w, 4, 1)),
+  ];
+  const at = (week: number, playerId: string) => {
+    const examples = buildWeeklyExamples(
+      2023, rows, new Map(), games, [], presets.ppr,
+    );
+    return examples.find((e) => e.week === week && e.playerId === playerId)!;
+  };
+
+  it("counts the club weeks a man missed", () => {
+    expect(at(6, "starter").gamesMissedRecent).toBe(2);
+    expect(at(6, "backup").gamesMissedRecent).toBe(0);
+  });
+
+  it("keeps his own form on the games he played", () => {
+    // twelve carries and three targets in each of weeks 1 to 3
+    expect(at(6, "starter").carriesRecent).toBe(12);
+    expect(at(6, "starter").targetsRecent).toBe(3);
+  });
+
+  it("counts a week he missed as no share of the room", () => {
+    // weeks 2 and 3 at three quarters, weeks 4 and 5 at nothing
+    expect(at(6, "starter").backfieldShareRecent).toBeCloseTo(0.375);
+    expect(at(6, "backup").backfieldShareRecent).toBeCloseTo(0.625);
+  });
+
+  it("measures a ruled-out man's hold on the room over the same weeks", () => {
+    const examples = buildWeeklyExamples(
+      2023, rows, new Map(), games, [], presets.ppr, undefined, undefined,
+      ruledOut(["starter"], 6),
+    );
+    const backup = examples.find((e) => e.week === 6 && e.playerId === "backup")!;
+
+    // the starter's fifteen touches in two of the four weeks, against
+    // the backup's five in all four
+    expect(backup.absenceShare).toBeCloseTo(7.5 / 12.5);
+  });
+});
+
 describe("depth chart join", () => {
   const games = [1, 2, 3, 4, 5].map(game);
   const rows = [1, 2, 3, 4, 5].map((w) => statWeek(w, 100));
