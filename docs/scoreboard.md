@@ -924,3 +924,102 @@ What this does not settle: only the skill positions are drafted, and
 both rules are handed a crude projection. Whether the same gap holds
 when the ordering runs on the blended board rather than on last season
 is untested.
+
+## Start and sit
+
+scripts/pairEval.ts takes every pair of same-position men who both
+played, asks how often the man a method liked better outscored the
+other, and reports the slate Spearman beside it. Our weekly ridge is
+fitted per position now, and Sleeper's own weekly projection is scored
+next to it on the 96% of player-weeks Sleeper covers.
+
+Slate Spearman, one position on one week being the set a manager
+chooses within:
+
+| | 2024 all | 2024 wk 1-17 | 2025 all | 2025 wk 1-17 |
+|---|---|---|---|---|
+| QB, ours | .367 | .378 | .251 | .260 |
+| QB, sleeper | .365 | .368 | .285 | .290 |
+| QB, half and half | .391 | .392 | .274 | .284 |
+| RB, ours | .657 | .665 | .654 | .666 |
+| RB, sleeper | .674 | .678 | .676 | .684 |
+| RB, half and half | .675 | .680 | .677 | .685 |
+| WR, ours | .576 | .579 | .535 | .550 |
+| WR, sleeper | .582 | .586 | .572 | .583 |
+| WR, half and half | .591 | .595 | .566 | .579 |
+| TE, ours | .606 | .609 | .533 | .538 |
+| TE, sleeper | .610 | .611 | .545 | .555 |
+| TE, half and half | .618 | .619 | .551 | .558 |
+| all, ours | .551 | .557 | .493 | .503 |
+| all, sleeper | .558 | .561 | .520 | .528 |
+| all, half and half | .569 | .571 | .517 | .526 |
+
+Week 18 is in the first and third columns and out of the second and
+fourth. Every number goes up when it is dropped, by about .005, which
+is the week half the league rests its starters and nobody is choosing
+between these men anyway.
+
+An even average of the two is the ranking number the app and
+scripts/start.ts ship. It wins 2024 outright and loses 2025 by .003 to
+Sleeper alone, and it wins every position on 2024 and every position
+but quarterback and receiver on 2025. Fitting the weight per position
+on the other season instead reads .565 and .517, which is the same
+number with a knob attached, so the knob is not there.
+
+### Inside two points nobody knows anything
+
+Pairs are split by how far apart the two projections were. In the
+0 to 2 point band, over 2024 and 2025:
+
+| method | 2024, 0-2 apart | 2025, 0-2 apart |
+|---|---|---|
+| his average so far | 54.0% | 53.9% |
+| our ridge | 55.6% | 54.6% |
+| sleeper | 54.4% | 54.4% |
+| half and half | 55.3% | 54.4% |
+
+Nothing measured here beats a coin flip by more than a point and a half
+in that band, and a man's own average is within a point of the best of
+them. Past five points apart the same
+methods run 82% to 85%. So the answer to a close start/sit call is that
+it is close, and start.ts says so rather than pretending the tenth of a
+point means something.
+
+Where the two methods pick different men, our ridge was right 49.2% of
+the time in 2024 and 45.4% in 2025. It gets worse the wider the split:
+in the two to five point band Sleeper takes 53% and 58%, and past five
+points 66% and 68%. A split of three points or more is worth telling
+the reader about, and start.ts prints one, with the roughly 55% that
+says which way to lean.
+
+### Where each side is wrong
+
+Sleeper runs hot. It projects quarterbacks 2.2 points a game over what
+they score, and every man it puts over fifteen points by 1.5 to 2. Our
+ridge is within .4 of the outcome in every band and at every position,
+which is what fitting on the outcome buys you. That is why the floor
+and the ceiling on a card come off our residuals and not off Sleeper's
+number, and why the average of the two is a ranking number rather than
+a points forecast.
+
+### The man whose job changed
+
+The case the weekly model exists for is the back whose starter is out,
+and it is the case both methods handle worst. Predicting a running
+back's carries in the coming week:
+
+| built from | 2024 | 2025 |
+|---|---|---|
+| his last four games | -.09 | .28 |
+| our volume adjusted for who is out | .55 | .64 |
+| sleeper | .70 | .74 |
+
+His last four games is worthless here, which is the point: the four
+games are the ones before the job changed. Handing the model the men
+his club ruled out this week recovers most of the gap and still leaves
+Sleeper ahead by .15 and .10. Sleeper is reading a beat writer and we
+are reading a status report, and the beat writer is faster.
+
+This is the one place where a better input is clearly available and we
+do not have it. Until we do, the average of the two is how the man
+whose job changed gets a sane number.
