@@ -150,6 +150,13 @@ export function preseasonWeekly(
         targetShareRecent: 0,
         backfieldShareRecent: 0,
         passTendency: input.passRate.get(team) ?? NEUTRAL_PASS_RATE,
+        // in August no club has published an injury report for December
+        questionable: false,
+        limitedPractice: false,
+        absenceShare: 0,
+        qbAbsenceShare: 0,
+        depthRank: 0,
+        depthKnown: false,
         teamId: team,
         opponent: slot.opponent,
       };

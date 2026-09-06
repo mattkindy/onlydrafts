@@ -8,8 +8,7 @@
  * below is what beat the pooled model on both 2024 and 2025.
  *
  * A position with no entry in POSITION_EXTRAS still gets a pooled ridge
- * fit over every position, which is what WR gets: a separate WR fit made
- * no difference and the pooled one has more rows behind it.
+ * fit over every position, which has more rows behind it.
  */
 
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
@@ -58,12 +57,20 @@ export const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
   backfieldShare: (e) => e.backfieldShareRecent,
   targetShare: (e) => e.targetShareRecent,
   snapSpread: (e) => e.snapRecent * e.spread,
+  absence: (e) => e.absenceShare,
+  qbAbsence: (e) => e.qbAbsenceShare,
+  questionable: (e) => (e.questionable ? 1 : 0),
+  limitedPractice: (e) => (e.limitedPractice ? 1 : 0),
+  depthStarter: (e) => (e.depthKnown && e.depthRank === 1 ? 1 : 0),
+  depthReserve: (e) => (e.depthKnown && e.depthRank >= 3 ? 1 : 0),
+  depthKnown: (e) => (e.depthKnown ? 1 : 0),
 };
 
 export const POSITION_EXTRAS: Record<string, readonly string[]> = {
   QB: ["spread", "snapSpread"],
-  RB: ["spread", "rushYdsRecent"],
-  TE: ["spread", "passTend"],
+  RB: ["spread", "rushYdsRecent", "absence"],
+  WR: ["absence"],
+  TE: ["spread", "passTend", "absence"],
 };
 
 export function positionFeatures(position: string): string[] {

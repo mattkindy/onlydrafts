@@ -1,5 +1,6 @@
 import type { GameRow, PlayerWeekStats, SnapCountWeek } from "../data/nflverse.js";
 import { normalizeName } from "../data/names.js";
+import type { WeeklyAvailability } from "../data/weeklyStatus.js";
 import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
 
 /**
@@ -54,12 +55,30 @@ export interface WeeklyExample {
   backfieldShareRecent: number;
   /** team's neutral-situation pass rate before this week, 0.57 unknown */
   passTendency: number;
+  /** his club listed him Questionable on this week's report */
+  questionable: boolean;
+  /** he was limited in practice this week, or did not practice */
+  limitedPractice: boolean;
+  /**
+   * the cut of his own room's recent touches that belongs to teammates
+   * his club ruled out this week. The backup of an injured starter sees
+   * a number near one.
+   */
+  absenceShare: number;
+  /** the same measure for his club's quarterbacks, 0 for a quarterback */
+  qbAbsenceShare: number;
+  /** where his club listed him this week, 1 for a starter, 0 unknown */
+  depthRank: number;
+  /** whether a depth chart covers this season at all */
+  depthKnown: boolean;
   teamId: string;
   opponent: string;
 }
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 const FIRST_WEEK = 5;
+const MAX_WEEK = 18;
+const RECENT_GAMES = 4;
 
 interface TeamWeek {
   opponent: string;
@@ -92,6 +111,70 @@ function impliedFor(game: GameRow, home: boolean): number {
   return home ? half + game.spreadLine / 2 : half - game.spreadLine / 2;
 }
 
+/** a quarterback's workload is his throws; everyone else's is his touches */
+export function weeklyVolume(row: PlayerWeekStats): number {
+  if (row.position === "QB") {
+    return row.passing.attempts;
+  }
+
+  return row.carries + row.targets;
+}
+
+export interface Rooms {
+  /** the cut of a room's recent workload owned by men ruled out this week */
+  shareOut(teamId: string, position: string, week: number): number;
+}
+
+/**
+ * A man's club and his room come from the last game he played before
+ * the week in question, because a man who is out this week has no row
+ * of his own to read them from.
+ */
+function buildRooms(
+  byPlayer: Map<string, PlayerWeekStats[]>,
+  availability: WeeklyAvailability | undefined,
+): Rooms {
+  const total = new Map<string, number>();
+  const missing = new Map<string, number>();
+  const roomKey = (teamId: string, position: string, week: number) =>
+    `${teamId}|${position}|${week}`;
+
+  for (const [playerId, rows] of byPlayer) {
+    const sorted = [...rows].sort((a, b) => a.week - b.week);
+
+    for (let week = 1; week <= MAX_WEEK; week++) {
+      const recent = sorted.filter((r) => r.week < week).slice(-RECENT_GAMES);
+      const last = recent[recent.length - 1];
+
+      if (!last) {
+        continue;
+      }
+
+      const volume =
+        recent.reduce((s, r) => s + weeklyVolume(r), 0) / recent.length;
+      const key = roomKey(last.teamId, last.position, week);
+      total.set(key, (total.get(key) ?? 0) + volume);
+
+      if (availability?.status.get(`${playerId}|${week}`)?.out) {
+        missing.set(key, (missing.get(key) ?? 0) + volume);
+      }
+    }
+  }
+
+  return {
+    shareOut: (teamId, position, week) => {
+      const key = roomKey(teamId, position, week);
+      const room = total.get(key) ?? 0;
+
+      if (room <= 0) {
+        return 0;
+      }
+
+      return (missing.get(key) ?? 0) / room;
+    },
+  };
+}
+
 export interface TendencyInputs {
   weekCounts: Map<string, { neutralPlays: number; neutralPasses: number }>;
   priorSeasonRate: Map<string, number>;
@@ -106,6 +189,7 @@ export function buildWeeklyExamples(
   rules: ScoringRules,
   tendencies?: TendencyInputs,
   prospectiveWeek?: number,
+  availability?: WeeklyAvailability,
 ): WeeklyExample[] {
   const schedule = new Map<string, TeamWeek>();
 
@@ -170,10 +254,12 @@ export function buildWeeklyExamples(
     );
   }
 
+  const rooms = buildRooms(byPlayer, availability);
+
   // points allowed by each defense to each position, accumulated by week
   const allowed = new Map<string, number[]>();
   const leagueTotal = new Map<string, number[]>();
-  const maxWeek = 18;
+  const maxWeek = MAX_WEEK;
 
   const at = (map: Map<string, number[]>, key: string) => {
     const existing = map.get(key);
@@ -287,6 +373,14 @@ export function buildWeeklyExamples(
     const leagueMean =
       cumulativeMean(leagueTotal.get(reference.position), week, defWeeks) / 32;
 
+    const status = availability?.status.get(`${playerId}|${week}`);
+
+    // a man his club ruled out is not on anyone's slate
+    if (status?.out) {
+      return undefined;
+    }
+
+    const depthRank = availability?.depth.rankFor(playerId, week);
     const series = snapSeries.get(
       `${normalizeName(reference.playerName)}|${teamId}`,
     );
@@ -328,6 +422,13 @@ export function buildWeeklyExamples(
       backfieldShareRecent:
         reference.position === "RB" ? meanOf(backfieldShare) : 0,
       passTendency: tendencyFor(teamId, week),
+      questionable: status?.questionable ?? false,
+      limitedPractice: status?.limitedPractice ?? false,
+      absenceShare: rooms.shareOut(teamId, reference.position, week),
+      qbAbsenceShare:
+        reference.position === "QB" ? 0 : rooms.shareOut(teamId, "QB", week),
+      depthRank: depthRank ?? 0,
+      depthKnown: availability?.depth.covered === true && depthRank !== undefined,
       teamId,
       opponent: slot.opponent,
     };
