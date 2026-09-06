@@ -7,7 +7,7 @@
  * so a method that only wins the easy calls is visible. The slate-wide
  * Spearman for the same methods is the last column, for comparison.
  *
- * Run: npx tsx scripts/pairEval.ts [--test 2024,2025]
+ * Run: npx tsx scripts/pairEval.ts [--test 2024,2025] [--weeks 1-17]
  */
 
 import { spearman } from "../src/backtest/metrics.js";
@@ -58,6 +58,21 @@ function parseList(arg: string | undefined, fallback: number[]): number[] {
   }
 
   return arg.split(",").map(Number);
+}
+
+interface WeekRange {
+  first: number;
+  last: number;
+}
+
+/** "1-17", or a single week. Every week counts when nothing is asked for */
+function parseWeeks(arg: string | undefined): WeekRange {
+  if (!arg) {
+    return { first: 1, last: 18 };
+  }
+
+  const [first, last] = arg.split("-").map(Number);
+  return { first: first!, last: last ?? first! };
 }
 
 type Predict = (e: WeeklyExample) => number;
@@ -193,6 +208,11 @@ async function main(): Promise<void> {
     [2024, 2025],
   );
 
+  const weekFlag = process.argv.indexOf("--weeks");
+  const weeks = parseWeeks(
+    weekFlag === -1 ? undefined : process.argv[weekFlag + 1],
+  );
+
   const games = await loadGames();
   const last = Math.max(...testSeasons);
   const cache = new Map<number, WeeklyExample[]>();
@@ -219,7 +239,9 @@ async function main(): Promise<void> {
       .flatMap((s) => cache.get(s)!);
     const perPosition = fitWeeklyByPosition(train);
     const flat = fitWeeklyByPosition(train, {});
-    const playedRows = cache.get(season)!.filter(played);
+    const playedRows = cache
+      .get(season)!
+      .filter((e) => played(e) && e.week >= weeks.first && e.week <= weeks.last);
     const covered = playedRows.filter((e) =>
       projections.has(projectionKey(e.season, e.week, e.playerId)),
     );
@@ -251,7 +273,9 @@ async function main(): Promise<void> {
       ["fitted blend", blended],
     ];
 
-    console.log(`${season}: ${all.length} player-weeks who played`);
+    console.log(
+      `${season}: ${all.length} player-weeks who played, weeks ${weeks.first}-${weeks.last}`,
+    );
     console.log(
       `sleeper covers ${pct(covered.length / all.length)}% of them, ` +
         `${POSITIONS.map(
