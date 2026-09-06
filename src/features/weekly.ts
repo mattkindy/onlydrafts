@@ -43,6 +43,15 @@ export interface WeeklyExample {
   home: boolean;
   /** Vegas implied points for the player's team, 21.5 when no line exists */
   impliedTotal: number;
+  /** points his own team is favored by, negative as an underdog, 0 with no line */
+  spread: number;
+  /** mean share of his own offence's targets over the same recent games */
+  targetShareRecent: number;
+  /**
+   * mean share of the carries and targets his team gave its running backs,
+   * over the same recent games. 0 for a team-week with no back touches.
+   */
+  backfieldShareRecent: number;
   /** team's neutral-situation pass rate before this week, 0.57 unknown */
   passTendency: number;
   teamId: string;
@@ -56,6 +65,16 @@ interface TeamWeek {
   opponent: string;
   home: boolean;
   impliedTotal: number;
+  spread: number;
+}
+
+/** how many points this side is favored by, from spread_line's home view */
+function spreadFor(game: GameRow, home: boolean): number {
+  if (game.spreadLine === undefined) {
+    return 0;
+  }
+
+  return home ? game.spreadLine : -game.spreadLine;
 }
 
 const DEFAULT_IMPLIED = 21.5;
@@ -99,11 +118,13 @@ export function buildWeeklyExamples(
       opponent: game.awayTeamId,
       home: true,
       impliedTotal: impliedFor(game, true),
+      spread: spreadFor(game, true),
     });
     schedule.set(`${game.awayTeamId}|${game.week}`, {
       opponent: game.homeTeamId,
       home: false,
       impliedTotal: impliedFor(game, false),
+      spread: spreadFor(game, false),
     });
   }
 
@@ -131,6 +152,22 @@ export function buildWeeklyExamples(
     const list = byPlayer.get(row.playerId) ?? [];
     list.push(row);
     byPlayer.set(row.playerId, list);
+  }
+
+  // every carry and target a team gave its backs in a week, so one back's
+  // cut of the room can be read off it
+  const backfieldTouches = new Map<string, number>();
+
+  for (const row of stats) {
+    if (row.position !== "RB") {
+      continue;
+    }
+
+    const key = `${row.teamId}|${row.week}`;
+    backfieldTouches.set(
+      key,
+      (backfieldTouches.get(key) ?? 0) + row.carries + row.targets,
+    );
   }
 
   // points allowed by each defense to each position, accumulated by week
@@ -224,6 +261,16 @@ export function buildWeeklyExamples(
     const meanOf = (pick: (r: PlayerWeekStats) => number) =>
       recent.reduce((s, r) => s + pick(r), 0) / recent.length;
 
+    const backfieldShare = (r: PlayerWeekStats) => {
+      const total = backfieldTouches.get(`${r.teamId}|${r.week}`) ?? 0;
+
+      if (total === 0) {
+        return 0;
+      }
+
+      return (r.carries + r.targets) / total;
+    };
+
     const teamId = reference.teamId;
     const slot = schedule.get(`${teamId}|${week}`);
 
@@ -276,6 +323,10 @@ export function buildWeeklyExamples(
       oppIndex: leagueMean > 0 ? defAllowed / leagueMean : 1,
       home: slot.home,
       impliedTotal: slot.impliedTotal,
+      spread: slot.spread,
+      targetShareRecent: meanOf((r) => r.targetShare),
+      backfieldShareRecent:
+        reference.position === "RB" ? meanOf(backfieldShare) : 0,
       passTendency: tendencyFor(teamId, week),
       teamId,
       opponent: slot.opponent,
