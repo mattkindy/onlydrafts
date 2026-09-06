@@ -6,14 +6,26 @@ import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import {
-  loadGames, loadPlayerStats, loadWeeklyRosters,
+  comingWeek, currentSeason, hasPlayerStats, loadGames, loadPlayerStats,
+  loadWeeklyRosters,
 } from "../src/data/nflverse.js";
+import {
+  loadSleeperWeekly,
+  projectionKey,
+} from "../src/data/sleeperProjections.js";
 import {
   weeklyExamplesForSeason,
   weeklyProspectiveForWeek,
-  weeklyRow,
 } from "../src/features/weeklyModel.js";
 import type { WeeklyExample } from "../src/features/weekly.js";
+import {
+  fitWeeklyByPosition,
+  predictWeeklyByPosition,
+} from "../src/features/fitWeeklyByPosition.js";
+import {
+  blendPoints,
+  SHIPPED_BLEND_WEIGHT,
+} from "../src/features/sleeperBlend.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import { buildResidualModel, outcomeQuantile } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
@@ -76,10 +88,6 @@ import { partsIn } from "../src/data/advancedParts.js";
  */
 const DOCS = join(import.meta.dirname, "..", "docs");
 const OLD = join(DOCS, "weekly");
-
-/** the season being drafted for; a new one starts in March */
-const CURRENT_SEASON = new Date().getUTCFullYear() -
-  (new Date().getUTCMonth() < 2 ? 1 : 0);
 
 function argOf(flag: string, fallback: string): string {
   const index = process.argv.indexOf(flag);
@@ -332,7 +340,7 @@ async function takePasserLines(
 }
 
 async function main(): Promise<void> {
-  const season = Number(argOf("--season", String(CURRENT_SEASON)));
+  const season = Number(argOf("--season", String(currentSeason())));
   const leagueId = argOf("--league", "");
   const format = argOf("--scoring", "");
   // The draft board has to match the draft. A point a catch moves
@@ -364,8 +372,9 @@ async function main(): Promise<void> {
   console.log(`building the ${season} board`);
   const weeksArg = argOf("--weeks", "");
   const range = weeksArg.match(/^(\d+)-(\d+)$/);
-  const weeks = weeksArg === ""
-    ? []
+  const games = await loadGames();
+  const asked = weeksArg === ""
+    ? [comingWeek(games, season)]
     : range
     ? Array.from(
         { length: Number(range[2]) - Number(range[1]) + 1 },
@@ -373,22 +382,32 @@ async function main(): Promise<void> {
       )
       : weeksArg.split(",").map(Number);
 
-  const games = await loadGames();
+  // Nobody has fetched this season's weekly stats yet, so there is no
+  // slate to write. The board is built from earlier seasons and still is.
+  const weeks = hasPlayerStats(season) ? asked : [];
+
+  if (weeks.length === 0) {
+    console.log(
+      `no weekly stats for ${season} on disk, so no slate. Run npm run week.`,
+    );
+  }
+
   const train: WeeklyExample[] = [];
 
   for (let s = 2016; s < season; s++) {
     train.push(...(await weeklyExamplesForSeason(s, games)));
   }
 
-  const weights = fitRidge(train.map(weeklyRow), train.map((e) => e.target), 25);
+  const weekly = fitWeeklyByPosition(train);
   const residuals = buildResidualModel(
     train.map((e) => ({
       position: e.position,
-      predicted: predictRidge(weights, weeklyRow(e)),
+      predicted: predictWeeklyByPosition(weekly, e),
       actual: e.target,
     })),
     5,
   );
+  const projections = await loadSleeperWeekly();
 
   await mkdir(join(DOCS, "data"), { recursive: true });
 
@@ -403,10 +422,9 @@ async function main(): Promise<void> {
 
   for (const week of weeks) {
     /**
-     * The week played out by the walk, next to the ridge's view of the
-     * same men. Mixed as places the two order a week better than
-     * either alone, .414 pooled against .330 and .401 on 2024 and
-     * 2025, so the slate is sorted by the mix and shows both numbers.
+     * The week played out by the walk. It is no longer part of the slate,
+     * which ranks on our projection and Sleeper's, but the board's weekly
+     * numbers still mix it in, so the weeks asked for here are walked.
      */
     const walkPositions = new Map<string, string>();
 
@@ -418,43 +436,49 @@ async function main(): Promise<void> {
     const walked = walkWeek(walkWorld, season, week, fixtures, scoring(), 60);
     weekWalked.set(week, walked.points);
     console.log(`  the walk played ${walked.played} fixtures of week ${week}`);
-    const slate = (await weeklyProspectiveForWeek(season, week, games))
+
+    /**
+     * One row a man, in the slate file the app reads. `ours` is our
+     * per-position ridge and `sleeper` is Sleeper's number, null when
+     * they have no row for him. `average` is the two averaged, or ours
+     * alone when Sleeper has nothing, and the file is sorted by it.
+     * `floor` and `ceiling` are the tenth and ninetieth of the outcome
+     * around that average. `snaps` is a whole percent; `gamesMissed` is
+     * out of his last four club weeks; `absenceShare` runs 0 to 1.
+     */
+    const rows = (await weeklyProspectiveForWeek(season, week, games))
       .map((e) => {
-        const predicted = predictRidge(weights, weeklyRow(e));
+        const ours = predictWeeklyByPosition(weekly, e);
+        const sleeper = projections.get(
+          projectionKey(season, week, e.playerId),
+        )?.points;
+        const average =
+          sleeper === undefined
+            ? ours
+            : blendPoints(ours, sleeper, SHIPPED_BLEND_WEIGHT);
+
         return {
           name: e.playerName,
           key: normalizeName(e.playerName),
           position: e.position,
           team: e.teamId,
           opponent: (e.home ? "v " : "@ ") + e.opponent,
-          predicted: Number(predicted.toFixed(1)),
-          walk: walked.points.has(e.playerId)
-            ? Number(walked.points.get(e.playerId)!.toFixed(1))
-            : null,
+          ours: Number(ours.toFixed(1)),
+          sleeper: sleeper === undefined ? null : Number(sleeper.toFixed(1)),
+          average: Number(average.toFixed(1)),
           floor: Number(
-            outcomeQuantile(residuals, e.position, predicted, 0.1).toFixed(1),
+            outcomeQuantile(residuals, e.position, average, 0.1).toFixed(1),
           ),
           ceiling: Number(
-            outcomeQuantile(residuals, e.position, predicted, 0.9).toFixed(1),
+            outcomeQuantile(residuals, e.position, average, 0.9).toFixed(1),
           ),
           snaps: Math.round(e.snapRecent * 100),
+          questionable: e.questionable,
+          gamesMissed: e.gamesMissedRecent,
+          absenceShare: Number(e.absenceShare.toFixed(2)),
         };
-      });
-
-    /**
-     * A man the walk never saw keeps the ridge's number whole rather
-     * than being marked down for being missing.
-     */
-    const rows = slate.map((r) => {
-      const share = WEEKLY_WALK_SHARE[r.position] ?? 0.25;
-
-      return {
-        ...r,
-        mixed: r.walk === null
-          ? r.predicted
-          : Number((share * r.walk + (1 - share) * r.predicted).toFixed(1)),
-      };
-    }).sort((a, b) => b.mixed - a.mixed);
+      })
+      .sort((a, b) => b.average - a.average);
 
     await writeFile(
       join(DOCS, "data", `slate-${season}-${week}.json`),
