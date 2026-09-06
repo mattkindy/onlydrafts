@@ -57,6 +57,8 @@ export const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
   backfieldShare: (e) => e.backfieldShareRecent,
   targetShare: (e) => e.targetShareRecent,
   snapSpread: (e) => e.snapRecent * e.spread,
+  carriesExpected: (e) => e.carriesExpected,
+  targetsExpected: (e) => e.targetsExpected,
   absence: (e) => e.absenceShare,
   qbAbsence: (e) => e.qbAbsenceShare,
   questionable: (e) => (e.questionable ? 1 : 0),
@@ -68,8 +70,8 @@ export const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
 
 export const POSITION_EXTRAS: Record<string, readonly string[]> = {
   QB: ["spread", "snapSpread"],
-  RB: ["spread", "rushYdsRecent", "absence"],
-  WR: ["absence"],
+  RB: ["spread", "rushYdsRecent", "absence", "carriesExpected", "targetsExpected"],
+  WR: ["absence", "targetsExpected"],
   TE: ["spread", "passTend", "absence"],
 };
 

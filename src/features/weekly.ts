@@ -1,7 +1,9 @@
 import type { GameRow, PlayerWeekStats, SnapCountWeek } from "../data/nflverse.js";
 import { normalizeName } from "../data/names.js";
 import type { WeeklyAvailability } from "../data/weeklyStatus.js";
+import type { RosterAppearance } from "../graph/build.js";
 import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
+import { buildWeeklyVolume, weeklyVolume } from "./weeklyVolume.js";
 
 /**
  * One player-week the weekly model predicts. Every feature is computed
@@ -26,6 +28,15 @@ export interface WeeklyExample {
   /** mean opportunity over the same games */
   targetsRecent: number;
   carriesRecent: number;
+  /**
+   * the same two numbers after the men his club ruled out, put on
+   * reserve, or moved off the roster hand their recent work to whoever
+   * is left in the room. Equal to the recent averages when nobody is
+   * out, and computed over the games he played rather than every row,
+   * so a man coming back from a month off is not counted at zero.
+   */
+  targetsExpected: number;
+  carriesExpected: number;
   airYardsRecent: number;
   receptionsRecent: number;
   recYdsRecent: number;
@@ -111,15 +122,6 @@ function impliedFor(game: GameRow, home: boolean): number {
   return home ? half + game.spreadLine / 2 : half - game.spreadLine / 2;
 }
 
-/** a quarterback's workload is his throws; everyone else's is his touches */
-export function weeklyVolume(row: PlayerWeekStats): number {
-  if (row.position === "QB") {
-    return row.passing.attempts;
-  }
-
-  return row.carries + row.targets;
-}
-
 export interface Rooms {
   /** the cut of a room's recent workload owned by men ruled out this week */
   shareOut(teamId: string, position: string, week: number): number;
@@ -190,6 +192,7 @@ export function buildWeeklyExamples(
   tendencies?: TendencyInputs,
   prospectiveWeek?: number,
   availability?: WeeklyAvailability,
+  rosters?: RosterAppearance[],
 ): WeeklyExample[] {
   const schedule = new Map<string, TeamWeek>();
 
@@ -255,6 +258,7 @@ export function buildWeeklyExamples(
   }
 
   const rooms = buildRooms(byPlayer, availability);
+  const volume = buildWeeklyVolume(byPlayer, availability, rosters);
 
   // points allowed by each defense to each position, accumulated by week
   const allowed = new Map<string, number[]>();
@@ -381,6 +385,7 @@ export function buildWeeklyExamples(
     }
 
     const depthRank = availability?.depth.rankFor(playerId, week);
+    const expected = volume.expectedFor(playerId, week);
     const series = snapSeries.get(
       `${normalizeName(reference.playerName)}|${teamId}`,
     );
@@ -404,6 +409,8 @@ export function buildWeeklyExamples(
       last4: lastFour.reduce((s, x) => s + x, 0) / lastFour.length,
       targetsRecent: meanOf((r) => r.targets),
       carriesRecent: meanOf((r) => r.carries),
+      targetsExpected: expected.targets,
+      carriesExpected: expected.carries,
       airYardsRecent: meanOf((r) => r.airYards),
       receptionsRecent: meanOf((r) => r.statLine.receptions),
       recYdsRecent: meanOf((r) => r.statLine.recYds),

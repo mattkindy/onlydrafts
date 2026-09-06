@@ -2,6 +2,7 @@ import {
   loadGames,
   loadPlayerStats,
   loadSnapCounts,
+  loadWeeklyRosters,
 } from "../data/nflverse.js";
 import { scoring } from "../scoring/active.js";
 import { summarizeSeason } from "./seasonSummary.js";
@@ -88,6 +89,7 @@ export async function weeklyExamplesForSeason(
     { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
     undefined,
     await loadWeeklyAvailability(season),
+    await loadWeeklyRosters(season).catch(() => []),
   );
 }
 
@@ -129,5 +131,6 @@ export async function weeklyProspectiveForWeek(
     { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
     week,
     await loadWeeklyAvailability(season),
+    await loadWeeklyRosters(season).catch(() => []),
   );
 }
