@@ -13,6 +13,8 @@ import { writeFile } from "node:fs/promises";
 import { fetchSleeperGsisIds } from "../src/data/sleeper.js";
 import {
   joinProjectionsToGsis,
+  loadSleeperWeekly,
+  projectionKey,
   SLEEPER_WEEKLY_PATH,
   type SleeperProjection,
   type SleeperProjectionRow,
@@ -95,8 +97,26 @@ async function main(): Promise<void> {
     console.log(`${season}: ${seasonRows} rows`);
   }
 
-  await writeFile(SLEEPER_WEEKLY_PATH, toCsv(all));
-  console.log(`wrote ${all.length} rows`);
+  /**
+   * A week that was fetched before and is not being fetched now stays.
+   * Sleeper stops answering for a season once it is well past, so asking
+   * for this season alone and writing only that would throw away every
+   * season the bench trains on.
+   */
+  const kept = new Map(await loadSleeperWeekly());
+
+  for (const row of all) {
+    kept.set(projectionKey(row.season, row.week, row.gsisId), row);
+  }
+
+  const merged = [...kept.values()].sort(
+    (a, b) =>
+      a.season - b.season ||
+      a.week - b.week ||
+      a.gsisId.localeCompare(b.gsisId),
+  );
+  await writeFile(SLEEPER_WEEKLY_PATH, toCsv(merged));
+  console.log(`fetched ${all.length} rows, wrote ${merged.length}`);
 }
 
 main().catch((error) => {
