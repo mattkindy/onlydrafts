@@ -1026,3 +1026,106 @@ are reading a status report, and the beat writer is faster.
 This is the one place where a better input is clearly available and we
 do not have it. Until we do, the average of the two is how the man
 whose job changed gets a sane number.
+
+## One drive at a time, against the drive that happened
+
+Every bench above scores a season of totals, where a walk that is too
+averaged still lands in the right place. scripts/gameRealismEval.ts
+scores single drives instead. It takes the state nobody can argue
+about, the opening drive of each half, puts the walk at that field
+position and plays the drive two hundred times: 1,710 drives over
+2023, 2024 and 2025. The walk's rules are fitted on all four seasons
+and its two rivals never see the season they are scored on, so any
+edge below runs the walk's way. What is scored is the drive engine
+with the offence's own rules, before any of it is handed to named
+players.
+
+**How the drive ends**, over touchdown, field goal, punt, turnover and
+the twenty play cap:
+
+| how the drive ended | brier | log |
+|---|---|---|
+| the walk | .6993 | 1.3002 |
+| base rates by field position and half | .7049 | 1.3110 |
+| a softmax on field position, spread and total | .6912 | 1.2813 |
+
+The walk beats knowing nothing about the teams by .0056 of Brier,
+where the fitted read beats it by .0137. So it picks up two fifths of
+what anyone can know before a drive starts, and there is little there:
+the whole distance from the league rate to the betting line is
+fourteen thousandths.
+
+Where the endings go is the finding:
+
+| | touchdown | field goal | punt | turnover | hit the cap |
+|---|---|---|---|---|---|
+| the walk | 20.7% | 19.9% | 39.7% | 19.4% | 0.3% |
+| what happened | 24.2% | 16.7% | 42.6% | 16.5% | 0.0% |
+
+Three and a half points of touchdown go missing and come back as field
+goals and giveaways. Drives get down the field and stop short. The
+calibration table says the same thing at every level the walk uses:
+
+| the walk said | it said | it happened | drives |
+|---|---|---|---|
+| 5 to 10% | 8.3% | 14.8% | 27 |
+| 10 to 15% | 12.9% | 15.0% | 227 |
+| 15 to 20% | 17.4% | 21.8% | 550 |
+| 20 to 30% | 23.9% | 27.5% | 814 |
+| 30 to 50% | 34.1% | 31.8% | 88 |
+
+It is under on touchdowns in every band with more than a hundred
+drives in it. The cap is the other thing to note: 0.3% of walked
+drives run to twenty snaps and stop, and no opening drive of a half in
+2022 to 2025 ever ended with the clock.
+
+**How long the drive is.** Each drive's plays and yards are read as a
+percentile inside the two hundred walks of it, which comes out flat
+when the spread is the right width, piles into the tails when it is
+too narrow, and piles into the middle when it is too wide:
+
+| | mean, played | mean, simulated | sd, played | sd, simulated | in the tails | in the middle |
+|---|---|---|---|---|---|---|
+| plays, the walk | 6.29 | 5.93 | 3.39 | 3.19 | 10.2% | 18.0% |
+| plays, base rates | 6.29 | 6.28 | 3.39 | 3.41 | 11.5% | 20.7% |
+| yards, the walk | 34.05 | 33.28 | 28.46 | 27.54 | 11.5% | 17.5% |
+| yards, base rates | 34.05 | 34.22 | 28.46 | 29.23 | 10.6% | 21.5% |
+
+Flat is 10.0% in the tails and 20.0% in the middle. The walk matches
+both, so its drive length spread is the right width. What is off is
+the level: it is a third of a play and three quarters of a yard short,
+and that shows up as a tilt rather than a pinch, with 13.1% of drives
+in the top tenth of the walk's plays against 8.1% in the bottom.
+
+**The first snap.** Which way it was called, and what it gained:
+
+| the first snap of a drive | says run | brier on the call |
+|---|---|---|
+| the walk | 51.9% | .2464 |
+| base rates by field position and half | 57.3% | .2487 |
+| a softmax on field position, spread and total | 57.0% | .2449 |
+
+| | mean, played | mean, simulated | sd, played | sd, simulated | in the tails |
+|---|---|---|---|---|---|
+| yards on the first snap, the walk | 5.61 | 5.98 | 8.30 | 8.95 | 9.1% |
+
+Teams run the opening snap 57.0% of the time and the walk runs it
+51.9%, which is five points too eager to throw. The gain it draws is
+within a third of a yard on the mean and slightly wide on the spread,
+and the percentiles come out nearly flat, so the pool a snap is drawn
+from is the part of the walk that is in good shape.
+
+**What this settles.** At the level of one drive the walk is not too
+averaged. Its plays and its yards have the spread the game has, within
+six percent on both, and the yards a single snap gains are close to
+right. Two things are wrong and both are levels rather than widths:
+the walk scores touchdowns on 20.7% of opening drives where offences
+score on 24.2%, and it throws the first snap five points too often.
+
+That also puts the ceiling eval's finding somewhere. The walk moves a
+man 2.05 points from week to week where he really moves 4.95, and the
+drive he plays in is not where that spread is lost, since the drive's
+own spread is right. It goes missing further down, in how a drive's
+snaps get shared out among the men on the field. The touchdown
+shortfall is the piece of it that this bench can see, and 3.5 points
+of drives on a 24.2% base is a seventh of all scoring.
