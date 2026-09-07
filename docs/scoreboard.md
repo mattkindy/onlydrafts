@@ -118,27 +118,32 @@ nearly nothing once the situation is known. First and second down are
 close to a coin flip, .2326 and .2139 against .2614 and .2419, and only
 third down is properly callable at .1430. There is no room here.
 
-**Who gets the ball is where it loses.** Against last season's share of
-that same call, which is the rival it has to beat:
+**Who gets the ball was where it lost, and is not any more.** Against
+last season's share of that same call, which is the rival it has to
+beat:
 
 | putting the right man top of the list | 2023 | 2024 | 2025 |
 |---|---|---|---|
-| the walk | 29.4% | 29.1% | 29.6% |
+| the walk before LEAN_K | 29.4% | 29.1% | 29.6% |
+| the walk as it ships | 34.3% | 35.0% | 34.9% |
 | last season's share of the call | 33.4% | 34.6% | 31.6% |
 | knowing this season, so nobody could do better | 40.5% | 40.7% | 40.1% |
 
-It loses to last season's counts by four or five points every season,
-and on the average share too, 22.9% against 24.2%. goesTo builds its
-weight as the projected share times a leaning, so the level comes
-entirely from the shrunk preseason projection and the counts only lean
-it toward the downs a man is used on. Moving the level onto the counts
-lifts the average share to 24.0% and drops the top of the list to
-28.4%, because the counts the walk has are conditioned on the state and
-faded over several seasons, so a man who started two years ago
-still has weight at 0.7 squared. Stale rather than wrong, and that
-looked like the lead worth following. It was not: the level was fine
-and the leaning was the problem, which is worked out below under who
-gets the ball.
+Shrinking the leaning by a man's own count in the cell, the change
+worked out below under who gets the ball, took the top of the list past
+last season's counts in all three seasons. The average share it gives
+the man who got it is still behind in two of them, 22.6% and 22.7%
+against 24.2% for 2023 and 2024, and ahead in 2025 at 23.0% against
+22.7%, where the most anyone could give him is about 25.5%.
+
+Everything that closes that share gap sells the top of the list to buy
+it. Half the level off the state-conditioned counts reads 24.5% on 2024
+and drops the top of the list to 31.4%; all of it reads 23.3% and
+27.1%. Taking the level off the same counts without the state, which is
+what the rival is, reads 23.8% and 34.1% at a quarter, 23.8% and 33.3%
+at a half, and 23.5% and 32.3% at seven tenths, with 2023 on the same
+slope. The board is built on naming the man, so the level stays on the
+projection. The share off the call is behind FROM_CALLS, off.
 
 **What he makes with it is level with the average**, 5.55 yards out
 against 5.40. That first read 7.42 and it was wrong: the walk draws a

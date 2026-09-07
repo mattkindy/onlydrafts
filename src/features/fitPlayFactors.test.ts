@@ -284,3 +284,67 @@ describe("a man's own draw out in the field", () => {
     expect(await crossesFromTheThirty(true)).toBeLessThan(0.05);
   });
 });
+
+// Busy takes four carries in five and Spare the fifth, from the same
+// spot every time, so their leanings are both one and the only thing
+// that can move their shares is where the level comes from.
+const sameSpot = (player: string): PlayRow => ({
+  offence: "NE", defence: "NYJ", down: 1, toGo: 10, yardline: 60,
+  margin: 0, secondsLeft: 1800, call: "run", yards: 4, touchdown: 0, player,
+});
+
+const carriesAtMidfield = async (fromCalls: string | undefined) => {
+  vi.resetModules();
+
+  if (fromCalls) {
+    process.env["FROM_CALLS"] = fromCalls;
+  } else {
+    delete process.env["FROM_CALLS"];
+  }
+
+  const loaded = await import("./fitPlayFactors.js");
+  delete process.env["FROM_CALLS"];
+
+  const rows: PlayRow[] = [];
+
+  for (let i = 0; i < 100; i++) {
+    rows.push(sameSpot(i % 5 === 0 ? "Spare" : "Busy"));
+  }
+
+  const factors = loaded.fitPlayFactors(rows, loaded.FACTOR_DEFAULTS, {
+    // August prices the two of them the same
+    split: new Map([
+      ["Busy", { carries: 0.2, targets: 0 }],
+      ["Spare", { carries: 0.2, targets: 0 }],
+    ]),
+  });
+  const state: PlayState = {
+    down: 1, toGo: 10, yardline: 60, margin: 0, secondsLeft: 1800,
+  };
+
+  return factors.goesTo(state, "run", ["Busy", "Spare"]);
+};
+
+describe("the level of who gets the ball", () => {
+  it("splits two men the projection prices the same evenly", async () => {
+    const shares = await carriesAtMidfield(undefined);
+
+    expect(shares.get("Busy")).toBeCloseTo(0.5, 2);
+    expect(shares.get("Spare")).toBeCloseTo(0.5, 2);
+  });
+
+  it("hands the busier man the difference with FROM_CALLS all the way up",
+    async () => {
+      const shares = await carriesAtMidfield("1");
+
+      expect(shares.get("Busy")).toBeCloseTo(0.8, 2);
+      expect(shares.get("Spare")).toBeCloseTo(0.2, 2);
+    });
+
+  it("moves him half as far in the log at a half", async () => {
+    const shares = await carriesAtMidfield("0.5");
+
+    // the geometric middle of an even split and a four to one
+    expect(shares.get("Busy")).toBeCloseTo(2 / 3, 2);
+  });
+});
