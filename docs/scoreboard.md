@@ -64,6 +64,18 @@ change, and swept out to the whole board below.
 | both sides of the goal check on the same plays | .7476 | .7128 | .7031 | .339 |
 | a sampled play that reached the line keeps its score | .7479 | .7128 | .7048 | flat, .368 against .3705 on 2025 alone |
 | the live board reads last season's snap share instead of zero | .7480 | .7128 | .7049 | not run |
+| the drawn pool stops reaching past the goal line | .7480 | .7128 | .7049 | .368 on 2025 alone |
+
+The drawn pool row is the one measured on drives rather than on seasons.
+A play from the eleven can gain at most eleven yards, so the window that
+grew both ways to find forty comparable plays was handing a snap on the
+fifteen a set of plays with the touchdowns clipped out of it. The window
+now reaches no more than two yards nearer the goal. On the opening drive
+of each half, 2023 to 2025, the walk scores a touchdown 22.6% of the time
+where it scored 20.7% before and teams score 24.2%, and the band that
+said 23.9% where 27.5% happened now says 24.2% against 24.2%. The board
+does not move and neither does the weekly bench, which is what a fix
+inside one drive should look like.
 
 The snap share row is a fix to the live path only. The backtest already fed the season model last season's snap share, so the bench did not move; the 2026 board did, with ten receivers in the top 60 moving five or more places.
 
