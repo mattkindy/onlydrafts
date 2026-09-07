@@ -17,6 +17,24 @@ import type { DriveRules, PlayType } from "../model/drive.js";
 const distanceBand = (toGo: number) =>
   toGo <= 2 ? 0 : toGo <= 6 ? 1 : toGo <= 10 ? 2 : 3;
 
+/** how far out the window round a spot grows, a step at a time */
+const REACHES = [1, 2, 4, 7, 12, 20, 35, 60, 99];
+
+/**
+ * How many yards nearer the goal a borrowed play may have been made.
+ *
+ * A gain is cut off at the goal line, so a play from the eleven never
+ * shows more than eleven yards, and a snap on the fifteen that borrows
+ * it can never reach the end zone with it. The window used to grow
+ * both ways at once, which filled every spot with plays already capped
+ * short of it: the pool reached the goal on 6.3% of plays from the 11
+ * to 20 where plays from there really score on 9.0%, and two yards of
+ * slack reads 8.7%. Refusing every closer play overshoots, since the
+ * window then reaches much further out for its forty plays. Set it to
+ * 99 for the window that grows both ways.
+ */
+const DRAWN_CLOSER = Number(process.env["DRAWN_CLOSER"] ?? 2);
+
 export interface FittedDrives extends DriveRules {
   /** what came out of the file, for anyone checking the fit */
   plays: number;
@@ -185,20 +203,20 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
    * forty seven, where there is not.
    */
   const found = new Map<string, number[]>();
-  const nearby = (pools: Map<string, number[]>, at: string, yardline: number) => {
-    const seen = found.get(`${at}|${yardline}`);
-
-    if (seen) {
-      return seen;
-    }
-
+  const around = (
+    pools: Map<string, number[]>, at: string, yardline: number, closer: number,
+  ) => {
     let pool: number[] = [];
 
-    for (const reach of [1, 2, 4, 7, 12, 20, 35, 60, 99]) {
+    for (const reach of REACHES) {
       pool = [];
 
-      for (let yard = yardline - reach; yard <= yardline + reach; yard++) {
-        if (yard < 1 || yard > 99) {
+      for (
+        let yard = Math.max(1, yardline - Math.min(reach, closer));
+        yard <= yardline + reach;
+        yard++
+      ) {
+        if (yard > 99) {
           continue;
         }
 
@@ -213,6 +231,20 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
         break;
       }
     }
+
+    return pool;
+  };
+  const nearby = (pools: Map<string, number[]>, at: string, yardline: number) => {
+    const seen = found.get(`${at}|${yardline}`);
+
+    if (seen) {
+      return seen;
+    }
+
+    const withRoom = around(pools, at, yardline, DRAWN_CLOSER);
+    const pool = withRoom.length >= ENOUGH
+      ? withRoom
+      : around(pools, at, yardline, 99);
 
     found.set(`${at}|${yardline}`, pool);
     return pool;
