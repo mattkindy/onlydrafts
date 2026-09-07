@@ -1,7 +1,11 @@
 /**
- * Standard lineup: one QB, two RB, two WR, one TE, one flex from
- * RB/WR/TE. A policy expresses itself through the scores handed in;
- * required slots fill greedily, then flex takes the best skill leftover.
+ * Setting a lineup: fill the required slots with the highest scores at
+ * each position, then give the flex to the best skill player left over.
+ * A policy expresses itself through the scores handed in, so the same
+ * setter serves a projection, a season average, or perfect hindsight.
+ *
+ * Two formats are named below because the simulator and the weekly
+ * evaluation disagree about how many receivers a team starts.
  */
 
 export interface LineupCandidate {
@@ -10,18 +14,47 @@ export interface LineupCandidate {
   score: number;
 }
 
-const REQUIRED: Record<string, number> = { QB: 1, RB: 2, WR: 2, TE: 1 };
-const FLEX_POSITIONS = new Set(["RB", "WR", "TE"]);
-const FLEX_COUNT = 1;
+export interface LineupFormat {
+  /** how many of each position must start */
+  required: Record<string, number>;
+  /** which positions may take a flex slot */
+  flexPositions: readonly string[];
+  flexCount: number;
+}
 
-export function pickLineup(candidates: LineupCandidate[]): string[] {
+/** one QB, two RB, two WR, one TE, one flex */
+export const TWO_RECEIVER_FORMAT: LineupFormat = {
+  required: { QB: 1, RB: 2, WR: 2, TE: 1 },
+  flexPositions: ["RB", "WR", "TE"],
+  flexCount: 1,
+};
+
+/** one QB, two RB, three WR, one TE, one flex, which most leagues start */
+export const THREE_RECEIVER_FORMAT: LineupFormat = {
+  required: { QB: 1, RB: 2, WR: 3, TE: 1 },
+  flexPositions: ["RB", "WR", "TE"],
+  flexCount: 1,
+};
+
+export function startersNeeded(format: LineupFormat): number {
+  return (
+    Object.values(format.required).reduce((sum, n) => sum + n, 0) +
+    format.flexCount
+  );
+}
+
+export function pickLineup(
+  candidates: LineupCandidate[],
+  format: LineupFormat = TWO_RECEIVER_FORMAT,
+): string[] {
   const sorted = [...candidates].sort((a, b) => b.score - a.score);
-  const filled: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0 };
+  const flex = new Set(format.flexPositions);
+  const filled: Record<string, number> = {};
   const starters: string[] = [];
   const leftovers: LineupCandidate[] = [];
 
   for (const candidate of sorted) {
-    const need = REQUIRED[candidate.position] ?? 0;
+    const need = format.required[candidate.position] ?? 0;
 
     if ((filled[candidate.position] ?? 0) < need) {
       filled[candidate.position] = (filled[candidate.position] ?? 0) + 1;
@@ -34,11 +67,11 @@ export function pickLineup(candidates: LineupCandidate[]): string[] {
   let flexUsed = 0;
 
   for (const candidate of leftovers) {
-    if (flexUsed >= FLEX_COUNT) {
+    if (flexUsed >= format.flexCount) {
       break;
     }
 
-    if (FLEX_POSITIONS.has(candidate.position)) {
+    if (flex.has(candidate.position)) {
       starters.push(candidate.playerId);
       flexUsed++;
     }
