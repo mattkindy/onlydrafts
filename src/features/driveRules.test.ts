@@ -43,3 +43,25 @@ describe("what a snap on the fifteen may borrow", () => {
     expect(drawn).toEqual(new Set([6]));
   });
 });
+
+describe("what a caught pass draws from", () => {
+  // fifty catches of six from the fifteen, fifty of twenty from the
+  // eighty, so a pool found near the spot has only one of the two in it
+  const rows = [...snaps(50, 15, 6), ...snaps(50, 80, 20)];
+
+  it("draws from the catches made round the spot", () => {
+    const drawn = everyDraw(
+      (uniform) => rulesFrom(rows).caughtYards(1, 10, 15, uniform),
+    );
+
+    expect(drawn).toEqual(new Set([6]));
+  });
+
+  it("draws the other end of the field from the other pool", () => {
+    const drawn = everyDraw(
+      (uniform) => rulesFrom(rows).caughtYards(1, 10, 80, uniform),
+    );
+
+    expect(drawn).toEqual(new Set([20]));
+  });
+});

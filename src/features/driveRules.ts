@@ -263,7 +263,11 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
       continue;
     }
 
-    const key = `${Number(row["down"])}|${distanceBand(Number(row["togo"]))}`;
+    // Kept where it happened, like the ordinary pools: a catch on the
+    // eight has the goal line in front of it and a catch on the eight
+    // going the other way has the whole field.
+    const key = `${Number(row["down"])}|${distanceBand(Number(row["togo"]))}` +
+      `|${Math.min(99, Number(row["yardline"]))}`;
     caught.set(key, [...(caught.get(key) ?? []), gained]);
   }
 
