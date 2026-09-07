@@ -9,7 +9,7 @@
  * projection outscored the other.
  */
 
-import { addPairs, emptyTally, pairRate } from "../backtest/pairs.js";
+import { bestMix, type MixEntry } from "./mixWeights.js";
 
 export interface BlendEntry {
   ours: number;
@@ -26,6 +26,8 @@ export const BLEND_WEIGHTS: readonly number[] = Array.from(
  * What the start/sit tools rank by. The fitted weight comes out near a
  * half on both test seasons and the curve around it is flat, so an even
  * average is what ships rather than a number that moves with the fit.
+ * Taking Sleeper's level bias off first was tried and left the pair
+ * accuracy where it was, on both seasons.
  */
 export const SHIPPED_BLEND_WEIGHT = 0.5;
 
@@ -46,22 +48,6 @@ export function blendPoints(
   return (1 - weight) * ours + weight * sleeper;
 }
 
-function pairRateAt(slates: BlendEntry[][], weight: number): number {
-  const tally = emptyTally();
-
-  for (const slate of slates) {
-    addPairs(
-      tally,
-      slate.map((e) => ({
-        predicted: blendPoints(e.ours, e.sleeper, weight),
-        actual: e.actual,
-      })),
-    );
-  }
-
-  return pairRate(tally, "all");
-}
-
 /**
  * The weight with the best pair accuracy over these slates. Ties go to the
  * smaller weight, which keeps a flat curve from reading as a preference
@@ -71,21 +57,14 @@ export function fitBlendWeight(
   slates: BlendEntry[][],
   candidates: readonly number[] = BLEND_WEIGHTS,
 ): number {
-  let best = candidates[0]!;
-  let bestRate = -Infinity;
+  const entries: MixEntry[][] = slates.map((slate) =>
+    slate.map((e) => ({ parts: [e.ours, e.sleeper], actual: e.actual })),
+  );
+  const ordered = [...candidates].sort((a, b) => a - b);
+  const best = bestMix(
+    entries,
+    ordered.map((weight) => [1 - weight, weight]),
+  );
 
-  for (const weight of candidates) {
-    const rate = pairRateAt(slates, weight);
-
-    if (Number.isNaN(rate)) {
-      continue;
-    }
-
-    if (rate > bestRate) {
-      best = weight;
-      bestRate = rate;
-    }
-  }
-
-  return best;
+  return best[1]!;
 }
