@@ -397,6 +397,15 @@ const HOW_FAR = Number(process.env["HOW_FAR"] ?? 1);
 const FROM_COUNTS = Number(process.env["FROM_COUNTS"] ?? 0);
 
 /**
+ * How much of that same level comes off how often he took the call at
+ * all, ignoring the state, 1 being all of it and 0 turning it off.
+ *
+ * It buys the average share and sells the top of the list at every
+ * strength, so it is off. The scoreboard has the trade.
+ */
+const FROM_CALLS = Number(process.env["FROM_CALLS"] ?? 0);
+
+/**
  * How much of the level of who gets the ball comes off what a man has
  * been taking lately rather than off the August projection, 1 being
  * all of it.
@@ -2613,7 +2622,13 @@ export function fitPlayFactors(
         const level = RECENT_LEVEL <= 0 || hisLately <= 0 || projectedShare <= 0
           ? projectedShare
           : projectedShare ** (1 - RECENT_LEVEL) * hisLately ** RECENT_LEVEL;
-        const said = level * leaning;
+        // his share of the call over every side, so the denominator is
+        // the same for everyone and normalising takes it back out
+        const tookTheCall = onCall.get(`${player}|${call}`) ?? 0;
+        const blended = FROM_CALLS <= 0 || tookTheCall <= 0 || level <= 0
+          ? level
+          : level ** (1 - FROM_CALLS) * tookTheCall ** FROM_CALLS;
+        const said = blended * leaning;
         const weight = (FROM_COUNTS <= 0 || touches <= 0 || said <= 0
           ? said
           : said ** (1 - FROM_COUNTS) * touches ** FROM_COUNTS) *
