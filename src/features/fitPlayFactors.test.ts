@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CountedPlays, GoalSample, PlayRow } from "./fitPlayFactors.js";
 import type { PlayState } from "../model/playFactors.js";
+import { seededRng } from "../sim/rng.js";
 
 /**
  * The carry is read out of the environment when the module loads, so
@@ -346,5 +347,76 @@ describe("the level of who gets the ball", () => {
 
     // the geometric middle of an even split and a four to one
     expect(shares.get("Busy")).toBeCloseTo(2 / 3, 2);
+  });
+});
+
+/**
+ * Busy's cut of the work in each of a run of games, asked for twice a
+ * game from the same spot. A cut drawn per snap rather than per game
+ * would come back as a pair that disagrees.
+ */
+const busyOverGames = async (width: string, games: number) => {
+  vi.resetModules();
+  process.env["GAME_SHARE_RUN"] = width;
+  process.env["GAME_SHARE_PASS"] = width;
+  const loaded = await import("./fitPlayFactors.js");
+  delete process.env["GAME_SHARE_RUN"];
+  delete process.env["GAME_SHARE_PASS"];
+
+  const rows: PlayRow[] = [];
+
+  for (let i = 0; i < 100; i++) {
+    rows.push(sameSpot(i % 5 === 0 ? "Spare" : "Busy"));
+  }
+
+  const factors = loaded.fitPlayFactors(rows, loaded.FACTOR_DEFAULTS, {
+    split: new Map([
+      ["Busy", { carries: 0.2, targets: 0 }],
+      ["Spare", { carries: 0.2, targets: 0 }],
+    ]),
+  });
+  const midfield: PlayState = {
+    down: 1, toGo: 10, yardline: 60, margin: 0, secondsLeft: 1800,
+  };
+  const askFor = () =>
+    factors.goesTo(midfield, "run", ["Busy", "Spare"]).get("Busy") ?? 0;
+  const played: { first: number; second: number }[] = [];
+
+  for (let game = 0; game < games; game++) {
+    factors.startsGame?.(seededRng(game * 811 + 7));
+    played.push({ first: askFor(), second: askFor() });
+  }
+
+  return played;
+};
+
+describe("the cut a game hands a man", () => {
+  it("is the same on the first snap and the last", async () => {
+    for (const game of await busyOverGames("0.6", 12)) {
+      expect(game.second).toBeCloseTo(game.first, 10);
+    }
+  });
+
+  it("is a different cut in the next game", async () => {
+    const played = await busyOverGames("0.6", 40);
+    const cuts = played.map((g) => g.first);
+    const middle = cuts.reduce((a, b) => a + b, 0) / cuts.length;
+    const spread = Math.sqrt(
+      cuts.reduce((a, b) => a + (b - middle) ** 2, 0) / cuts.length,
+    );
+
+    expect(new Set(cuts).size).toBe(cuts.length);
+    // the projection prices the two of them the same, so an even split
+    // is what the draws should average out to
+    expect(middle).toBeGreaterThan(0.4);
+    expect(middle).toBeLessThan(0.6);
+    expect(spread).toBeGreaterThan(0.05);
+  });
+
+  it("stands still across games when both widths are off", async () => {
+    for (const game of await busyOverGames("0", 6)) {
+      expect(game.first).toBeCloseTo(0.5, 10);
+      expect(game.second).toBeCloseTo(0.5, 10);
+    }
   });
 });
