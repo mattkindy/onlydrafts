@@ -14,6 +14,7 @@
  */
 
 import { walkDrive, type FactorDrive, type Opening } from "./driveFromFactors.js";
+import { standardNormal } from "../sim/rng.js";
 import type { PlayerLine } from "./playerWeek.js";
 import type { Call, PlayFactors } from "./playFactors.js";
 import type { EndingRules, ClockRules } from "./driveFromFactors.js";
@@ -212,6 +213,34 @@ const pointsFor = (drive: FactorDrive) =>
  * though the ground were nobody's.
  */
 const AT_HOME = Number(process.env["AT_HOME"] ?? 1.024);
+
+/**
+ * How far a whole side's afternoon moves, as a fraction of its yards a
+ * play.
+ *
+ * Each man already gets a tilt of his own once a game, but every man's
+ * is drawn on its own, so an offence never has a good afternoon
+ * together the way weather, a matchup or a script gives one. A side's
+ * yards a play moves 0.252 game to game really and 0.090 in the walk,
+ * on 5.40 yards a play, so what is left for the side itself is
+ * sqrt(0.252^2 - 0.090^2) / 5.40. Setting it to 0 restores every draw
+ * exactly, since nothing is then drawn and no gain is touched.
+ */
+const SIDE_DAY = Number(process.env["SIDE_DAY"] ?? 0.044);
+
+/**
+ * What this game is doing to one side, near one. Centred so a side's
+ * afternoons still average what its fitted plays say, the same way a
+ * man's own tilt is.
+ */
+export function sideDay(uniform: () => number): number {
+  if (SIDE_DAY <= 0) {
+    return 1;
+  }
+
+  return Math.exp(SIDE_DAY * standardNormal(uniform) - (SIDE_DAY * SIDE_DAY) / 2);
+}
+
 /** a kneel with nobody able to stop the clock burns the play clock */
 const KNEEL_BURNS = 41;
 /** a defensive timeout hands that play's clock back */
@@ -226,6 +255,11 @@ export function playGame(
 ): PlayedGame {
   home = { ...home, lift: (home.lift ?? 1) * AT_HOME };
   away = { ...away, lift: (away.lift ?? 1) / AT_HOME };
+  // one draw each, so the two sides get their own afternoon
+  const dayOf: Record<string, number> = {
+    [home.team]: sideDay(uniform),
+    [away.team]: sideDay(uniform),
+  };
   home.factors.startsGame?.(uniform);
 
   if (away.factors !== home.factors) {
@@ -303,6 +337,7 @@ export function playGame(
         passer: withBall.passer, season: rules.season, week: rules.week,
         lift: withBall.lift,
         passLift: withBall.passLift,
+        day: dayOf[withBall.team],
       },
       rules.ticking,
       opening,

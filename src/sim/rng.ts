@@ -10,3 +10,8 @@ export function seededRng(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** one draw from a bell centred on zero, off Box and Muller's pair */
+export const standardNormal = (uniform: () => number): number =>
+  Math.sqrt(-2 * Math.log(Math.max(1e-12, uniform()))) *
+  Math.cos(2 * Math.PI * uniform());

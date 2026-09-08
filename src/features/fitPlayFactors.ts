@@ -19,7 +19,7 @@ import type { Formation } from "./fitFormation.js";
 import type { Coverage } from "./fitCoverage.js";
 import type { Look } from "./fitLook.js";
 import type { AfterCatch } from "./fitAfterCatch.js";
-import { seededRng } from "../sim/rng.js";
+import { seededRng, standardNormal } from "../sim/rng.js";
 
 export interface PlayRow {
   /** which season it happened, so an old play can count for less */
@@ -452,11 +452,6 @@ const LEAN_K = Number(process.env["LEAN_K"] ?? 60);
  */
 const GAME_SHARE_RUN = Number(process.env["GAME_SHARE_RUN"] ?? 0.65);
 const GAME_SHARE_PASS = Number(process.env["GAME_SHARE_PASS"] ?? 0.3);
-
-/** one draw from a bell centred on zero, off Box and Muller's pair */
-const standardNormal = (uniform: () => number) =>
-  Math.sqrt(-2 * Math.log(Math.max(1e-12, uniform()))) *
-  Math.cos(2 * Math.PI * uniform());
 
 /**
  * How near the line a throw has to be before room is asked of its pool.
