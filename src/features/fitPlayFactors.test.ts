@@ -514,3 +514,66 @@ describe("a man with no plays of his own leans the way his position does", () =>
       }
     });
 });
+
+/**
+ * A league where the plays from the three all belong to two other men,
+ * so the tight cell says nothing about either of the pair being asked
+ * about. Both are backs, both are priced the same in August and both
+ * carried it the same number of times, so their positions and their
+ * season shares cannot separate them either. One took his carries in
+ * the red zone and the other took his at midfield.
+ */
+const carryAt = (yardline: number, player: string): PlayRow => ({
+  offence: "NE", defence: "NYJ", down: 1, toGo: 10,
+  yardline, margin: 0, secondsLeft: 1800, call: "run", yards: 4,
+  touchdown: 0, player,
+});
+
+const redZoneBackAt = async (wideLean: string) => {
+  vi.resetModules();
+  process.env["WIDE_LEAN"] = wideLean;
+  const loaded = await import("./fitPlayFactors.js");
+  delete process.env["WIDE_LEAN"];
+
+  const rows: PlayRow[] = [];
+
+  for (let i = 0; i < 60; i++) {
+    rows.push(carryAt(3, i % 2 ? "GoalBack" : "GoalOther"));
+    rows.push(carryAt(15, "RedZone"));
+    rows.push(carryAt(55, "Midfield"));
+  }
+
+  const factors = loaded.fitPlayFactors(rows, loaded.FACTOR_DEFAULTS, {
+    split: new Map([
+      ["RedZone", { carries: 0.2, targets: 0 }],
+      ["Midfield", { carries: 0.2, targets: 0 }],
+    ]),
+    positions: new Map([
+      ["GoalBack", "RB"], ["GoalOther", "RB"],
+      ["RedZone", "RB"], ["Midfield", "RB"],
+    ]),
+  });
+
+  return factors.goesTo(
+    { down: 1, toGo: 10, yardline: 3, margin: 0, secondsLeft: 1800 },
+    "run", ["RedZone", "Midfield"],
+  );
+};
+
+describe("a thin cell rests on a man's own leaning at a wider one", () => {
+  it("splits the carries from the three evenly with the step off",
+    async () => {
+      const shares = await redZoneBackAt("0");
+
+      expect(shares.get("RedZone")).toBeCloseTo(0.5, 6);
+      expect(shares.get("Midfield")).toBeCloseTo(0.5, 6);
+    });
+
+  it("tells them apart with the step on, on where each one carried it",
+    async () => {
+      const shares = await redZoneBackAt("200");
+
+      expect(Math.abs(shares.get("RedZone")! - shares.get("Midfield")!))
+        .toBeGreaterThan(0.1);
+    });
+});

@@ -470,6 +470,28 @@ const POSITION_LEAN = !process.env["NO_POSITION_LEAN"];
 const POSITION_K = Number(process.env["POSITION_K"] ?? 10);
 
 /**
+ * How many plays a man is asked for in the pool he rests on, against
+ * the forty he is asked for in the one he is scored on. 0 leaves him
+ * resting straight on his position, which is how it ships.
+ *
+ * Cells are thin everywhere, not only near the goal: the middle man
+ * has four of the plays inside the five. Splitting a season odd and
+ * even, his own leaning inside the twenty predicts his leaning inside
+ * the five at .27 where his position predicts it at .00, and it wins
+ * again two scores down late and on third and short. His position
+ * wins only on throws near the goal, so it stays underneath. At 400
+ * the goal line puts the right man top 52.5% and 45.9% against 51.5%
+ * and 44.0%, and the whole layer is level on 2024.
+ */
+const WIDE_LEAN = Number(process.env["WIDE_LEAN"] ?? 0);
+/**
+ * And how many of his own plays that wider pool needs before its
+ * leaning is believed over his position's. Larger than POSITION_K
+ * because it is one man's count again, not a whole position's.
+ */
+const WIDE_K = Number(process.env["WIDE_K"] ?? 60);
+
+/**
  * How far a man's cut of the work moves from one game to the next,
  * beyond the coin flips inside a single game, as a fraction of his
  * own cut. A run and a throw move differently, so there are two.
@@ -2168,6 +2190,45 @@ export function fitPlayFactors(
   };
 
   /**
+   * Where a man is left while his own count in this cell is too thin
+   * to say, in two steps: his position's leaning here, and then his
+   * own leaning over a pool several times the size.
+   *
+   * The wider pool is the same spot with the reach let out, so it is
+   * still the goal line or the third down and not his season. A man's
+   * own leaning inside the twenty says more about what he does inside
+   * the five than his position does, so the position only catches him
+   * when the wide pool has nothing of his either.
+   */
+  const restingPlace = (
+    player: string, call: Call, itsCells: Counted[], here: number,
+    wideCells: Counted[] | undefined, wideHere: number,
+  ) => {
+    const position = positionLeaning(player, call, itsCells, here);
+
+    if (!wideCells || wideHere <= 0) {
+      return position;
+    }
+
+    const hisOverall = (onCall.get(`${player}|${call}`) ?? 0) /
+      Math.max(1, callPlays.get(call) ?? 0);
+    let wideTouches = 0;
+
+    for (const cell of wideCells) {
+      wideTouches += cell.byPlayer.get(player)?.touches ?? 0;
+    }
+
+    if (hisOverall <= 0 || wideTouches <= 0) {
+      return position;
+    }
+
+    const believed = WIDE_K > 0 ? wideTouches / (wideTouches + WIDE_K) : 1;
+    const leaning = (wideTouches / wideHere) / hisOverall;
+
+    return position * (leaning / position) ** believed;
+  };
+
+  /**
    * What the level averages over the touches it is put on.
    *
    * A man's level is his yards against the league's, and the men who
@@ -2748,6 +2809,19 @@ export function fitPlayFactors(
         here += touchesOf(cell);
       }
 
+      /**
+       * The same spot asked of a pool several times the size, which is
+       * where a man is left while his count in the tight one is thin.
+       */
+      const wideCells = WIDE_LEAN > 0
+        ? atCells(state, WIDE_LEAN * Math.max(1, among.length), call)
+        : undefined;
+      let wideHere = 0;
+
+      for (const cell of wideCells ?? []) {
+        wideHere += touchesOf(cell);
+      }
+
       const shares = new Map<string, number>();
       let total = 0;
 
@@ -2774,7 +2848,9 @@ export function fitPlayFactors(
         const hisHere = here > 0 ? touches / here : 0;
         const believed = LEAN_K > 0 ? touches / (touches + LEAN_K) : 1;
         // and where he is left while his own count is too thin to say
-        const towards = positionLeaning(player, call, itsCells, here);
+        const towards = restingPlace(
+          player, call, itsCells, here, wideCells, wideHere,
+        );
         const leaning = hisOverall > 0 && hisHere > 0
           ? towards * ((hisHere / hisOverall) / towards) ** believed
           : towards;
