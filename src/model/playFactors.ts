@@ -261,6 +261,26 @@ export function wideningPacked(toGo: number, yardline: number): Int32Array {
 }
 
 /**
+ * How much a play from this far up or down the field counts when a
+ * pool is drawn from for a state here.
+ *
+ * Everything the widening let in used to count the same, so a gain
+ * from the fifty five stood in for a gain from the three. Read off
+ * the plays, what a pool is asked for moves steadily with distance
+ * rather than in a step: two yardlines five apart differ by a tenth
+ * of what two fifty apart do, twelve apart by a third, twenty apart
+ * by a half. The same falloff fits the yards, the throws that gain
+ * nothing, and the run rate. Four yards halves the weight at eight
+ * out and leaves a third of it at twenty, so the widened plays stay
+ * in the pool rather than collapsing back onto the thin cell.
+ */
+export const NEARNESS = Number(process.env["NEARNESS"] ?? 4);
+
+/** the weight for a play that far along the field from the state */
+export const nearnessWeight = (away: number) =>
+  NEARNESS <= 0 ? 1 : 1 / (1 + away / NEARNESS);
+
+/**
  * How the clock is cut for counting. Coarse on purpose: it matters far
  * less than the down and the distance, and a fine cut on everything at
  * once leaves nothing in any cell.
