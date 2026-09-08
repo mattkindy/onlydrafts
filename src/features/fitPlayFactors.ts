@@ -19,6 +19,7 @@ import type { Formation } from "./fitFormation.js";
 import type { Coverage } from "./fitCoverage.js";
 import type { Look } from "./fitLook.js";
 import type { AfterCatch } from "./fitAfterCatch.js";
+import { seededRng } from "../sim/rng.js";
 
 export interface PlayRow {
   /** which season it happened, so an old play can count for less */
@@ -436,6 +437,26 @@ const RECENT_LEVEL = Number(process.env["RECENT_LEVEL"] ?? 0);
  * not smooth in the middle.
  */
 const LEAN_K = Number(process.env["LEAN_K"] ?? 60);
+
+/**
+ * How far a man's cut of the work moves from one game to the next,
+ * beyond the coin flips inside a single game, as a fraction of his
+ * own cut. A run and a throw move differently, so there are two.
+ *
+ * The walk handed a man the same cut on every snap of every game, so a
+ * game plan, a hot hand or a blowout moved nothing. A back's cut of
+ * the carries swings 0.34 of itself game to game once the flips are
+ * taken out, where the walk managed 0.07; a receiver's swings 0.19.
+ * Both settings are about twice that, because one man's draw is then
+ * normalised over everyone on the field, which takes half back out.
+ */
+const GAME_SHARE_RUN = Number(process.env["GAME_SHARE_RUN"] ?? 0.65);
+const GAME_SHARE_PASS = Number(process.env["GAME_SHARE_PASS"] ?? 0.3);
+
+/** one draw from a bell centred on zero, off Box and Muller's pair */
+const standardNormal = (uniform: () => number) =>
+  Math.sqrt(-2 * Math.log(Math.max(1e-12, uniform()))) *
+  Math.cos(2 * Math.PI * uniform());
 
 /**
  * How near the line a throw has to be before room is asked of its pool.
@@ -1145,6 +1166,36 @@ export function fitPlayFactors(
       string, { plays: number; yards: number; dry: number }
     >(),
   } = extras.counted ?? countPlays(rows, !pairing);
+
+  /**
+   * What this game is doing to each man's cut, drawn the first time he
+   * is asked for and held until the next game starts. Nothing is drawn
+   * outside a game, so a caller asking about a single snap gets the
+   * projected cut on its own.
+   */
+  const gameTilt = new Map<string, number>();
+  let gameDraw: (() => number) | undefined;
+
+  const tiltFor = (player: string, call: Call) => {
+    if (!gameDraw) {
+      return 1;
+    }
+
+    const key = `${player}|${call}`;
+    const already = gameTilt.get(key);
+
+    if (already !== undefined) {
+      return already;
+    }
+
+    const width = call === "run" ? GAME_SHARE_RUN : GAME_SHARE_PASS;
+    // centred so a man's cut over many games still averages what the
+    // projection said, since the exponential would otherwise lift it
+    const drawn = Math.exp(width * standardNormal(gameDraw) - (width * width) / 2);
+    gameTilt.set(key, drawn);
+
+    return drawn;
+  };
 
   /**
    * What this side's habit does to a drawn gain, near one. The pools
@@ -2548,6 +2599,19 @@ export function fitPlayFactors(
       return Math.max(0.05, Math.min(0.95,
         leagueRate * ((1 - itsOwn) + itsOwn * leaning)));
     },
+    startsGame: (uniform) => {
+      gameTilt.clear();
+
+      if (GAME_SHARE_RUN <= 0 && GAME_SHARE_PASS <= 0) {
+        gameDraw = undefined;
+        return;
+      }
+
+      // seeded off the game's own stream, so the same fixture played
+      // twice moves the same men, and drawn only when a width is set
+      // so that turning both off leaves every other draw where it was
+      gameDraw = seededRng(Math.floor(uniform() * 2 ** 31));
+    },
     goesTo: (state, call, among, sides) => {
       /**
        * Near the line a cell is asked for less, because asking for
@@ -2633,6 +2697,7 @@ export function fitPlayFactors(
           ? said
           : said ** (1 - FROM_COUNTS) * touches ** FROM_COUNTS) *
           facing *
+          tiltFor(player, call) *
           (settings.readsTheScript === false
             ? 1
             : scriptLeaning(player, call, state));

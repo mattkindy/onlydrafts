@@ -49,6 +49,12 @@ export interface PlayFactors {
     sides?: { offence?: string; defence?: string; shell?: string },
   ) => Map<string, number>;
   /**
+   * Told that a new game is starting. A man's cut of the work moves
+   * game to game for reasons a snap cannot see, so it is drawn here
+   * and then stays put across that game's snaps.
+   */
+  startsGame?: (uniform: () => number) => void;
+  /**
    * What the defence puts on the field against this look, drawn. A
    * drive asks once a snap and hands it to the target and the gain,
    * so both answer to the same defence.

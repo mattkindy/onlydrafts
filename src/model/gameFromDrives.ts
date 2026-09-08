@@ -226,6 +226,12 @@ export function playGame(
 ): PlayedGame {
   home = { ...home, lift: (home.lift ?? 1) * AT_HOME };
   away = { ...away, lift: (away.lift ?? 1) / AT_HOME };
+  home.factors.startsGame?.(uniform);
+
+  if (away.factors !== home.factors) {
+    away.factors.startsGame?.(uniform);
+  }
+
   const points: Record<string, number> = { [home.team]: 0, [away.team]: 0 };
   const drives: Record<string, number> = { [home.team]: 0, [away.team]: 0 };
   const possessions: Possession[] = [];
