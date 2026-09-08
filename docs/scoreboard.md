@@ -27,11 +27,13 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7484 | .7147 | .7039 | .3805 on 2025 alone |
+| now | .7478 | .7147 | .7028 | .382 on 2025 alone |
 
-The .339 is a two seed mean at forty draws and is level with the
-yardstick of a man's average so far, .340. The walk has not beaten
-that yardstick on weeks; the readings that said it had were noise.
+The weekly figure is a two seed mean at forty draws on 2025 by itself,
+where the yardstick of a man's average so far is .380. The walk passed
+it for the first time in September 2026, on the change that draws a
+man's cut of the touches once a game. Before that it had never beaten
+the yardstick, and the earlier readings that said it had were noise.
 An early .343 did not reproduce: walkWeeklyEval seeds its rng off the
 season, the week and the two sides, so it repeats to four figures, and
 the build shipped at the time read .327 twice, because the kept files
@@ -66,6 +68,25 @@ change, and swept out to the whole board below.
 | the live board reads last season's snap share instead of zero | .7480 | .7128 | .7049 | not run |
 | the drawn pool stops reaching past the goal line | .7480 | .7128 | .7049 | .368 on 2025 alone |
 | a man's cut of the touches drawn once a game, not once a snap | .7484 | .7147 | .7039 | .3805 on 2025 alone |
+| a short gain near the goal carried up to the line | .7478 | .7147 | .7028 | .382 on 2025 alone |
+| and a whole side given a day of its own, 0.044 | .7477 | .7128 | .7039 | .383 |
+
+The goal line row ships and the side day does not. `settleAtGoal` only
+ever cut a drawn play down, so a gain that crossed the line could be
+taken away and a short one was never carried up, and every position came
+out low inside the twenty. From the eleven to the twenty a back drew
+9.7% against 11.2% really, a receiver 12.2% against 15.4%, a tight end
+11.8% against 18.8%; carrying short gains up puts those at 11.4%, 15.7%
+and 15.8%. Runs never needed it and stay out.
+
+Giving a whole side a day of its own is the same idea as the cut row one
+level up: a side's yards a play moves 0.252 game to game really and
+0.090 in the walk, because each man's tilt is drawn on its own and an
+offence never has a good afternoon together. The width was fitted from
+what the per-man tilts leave over. It still costs the first 24, .7147 to
+.7128, and leaves the week where it was. The swing it adds is shared by
+every man on the side, so unlike a man's own tilt it never averages out
+of an ordering. SIDE_DAY keeps it, at 0.
 
 The cut row is the first change in a long while to move the board and the
 weekly bench together, and the first 24 is the best it has been. A back's
