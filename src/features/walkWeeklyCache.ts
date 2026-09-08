@@ -22,9 +22,15 @@ export interface WalkWeekRow {
   points: number;
   touches: number;
   tds: number;
+  /**
+   * What he scored in each game the walk dealt him, space separated. A
+   * band or a boom chance wants the games themselves, and a threshold
+   * nobody has picked yet cannot be read back out of a summary.
+   */
+  dealt: number[];
 }
 
-const HEADER = "season,week,playerId,position,points,touches,tds";
+const HEADER = "season,week,playerId,position,points,touches,tds,dealt";
 
 export function walkKey(
   season: number,
@@ -38,7 +44,8 @@ export function walkRowsToCsv(rows: WalkWeekRow[]): string {
   const lines = rows.map(
     (r) =>
       `${r.season},${r.week},${r.playerId},${r.position},${r.points.toFixed(4)},` +
-      `${r.touches.toFixed(4)},${r.tds.toFixed(4)}`,
+      `${r.touches.toFixed(4)},${r.tds.toFixed(4)},` +
+      r.dealt.map((d) => d.toFixed(2)).join(" "),
   );
 
   return [HEADER, ...lines].join("\n") + "\n";
@@ -53,6 +60,7 @@ export function parseWalkRows(text: string): Map<string, WalkWeekRow> {
     points: Number(row["points"]),
     touches: Number(row["touches"]),
     tds: Number(row["tds"]),
+    dealt: (row["dealt"] ?? "").split(" ").filter(Boolean).map(Number),
   }));
 
   return new Map(

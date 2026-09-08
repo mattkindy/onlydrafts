@@ -15,6 +15,7 @@ const rows: WalkWeekRow[] = [
     points: 13.4567,
     touches: 18.25,
     tds: 0.6,
+    dealt: [4.2, 11.7, 24.45],
   },
 ];
 

@@ -12,6 +12,7 @@ import { playGame, linesFrom, type Side } from "../model/gameFromDrives.js";
 import { sizeOf } from "./gameSize.js";
 import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
 import { seededRng } from "../sim/rng.js";
+import { spreadOf, type RunSpread } from "./runSpread.js";
 import type { PlayedWorld } from "./playedWorld.js";
 
 /**
@@ -28,6 +29,14 @@ export interface WalkedWeek {
   tds: Map<string, number>;
   /** how many fixtures had both sides in the world */
   played: number;
+  /**
+   * The same games described by their spread rather than their mean. A
+   * run the man was not on the field for counts as nothing, so the mean
+   * of his runs is the number in `points`.
+   */
+  spread: Map<string, RunSpread>;
+  /** what a man scored in each run, in run order */
+  perRun: Map<string, number[]>;
 }
 
 export function walkWeek(
@@ -41,6 +50,7 @@ export function walkWeek(
   const points = new Map<string, number>();
   const touches = new Map<string, number>();
   const tds = new Map<string, number>();
+  const perRun = new Map<string, number[]>();
   let played = 0;
 
   for (const r of fixtures) {
@@ -87,11 +97,11 @@ export function walkWeek(
       }, rng);
 
       for (const [id, line] of linesFrom(game, [home, away])) {
-        points.set(
-          id,
-          (points.get(id) ?? 0) +
-            (bendFor.get(id) ?? 1) * fantasyPoints(line, rules) / runs,
-        );
+        const scored = (bendFor.get(id) ?? 1) * fantasyPoints(line, rules);
+        const his = perRun.get(id) ?? new Array<number>(runs).fill(0);
+        his[run] = (his[run] ?? 0) + scored;
+        perRun.set(id, his);
+        points.set(id, (points.get(id) ?? 0) + scored / runs);
         touches.set(
           id,
           (touches.get(id) ?? 0) +
@@ -105,7 +115,13 @@ export function walkWeek(
     }
   }
 
-  return { points, touches, tds, played };
+  const spread = new Map<string, RunSpread>();
+
+  for (const [id, his] of perRun) {
+    spread.set(id, spreadOf(his));
+  }
+
+  return { points, touches, tds, played, spread, perRun };
 }
 
 /**
