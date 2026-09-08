@@ -360,7 +360,7 @@ export async function buildWorld(
     ...FACTOR_DEFAULTS,
     readsTheScript: !process.env["NO_SCRIPT"],
   }, {
-    split, lately, pairing: pairing.bend, counted,
+    split, lately, pairing: pairing.bend, counted, positions,
     /**
      * Where a side stands before the snap. It says nothing about the
      * call that the pools do not already know, and a great deal about

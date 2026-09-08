@@ -434,3 +434,83 @@ describe("the cut a game hands a man", () => {
     }
   });
 });
+
+/**
+ * A league where tight ends take 40% of the throws from the three and
+ * 20% of them at midfield, and receivers the rest. Two fresh men are
+ * then asked about, neither of whom has ever caught anything, so the
+ * only thing that can separate them is what their positions do here.
+ */
+const throwAt = (yardline: number, player: string): PlayRow => ({
+  offence: "NE", defence: "NYJ", down: 1, toGo: yardline <= 10 ? 3 : 10,
+  yardline, margin: 0, secondsLeft: 1800, call: "pass", yards: 6,
+  touchdown: 0, player,
+});
+
+const freshMenAt = async (yardline: number, leansToPosition: boolean) => {
+  vi.resetModules();
+
+  if (leansToPosition) {
+    delete process.env["NO_POSITION_LEAN"];
+  } else {
+    process.env["NO_POSITION_LEAN"] = "1";
+  }
+
+  const loaded = await import("./fitPlayFactors.js");
+  delete process.env["NO_POSITION_LEAN"];
+
+  const rows: PlayRow[] = [];
+
+  for (let i = 0; i < 100; i++) {
+    rows.push(throwAt(3, i % 5 < 2 ? "LeagueTE" : "LeagueWR"));
+    rows.push(throwAt(60, i % 5 < 1 ? "LeagueTE" : "LeagueWR"));
+  }
+
+  const factors = loaded.fitPlayFactors(rows, loaded.FACTOR_DEFAULTS, {
+    // August prices the two fresh men the same
+    split: new Map([
+      ["FreshTE", { carries: 0, targets: 0.2 }],
+      ["FreshWR", { carries: 0, targets: 0.2 }],
+    ]),
+    positions: new Map([
+      ["LeagueTE", "TE"], ["LeagueWR", "WR"],
+      ["FreshTE", "TE"], ["FreshWR", "WR"],
+    ]),
+  });
+  const state: PlayState = {
+    down: 1, toGo: yardline <= 10 ? 3 : 10, yardline,
+    margin: 0, secondsLeft: 1800,
+  };
+
+  return factors.goesTo(state, "pass", ["FreshTE", "FreshWR"]);
+};
+
+describe("a man with no plays of his own leans the way his position does", () => {
+  it("hands the fresh tight end more of the throws from the three",
+    async () => {
+      const shares = await freshMenAt(3, true);
+
+      expect(shares.get("FreshTE")!).toBeGreaterThan(0.55);
+      expect(shares.get("FreshWR")!).toBeLessThan(0.45);
+    });
+
+  it("hands him fewer of them at midfield, where his position is thinner",
+    async () => {
+      const atGoal = await freshMenAt(3, true);
+      const atMidfield = await freshMenAt(60, true);
+
+      expect(atMidfield.get("FreshTE")!)
+        .toBeLessThan(atGoal.get("FreshTE")!);
+      expect(atMidfield.get("FreshTE")!).toBeLessThan(0.5);
+    });
+
+  it("splits them evenly at both spots when the leaning is turned off",
+    async () => {
+      for (const yardline of [3, 60]) {
+        const shares = await freshMenAt(yardline, false);
+
+        expect(shares.get("FreshTE")).toBeCloseTo(0.5, 6);
+        expect(shares.get("FreshWR")).toBeCloseTo(0.5, 6);
+      }
+    });
+});

@@ -439,6 +439,37 @@ const RECENT_LEVEL = Number(process.env["RECENT_LEVEL"] ?? 0);
 const LEAN_K = Number(process.env["LEAN_K"] ?? 60);
 
 /**
+ * What a man's leaning is pulled toward while his own count is thin:
+ * his position's leaning at the same spot, rather than no view at all.
+ *
+ * Where a tight end gets the ball is a fact about tight ends before it
+ * is a fact about him. They took 27 to 31% of the throws inside the
+ * five and 20 to 23% past the forty in each of 2021 to 2025, and backs
+ * went the other way. Pulling toward one left every man on his
+ * season-wide share exactly where the cells are thinnest.
+ *
+ * His own leaning still says something his position has not, so the
+ * count still decides how much of his own is used. Only the resting
+ * place changes. Set NO_POSITION_LEAN to pull toward one again.
+ */
+const POSITION_LEAN = !process.env["NO_POSITION_LEAN"];
+/**
+ * And how many plays of its own a position needs at a spot before that
+ * leaning is believed, the same shrinking LEAN_K does to a man. Far
+ * smaller, because a position has ten to thirty times the plays a man
+ * has in the same cell: inside the ten a tight end's position has
+ * about eleven of the forty five the cell asks for, and the sampling
+ * error on that is about the size of the spread the yardline really
+ * puts on it, which is what a shrink of a half means.
+ *
+ * Ten and twenty read the same at the play layer, both a step above
+ * pulling toward one. Ten leaves the tight end's share inside the five
+ * at 23.1% where twenty leaves it at 22.3% and the throws were 26.8%.
+ * Nothing at all reads 25.0% there and gives back the goal line run.
+ */
+const POSITION_K = Number(process.env["POSITION_K"] ?? 10);
+
+/**
  * How far a man's cut of the work moves from one game to the next,
  * beyond the coin flips inside a single game, as a fraction of his
  * own cut. A run and a throw move differently, so there are two.
@@ -812,6 +843,11 @@ export interface FactorExtras {
   playLevel?: PlayLevel;
   /** how far downfield each man is thrown, which picks his pool */
   depth?: TargetDepth;
+  /**
+   * What each man plays, so a man too thin at a spot can lean the way
+   * his position leans there instead of the way he leans everywhere.
+   */
+  positions?: Map<string, string>;
   /** the men on that defence this week, and the quarterback */
   people?: {
     defenceNow?: (defence: string, season: number, week: number, call: Call) => number;
@@ -1155,7 +1191,7 @@ export function fitPlayFactors(
 ): PlayFactors {
   const {
     projected, split, lately, pairing, playLevel, depth, people, plays,
-    alike, formation, coverage, look, afterCatch,
+    alike, formation, coverage, look, afterCatch, positions,
   } = extras;
   const {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
@@ -2052,6 +2088,86 @@ export function fitPlayFactors(
   };
 
   /**
+   * What each position took of a call anywhere on the field, once.
+   *
+   * The call and not everything, because a back takes 45% of the
+   * touches and 20% of the throws, and reading his position's spot
+   * against the first of those makes every pass cell look like a place
+   * backs are kept out of. That is the run and the throw being told
+   * apart, which the split projection already prices.
+   */
+  const positionOnCall = new Map<string, number>();
+
+  if (POSITION_LEAN && positions) {
+    for (const [key, took] of onCall) {
+      const bar = key.lastIndexOf("|");
+      const position = positions.get(key.slice(0, bar));
+
+      if (position) {
+        const at = `${position}|${key.slice(bar + 1)}`;
+        positionOnCall.set(at, (positionOnCall.get(at) ?? 0) + took);
+      }
+    }
+  }
+
+  /** and the same at one cell, added up once per cell */
+  const cellByPosition = new WeakMap<Counted, Map<string, number>>();
+  const positionTouchesOf = (cell: Counted) => {
+    const already = cellByPosition.get(cell);
+
+    if (already) {
+      return already;
+    }
+
+    const sums = new Map<string, number>();
+
+    for (const [player, own] of cell.byPlayer) {
+      const position = positions?.get(player);
+
+      if (position) {
+        sums.set(position, (sums.get(position) ?? 0) + own.touches);
+      }
+    }
+
+    cellByPosition.set(cell, sums);
+
+    return sums;
+  };
+
+  /**
+   * How much more of the work this position takes here than it takes
+   * anywhere, believed in proportion to how much of the spot is its
+   * own. This is where a man with too few plays of his own is left.
+   */
+  const positionLeaning = (
+    player: string, call: Call, itsCells: Counted[], here: number,
+  ) => {
+    const position = positions?.get(player);
+
+    if (!POSITION_LEAN || !position || here <= 0) {
+      return 1;
+    }
+
+    const overallShare = (positionOnCall.get(`${position}|${call}`) ?? 0) /
+      Math.max(1, callPlays.get(call) ?? 0);
+    let takenHere = 0;
+
+    for (const cell of itsCells) {
+      takenHere += positionTouchesOf(cell).get(position) ?? 0;
+    }
+
+    if (overallShare <= 0 || takenHere <= 0) {
+      return 1;
+    }
+
+    const believed = POSITION_K > 0
+      ? takenHere / (takenHere + POSITION_K)
+      : 1;
+
+    return ((takenHere / here) / overallShare) ** believed;
+  };
+
+  /**
    * What the level averages over the touches it is put on.
    *
    * A man's level is his yards against the league's, and the men who
@@ -2648,15 +2764,20 @@ export function fitPlayFactors(
           continue;
         }
 
-        // How much more of the work he takes here than he takes in
-        // general. A man used on third down leans that way whatever his
+        // How much more of this call he takes here than he takes of it
+        // anywhere. A man used on third down leans that way whatever his
         // overall share turns out to be next season.
-        const hisOverall = (overall.get(player) ?? 0) / Math.max(1, everyTouch);
+        const hisOverall = POSITION_LEAN
+          ? (onCall.get(`${player}|${call}`) ?? 0) /
+            Math.max(1, callPlays.get(call) ?? 0)
+          : (overall.get(player) ?? 0) / Math.max(1, everyTouch);
         const hisHere = here > 0 ? touches / here : 0;
         const believed = LEAN_K > 0 ? touches / (touches + LEAN_K) : 1;
+        // and where he is left while his own count is too thin to say
+        const towards = positionLeaning(player, call, itsCells, here);
         const leaning = hisOverall > 0 && hisHere > 0
-          ? (hisHere / hisOverall) ** believed
-          : 1;
+          ? towards * ((hisHere / hisOverall) / towards) ** believed
+          : towards;
         const half = split?.get(player);
         const projectedShare = half
           ? (call === "run" ? half.carries : half.targets)
