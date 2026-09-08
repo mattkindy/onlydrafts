@@ -27,7 +27,7 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7476 | .7128 | .7024 | .388 on 2025 alone |
+| now | .7477 | .7147 | .7030 | .3915 on 2025 alone |
 
 The weekly figure is a two seed mean at forty draws on 2025 by itself,
 where the yardstick of a man's average so far is .380. The walk passed
@@ -71,6 +71,40 @@ change, and swept out to the whole board below.
 | a short gain near the goal carried up to the line | .7478 | .7147 | .7028 | .382 on 2025 alone |
 | and a whole side given a day of its own, 0.044 | .7477 | .7128 | .7039 | .383 |
 | a thin man leaning the way his position leans there | .7476 | .7128 | .7024 | .388 on 2025 alone |
+| a thin spot's window grown outward instead of in shells | .7474 | .7128 | .7013 | .379 on 2025 alone |
+| and a pooled play counted by how near it was drawn from | .7477 | .7147 | .7030 | .3915 on 2025 alone |
+
+These two rows belong together, and the pair is the best the walk has
+read. `ring` widens a pooled lookup when the exact cell is thin, and its
+header said "the states near this one, nearest first". What it did was
+hand back the cells it had already given on every pass, so the state's
+own cell was counted six times, and past eight yards it gave hollow
+shells, so a pool asked from the three could see the 63 and never the 12
+or the 20. In a toy league that pushed the work to a back who carried
+from the 55 over one who carried from the 15, .604 against .396. It
+reaches six callers, so it touches nearly every pooled draw the walk
+makes.
+
+Fixing it on its own cost the week, .388 to .379, which is more than
+twice that bench's noise. Counting one cell six times had been a
+weighting by nearness, taken by accident, and removing it let a play
+from the 55 count as much as one from the 15. So the weighting is now
+deliberate: a play's weight falls off as 1 / (1 + away / 4). A variogram
+over the curated plays says two spots differ more the further apart they
+are, smoothly, reaching half the far-apart difference around 22 to 32
+yards, and one falloff served all six callers. That took the week to
+.3915 and the first 24 back to .7147. Yards a play went 5.68 out to 5.64
+on 2024 and 5.62 on 2025.
+
+The walk now beats a man's own average at every position except running
+back, where it is level: QB .174 against .130, WR .336 against .232, TE
+.3855 against .243, RB .420 against .421.
+
+WIDE_LEAN, resting a thin cell on a man's own leaning at a wider pool
+instead of his position's, is still off and is now worth another look,
+since it gained on both seasons at the play layer once the window was
+fixed.
+
 
 The board bench has no noise in it. Replaying the same code twice writes
 byte identical kept files and the sweep repeats to four figures, so any
