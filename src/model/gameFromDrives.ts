@@ -216,17 +216,12 @@ const AT_HOME = Number(process.env["AT_HOME"] ?? 1.024);
 
 /**
  * How far a whole side's afternoon moves, as a fraction of its yards a
- * play.
- *
- * Each man already gets a tilt of his own once a game, but every man's
- * is drawn on its own, so an offence never has a good afternoon
- * together the way weather, a matchup or a script gives one. A side's
- * yards a play moves 0.252 game to game really and 0.090 in the walk,
- * on 5.40 yards a play, so what is left for the side itself is
- * sqrt(0.252^2 - 0.090^2) / 5.40. Setting it to 0 restores every draw
- * exactly, since nothing is then drawn and no gain is touched.
+ * play. Off, because the swing it adds is shared by every man on the
+ * side and so never averages out of an ordering: at its fitted 0.044 it
+ * costs the board's first 24 picks .7147 against .7128. The scoreboard
+ * has the rest. Zero restores every draw exactly.
  */
-const SIDE_DAY = Number(process.env["SIDE_DAY"] ?? 0.044);
+const SIDE_DAY = Number(process.env["SIDE_DAY"] ?? 0);
 
 /**
  * What this game is doing to one side, near one. Centred so a side's
