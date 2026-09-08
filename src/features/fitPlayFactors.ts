@@ -506,13 +506,20 @@ const GOAL_LEAST_PASS = Number(process.env["GOAL_LEAST_PASS"] ?? GOAL_LEAST);
 const GOAL_GAIN_LEAST = Number(process.env["GOAL_GAIN_LEAST"] ?? 300);
 
 /**
- * Switched on, a short gain near the goal is carried up to the line;
- * a crossing draw is cut back either way. It is off because the drives
- * the walk gets inside the twenty already score more often than sides
- * do, so anything that adds touchdowns pushes the wrong way, even
- * though the goal line layer on its own draws too few of them.
+ * A short gain near the goal is carried up to the line often enough
+ * that the spot scores as often as sides do; a crossing draw is cut
+ * back either way.
+ *
+ * The settling can only cut, so every spot inside the twenty came out
+ * short, and every position with it. Over 2025 throws from the 11 to
+ * the 20, a tight end scored on 11.8% of the walk's draws where he
+ * really scored 18.8% of the time, a receiver 12.2% against 15.4% and
+ * a back 9.7% against 11.2%. Carrying the short gains up puts those at
+ * 15.8%, 15.7% and 11.4%. What it does to a whole drive is what used
+ * to keep this off, and no bench here measures that. Set NO_GOAL_LIFT
+ * to leave a short gain where it lands.
  */
-const GOAL_LIFT = process.env["GOAL_LIFT"];
+const GOAL_LIFT = !process.env["NO_GOAL_LIFT"];
 
 /**
  * Which calls the carry applies to when it is on.
