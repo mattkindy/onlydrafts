@@ -11,13 +11,21 @@ const settleWith = async (lift: boolean) => {
   vi.resetModules();
 
   if (lift) {
-    process.env["GOAL_LIFT"] = "1";
+    delete process.env["NO_GOAL_LIFT"];
   } else {
-    delete process.env["GOAL_LIFT"];
+    process.env["NO_GOAL_LIFT"] = "1";
   }
 
   const loaded = await import("./fitPlayFactors.js");
-  delete process.env["GOAL_LIFT"];
+  delete process.env["NO_GOAL_LIFT"];
+
+  return loaded.settleAtGoal;
+};
+
+/** whatever the environment says, which is the carry on */
+const settleAsShipped = async () => {
+  vi.resetModules();
+  const loaded = await import("./fitPlayFactors.js");
 
   return loaded.settleAtGoal;
 };
@@ -83,6 +91,12 @@ describe("settleAtGoal", () => {
     const settle = await settleWith(true);
 
     expect(settle(atTheFive, "pass", 0, always(0.01), crossesTooRarely)).toBe(0);
+  });
+
+  it("carries a short throw up with nothing set in the environment", async () => {
+    const settle = await settleAsShipped();
+
+    expect(settle(atTheFive, "pass", 2, always(0.49), crossesTooRarely)).toBe(5);
   });
 });
 
