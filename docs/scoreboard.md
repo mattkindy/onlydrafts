@@ -27,7 +27,7 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7480 | .7128 | .7049 | .339 |
+| now | .7484 | .7147 | .7039 | .3805 on 2025 alone |
 
 The .339 is a two seed mean at forty draws and is level with the
 yardstick of a man's average so far, .340. The walk has not beaten
@@ -65,6 +65,19 @@ change, and swept out to the whole board below.
 | a sampled play that reached the line keeps its score | .7479 | .7128 | .7048 | flat, .368 against .3705 on 2025 alone |
 | the live board reads last season's snap share instead of zero | .7480 | .7128 | .7049 | not run |
 | the drawn pool stops reaching past the goal line | .7480 | .7128 | .7049 | .368 on 2025 alone |
+| a man's cut of the touches drawn once a game, not once a snap | .7484 | .7147 | .7039 | .3805 on 2025 alone |
+
+The cut row is the first change in a long while to move the board and the
+weekly bench together, and the first 24 is the best it has been. A back's
+touches used to move 3.33 from game to game against 5.09 really, because
+his cut of his side's touches was drawn fresh on every snap and averaged
+itself out. Real football moves as a block: a plan, a script, a blowout,
+a knock at halftime shift his whole game at once. Drawing his cut once a
+game and holding it takes him to 4.85. Tight ends gain the most on the
+week, .3425 to .388, since a handful of touches decides their day. The
+weekly figures are two seed means and carry about .004 of noise, so the
+.0125 overall is worth roughly three times the noise and the size of it
+is not yet pinned.
 
 The drawn pool row is the one measured on drives rather than on seasons.
 A play from the eleven can gain at most eleven yards, so the window that
