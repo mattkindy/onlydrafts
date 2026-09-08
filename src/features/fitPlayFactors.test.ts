@@ -571,9 +571,12 @@ describe("a thin cell rests on a man's own leaning at a wider one", () => {
 
   it("tells them apart with the step on, on where each one carried it",
     async () => {
-      const shares = await redZoneBackAt("200");
+      // a pool of a hundred, which the plays from the three and the
+      // fifteen fill between them before it reaches midfield
+      const shares = await redZoneBackAt("50");
 
-      expect(Math.abs(shares.get("RedZone")! - shares.get("Midfield")!))
+      // the man who carried it near the three, not the one at midfield
+      expect(shares.get("RedZone")! - shares.get("Midfield")!)
         .toBeGreaterThan(0.1);
     });
 });
