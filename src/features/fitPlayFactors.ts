@@ -9,7 +9,7 @@
  */
 
 import {
-  emptyCell, keysAt, stateKey, wideningPacked,
+  emptyCell, keysAt, nearnessWeight, stateKey, wideningPacked,
   type Call, type PlayFactors, type PlayState, type StateCell,
 } from "../model/playFactors.js";
 import type { RunParts } from "./runParts.js";
@@ -188,6 +188,35 @@ const emptyCounted = (): Counted =>
   });
 
 /**
+ * Gains to draw one from, each with the yardline it was made at, so
+ * the draw can count the near ones more than the far ones.
+ */
+interface Drawable { yards: number[]; from: number[] }
+
+/**
+ * The same, split by what it was worth and carrying each play's
+ * weight, worked out once while the pool is being split.
+ */
+interface Weighted { yards: number[]; weights: number[]; total: number }
+
+const emptyWeighted = (): Weighted => ({ yards: [], weights: [], total: 0 });
+
+/** one gain out of a split pool, the near ones coming up more often */
+const drawWeighted = (pool: Weighted, uniform: () => number): number => {
+  let left = uniform() * pool.total;
+
+  for (let i = 0; i < pool.yards.length; i++) {
+    left -= pool.weights[i]!;
+
+    if (left <= 0) {
+      return pool.yards[i]!;
+    }
+  }
+
+  return pool.yards[pool.yards.length - 1]!;
+};
+
+/**
  * Which depth this throw goes to, from what happens here tilted by how
  * this man is used.
  *
@@ -235,22 +264,23 @@ const bandHere = (
  * pool of all throws is worth six. A band next door is much closer to
  * the truth than no band at all.
  */
-const gainsAtDepth = (cell: Counted, band: number, room = 0): number[] => {
-  const found: number[] = [];
+const gainsAtDepth = (cell: Counted, band: number, room = 0): Drawable => {
+  const found: Drawable = { yards: [], from: [] };
   const take = (at: number) => {
     const gains = cell.byDepth.get(at) ?? [];
     const from = cell.byDepthFrom.get(at) ?? [];
 
     for (let i = 0; i < gains.length; i++) {
       if (room <= 0 || (from[i] ?? 0) >= room) {
-        found.push(gains[i]!);
+        found.yards.push(gains[i]!);
+        found.from.push(from[i] ?? 0);
       }
     }
   };
 
   take(band);
 
-  for (let step = 1; step < 6 && found.length < 40; step++) {
+  for (let step = 1; step < 6 && found.yards.length < 40; step++) {
     for (const beside of [band - step, band + step]) {
       take(beside);
     }
@@ -262,7 +292,7 @@ const gainsAtDepth = (cell: Counted, band: number, room = 0): number[] => {
    * Better a throw that could not have run as far as this one might
    * than no throw of this depth at all.
    */
-  return room > 0 && found.length < 20 ? gainsAtDepth(cell, band) : found;
+  return room > 0 && found.yards.length < 20 ? gainsAtDepth(cell, band) : found;
 };
 
 /**
@@ -271,12 +301,13 @@ const gainsAtDepth = (cell: Counted, band: number, room = 0): number[] => {
  * Kept in the order they were counted, so the yards and where they
  * came from line up.
  */
-const roomFor = (cell: Counted, yardline: number): number[] => {
-  const found: number[] = [];
+const roomFor = (cell: Counted, yardline: number): Drawable => {
+  const found: Drawable = { yards: [], from: [] };
 
   for (let i = 0; i < cell.yards.length; i++) {
     if ((cell.from[i] ?? 0) >= yardline) {
-      found.push(cell.yards[i]!);
+      found.yards.push(cell.yards[i]!);
+      found.from.push(cell.from[i]!);
     }
   }
 
@@ -2916,9 +2947,9 @@ export function fitPlayFactors(
     gains: (state, call, player, uniform, sides) => {
       const cell = at(state, goalPoolLeast(state), call);
       const own = cell.byPlayer.get(player);
-      const pool = cell.yards;
+      const pool: Drawable = { yards: cell.yards, from: cell.from };
 
-      if (!pool.length) {
+      if (!pool.yards.length) {
         return 4;
       }
 
@@ -2983,12 +3014,12 @@ export function fitPlayFactors(
         state.yardline > settings.roomUpTo || process.env["NO_ROOM"]
         ? undefined
         : roomFor(cell, state.yardline);
-      const drawFrom = atDepth && atDepth.length >= 20 ? atDepth
-        : hadRoom && hadRoom.length >= settings.leastWithRoom ? hadRoom
+      const drawFrom = atDepth && atDepth.yards.length >= 20 ? atDepth
+        : hadRoom && hadRoom.yards.length >= settings.leastWithRoom ? hadRoom
         : pool;
-      const longOnes: number[] = [];
-      const shortOnes: number[] = [];
-      const wentNowhere: number[] = [];
+      const longOnes = emptyWeighted();
+      const shortOnes = emptyWeighted();
+      const wentNowhere = emptyWeighted();
       /**
        * What this pool makes on an ordinary touch, counted while it is
        * being split so it costs nothing. On a throw the pool is the one
@@ -2999,19 +3030,33 @@ export function fitPlayFactors(
        */
       let poolPlain = 0;
       let poolPlainOf = 0;
+      let poolPlainWeight = 0;
+      /**
+       * Every share below is taken over the same weights the draw
+       * uses. Reading how often the pool gained nothing off the raw
+       * counts while drawing off the weighted ones would answer two
+       * different questions about one pool.
+       */
+      let poolWeight = 0;
 
-      for (const gained of drawFrom) {
+      for (let i = 0; i < drawFrom.yards.length; i++) {
+        const gained = drawFrom.yards[i]!;
+        const near = nearnessWeight(
+          Math.abs((drawFrom.from[i] ?? state.yardline) - state.yardline));
+        poolWeight += near;
+
         if (gained < 20) {
-          poolPlain += gained;
+          poolPlain += gained * near;
+          poolPlainWeight += near;
           poolPlainOf++;
         }
 
-        if (gained <= 0) {
-          wentNowhere.push(gained);
-          continue;
-        }
-
-        (gained >= 20 ? longOnes : shortOnes).push(gained);
+        const into = gained <= 0 ? wentNowhere
+          : gained >= 20 ? longOnes
+          : shortOnes;
+        into.yards.push(gained);
+        into.weights.push(near);
+        into.total += near;
       }
 
       /**
@@ -3023,18 +3068,18 @@ export function fitPlayFactors(
        * nothing, so which end of the pool to draw from is asked first.
        */
       const wentNowhereHere =
-        (wentNowhere.length / Math.max(1, drawFrom.length)) * tilt.dry;
+        (wentNowhere.total / Math.max(1e-9, poolWeight)) * tilt.dry;
       const stuffed = playLevel && sides
         ? Math.max(0, Math.min(0.95,
             wentNowhereHere * playLevel.stuffedBy(state, call, player, sides)))
         : Math.min(0.95, wentNowhereHere);
 
-      if (wentNowhere.length && uniform() < stuffed) {
-        return wentNowhere[Math.floor(uniform() * wentNowhere.length)]!;
+      if (wentNowhere.yards.length && uniform() < stuffed) {
+        return drawWeighted(wentNowhere, uniform);
       }
 
-      const gainful = longOnes.length + shortOnes.length;
-      const leagueLong = longOnes.length / Math.max(1, gainful);
+      const gainful = longOnes.total + shortOnes.total;
+      const leagueLong = longOnes.total / Math.max(1e-9, gainful);
       /**
        * Him against the league, both measured over the same plays.
        *
@@ -3055,9 +3100,11 @@ export function fitPlayFactors(
             leagueLong * (found.his.long / found.his.touches) /
               (found.league.long / found.league.touches)))
         : leagueLong;
-      const from = uniform() < hisLong && longOnes.length ? longOnes
-        : shortOnes.length ? shortOnes : longOnes.length ? longOnes : pool;
-      const drawn = from[Math.floor(uniform() * from.length)]!;
+      const end = uniform() < hisLong && longOnes.yards.length ? longOnes
+        : shortOnes.yards.length ? shortOnes
+        : longOnes.yards.length ? longOnes
+        : wentNowhere;
+      const drawn = drawWeighted(end, uniform);
 
       if (!found?.league || drawn <= 0) {
         return drawn > 0 ? whole(drawn * tilt.gain) : drawn;
@@ -3087,7 +3134,7 @@ export function fitPlayFactors(
        * his own depth, and against the league on this call otherwise.
        */
       const atHisDepth = ORDINARY_LEVEL && atDepth && poolPlainOf >= 20
-        ? poolPlain / poolPlainOf
+        ? poolPlain / poolPlainWeight
         : 0;
       const league = !ORDINARY_LEVEL
         ? found.league.yards / Math.max(1, found.league.touches)

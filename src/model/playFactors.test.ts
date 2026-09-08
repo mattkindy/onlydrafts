@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { widening } from "./playFactors.js";
+import { NEARNESS, nearnessWeight, widening } from "./playFactors.js";
 
 /** the spots one widening pass gives up, with the score held exact */
 const spotsFrom = (yardline: number, toGo = 10) =>
@@ -78,5 +78,28 @@ describe("the window a thin spot widens into", () => {
     const near = spots.map(away(50)).lastIndexOf(10);
 
     expect(near).toBeLessThan(far);
+  });
+});
+
+describe("how much a play from further up the field counts", () => {
+  it("counts the state's own plays fully", () => {
+    expect(nearnessWeight(0)).toBe(1);
+  });
+
+  it("falls off as the play gets further away", () => {
+    for (let away = 1; away <= 60; away++) {
+      expect(nearnessWeight(away)).toBeLessThan(nearnessWeight(away - 1));
+    }
+  });
+
+  it("still counts a play from twenty yards away for something", () => {
+    // the pool widens because the state's own cell is thin, so a
+    // weighting that shuts the widened plays out puts the thin cell back
+    expect(nearnessWeight(20)).toBeGreaterThan(0.1);
+    expect(nearnessWeight(8)).toBeGreaterThan(0.3);
+  });
+
+  it("halves at the distance it is set to", () => {
+    expect(nearnessWeight(NEARNESS)).toBeCloseTo(0.5, 10);
   });
 });
