@@ -158,38 +158,70 @@ export interface Spot {
  */
 export const holdsDistance = (toGo: number) => toGo <= 3;
 
+/** how far along the field each pass reaches, in order */
+const REACHES = [0, 1, 2, 3, 5, 8, 12, 20, 35, 60, 99];
+
+/**
+ * The field opens up far faster than the distance does.
+ *
+ * How often a side runs turns on the distance and hardly on where it
+ * is: 72% on third and one and 19% on third and eight, against next to
+ * nothing between the seventy five and the forty. Letting the two out
+ * together reached third and four to fill a thin third and one, and
+ * said 46% where sides run 72%.
+ */
+const distanceLetGo = (toGo: number, reach: number) =>
+  holdsDistance(toGo) || reach < 12 ? 0
+    : reach < 35 ? 1 : 2;
+
+/**
+ * A window that grows outward from the spot, a pass at a time, giving
+ * up every state it has reached before it reaches any further one.
+ *
+ * A caller stops as soon as it has the plays it asked for, so what a
+ * thin spot rests on is whatever the last pass let in. Each pass yields
+ * only what the pass before it did not, nearest along the field first,
+ * and each state comes out once.
+ */
 function* ring(state: PlayState, looseness: number): Generator<Spot> {
-  for (const reach of [0, 1, 2, 3, 5, 8, 12, 20, 35, 60, 99]) {
+  let hadReach = -1;
+  let hadNear = -1;
+
+  for (const reach of REACHES) {
+    const near = distanceLetGo(state.toGo, reach);
+    const fresh: { away: number; off: number; spot: Spot }[] = [];
+
     for (let yard = state.yardline - reach; yard <= state.yardline + reach; yard++) {
       if (yard < 1 || yard > 99) {
         continue;
       }
 
-      /**
-       * The field opens up far faster than the distance does.
-       *
-       * How often a side runs turns on the distance and hardly on where
-       * it is: 72% on third and one and 19% on third and eight, against
-       * next to nothing between the seventy five and the forty. Letting
-       * the two out together reached third and four to fill a thin
-       * third and one, and said 46% where sides run 72%.
-       */
-      const near = holdsDistance(state.toGo) || reach < 12 ? 0
-        : reach < 35 ? 1 : 2;
+      const away = Math.abs(yard - state.yardline);
 
       for (let toGo = state.toGo - near; toGo <= state.toGo + near; toGo++) {
         if (toGo < 1 || toGo > 40) {
           continue;
         }
 
-        const onEdge = Math.abs(yard - state.yardline) === reach ||
-          Math.abs(toGo - state.toGo) === near;
+        const off = Math.abs(toGo - state.toGo);
 
-        if (reach === 0 || onEdge) {
-          yield { toGo, yardline: yard, looseness };
+        if (away <= hadReach && off <= hadNear) {
+          continue;
         }
+
+        fresh.push({ away, off, spot: { toGo, yardline: yard, looseness } });
       }
     }
+
+    fresh.sort((a, b) =>
+      a.away - b.away || a.off - b.off || a.spot.yardline - b.spot.yardline);
+
+    for (const { spot } of fresh) {
+      yield spot;
+    }
+
+    hadReach = reach;
+    hadNear = near;
   }
 }
 
