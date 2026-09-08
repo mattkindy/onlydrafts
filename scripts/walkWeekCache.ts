@@ -86,6 +86,7 @@ async function oneWeek(season: number, week: number): Promise<WalkWeekRow[]> {
       points,
       touches: walked.touches.get(playerId) ?? 0,
       tds: walked.tds.get(playerId) ?? 0,
+      dealt: walked.perRun.get(playerId) ?? [],
     });
   }
 
