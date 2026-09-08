@@ -195,6 +195,26 @@ export const watchHowFar = () => { watchReach = true; };
 
 export const watchFourths = (fn: typeof chose) => { chose = fn; };
 
+/**
+ * A side's day applied to one gain, put back on whole yards.
+ *
+ * Rounding to the nearest yard would swallow a small multiplier whole,
+ * since four percent of six yards rounds back to six. The leftover
+ * fraction becomes a chance of one more yard, which keeps the mean.
+ */
+export function onTheDay(
+  gained: number, day: number | undefined, uniform: () => number,
+): number {
+  if (day === undefined || day === 1 || gained <= 0) {
+    return gained;
+  }
+
+  const want = gained * day;
+  const whole = Math.floor(want);
+
+  return whole + (uniform() < want - whole ? 1 : 0);
+}
+
 export function walkDrive(
   startAt: number,
   factors: PlayFactors,
@@ -216,6 +236,13 @@ export function walkDrive(
     lift?: number;
     /** the passer's own worth, on throws alone */
     passLift?: number;
+    /**
+     * What this one game is doing to the whole side, near one, drawn
+     * once when the game starts. Every man on the side gets the same
+     * one, which is the point of it: a game plan, a matchup or an
+     * afternoon of weather moves an offence together.
+     */
+    day?: number;
   } = {},
   /**
    * How long each snap takes. Without one the drive has no length in
@@ -458,7 +485,10 @@ export function walkDrive(
       (call === "pass" ? sides.passLift ?? 1 : 1);
     let gained = Math.min(
       state.yardline,
-      lifted !== 1 && drawn > 0 ? Math.round(drawn * lifted) : drawn,
+      onTheDay(
+        lifted !== 1 && drawn > 0 ? Math.round(drawn * lifted) : drawn,
+        sides.day, uniform,
+      ),
     );
 
     /**
