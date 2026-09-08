@@ -27,7 +27,7 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7478 | .7147 | .7028 | .382 on 2025 alone |
+| now | .7476 | .7128 | .7024 | .388 on 2025 alone |
 
 The weekly figure is a two seed mean at forty draws on 2025 by itself,
 where the yardstick of a man's average so far is .380. The walk passed
@@ -70,7 +70,28 @@ change, and swept out to the whole board below.
 | a man's cut of the touches drawn once a game, not once a snap | .7484 | .7147 | .7039 | .3805 on 2025 alone |
 | a short gain near the goal carried up to the line | .7478 | .7147 | .7028 | .382 on 2025 alone |
 | and a whole side given a day of its own, 0.044 | .7477 | .7128 | .7039 | .383 |
-| a thin man leaning the way his position leans there | not run | not run | not run | not run |
+| a thin man leaning the way his position leans there | .7476 | .7128 | .7024 | .388 on 2025 alone |
+
+The board bench has no noise in it. Replaying the same code twice writes
+byte identical kept files and the sweep repeats to four figures, so any
+board number here is exact and a difference of .0002 is a difference.
+The weekly bench is the noisy one, about .004 on a two seed mean.
+
+The position leaning row is a trade taken with eyes open. It costs the
+first 24 .7147 to .7128, which is real, and wins the week .382 to .388,
+which is worth about one and a half times that bench's noise. It also
+wins the play layer on both seasons, 22.7% to 23.0% of the play on 2024
+and 23.0% to 23.4% on 2025, against last season's counts at 24.2%, and
+that bench measures this exact decision. A thin near-goal cell used to
+pull a man back to his own season-wide share, so every man looked the
+same at the goal line; it now pulls him toward what his position does
+there. Tight ends go from 20.0% of the throws inside the five to 23.1%
+against 26.8% really, and backs stop taking 87.6% of the carries from
+the five where they take 83.3%. His own near-goal history still counts
+for as much as it did, since splitting a man's season in half shows his
+own leaning agreeing with itself at .44, and .48 with his position taken
+out, so the position is not the whole story and only the resting place
+changed.
 
 The goal line row ships and the side day does not. `settleAtGoal` only
 ever cut a drawn play down, so a gain that crossed the line could be
