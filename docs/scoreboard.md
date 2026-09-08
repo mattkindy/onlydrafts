@@ -70,6 +70,7 @@ change, and swept out to the whole board below.
 | a man's cut of the touches drawn once a game, not once a snap | .7484 | .7147 | .7039 | .3805 on 2025 alone |
 | a short gain near the goal carried up to the line | .7478 | .7147 | .7028 | .382 on 2025 alone |
 | and a whole side given a day of its own, 0.044 | .7477 | .7128 | .7039 | .383 |
+| a thin man leaning the way his position leans there | not run | not run | not run | not run |
 
 The goal line row ships and the side day does not. `settleAtGoal` only
 ever cut a drawn play down, so a gain that crossed the line could be
@@ -557,6 +558,81 @@ did not help at ten draws (.317 a week at a quarter and .311 at a half,
 against .344) and stays off behind RECENT_LEVEL. Those gaps are larger
 than the noise, so the result is probably right, though it was not
 re-run at forty.
+
+## Where a thin man is left when his own count says nothing
+
+Shrinking the leaning by a man's own count in the cell put every man
+back on his season-wide share exactly where the cells are thinnest,
+which is at the goal. So the walk gave out the throws near the line
+the same way it gave them out at midfield. Over 2025 throws, the share
+going to each position by yardline band, played against drawn:
+
+| | 1-5 | 6-10 | 11-20 | 21-40 | 41+ |
+|---|---|---|---|---|---|
+| tight ends played | 26.8% | 27.3% | 26.6% | 22.9% | 21.9% |
+| drawn, pulled toward one | 20.0% | 19.9% | 20.4% | 20.4% | 20.3% |
+| backs played | 11.9% | 19.3% | 21.2% | 19.5% | 19.5% |
+| drawn, pulled toward one | 19.6% | 19.7% | 19.8% | 19.8% | 19.8% |
+
+Turning the shrinking off closes about half of the near-goal gap and
+then breaks the far bands, so the setting was never the answer. Where
+a tight end gets the ball is a fact about tight ends first, and that
+fact is stable: they took 28.2%, 30.8%, 30.4%, 27.4% and 30.2% of the
+throws inside the five in 2021 through 2025, and 20.2% to 22.9% past
+the forty in the same seasons, with backs going the other way, 10.2%
+to 12.7% inside the five against 17.3% to 18.9% past the forty.
+
+Teams differ inside the ten beyond what their play counts would give
+by coin flips, 0.077 of spread for tight ends on a base of about a
+quarter, and a team's share agrees with its own next season at .43.
+
+A man's own near-goal history says something his position has not.
+Split a man's season of throws odd and even and the two halves agree
+on his leaning inside the ten at .44, and at .48 once his position's
+leaning is taken out of both, so almost none of that agreement was the
+position. It takes about six throws inside the ten in a season before
+there are enough to split, which is more than most men get, and it is
+why the count still decides how much of his own leaning is used.
+
+So the resting place moved from one to his position's leaning at the
+same spot, believed by the position's own count there over that count
+plus ten. Both leanings are read on the call being made rather than on
+every touch, since a back takes 45% of the touches and 20% of the
+throws and the split projection already prices that.
+
+| 2025 throws, drawn | 1-5 | 6-10 | 11-20 | 21-40 | 41+ |
+|---|---|---|---|---|---|
+| tight ends, toward his position | 23.1% | 21.2% | 21.8% | 20.1% | 20.0% |
+| backs, toward his position | 18.6% | 19.3% | 21.0% | 20.7% | 20.5% |
+
+The far bands stay where they were and the near ones move about half
+way. Runs move too, and further: from the five in, backs took 83.3% of
+them and the walk drew 87.6%, where it now draws 83.8%.
+
+| playLayerEval | top of the list | share to the man who took it |
+|---|---|---|
+| 2024, toward one | 35.0% | 22.7% |
+| 2024, toward his position | 35.2% | 23.0% |
+| 2025, toward one | 34.9% | 23.0% |
+| 2025, toward his position | 35.4% | 23.4% |
+
+Inside the ten the run goes 50.9% to 51.5% on 2024 and 43.0% to 44.0%
+on 2025 for naming the man, and the throw gives back about half a
+point on both, which is inside what 950 plays can say. Believing the
+position's leaning in full, with no shrinking at all, reads 25.0% for
+tight ends inside the five and gives the goal line run back, so ten
+ships. The opening drive touchdown rate does not move at all, since
+that bench never asks who gets the ball.
+
+On weekWidthCheck over 2025, a tight end's share of games with a score
+goes from 15.6% to 18.4% where he really scored in 25.8% of them. A
+back's goes the other way, 29.5% to 27.2% against 32.7% really, and
+the allocation it came from is the better one: the walk was handing
+backs 87.6% of the carries from the five where they took 83.3%, and
+some of the scoring it lost was being made up by that.
+
+Behind POSITION_LEAN, on, with POSITION_K at ten. The board and the
+weekly bench have not been run.
 
 ## The pooled throw paid for the sack twice
 
