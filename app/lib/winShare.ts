@@ -3,11 +3,10 @@
  *
  * Value over replacement asks how many points he beats a baseline by,
  * and the game is beating one other team on Sunday. The two come apart
- * wherever your own roster matters. An empty kicker slot scores
- * nothing, so your first kicker is worth his whole output and the
- * second almost none of it. A fifth back is worth nothing on paper and
- * something in fact, because byes and injuries mean he starts some
- * weeks.
+ * wherever your own roster matters. Your first kicker is worth what he
+ * beats the kicker off waivers by, and the second almost nothing. A
+ * fifth back is worth nothing on paper and something in fact, because
+ * byes and injuries mean he starts some weeks.
  *
  * So a week is drawn for everybody, the best legal lineup is filled,
  * and a man is worth the change in how often it beats a typical side.
@@ -19,6 +18,17 @@ import { DRAWS, streamFor, weeksFromSpread } from "./spread.ts";
 const FLEX_POSITIONS = ["RB", "WR", "TE"];
 
 const WHERE = ["QB", "RB", "WR", "TE", "K", "DEF"];
+
+/**
+ * Who is in a seat: what you expect of him and what he scored. A man off
+ * waivers is marked, because you play your own man over a pickup when
+ * the two of them are as good as each other.
+ */
+export interface Held {
+  expect: number;
+  score: number;
+  wire?: boolean;
+}
 
 export interface Baseline {
   /** what your lineup scores in each drawn week */
@@ -33,7 +43,7 @@ export interface Baseline {
    * second kicker two and a half points of win chance for the weeks he
    * happened to beat the first.
    */
-  displaced: Record<string, { expect: number; score: number }[]>;
+  displaced: Record<string, Held[]>;
   /** how many drawn weeks each man was in the lineup, by his key */
   started: Record<string, number>;
 }
@@ -95,7 +105,7 @@ function drawWeeks(p: Player, draws: number): number[] {
 
 interface Seat {
   where: string[];
-  taken: { expect: number; score: number } | null;
+  taken: Held | null;
 }
 
 /** every starting seat this league has, the named ones then the flexes */
@@ -117,6 +127,31 @@ function seatsOf(slots: string[] | null | undefined): Seat[] {
 }
 
 /**
+ * A seat your roster cannot fill this week is not worth nothing. You
+ * start whoever the wire gives you there, so that man goes in it and a
+ * newcomer has to beat him.
+ *
+ * He scores his average every week, because he is not one player. He is
+ * whoever you pick up on Wednesday, and a spread there would hand the
+ * baseline weeks he happened to go big without anybody having chosen
+ * him for it. A flex takes the best of the positions it accepts.
+ */
+function fillFromTheWire(seated: Seat[], wire: Record<string, number>): void {
+  for (const seat of seated) {
+    if (seat.taken) {
+      continue;
+    }
+
+    const off = seat.where.reduce(
+      (best, where) => Math.max(best, wire[where] ?? 0), 0);
+
+    if (off > 0) {
+      seat.taken = { expect: off, score: off, wire: true };
+    }
+  }
+}
+
+/**
  * Your lineup one drawn week at a time, and what a newcomer at each
  * position would have to beat to get into it.
  *
@@ -126,6 +161,7 @@ function seatsOf(slots: string[] | null | undefined): Seat[] {
  */
 export function baselineFor(
   roster: Player[], slots: string[] | null | undefined, draws = DRAWS,
+  wire: Record<string, number> = {},
 ): Baseline {
   const seats = seatsOf(slots);
   // by what you expect of him, since that is what a lineup is set on
@@ -133,7 +169,7 @@ export function baselineFor(
     .map((p) => ({ p, its: weeksOf(p, draws), expect: p.ppg ?? 0 }))
     .sort((a, b) => b.expect - a.expect);
   const total: number[] = [];
-  const displaced: Record<string, { expect: number; score: number }[]> = {};
+  const displaced: Record<string, Held[]> = {};
   const started: Record<string, number> = {};
 
   for (const where of WHERE) {
@@ -160,6 +196,7 @@ export function baselineFor(
       }
     }
 
+    fillFromTheWire(seated, wire);
     total.push(seated.reduce((sum, s) => sum + (s.taken?.score ?? 0), 0));
 
     for (const where of WHERE) {
@@ -336,10 +373,11 @@ export interface WinShare {
 export function takeNowFor(
   mine: Player[], slots: string[] | null | undefined, left: Player[],
   turns: number[], opponent: number[], draws = DRAWS,
+  wire: Record<string, number> = {},
 ): (p: Player) => WinShare {
   const later = turns.slice(1);
   const passed = baselineFor(
-    projectedRoster(mine, slots, left, later), slots, draws,
+    projectedRoster(mine, slots, left, later), slots, draws, wire,
   );
   const without = winChance(passed.total, opponent);
   /**
@@ -360,7 +398,7 @@ export function takeNowFor(
     let his = around.get(key);
 
     if (!his) {
-      const base = baselineFor(rest, slots, draws);
+      const base = baselineFor(rest, slots, draws, wire);
       his = {
         chance: winChance(base.total, opponent),
         share: winShareFor(base, opponent, draws),
@@ -388,6 +426,19 @@ export function takeNowFor(
  * any man the baseline did not already assume. The board uses
  * takeNowFor, which has no such exception.
  */
+/**
+ * Whether you would start him over the man in the seat. A man of your
+ * own goes in on a tie with somebody you would have to pick up, and
+ * stays on the bench on a tie with somebody you already have.
+ */
+function wouldStart(his: number, seat: Held): boolean {
+  if (seat.wire) {
+    return his >= seat.expect;
+  }
+
+  return his > seat.expect;
+}
+
 export function winShareFor(
   baseline: Baseline, opponent: number[], draws = DRAWS,
 ): (p: Player) => WinShare {
@@ -412,7 +463,7 @@ export function winShareFor(
        * two of them then went and scored.
        */
       const plays = his[i]! > 0;
-      const starts = plays && (p.ppg ?? 0) > out.expect;
+      const starts = plays && wouldStart(p.ppg ?? 0, out);
 
       if (starts) {
         started++;

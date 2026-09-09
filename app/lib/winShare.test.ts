@@ -60,6 +60,49 @@ describe("a seat you have not filled", () => {
     expect(worth(aMan("k1", "K", 9)).added).toBeGreaterThan(0.1);
   });
 
+  /**
+   * You do not field eight men. Whatever your roster cannot cover, you
+   * cover off waivers, so the first kicker is worth what he beats the
+   * kicker anybody can have by, and a backup quarterback covers the
+   * weeks your starter is out against that same man rather than
+   * against nothing.
+   */
+  it("costs the man off waivers once the wire is given", () => {
+    const roster = aRoster();
+    const opponent = anOpponent(DRAWN);
+    const wire = { K: 8.5, QB: 16 };
+    const onNothing = winShareFor(
+      baselineFor(roster, SLOTS, DRAWN), opponent, DRAWN,
+    );
+    const onTheWire = winShareFor(
+      baselineFor(roster, SLOTS, DRAWN, wire), opponent, DRAWN,
+    );
+    const him = aMan("k1", "K", 9);
+
+    expect(onTheWire(him).added).toBeLessThan(onNothing(him).added / 2);
+  });
+
+  it("pays a second quarterback for the weeks the first is out, no more", () => {
+    const opponent = anOpponent(DRAWN);
+    const roster = aRoster().concat(aMan("k1", "K", 9));
+    // his own man plays two thirds of the weeks
+    const starter = aMan("qb1", "QB", 24, 11);
+    const wire = { QB: 22.5 };
+    const backup = aMan("qb2", "QB", 24);
+    const withQb = roster.filter((p) => p.position !== "QB").concat(starter);
+    const onNothing = winShareFor(
+      baselineFor(withQb, SLOTS, DRAWN), opponent, DRAWN,
+    )(backup);
+    const onTheWire = winShareFor(
+      baselineFor(withQb, SLOTS, DRAWN, wire), opponent, DRAWN,
+    )(backup);
+
+    expect(onNothing.added).toBeGreaterThan(0.01);
+    expect(onTheWire.added).toBeLessThan(onNothing.added / 2);
+    // and the seat is no longer worth nothing in the weeks it is empty
+    expect(onTheWire.starts).toBeCloseTo(onNothing.starts, 10);
+  });
+
   it("and almost nothing to the second one", () => {
     const withOne = aRoster().concat(aMan("k1", "K", 9));
     const worth = winShareFor(
@@ -342,6 +385,27 @@ describe("taking a man now, with the rest of the draft filled around him", () =>
     for (const p of board) {
       const roster = projectedRoster([p], SLOTS, board, turns.slice(1));
       const drawn = winChance(baselineFor(roster, SLOTS, DRAWN).total, opponent);
+
+      expect(worth(p).added).toBeCloseTo(drawn - passed, 10);
+    }
+  });
+
+  it("still agrees once the wire covers the seats nobody filled", () => {
+    const opponent = anOpponent(DRAWN);
+    const wire = { QB: 16, RB: 8, WR: 8, TE: 6, K: 8.5, DEF: 7 };
+    const worth = takeNowFor([], SLOTS, board, turns, opponent, DRAWN, wire);
+    const passed = winChance(
+      baselineFor(
+        projectedRoster([], SLOTS, board, turns.slice(1)), SLOTS, DRAWN, wire,
+      ).total,
+      opponent,
+    );
+
+    for (const p of board) {
+      const roster = projectedRoster([p], SLOTS, board, turns.slice(1));
+      const drawn = winChance(
+        baselineFor(roster, SLOTS, DRAWN, wire).total, opponent,
+      );
 
       expect(worth(p).added).toBeCloseTo(drawn - passed, 10);
     }
