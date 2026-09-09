@@ -13,7 +13,7 @@
  */
 
 import type { League, Roster } from "./providers.ts";
-import type { Player } from "./scoring.ts";
+import { startedHere, type Player } from "./scoring.ts";
 
 /** the positions people swap out after a bad week */
 export const STREAMED = new Set(["K", "DEF"]);
@@ -91,8 +91,8 @@ export function keptAt(
 export function offWaivers(
   men: Player[], position: string, teams: number,
   rosters: Roster[] | null | undefined,
+  kept = keptAt(position, teams, rosters),
 ): number | null {
-  const kept = keptAt(position, teams, rosters);
   const best = men
     .filter((p) => p.position === position)
     .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))
@@ -103,6 +103,38 @@ export function offWaivers(
   }
 
   return best + (STREAMING_GAIN[position] ?? 0);
+}
+
+/**
+ * What the wire gives you at every position, for a seat nobody on your
+ * roster can fill that week.
+ *
+ * How many are already spoken for is the whole question. Teams keep one
+ * kicker and one defence, so the wire kicker is the thirteenth in a
+ * twelve team league. They keep backs and receivers in bulk, and a
+ * league that starts twenty nine backs has at least that many gone, so
+ * counting one a team there would hand an empty flex a man who is
+ * somebody's second back.
+ */
+export function waiverBar(
+  men: Player[], slots: string[] | null | undefined, teams: number,
+  rosters: Roster[] | null | undefined,
+): Record<string, number> {
+  const started = startedHere(slots, teams);
+  const bar: Record<string, number> = {};
+
+  for (const position of new Set(men.map((p) => p.position))) {
+    const gone = Math.max(
+      keptAt(position, teams, rosters), started[position] ?? 0,
+    );
+    const best = offWaivers(men, position, teams, rosters, gone);
+
+    if (best !== null) {
+      bar[position] = best;
+    }
+  }
+
+  return bar;
 }
 
 export interface PoolInput {

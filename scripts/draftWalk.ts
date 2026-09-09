@@ -19,13 +19,13 @@ import { join } from "node:path";
 
 import { rescore } from "../app/lib/board.ts";
 import { keyForPick } from "../app/lib/draftRating.ts";
-import { offWaivers } from "../app/lib/replacementPool.ts";
+import { offWaivers, waiverBar } from "../app/lib/replacementPool.ts";
 import { normalizeName } from "../app/lib/store.ts";
 import { lineupOf, payFor, type Pays, type Player } from "../app/lib/scoring.ts";
-import { DRAWS } from "../app/lib/spread.ts";
+import { DRAWS as WEEKS } from "../app/lib/spread.ts";
 import {
   baselineFor, projectedRoster, takeNowFor, typicalWeek, weeksOf, winChance,
-  winShareFor, type Baseline,
+  winShareFor,
 } from "../app/lib/winShare.ts";
 
 const [
@@ -35,6 +35,12 @@ const [
 ] = process.argv.slice(2);
 const ME = "632473674548580352";
 const WHERE = ["QB", "RB", "WR", "TE", "K", "DEF"];
+/**
+ * Two thousand weeks resolve five ten-thousandths, and the top of the
+ * board moves by more than that between two thousand and twenty, so a
+ * reading anybody is going to argue about wants WALK_DRAWS=20000.
+ */
+const DRAWS = Number(process.env["WALK_DRAWS"] ?? "") || WEEKS;
 
 mkdirSync(cacheDir, { recursive: true });
 
@@ -126,6 +132,7 @@ const mine = took.filter((t) => t.pick.picked_by === ME);
 const turnsAll = mine.map((t) => t.pick.pick_no);
 const opponent = typicalWeek(men, slots, teams, DRAWS);
 const seats = lineupOf(slots);
+const wire = waiverBar(men, slots, teams, null);
 
 console.log(
   `${league.name}, ${teams} teams, ${pays["rec"] ?? 0} a catch, ` +
@@ -134,7 +141,11 @@ console.log(
 console.log(
   `lineup ${JSON.stringify(seats.named)} plus ${seats.flex} flex, ` +
   `a typical week ${(opponent.reduce((s, n) => s + n, 0) / opponent.length)
-    .toFixed(1)}\n`,
+    .toFixed(1)}`,
+);
+console.log(
+  "the wire fills a seat his men cannot with " +
+  WHERE.map((w) => `${w} ${(wire[w] ?? 0).toFixed(1)}`).join(", ") + "\n",
 );
 
 /** assumed fills the room had already taken by the turn they were penciled for */
@@ -170,18 +181,24 @@ function assumedAt(
   return out;
 }
 
-/** how often each seat had nobody in it, over the drawn weeks */
-function openSeats(displaced: Record<string, { expect: number }[]>) {
+/**
+ * How often his own men could not fill a seat, and what a newcomer has
+ * to beat there once the wire has filled the ones they could not.
+ */
+function openSeats(
+  bare: Record<string, { expect: number }[]>,
+  wired: Record<string, { expect: number }[]>,
+) {
   const out: string[] = [];
 
   for (const where of WHERE) {
-    const its = displaced[where] ?? [];
+    const its = bare[where] ?? [];
     const empty = its.filter((d) => d.expect === 0).length;
-    const filled = its.filter((d) => d.expect > 0);
-    const mean = filled.length
-      ? filled.reduce((s, d) => s + d.expect, 0) / filled.length
+    const bars = wired[where] ?? [];
+    const mean = bars.length
+      ? bars.reduce((s, d) => s + d.expect, 0) / bars.length
       : 0;
-    out.push(`${where} open ${pct(empty / Math.max(1, its.length))} ` +
+    out.push(`${where} unfilled ${pct(empty / Math.max(1, its.length))} ` +
       `bar ${mean.toFixed(1)}`);
   }
 
@@ -199,9 +216,11 @@ for (let turn = 0; turn < mine.length; turn++) {
   const turns = turnsAll.slice(turn);
   const later = turns.slice(1);
   const assumed = projectedRoster(had, slots, left, later);
-  const passed = baselineFor(assumed, slots, DRAWS);
+  const passed = baselineFor(assumed, slots, DRAWS, wire);
+  // the same baseline with an empty seat left empty, to count them
+  const bare = baselineFor(assumed, slots, DRAWS);
   const without = winChance(passed.total, opponent);
-  const worth = takeNowFor(had, slots, left, turns, opponent, DRAWS);
+  const worth = takeNowFor(had, slots, left, turns, opponent, DRAWS, wire);
 
   const scored = left
     .map((p) => ({ p, ...worth(p) }))
@@ -244,7 +263,7 @@ for (let turn = 0; turn < mine.length; turn++) {
         `reads ${at(worth(a.p).added)})`)
       .join("; ") || "nothing, every seat filled"),
   );
-  console.log("    seats: " + openSeats(passed.displaced));
+  console.log("    seats: " + openSeats(bare.displaced, passed.displaced));
   console.log(
     "   #  player                 pos   ppg  starts    added  went at",
   );
@@ -315,7 +334,7 @@ for (const turn of [kickerTurn, kickerTurn + 1]) {
   const had = mine.slice(0, turn).map((t) => t.p!);
   const left = men.filter((p) => !gone.has(p.key));
   const turns = turnsAll.slice(turn);
-  const worth = takeNowFor(had, slots, left, turns, opponent, DRAWS);
+  const worth = takeNowFor(had, slots, left, turns, opponent, DRAWS, wire);
   const kickers = left.filter((p) => p.position === "K")
     .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0)).slice(0, 5);
 
@@ -330,25 +349,6 @@ for (const turn of [kickerTurn, kickerTurn + 1]) {
   }
 }
 
-/**
- * The same turn with one thing changed: a week his starter is out costs
- * him the quarterback anybody can have off waivers rather than nothing.
- * Everything else, the draws and the rest of the roster, is untouched.
- */
-function againstTheWire(
-  base: Baseline, where: string, wire: number, wireWeeks: number[],
-): Baseline {
-  const bar = base.displaced[where]!.map((seat, i) =>
-    seat.expect > 0 ? seat : { expect: wire, score: wireWeeks[i]! });
-
-  return {
-    total: base.total.map((week, i) =>
-      week + (base.displaced[where]![i]!.expect > 0 ? 0 : wireWeeks[i]!)),
-    displaced: { ...base.displaced, [where]: bar },
-    started: base.started,
-  };
-}
-
 console.log("\n=== a backup quarterback, against nothing and against the wire");
 const backupTurn = 5;
 {
@@ -359,20 +359,19 @@ const backupTurn = 5;
   );
   const had = mine.slice(0, backupTurn).map((t) => t.p!);
   const left = men.filter((p) => !gone.has(p.key));
-  const base = baselineFor(
-    projectedRoster(had, slots, left, turnsAll.slice(backupTurn + 1)),
-    slots, DRAWS,
+  const assumed = projectedRoster(
+    had, slots, left, turnsAll.slice(backupTurn + 1),
   );
-  const wire = offWaivers(men, "QB", teams, null) ?? 0;
+  const asIs = winShareFor(baselineFor(assumed, slots, DRAWS), opponent, DRAWS);
+  const fair = winShareFor(
+    baselineFor(assumed, slots, DRAWS, wire), opponent, DRAWS,
+  );
   const wireMan = men.filter((p) => p.position === "QB")
     .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))[teams]!;
-  const patched = againstTheWire(base, "QB", wire, weeksOf(wireMan, DRAWS));
-  const asIs = winShareFor(base, opponent, DRAWS);
-  const fair = winShareFor(patched, opponent, DRAWS);
 
   console.log(
     `  at p${here.pick.pick_no}, the wire quarterback is ${wireMan.name} ` +
-    `at ${wire.toFixed(1)} a game`,
+    `at ${(offWaivers(men, "QB", teams, null) ?? 0).toFixed(1)} a game`,
   );
 
   for (const qb of left.filter((p) => p.position === "QB").slice(0, 6)) {
@@ -411,9 +410,9 @@ if (stafford) {
   const had = mine.slice(0, turn).map((t) => t.p!);
   const left = men.filter((p) => !gone.has(p.key));
   const assumed = projectedRoster(had, slots, left, turnsAll.slice(turn + 1));
-  const base = baselineFor(assumed, slots, DRAWS);
-  const bar = base.displaced["QB"]!;
-  const empty = bar.filter((d) => d.expect === 0).length;
+  const bar = baselineFor(assumed, slots, DRAWS, wire).displaced["QB"]!;
+  const empty = baselineFor(assumed, slots, DRAWS).displaced["QB"]!
+    .filter((d) => d.expect === 0).length;
   const him = weeksOf(stafford.p!, DRAWS);
   const beats = him.filter((w, i) =>
     w > 0 && (stafford.p!.ppg ?? 0) > bar[i]!.expect).length;
@@ -506,14 +505,14 @@ const byName = (name: string) => men.find((p) => p.name === name)!;
 const nacua = byName("Puka Nacua");
 const gibbs = byName("Jahmyr Gibbs");
 const bijan = byName("Bijan Robinson");
-const firstWorth = takeNowFor([], slots, men, turnsAll, opponent, DRAWS);
+const firstWorth = takeNowFor([], slots, men, turnsAll, opponent, DRAWS, wire);
 
 for (const had of [[], [nacua], [gibbs]] as Player[][]) {
   const plan = new Map(
     assumedAt(had, men, firstTurn).map((a) => [a.p.key, a.at]),
   );
   const roster = projectedRoster(had, slots, men, firstTurn);
-  const base = baselineFor(roster, slots, DRAWS);
+  const base = baselineFor(roster, slots, DRAWS, wire);
   console.log(
     `  ${had.length ? "taking " + had[0]!.name : "passing over"}, reads ` +
     `${had.length ? at(firstWorth(had[0]!).added) : at(0)}, ` +
@@ -686,10 +685,11 @@ const asIfLeft = men.filter((p) =>
 const loveTurns = turnsAll.slice(loveTurn);
 const loveBase = baselineFor(
   projectedRoster(loveHad, slots, asIfLeft, loveTurns.slice(1)), slots, DRAWS,
+  wire,
 );
 const loveWithout = winChance(loveBase.total, opponent);
 const loveWorth = takeNowFor(
-  loveHad, slots, asIfLeft, loveTurns, opponent, DRAWS,
+  loveHad, slots, asIfLeft, loveTurns, opponent, DRAWS, wire,
 );
 const earlier = baselineFor(
   projectedRoster(
@@ -698,7 +698,7 @@ const earlier = baselineFor(
       t.p && t.p.key === p.key && t.pick.pick_no < 24)),
     turnsAll.slice(2),
   ),
-  slots, DRAWS,
+  slots, DRAWS, wire,
 );
 const earlierWithout = winChance(earlier.total, opponent);
 
@@ -720,7 +720,9 @@ for (const p of [byName("Jeremiyah Love"), bijan, byName("Ja'Marr Chase")]) {
 console.log("\n=== the same turn with more weeks drawn");
 const MORE = 20000;
 const opponentMore = typicalWeek(men, slots, teams, MORE);
-const worthMore = takeNowFor([], slots, men, turnsAll, opponentMore, MORE);
+const worthMore = takeNowFor(
+  [], slots, men, turnsAll, opponentMore, MORE, wire,
+);
 
 for (const p of [nacua, byName("Ja'Marr Chase"), byName("Jaxon Smith-Njigba"),
   gibbs, bijan]) {

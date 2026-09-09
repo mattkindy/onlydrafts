@@ -8,7 +8,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { keptAt, offWaivers, replacementBar } from "./replacementPool.ts";
+import {
+  keptAt, offWaivers, replacementBar, waiverBar,
+} from "./replacementPool.ts";
 import type { Player } from "./scoring.ts";
 import type { Roster } from "./providers.ts";
 
@@ -74,6 +76,26 @@ describe("what the wire gives you", () => {
 
   it("says nothing when there is nobody left to pick up", () => {
     expect(offWaivers(defences.slice(0, 8), "DEF", 12, null)).toBeNull();
+  });
+
+  /**
+   * At a seat your own men cannot fill, how many are already gone is the
+   * whole question. Twelve teams keep a kicker each, so the wire kicker
+   * is the thirteenth. They start twenty nine backs between them, and
+   * counting one a team there would put somebody's second back on the
+   * wire.
+   */
+  it("counts the league's starters at a position people keep in bulk", () => {
+    const backs = Array.from({ length: 40 }, (_, i) =>
+      ({ name: `RB${i + 1}`, key: `RB${i + 1}`, position: "RB", ppg: 20 - i * 0.5 }) as Player);
+    const bar = waiverBar(
+      [...backs, ...kickers], ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K"],
+      12, null,
+    );
+
+    expect(bar["K"]).toBeCloseTo(kickers[12]!.ppg!, 5);
+    // twenty nine backs start, so the thirtieth is what is left
+    expect(bar["RB"]).toBeCloseTo(backs[29]!.ppg!, 5);
   });
 
   /**
