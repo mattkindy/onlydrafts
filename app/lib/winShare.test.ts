@@ -71,6 +71,53 @@ describe("a seat you have not filled", () => {
   });
 });
 
+/**
+ * The flex is shared, and who a newcomer pushes out of it is settled by
+ * the drawn week rather than by any pencil assignment. On a roster with
+ * three good backs and two poor receivers the flex goes to a back, so
+ * a new back has to beat far more than a new receiver does. That gap is
+ * what the roster says, not an artifact: putting either man on and
+ * drawing the whole lineup again drops exactly the man the bar named.
+ */
+describe("the bar at a shared seat", () => {
+  const shared = () => [
+    aMan("rb1", "RB", 19.8), aMan("rb2", "RB", 17.6), aMan("rb3", "RB", 14.8),
+    aMan("wr1", "WR", 10.5), aMan("wr2", "WR", 9.5), aMan("te1", "TE", 10.5),
+    aMan("qb1", "QB", 24.6), aMan("k1", "K", 9), aMan("d1", "DEF", 8),
+  ];
+
+  it("is the man the week put in the flex, not the one a pencil put there", () => {
+    const base = baselineFor(shared(), SLOTS, DRAWN);
+
+    // nobody here misses a week, so every week seats the same men
+    expect(base.displaced["RB"]![0]!.expect).toBe(14.8);
+    expect(base.displaced["WR"]![0]!.expect).toBe(9.5);
+    expect(base.displaced["TE"]![0]!.expect).toBe(10.5);
+  });
+
+  it("names the man the lineup actually drops, at every position", () => {
+    const opponent = anOpponent(DRAWN);
+    const roster = shared();
+    const worth = winShareFor(
+      baselineFor(roster, SLOTS, DRAWN), opponent, DRAWN,
+    );
+    const passed = winChance(baselineFor(roster, SLOTS, DRAWN).total, opponent);
+    const newcomers = [
+      aMan("newRb", "RB", 16), aMan("cheapRb", "RB", 12),
+      aMan("newWr", "WR", 20), aMan("cheapWr", "WR", 12),
+      aMan("newTe", "TE", 15),
+    ];
+
+    for (const him of newcomers) {
+      const drawn = winChance(
+        baselineFor([...roster, him], SLOTS, DRAWN).total, opponent,
+      );
+
+      expect(worth(him).added).toBeCloseTo(drawn - passed, 10);
+    }
+  });
+});
+
 describe("depth", () => {
   /**
    * A back who cannot crack the lineup this Sunday still plays, because
