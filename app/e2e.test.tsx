@@ -118,7 +118,17 @@ it("scores every category the board ships", async () => {
   expect([...unknown]).toEqual([]);
 });
 
+/**
+ * Under an ordinary league's kicking rules, which is how a kicker is
+ * ever scored. Nothing pays for a made kick by default, because the
+ * board ships the same kick counted three ways and a rate for two of
+ * them would pay him twice.
+ */
 it("gives a kicker a sensible afternoon", async () => {
+  const kicking = {
+    fgm_0_19: 3, fgm_20_29: 3, fgm_30_39: 3, fgm_40_49: 4, fgm_50p: 5,
+    xpm: 1, xpmiss: -1, fgmiss: -1,
+  };
   const { readFileSync } = await import("node:fs");
   const { payFor } = await import("./lib/scoring.ts");
   const file = JSON.parse(
@@ -129,7 +139,7 @@ it("gives a kicker a sensible afternoon", async () => {
   expect(kickers.length).toBeGreaterThan(20);
 
   for (const k of kickers) {
-    const scored = payFor(k.simulated!, {});
+    const scored = payFor(k.simulated!, kicking);
     expect(scored, `${k.name} scored ${scored.toFixed(1)}`).toBeGreaterThan(4);
     expect(scored, `${k.name} scored ${scored.toFixed(1)}`).toBeLessThan(14);
   }

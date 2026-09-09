@@ -82,7 +82,10 @@ const SKILL_FALLBACK: Pays = {
  * the names the leagues use for them so nothing has to be translated.
  */
 const THEIR_OWN_FALLBACK: Pays = {
-  fgm_yds: 0.1, xpm: 1, xpmiss: -1,
+  // a league that does not name a rate for field goal yardage does not
+  // pay for it. A tenth a yard paid Cameron Dicker 15.7 a game where his
+  // own league scores him 8.6.
+  fgm_yds: 0, xpm: 1, xpmiss: -1,
   fgm_0_19: 0, fgm_20_29: 0, fgm_30_39: 0, fgm_40_49: 0, fgm_50_59: 0,
   fgm_60p: 0,
   fgmiss_0_19: -3, fgmiss_20_29: -2, fgmiss_30_39: -2, fgmiss_40_49: -1,
