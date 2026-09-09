@@ -21,7 +21,7 @@ import { rescore } from "../app/lib/board.ts";
 import { keyForPick } from "../app/lib/draftRating.ts";
 import { offWaivers } from "../app/lib/replacementPool.ts";
 import { normalizeName } from "../app/lib/store.ts";
-import { lineupOf, type Pays, type Player } from "../app/lib/scoring.ts";
+import { lineupOf, payFor, type Pays, type Player } from "../app/lib/scoring.ts";
 import { DRAWS } from "../app/lib/spread.ts";
 import {
   baselineFor, projectedRoster, takeNowFor, typicalWeek, weeksOf, winChance,
@@ -426,6 +426,307 @@ if (stafford) {
     `  of those starts, ${pct(bar.filter((d, i) =>
       d.expect === 0 && him[i]! > 0).length / Math.max(1, beats))} ` +
     `are weeks the seat was empty`,
+  );
+}
+
+/**
+ * The first pick taken apart, since a receiver reading nearly double the
+ * best back wants explaining.
+ *
+ * Every variant keeps the man's own key, so he draws the same weeks and
+ * misses the same ones and only the thing under test moves. A flat man
+ * scores his average every week, which is how much of a reading is his
+ * spread rather than his points.
+ */
+const asFlat = (p: Player): Player => {
+  const ppg = p.ppg ?? 0;
+
+  return {
+    ...p,
+    game: { ev: ppg, q1: ppg, mid: ppg, q3: ppg, low: ppg, high: ppg },
+  };
+};
+
+const asPosition = (p: Player, position: string): Player => ({ ...p, position });
+
+interface Shown {
+  label: string;
+  where: string[];
+  taken: Player | null;
+}
+
+/** every seat the league starts, named ones first and the flex last */
+function seatsShown(): Shown[] {
+  const { named, flex } = lineupOf(slots);
+  const out: Shown[] = [];
+
+  for (const [where, count] of Object.entries(named)) {
+    for (let i = 0; i < count; i++) {
+      out.push({
+        label: count > 1 ? `${where}${i + 1}` : where,
+        where: [where],
+        taken: null,
+      });
+    }
+  }
+
+  for (let i = 0; i < flex; i++) {
+    out.push({ label: "FLEX", where: ["RB", "WR", "TE"], taken: null });
+  }
+
+  return out;
+}
+
+/**
+ * Who ends up in which seat, considered in the order projectedRoster
+ * seats them: the men he has already, by value, then the fills in turn
+ * order.
+ */
+function seatedAs(had: Player[], roster: Player[]): Shown[] {
+  const seats = seatsShown();
+  const order = [
+    ...[...had].sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0)),
+    ...roster.filter((p) => !had.some((q) => q.key === p.key)),
+  ];
+
+  for (const p of order) {
+    const seat = seats.find((s) => !s.taken && s.where.includes(p.position));
+
+    if (seat) {
+      seat.taken = p;
+    }
+  }
+
+  return seats;
+}
+
+console.log("\n=== pick 1, seat by seat");
+const firstTurn = turnsAll.slice(1);
+const byName = (name: string) => men.find((p) => p.name === name)!;
+const nacua = byName("Puka Nacua");
+const gibbs = byName("Jahmyr Gibbs");
+const bijan = byName("Bijan Robinson");
+const firstWorth = takeNowFor([], slots, men, turnsAll, opponent, DRAWS);
+
+for (const had of [[], [nacua], [gibbs]] as Player[][]) {
+  const plan = new Map(
+    assumedAt(had, men, firstTurn).map((a) => [a.p.key, a.at]),
+  );
+  const roster = projectedRoster(had, slots, men, firstTurn);
+  const base = baselineFor(roster, slots, DRAWS);
+  console.log(
+    `  ${had.length ? "taking " + had[0]!.name : "passing over"}, reads ` +
+    `${had.length ? at(firstWorth(had[0]!).added) : at(0)}, ` +
+    `week ${(base.total.reduce((s, n) => s + n, 0) / base.total.length)
+      .toFixed(1)}, win ${winChance(base.total, opponent).toFixed(4)}`,
+  );
+  console.log("    " + seatedAs(had, roster).map((s) =>
+    `${s.label} ${s.taken
+      ? `${s.taken.name} ${(s.taken.ppg ?? 0).toFixed(1)}` +
+        (plan.has(s.taken.key) ? ` at ${plan.get(s.taken.key)}` : " (his)")
+      : "empty"}`).join("; "));
+
+  for (const where of ["RB", "WR"]) {
+    const its = base.displaced[where]!.filter((d) => d.expect > 0);
+    console.log(
+      `    a newcomer at ${where} has to beat ` +
+      `${(its.reduce((s, d) => s + d.expect, 0) / Math.max(1, its.length))
+        .toFixed(1)} expected and takes the seat off a man who then ` +
+      `scored ${(its.reduce((s, d) => s + d.score, 0) / Math.max(1, its.length))
+        .toFixed(1)}, in ${pct(its.length / base.total.length)} of weeks`,
+    );
+  }
+}
+
+console.log("\n=== the same two men, one thing changed at a time");
+const variants: { of: string; p: Player }[] = [
+  { of: "Nacua as he is, WR", p: nacua },
+  { of: "Nacua listed at RB", p: asPosition(nacua, "RB") },
+  { of: "Nacua flat, WR", p: asFlat(nacua) },
+  { of: "Gibbs as he is, RB", p: gibbs },
+  { of: "Gibbs listed at WR", p: asPosition(gibbs, "WR") },
+  { of: "Gibbs flat, RB", p: asFlat(gibbs) },
+  { of: "Robinson as he is, RB", p: bijan },
+  { of: "Robinson listed at WR", p: asPosition(bijan, "WR") },
+];
+
+for (const { of, p } of variants) {
+  const his = firstWorth(p);
+  const weeks = weeksOf(p, DRAWS);
+  const playing = weeks.filter((w) => w > 0);
+  const sorted = [...playing].sort((a, b) => a - b);
+  console.log(
+    `  ${of.padEnd(22)} ${(p.ppg ?? 0).toFixed(1)} a game, ` +
+    `weeks ${sorted[Math.floor(sorted.length * 0.1)]!.toFixed(0)} to ` +
+    `${sorted[Math.floor(sorted.length * 0.9)]!.toFixed(0)}, ` +
+    `starts ${pct(his.starts)}, added ${at(his.added)}`,
+  );
+}
+
+console.log("\n=== what the file says about the two of them");
+
+for (const p of [nacua, gibbs, bijan]) {
+  console.log(
+    `  ${p.name.padEnd(18)} the projection pays ` +
+    `${payFor(p.projected ?? {}, pays).toFixed(2)} a game, the walk's own ` +
+    `line pays ${payFor(p.simulated ?? {}, pays).toFixed(2)}, and the board ` +
+    `uses ${(p.ppg ?? 0).toFixed(1)}`,
+  );
+}
+
+/**
+ * What the fill would hand you at each pick, position by position, under
+ * the same availability rule it uses: the first man in board order it
+ * still expects to be there. The best points on offer is shown beside
+ * him, since board order and points a game are not the same thing.
+ */
+console.log("\n=== the falloff the fill believes in");
+const POSTS = [1, 12, 24, 36, 48, 72, 96, 120];
+const stillThere = (p: Player, pick: number) => !p.adp || p.adp >= pick;
+const firstFor = (where: string, pick: number) =>
+  men.find((p) => p.position === where && stillThere(p, pick));
+const bestFor = (where: string, pick: number) =>
+  men.filter((p) => p.position === where && stillThere(p, pick))
+    .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))[0];
+
+console.log("  pick  " + ["QB", "RB", "WR", "TE"]
+  .map((w) => (w + " the fill takes / the best left").padEnd(38)).join(""));
+
+for (const pick of POSTS) {
+  console.log(
+    `  ${String(pick).padStart(4)}  ` +
+    ["QB", "RB", "WR", "TE"].map((where) => {
+      const him = firstFor(where, pick);
+      const best = bestFor(where, pick);
+
+      return `${(him?.name ?? "none").split(" ").slice(-1)[0]} ` +
+        `${(him?.ppg ?? 0).toFixed(1)} / ` +
+        `${(best?.name ?? "none").split(" ").slice(-1)[0]} ` +
+        `${(best?.ppg ?? 0).toFixed(1)}`;
+    }).map((s) => s.padEnd(38)).join(""),
+  );
+}
+
+/**
+ * What the fill promised him for his next turn against who was really
+ * there when it came. ADP is an average of other rooms, so this is the
+ * size of the defect in the one room he was sitting in.
+ */
+console.log("\n=== what ADP promised for his next turn against what was there");
+const slippage: Record<string, number[]> = {};
+
+for (const where of WHERE) {
+  slippage[where] = [];
+}
+
+for (let turn = 0; turn < mine.length - 1; turn++) {
+  const here = mine[turn]!.pick.pick_no;
+  const next = mine[turn + 1]!.pick.pick_no;
+  const goneNow = new Set(
+    took.filter((t) => t.pick.pick_no < here && t.p).map((t) => t.p!.key),
+  );
+  const goneThen = new Set(
+    took.filter((t) => t.pick.pick_no < next && t.p).map((t) => t.p!.key),
+  );
+  const believedBest = (where: string) => men
+    .filter((p) => p.position === where && !goneNow.has(p.key) &&
+      stillThere(p, next))
+    .reduce((top, p) => Math.max(top, p.ppg ?? 0), 0);
+  const actualBest = (where: string) => men
+    .filter((p) => p.position === where && !goneThen.has(p.key))
+    .reduce((top, p) => Math.max(top, p.ppg ?? 0), 0);
+  const gaps = WHERE.map((where) => {
+    const gap = believedBest(where) - actualBest(where);
+    slippage[where]!.push(gap);
+
+    return `${where} ${believedBest(where).toFixed(1)}/` +
+      `${actualBest(where).toFixed(1)}`;
+  });
+  const penciled = assumedAt(
+    mine.slice(0, turn).map((t) => t.p!),
+    men.filter((p) => !goneNow.has(p.key)),
+    turnsAll.slice(turn + 1),
+  ).find((a) => a.at === next);
+  console.log(
+    `  p${String(here).padStart(3)} for p${String(next).padStart(3)}: ` +
+    gaps.join(", ") +
+    (penciled
+      ? `; penciled ${penciled.p.name} ` +
+        `${goneThen.has(penciled.p.key) ? "gone" : "still there"}`
+      : ""),
+  );
+}
+
+for (const where of WHERE) {
+  const its = slippage[where]!;
+  const mean = its.reduce((s, n) => s + n, 0) / its.length;
+  const over = its.filter((n) => n > 0.5).length;
+  console.log(
+    `  ${where}: ADP was ${mean.toFixed(1)} a game optimistic on average, ` +
+    `and over half a point out at ${over} of ${its.length} turns, worst ` +
+    `${Math.max(...its).toFixed(1)}`,
+  );
+}
+
+// men the room took early go back on the board, so one turn can be asked
+// about two who never were available together. His own stay off it, since
+// a man cannot displace himself.
+console.log("\n=== a third round back reading above the first pick");
+const loveTurn = 2;
+const loveHere = mine[loveTurn]!;
+const loveGone = new Set(
+  took.filter((t) => t.pick.pick_no < loveHere.pick.pick_no && t.p)
+    .map((t) => t.p!.key),
+);
+const loveHad = mine.slice(0, loveTurn).map((t) => t.p!);
+const putBack = [bijan.key, byName("Ja'Marr Chase").key];
+const asIfLeft = men.filter((p) =>
+  (!loveGone.has(p.key) || putBack.includes(p.key)) &&
+  !loveHad.some((q) => q.key === p.key));
+const loveTurns = turnsAll.slice(loveTurn);
+const loveBase = baselineFor(
+  projectedRoster(loveHad, slots, asIfLeft, loveTurns.slice(1)), slots, DRAWS,
+);
+const loveWithout = winChance(loveBase.total, opponent);
+const loveWorth = takeNowFor(
+  loveHad, slots, asIfLeft, loveTurns, opponent, DRAWS,
+);
+const earlier = baselineFor(
+  projectedRoster(
+    mine.slice(0, 1).map((t) => t.p!), slots,
+    men.filter((p) => !took.some((t) =>
+      t.p && t.p.key === p.key && t.pick.pick_no < 24)),
+    turnsAll.slice(2),
+  ),
+  slots, DRAWS,
+);
+const earlierWithout = winChance(earlier.total, opponent);
+
+console.log(
+  `  the reference at pick 24 read ${earlierWithout.toFixed(4)} and at ` +
+  `pick 25 it reads ${loveWithout.toFixed(4)}, a fall of ` +
+  `${(earlierWithout - loveWithout).toFixed(4)} from making one pick`,
+);
+
+for (const p of [byName("Jeremiyah Love"), bijan, byName("Ja'Marr Chase")]) {
+  const his = loveWorth(p);
+  console.log(
+    `  ${p.name.padEnd(18)} at pick 25 reads ${at(his.added)}, and ` +
+    `${at(loveWithout + his.added - earlierWithout)} against the reference ` +
+    `one pick earlier`,
+  );
+}
+
+console.log("\n=== the same turn with more weeks drawn");
+const MORE = 20000;
+const opponentMore = typicalWeek(men, slots, teams, MORE);
+const worthMore = takeNowFor([], slots, men, turnsAll, opponentMore, MORE);
+
+for (const p of [nacua, byName("Ja'Marr Chase"), byName("Jaxon Smith-Njigba"),
+  gibbs, bijan]) {
+  console.log(
+    `  ${p.name.padEnd(20)} ${DRAWS} weeks ${at(firstWorth(p).added)}, ` +
+    `${MORE} weeks ${at(worthMore(p).added)}`,
   );
 }
 
