@@ -54,14 +54,15 @@ jobs:
           key: nflverse-raw-v1-${{ steps.stamp.outputs.week }}
           restore-keys: nflverse-raw-v1-
 
-      # Every season from 2016 trains the weekly model, so the build needs
-      # each one's stats and rosters. --no-plays leaves out the per-play
-      # files, which are read only for the season being rebuilt, and the
-      # step downloads nothing a restored cache already has.
+      # Every season from 2016 trains the weekly model, and each of those
+      # reads the season before it for a man's points a game last year, so
+      # the fill starts at 2015. --no-plays leaves out the per-play files,
+      # which are read only for the season being rebuilt, and the step
+      # downloads nothing a restored cache already has.
       - name: fill in the seasons the models train on
         run: |
           npx tsx scripts/fetchData.ts \
-            --seasons "2016-$(( $(date -u +%Y) - 1 ))" --no-plays
+            --seasons "2015-$(( $(date -u +%Y) - 1 ))" --no-plays
 
       # week.ts pulls this season's files and Sleeper's projections,
       # counts this season's touches and builds the site. A release
