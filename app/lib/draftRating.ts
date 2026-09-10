@@ -317,7 +317,9 @@ const middleOf = (of: number[]): number => {
   return sorted.length % 2 ? sorted[at]! : (sorted[at - 1]! + sorted[at]!) / 2;
 };
 
-export function gradesFor(rated: TeamRating[]): Map<string, string> {
+export function gradesFor(
+  rated: { owner: string; perPick: number }[],
+): Map<string, string> {
   const overs = rated.map((t) => t.perPick);
   const middle = middleOf(overs);
   // 1.4826 turns a median distance into something a normal spread's

@@ -3,12 +3,18 @@
 import type { Player } from "../lib/scoring.ts";
 import type { League } from "../lib/providers.ts";
 import {
-  barFromPicks, gradesFor, keyForPick, marketCurve, ratePicks, rateTeams,
-  worthAt, type TeamRating,
+  fillLineup, gradesFor, keyForPick, marketCurve,
 } from "../lib/draftRating.ts";
+import {
+  roomFor, sharePicks, shareTeams, type TeamShare, type Took,
+} from "../lib/draftShare.ts";
 import { asRound } from "../lib/picks.ts";
 import { normalizeName } from "../lib/store.ts";
 import type { Pick } from "./Draft.tsx";
+import { useMemo } from "preact/hooks";
+
+/** the same draw as the draft board, so a pick reads here as it read there */
+const WEEKS_DRAWN = 6000;
 
 interface Props {
   board: Player[];
@@ -18,33 +24,33 @@ interface Props {
   made: Pick[];
 }
 
+function pct(share: number): string {
+  return `${(100 * share).toFixed(0)}%`;
+}
+
+function signed(share: number, places = 1): string {
+  const text = (100 * share).toFixed(places);
+
+  return share > 0 ? `+${text}` : text;
+}
+
 function TeamRow(
-  { team, at, grade, mine }:
-  { team: TeamRating; at: number; grade: string; mine: boolean },
+  { team, at, grade, mine, starters }:
+  {
+    team: TeamShare; at: number; grade: string; mine: boolean;
+    starters: { p: Player }[];
+  },
 ) {
   return (
     <tr class={mine ? "on" : ""}>
       <td>{at}</td>
       <td>{team.owner}</td>
       <td>{grade}</td>
-      {/* a pick leads, since that is what the order and the grade are
-          read off. A side with fifteen turns beats one with nine on the
-          total without having drafted any better */}
-      <td>
-        {team.perPick > 0
-          ? `+${team.perPick.toFixed(1)}`
-          : team.perPick.toFixed(1)}
-      </td>
-      <td>{team.over > 0 ? `+${team.over.toFixed(1)}` : team.over.toFixed(1)}</td>
+      <td>{signed(team.over)}</td>
+      <td>{pct(team.wins)}</td>
+      <td>{pct(team.expected)}</td>
       <td>{team.picks}</td>
-      <td>{team.got.toFixed(1)}</td>
-      <td>{team.expected.toFixed(1)}</td>
-      <td>
-        {team.starters
-          .slice(0, 3)
-          .map((s) => s.p.name)
-          .join(", ")}
-      </td>
+      <td>{starters.slice(0, 3).map((s) => s.p.name).join(", ")}</td>
     </tr>
   );
 }
@@ -59,10 +65,8 @@ export function DraftRating(props: Props) {
    * rosters are the fallback for a league whose provider cannot say
    * what happened pick by pick.
    */
-  type Took = { at: number; p: Player; kept: boolean };
   const drafted = new Map<string, Took[]>();
   const kept: Took[] = [];
-  const took: Took[] = [];
   /**
    * The picks the board has no man for, so a reader knows a team was
    * rated on fewer picks than it made. Left silent, a side that took a
@@ -79,31 +83,13 @@ export function DraftRating(props: Props) {
       continue;
     }
 
-    const one = { at: pick.overall, p, kept: pick.keeper };
+    const one: Took = { at: pick.overall, p, kept: pick.keeper };
     drafted.set(pick.who, [...(drafted.get(pick.who) ?? []), one]);
-    (pick.keeper ? kept : took).push(one);
-  }
 
-  /**
-   * Two bars, because keeping a man costs the pick he is kept at and he
-   * is nearly always cheaper than one drafted there. Against a single
-   * bar, keeping looked good for everybody and drafting looked bad for
-   * nine sides out of twelve.
-   */
-  const lastPick = props.made.length
-    ? Math.max(...props.made.map((m) => m.overall))
-    : league.size * (league.slots?.length ?? 15);
-  const keptBar = barFromPicks(kept, curve, lastPick);
-  const tookBar = barFromPicks(took, curve, lastPick);
-  const buysAt = (pick: number, wasKept: boolean) => {
-    const bar = wasKept ? keptBar : tookBar;
-
-    if (bar.length === 0) {
-      return worthAt(curve, pick);
+    if (pick.keeper) {
+      kept.push(one);
     }
-
-    return bar[Math.max(0, Math.min(bar.length - 1, Math.round(pick) - 1))]!;
-  };
+  }
 
   const teams = drafted.size > 0
     ? [...drafted.entries()].map(([owner, men]) => ({ owner, took: men }))
@@ -113,9 +99,6 @@ export function DraftRating(props: Props) {
           .map((m, i) => ({ at: r.picks[i] ?? 999, p: byKey.get(m.key), kept: false }))
           .filter((x): x is Took => Boolean(x.p)),
       }));
-  const rated = rateTeams(teams, league.slots, curve, buysAt);
-  const grades = gradesFor(rated);
-
   const mine = props.made
     .filter((pick) => pick.mine)
     .map((pick) => ({
@@ -123,9 +106,24 @@ export function DraftRating(props: Props) {
       p: byKey.get(keyForPick(pick, normalizeName)),
       kept: pick.keeper,
     }))
-    .filter((x): x is Took => Boolean(x.p))
-    .sort((a, b) => a.at - b.at);
-  const picks = ratePicks(mine, curve, buysAt);
+    .filter((x): x is Took => Boolean(x.p));
+  /**
+   * Drawn once a league, not once a render. Twelve rosters and a
+   * replayed draft come to about half a second, which is fine on
+   * opening the page and not on every keystroke elsewhere.
+   */
+  const { rated, picks } = useMemo(() => {
+    const room = roomFor(board, league.slots, league.size, WEEKS_DRAWN);
+    const everyPick = [...drafted.values()].flat();
+
+    return {
+      rated: shareTeams(teams, board, league.slots, room),
+      picks: sharePicks(mine, everyPick, board, league.slots, room),
+    };
+  }, [board, league, props.made]);
+  const grades = gradesFor(rated.map((t) => ({ owner: t.owner, perPick: t.over })));
+  const startersOf = new Map(teams.map((t) =>
+    [t.owner, fillLineup(t.took.map((x) => x.p), league.slots, curve).starters]));
 
   if (rated.length === 0) {
     return (
@@ -139,23 +137,24 @@ export function DraftRating(props: Props) {
   return (
     <>
       <div class="empty">
-        <b>{rated.length} teams</b> in {league.name}, each against what its own
-        picks were worth. A team picking third should come away with more than
-        one picking tenth, so only beating your own slots counts.
+        <b>{rated.length} teams</b> in {league.name}, each by how often the
+        roster it drafted wins a week against a typical lineup from this room,
+        over how often the roster the room would have handed its picks wins.
+        A team picking third should come away with more than one picking
+        tenth, so only beating your own slots counts.
         {drafted.size > 0
           ? " Only the men who were picked count, so a free agent taken the moment the draft ended is nobody's pick."
           : " Read off the rosters, since this league cannot say what happened pick by pick."}
-        {kept.length > 0 && " Keepers count too, against what the rest of the" +
-          " league kept at that pick rather than what it drafted there," +
-          " since a man kept is nearly always cheaper than one drafted."}
+        {kept.length > 0 && " A keeper counts as a pick at the turn he" +
+          " was kept at."}
       </div>
 
       <table class="rating">
         <thead>
           <tr>
-            <th>#</th><th>team</th><th>grade</th><th>a pick</th>
-            <th>all told</th><th>picks</th>
-            <th>got</th><th>slots worth</th><th>best three</th>
+            <th>#</th><th>team</th><th>grade</th><th>over</th>
+            <th>wins a week</th><th>slots would</th><th>picks</th>
+            <th>best three</th>
           </tr>
         </thead>
         <tbody>
@@ -166,6 +165,7 @@ export function DraftRating(props: Props) {
               at={i + 1}
               grade={grades.get(team.owner) ?? "C"}
               mine={team.owner === league.team}
+              starters={startersOf.get(team.owner) ?? []}
             />
           ))}
         </tbody>
@@ -186,11 +186,17 @@ export function DraftRating(props: Props) {
       {picks.length > 0 && (
         <>
           <h2>{league.team}, pick by pick</h2>
+          <div class="empty">
+            Each pick as the draft board would have read it at the time, with
+            the room's picks up to then off the board: what taking him added
+            to how often you win a week, in points of win chance, and who the
+            board would have taken instead.
+          </div>
           <table class="rating">
             <thead>
               <tr>
                 <th>pick</th><th>player</th><th>room had him</th>
-                <th>waited</th><th>over</th>
+                <th>waited</th><th>added</th><th>the board wanted</th>
               </tr>
             </thead>
             <tbody>
@@ -202,21 +208,22 @@ export function DraftRating(props: Props) {
                   </td>
                   <td>{pick.p.name} <i>{pick.p.position}</i></td>
                   <td>
-                    {pick.adp === null
+                    {pick.p.adp == null
                       ? "unpriced"
-                      : asRound(Math.round(pick.adp), league.size)}
+                      : asRound(Math.round(pick.p.adp), league.size)}
                   </td>
                   <td>
-                    {pick.fell === null
+                    {pick.p.adp == null
                       ? ""
-                      : pick.fell > 0
-                      ? `${pick.fell.toFixed(0)} late`
-                      : `${(-pick.fell).toFixed(0)} early`}
+                      : pick.at - pick.p.adp > 0
+                      ? `${(pick.at - pick.p.adp).toFixed(0)} late`
+                      : `${(pick.p.adp - pick.at).toFixed(0)} early`}
                   </td>
+                  <td>{signed(pick.share.added, 2)}</td>
                   <td>
-                    {pick.over > 0
-                      ? `+${pick.over.toFixed(1)}`
-                      : pick.over.toFixed(1)}
+                    {pick.best
+                      ? `${pick.best.p.name} ${signed(pick.best.share.added, 2)}`
+                      : "him"}
                   </td>
                 </tr>
               ))}
