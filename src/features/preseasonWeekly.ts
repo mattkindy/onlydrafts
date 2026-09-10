@@ -21,6 +21,7 @@ import { scoring } from "../scoring/active.js";
 import type { PreseasonWorld } from "./preseason.js";
 import type { SeasonExample } from "./seasonModel.js";
 import type { WeeklyExample } from "./weekly.js";
+import { NO_CHANGE, staffChangesFor, type StaffChange } from "./staffChange.js";
 import {
   predictWeeklyByPosition,
   type WeeklyByPosition,
@@ -57,6 +58,8 @@ export interface PreseasonWeeklyInput {
   teamScoring: Map<string, number>;
   /** each team's neutral pass rate last season */
   passRate: Map<string, number>;
+  /** what changed on each club's offensive staff this season */
+  staff: Map<string, StaffChange>;
 }
 
 export interface WeeklyProjection {
@@ -172,6 +175,7 @@ export function preseasonWeeklyExamples(
         targetShareRecent: 0,
         backfieldShareRecent: 0,
         passTendency: input.passRate.get(team) ?? NEUTRAL_PASS_RATE,
+        staff: input.staff.get(team) ?? NO_CHANGE,
         // in August no club has published an injury report for December,
         // so out of season this is false for everyone
         questionable: input.isQuestionable(playerId, slot.week),
@@ -265,6 +269,7 @@ export async function preseasonWeeklyInput(
         [team, e.points / Math.max(1, e.weeks.size)]),
     ),
     passRate,
+    staff: (await staffChangesFor(world.season)).changes,
   };
 }
 

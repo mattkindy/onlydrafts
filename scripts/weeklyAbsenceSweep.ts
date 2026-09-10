@@ -15,7 +15,7 @@ import {
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 
-const CANDIDATES = [
+const CANDIDATES = process.env["CANDIDATES"]?.split(",") ?? [
   "absence",
   "qbAbsence",
   "questionable",

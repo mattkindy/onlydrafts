@@ -12,6 +12,7 @@ import {
   loadWeeklyTendencyCounts,
 } from "../data/tendencies.js";
 import { loadWeeklyAvailability } from "../data/weeklyStatus.js";
+import { staffChangesFor } from "./staffChange.js";
 
 export const WEEKLY_FEATURES = [
   "intercept",
@@ -86,7 +87,11 @@ export async function weeklyExamplesForSeason(
     games,
     await loadSnapCounts(season),
     scoring(),
-    { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
+    {
+      weekCounts: await loadWeeklyTendencyCounts(),
+      priorSeasonRate,
+      staff: (await staffChangesFor(season)).changes,
+    },
     undefined,
     await loadWeeklyAvailability(season),
     await loadWeeklyRosters(season).catch(() => []),
@@ -128,7 +133,11 @@ export async function weeklyProspectiveForWeek(
     games,
     await loadSnapCounts(season),
     scoring(),
-    { weekCounts: await loadWeeklyTendencyCounts(), priorSeasonRate },
+    {
+      weekCounts: await loadWeeklyTendencyCounts(),
+      priorSeasonRate,
+      staff: (await staffChangesFor(season)).changes,
+    },
     week,
     await loadWeeklyAvailability(season),
     await loadWeeklyRosters(season).catch(() => []),

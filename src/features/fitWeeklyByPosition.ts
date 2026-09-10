@@ -67,6 +67,11 @@ export const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
   depthStarter: (e) => (e.depthKnown && e.depthRank === 1 ? 1 : 0),
   depthReserve: (e) => (e.depthKnown && e.depthRank >= 3 ? 1 : 0),
   depthKnown: (e) => (e.depthKnown ? 1 : 0),
+  ocChanged: (e) => (e.staff.ocChanged ? 1 : 0),
+  hcChanged: (e) => (e.staff.hcChanged ? 1 : 0),
+  passShift: (e) => e.staff.passShift,
+  // a new coordinator makes last season's average a poorer guide
+  ocChangedPrev: (e) => (e.staff.ocChanged ? e.prevPpg : 0),
 };
 
 export const POSITION_EXTRAS: Record<string, readonly string[]> = {
