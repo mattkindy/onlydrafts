@@ -90,6 +90,19 @@ jobs:
           echo "season=$season" >> "$GITHUB_OUTPUT"
           echo "week=$week" >> "$GITHUB_OUTPUT"
 
+      # A machine that fetched nothing still writes a board and a slate
+      # that look normal, with nobody in them ever hurt. This fails the
+      # run rather than committing a site thinner than the one there.
+      - name: is the refresh worth committing
+        env:
+          SEASON: ${{ inputs.season }}
+        run: |
+          args=()
+          if [ -n "$SEASON" ]; then
+            args+=(--season "$SEASON")
+          fi
+          npx tsx scripts/checkRefresh.ts "${args[@]}"
+
       - name: commit the refreshed site
         env:
           SEASON: ${{ steps.built.outputs.season }}
