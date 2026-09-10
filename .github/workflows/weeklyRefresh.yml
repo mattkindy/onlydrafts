@@ -108,6 +108,13 @@ jobs:
           fi
           npx tsx scripts/checkRefresh.ts "${args[@]}"
 
+      # Much of the suite reads the board and the slate the build wrote a
+      # step ago, so it is the only thing here that checks the site we are
+      # about to publish. The bot once pushed a board that broke a test,
+      # because this step was missing. It takes under a minute.
+      - name: do the tests pass on the site the build wrote
+        run: npm test
+
       - name: commit the refreshed site
         env:
           SEASON: ${{ steps.built.outputs.season }}
