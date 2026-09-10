@@ -1,9 +1,10 @@
-// Downloads nflverse flat files into data/raw/, skipping files
-// already on disk unless --force. In-season refresh:
-//   npx tsx scripts/fetchData.ts --seasons 2026 --force
+// Downloads nflverse flat files into data/raw/, skipping files already
+// on disk unless --force. In-season: --seasons 2026 --force. History
+// without the big per-play files: --seasons 2016-2025 --no-plays.
 
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
+import { seasonsAsked } from "../src/data/seasons.js";
 
 const RAW_DIR = join(import.meta.dirname, "..", "data", "raw");
 
@@ -40,6 +41,15 @@ function participationUrl(season: number): string {
 }
 
 /**
+ * Every play of a season, which is where the touches table comes from.
+ * The release for a season being played appears once its first games
+ * are in the books, so asking for it early gets a 404 rather than rows.
+ */
+function playByPlayUrl(season: number): string {
+  return `https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_${season}.csv`;
+}
+
+/**
  * What a player is, rather than what he did. Height, weight, where he
  * was drafted and what he ran at the combine do not change from week
  * to week, so they come as one file each rather than per season.
@@ -66,22 +76,6 @@ const PLAYER_FILES: [url: string, name: string][] = [
     "advstats_pass.csv",
   ],
 ];
-
-function parseSeasons(arg: string | undefined): number[] {
-  if (!arg) {
-    return [2021, 2022, 2023, 2024, 2025];
-  }
-
-  const range = arg.match(/^(\d{4})-(\d{4})$/);
-
-  if (range) {
-    const from = Number(range[1]);
-    const to = Number(range[2]);
-    return Array.from({ length: to - from + 1 }, (_, i) => from + i);
-  }
-
-  return arg.split(",").map(Number);
-}
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -125,10 +119,8 @@ async function tryDownload(url: string, fileName: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const seasonsFlag = process.argv.indexOf("--seasons");
-  const seasons = parseSeasons(
-    seasonsFlag === -1 ? undefined : process.argv[seasonsFlag + 1],
-  );
+  const seasons = seasonsAsked(process.argv, [2021, 2022, 2023, 2024, 2025]);
+  const plays = !process.argv.includes("--no-plays");
 
   await mkdir(RAW_DIR, { recursive: true });
   await download(GAMES_URL, "games.csv");
@@ -142,6 +134,12 @@ async function main(): Promise<void> {
     await tryDownload(renamedStatsUrl(season), `stats_player_week_${season}.csv`);
     await tryDownload(weeklyRosterUrl(season), `roster_weekly_${season}.csv`);
     await tryDownload(snapCountsUrl(season), `snap_counts_${season}.csv`);
+
+    if (!plays) {
+      continue;
+    }
+
+    await tryDownload(playByPlayUrl(season), `play_by_play_${season}.csv`);
 
     if (season >= FIRST_PARTICIPATION_SEASON) {
       await tryDownload(participationUrl(season), `participation_${season}.csv`);
