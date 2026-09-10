@@ -49,12 +49,35 @@ function playByPlayUrl(season: number): string {
   return `https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_${season}.csv`;
 }
 
+/** who was listed Out, Doubtful or Questionable, week by week */
+function injuriesUrl(season: number): string {
+  return `https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_${season}.csv`;
+}
+
+/** where each club had a man on its own chart that week */
+function depthChartsUrl(season: number): string {
+  return `https://github.com/nflverse/nflverse-data/releases/download/depth_charts/depth_charts_${season}.csv`;
+}
+
+/**
+ * The mock-draft rooms, which are a snapshot of the week before a season
+ * rather than a live number. One on disk is never replaced, --force or
+ * not: the room in November is not the room the league drafted from.
+ */
+function adpUrl(format: string, season: number): string {
+  return `https://fantasyfootballcalculator.com/api/v1/adp/${format}?teams=12&year=${season}`;
+}
+
 /**
  * What a player is, rather than what he did. Height, weight, where he
  * was drafted and what he ran at the combine do not change from week
  * to week, so they come as one file each rather than per season.
  */
 const PLAYER_FILES: [url: string, name: string][] = [
+  [
+    "https://github.com/nflverse/nflverse-data/releases/download/players/players.csv",
+    "players.csv",
+  ],
   [
     "https://github.com/nflverse/nflverse-data/releases/download/combine/combine.csv",
     "combine.csv",
@@ -88,10 +111,14 @@ async function exists(path: string): Promise<boolean> {
 
 const force = process.argv.includes("--force");
 
-async function download(url: string, fileName: string): Promise<void> {
+async function download(
+  url: string,
+  fileName: string,
+  replace = force,
+): Promise<void> {
   const path = join(RAW_DIR, fileName);
 
-  if (!force && (await exists(path))) {
+  if (!replace && (await exists(path))) {
     console.log(`skip ${fileName} (already downloaded)`);
     return;
   }
@@ -110,9 +137,13 @@ async function download(url: string, fileName: string): Promise<void> {
 // not stop the rest of the download
 const missing: string[] = [];
 
-async function tryDownload(url: string, fileName: string): Promise<void> {
+async function tryDownload(
+  url: string,
+  fileName: string,
+  replace = force,
+): Promise<void> {
   try {
-    await download(url, fileName);
+    await download(url, fileName, replace);
   } catch (error) {
     missing.push(`${fileName}: ${error instanceof Error ? error.message : error}`);
   }
@@ -134,6 +165,16 @@ async function main(): Promise<void> {
     await tryDownload(renamedStatsUrl(season), `stats_player_week_${season}.csv`);
     await tryDownload(weeklyRosterUrl(season), `roster_weekly_${season}.csv`);
     await tryDownload(snapCountsUrl(season), `snap_counts_${season}.csv`);
+    await tryDownload(injuriesUrl(season), `injuries_${season}.csv`);
+    await tryDownload(depthChartsUrl(season), `depth_charts_${season}.csv`);
+
+    for (const format of ["ppr", "standard"]) {
+      await tryDownload(
+        adpUrl(format, season),
+        `adp_${format}_${season}.json`,
+        false,
+      );
+    }
 
     if (!plays) {
       continue;
