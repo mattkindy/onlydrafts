@@ -12,9 +12,8 @@ import {
 import { primaryQbByTeam, projectedQbByTeam } from "./teamQb.js";
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
 import { fitGbm, predictGbm, type GbmModel } from "../backtest/gbm.js";
-import { loadCoaches } from "../data/coaches.js";
 import { loadAdp } from "../data/adp.js";
-import { loadTendencies } from "../data/tendencies.js";
+import { staffChangesFor } from "./staffChange.js";
 import { loadCompromisedWeeks, loadInjuryDetail } from "../data/injuries.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { spearman } from "../backtest/metrics.js";
@@ -441,52 +440,16 @@ async function draftContext(
     roomBy.set(key, list);
   }
 
-  const coaches = await loadCoaches();
-  const tendencies = await loadTendencies();
-  const coachOf = (team: string, season: number, role: string) =>
-    coaches.get(`${team}|${season}|${role}`);
+  const staff = await staffChangesFor(target);
   const ocChanged = new Map<string, boolean>();
   const hcChanged = new Map<string, boolean>();
   const passShift = new Map<string, number>();
 
-  const ocStops = new Map<string, { team: string; season: number }[]>();
-
-  for (const [key, name] of coaches) {
-    const [team, seasonText, role] = key.split("|");
-
-    if (role !== "OC" || !name) {
-      continue;
-    }
-
-    const list = ocStops.get(name) ?? [];
-    list.push({ team: team!, season: Number(seasonText) });
-    ocStops.set(name, list);
-  }
-
   for (const teamId of new Set([...olRetention.keys(), ...targetOl.keys()])) {
-    const oc = coachOf(teamId, target, "OC");
-    const prevOc = coachOf(teamId, target - 1, "OC");
-    const hc = coachOf(teamId, target, "HC");
-    const prevHc = coachOf(teamId, target - 1, "HC");
-    // an unknown staff is not a changed staff; without both seasons the
-    // honest answer is no evidence of a change
-    ocChanged.set(teamId, oc !== undefined && prevOc !== undefined && oc !== prevOc);
-    hcChanged.set(teamId, hc !== undefined && prevHc !== undefined && hc !== prevHc);
-
-    const teamPrev = tendencies.get(`${teamId}|${target - 1}`)?.neutralPassRate;
-
-    if (oc === undefined || oc === prevOc || teamPrev === undefined) {
-      passShift.set(teamId, 0);
-      continue;
-    }
-
-    const stop = (ocStops.get(oc) ?? [])
-      .filter((s) => s.season < target && s.team !== teamId)
-      .sort((a, b) => b.season - a.season)[0];
-    const ocPrev = stop
-      ? tendencies.get(`${stop.team}|${stop.season}`)?.neutralPassRate
-      : undefined;
-    passShift.set(teamId, ocPrev === undefined ? 0 : ocPrev - teamPrev);
+    const change = staff.changes.get(teamId);
+    ocChanged.set(teamId, change?.ocChanged ?? false);
+    hcChanged.set(teamId, change?.hcChanged ?? false);
+    passShift.set(teamId, change?.passShift ?? 0);
   }
 
   return {
@@ -500,7 +463,7 @@ async function draftContext(
     olRetention,
     ocChanged,
     hcChanged,
-    coachOf,
+    coachOf: staff.coachOf,
     passShift,
   };
 }
