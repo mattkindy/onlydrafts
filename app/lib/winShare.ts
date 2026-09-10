@@ -181,7 +181,7 @@ function fillFromTheWire(seated: Seat[], wire: Record<string, number>): void {
  */
 export function baselineFor(
   roster: Player[], slots: string[] | null | undefined, draws = DRAWS,
-  wire: Record<string, number> = {},
+  wire: Record<string, number> = {}, only: [number, number] = [0, draws],
 ): Baseline {
   const seats = seatsOf(slots);
   // by what you expect of him, since that is what a lineup is set on
@@ -196,7 +196,7 @@ export function baselineFor(
     displaced[where] = [];
   }
 
-  for (let i = 0; i < draws; i++) {
+  for (let i = only[0]; i < only[1]; i++) {
     const seated = seats.map((seat) => ({ ...seat }));
 
     for (const man of weeks) {
@@ -232,6 +232,43 @@ export function baselineFor(
       );
     }
   }
+
+  return { total, displaced, started };
+}
+
+/**
+ * A baseline over several rosters at once, each getting an equal run
+ * of the drawn weeks. A roster you have not finished drafting is many
+ * rosters, one per drawn draft, and its weeks are the weeks of all of
+ * them together.
+ */
+export function baselineAcross(
+  rosters: Player[][], slots: string[] | null | undefined, draws = DRAWS,
+  wire: Record<string, number> = {},
+): Baseline {
+  const total: number[] = [];
+  const displaced: Record<string, Held[]> = {};
+  const started: Record<string, number> = {};
+
+  for (const where of WHERE) {
+    displaced[where] = [];
+  }
+
+  rosters.forEach((roster, k) => {
+    const from = Math.floor((k * draws) / rosters.length);
+    const to = Math.floor(((k + 1) * draws) / rosters.length);
+    const base = baselineFor(roster, slots, draws, wire, [from, to]);
+
+    total.push(...base.total);
+
+    for (const where of WHERE) {
+      displaced[where]!.push(...base.displaced[where]!);
+    }
+
+    for (const [key, count] of Object.entries(base.started)) {
+      started[key] = (started[key] ?? 0) + count;
+    }
+  });
 
   return { total, displaced, started };
 }
@@ -290,9 +327,49 @@ export function typicalWeek(
     weeks.reduce((sum, its) => sum + (its[i] ?? 0), 0));
 }
 
+/** how many drawn drafts the seats you have not filled are filled from */
+export const FILLS = 8;
+
 /**
- * Your roster as it will look when the draft ends: what you have, plus
- * the man you would expect to get at each seat you have not filled.
+ * Where he goes in one drawn draft: a triangular draw between the
+ * earliest and the latest pick he has gone at, peaking at his average.
+ * The same draw serves every turn, so a man gone by your fourth pick
+ * is still gone by your fifth.
+ */
+function drawnPick(p: Player, fill: number): number {
+  if (!p.adp) {
+    return Infinity;
+  }
+
+  let picks = picked.get(p);
+
+  if (!picks) {
+    const adp = p.adp;
+    const low = Math.min(p.adpLow ?? adp, adp);
+    const high = Math.max(p.adpHigh ?? adp, adp);
+    const peak = (adp - low) / Math.max(1e-9, high - low);
+    picks = streamFor(p.key + "|pick", FILLS).map((u) =>
+      u < peak
+        ? low + Math.sqrt(u * (high - low) * (adp - low))
+        : high - Math.sqrt((1 - u) * (high - low) * (high - adp)));
+    picked.set(p, picks);
+  }
+
+  return picks[fill]!;
+}
+
+const picked = new WeakMap<Player, number[]>();
+
+/**
+ * Your roster as it will look when the draft ends, in one drawn draft:
+ * what you have, plus the man you get at each seat you have not filled.
+ *
+ * Who is still there at each of your turns is drawn, not assumed. The
+ * fill used to take any man whose average draft position was at or
+ * after the turn, as if he were certain to be there, which made the
+ * man it assumed for you worth nothing to take now and made a seat you
+ * could easily fail to fill look filled. Here a man is there for you
+ * when his drawn pick comes after your turn.
  *
  * Measuring against what you have today says nothing on the first pick,
  * because one man against a whole side loses every week whoever he is,
@@ -305,7 +382,7 @@ export function typicalWeek(
  */
 export function projectedRoster(
   mine: Player[], slots: string[] | null | undefined, left: Player[],
-  turns: number[],
+  turns: number[], fill = 0,
 ): Player[] {
   const seats = seatsOf(slots);
   const filled = [...mine].sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0));
@@ -339,7 +416,7 @@ export function projectedRoster(
 
     const him = left.find((p) =>
       spare.has(p.key) &&
-      (!p.adp || p.adp >= at) &&
+      drawnPick(p, fill) >= at &&
       seats.some((s) => !s.taken && s.where.includes(p.position)));
 
     if (!him) {
@@ -396,8 +473,10 @@ export function takeNowFor(
   wire: Record<string, number> = {},
 ): (p: Player) => WinShare {
   const later = turns.slice(1);
-  const passed = baselineFor(
-    projectedRoster(mine, slots, left, later), slots, draws, wire,
+  const fills = Array.from({ length: FILLS }, (_, k) => k);
+  const passed = baselineAcross(
+    fills.map((k) => projectedRoster(mine, slots, left, later, k)),
+    slots, draws, wire,
   );
   const without = winChance(passed.total, opponent);
   /**
@@ -412,13 +491,16 @@ export function takeNowFor(
   >();
 
   return (p: Player) => {
-    const rest = projectedRoster([...mine, p], slots, left, later)
-      .filter((q) => q.key !== p.key);
-    const key = rest.map((q) => q.key).sort().join("|");
+    const rests = fills.map((k) =>
+      projectedRoster([...mine, p], slots, left, later, k)
+        .filter((q) => q.key !== p.key));
+    const key = rests
+      .map((rest) => rest.map((q) => q.key).sort().join("|"))
+      .join("/");
     let his = around.get(key);
 
     if (!his) {
-      const base = baselineFor(rest, slots, draws, wire);
+      const base = baselineAcross(rests, slots, draws, wire);
       his = {
         chance: winChance(base.total, opponent),
         share: winShareFor(base, opponent, draws),
