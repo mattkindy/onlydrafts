@@ -24,8 +24,8 @@ import { normalizeName } from "../app/lib/store.ts";
 import { lineupOf, payFor, type Pays, type Player } from "../app/lib/scoring.ts";
 import { DRAWS as WEEKS } from "../app/lib/spread.ts";
 import {
-  baselineFor, projectedRoster, takeNowFor, typicalWeek, weeksOf, winChance,
-  winShareFor,
+  baselineFor, projectedRoster, takeNowFor, typicalWeek, weekOfDraw, weeksOf,
+  winChance, winShareFor,
 } from "../app/lib/winShare.ts";
 
 const [
@@ -733,7 +733,23 @@ for (const p of [nacua, byName("Ja'Marr Chase"), byName("Jaxon Smith-Njigba"),
 }
 
 console.log("\n=== byes");
-console.log(
-  `  ${men.filter((p) => p.bye).length} of ${men.length} men carry a bye ` +
-  `week, and weeksOf reads games and the drawn spread only.`,
-);
+{
+  const withBye = men.filter((p) => p.bye);
+  const his = mine.map((t) => t.p!).filter(Boolean);
+  const stacked = his.filter((p) => p.bye === his[0]?.bye).length;
+  const onBye = withBye.slice(0, 5).map((p) => {
+    const weeks = weeksOf(p, DRAWS);
+    const zero = weeks.filter((w, i) => weekOfDraw(i) === p.bye && w === 0).length;
+    const of = weeks.filter((_, i) => weekOfDraw(i) === p.bye).length;
+
+    return `${p.name} week ${p.bye}: ${zero} of ${of} drawn bye weeks read 0`;
+  });
+  console.log(
+    `  ${withBye.length} of ${men.length} men have a bye week, ` +
+    `and ${stacked} of his men share ${his[0]?.name ?? "nobody"}'s`,
+  );
+
+  for (const line of onBye) {
+    console.log(`  ${line}`);
+  }
+}
