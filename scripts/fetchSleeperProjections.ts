@@ -11,6 +11,7 @@
 
 import { writeFile } from "node:fs/promises";
 import { fetchSleeperGsisIds } from "../src/data/sleeper.js";
+import { comingWeek, currentSeason, loadGames } from "../src/data/nflverse.js";
 import {
   joinProjectionsToGsis,
   loadSleeperWeekly,
@@ -77,7 +78,16 @@ async function main(): Promise<void> {
   for (const season of seasons) {
     let seasonRows = 0;
 
-    for (let week = 1; week <= LAST_WEEK; week++) {
+    /**
+     * Sleeper revises every week still to come, so fetching all eighteen
+     * rewrites thousands of rows a run for numbers nobody reads until
+     * that week arrives. Past seasons are settled and come whole.
+     */
+    const last = season === currentSeason()
+      ? Math.min(LAST_WEEK, comingWeek(await loadGames(), season))
+      : LAST_WEEK;
+
+    for (let week = 1; week <= last; week++) {
       const raw = await fetchWeek(season, week);
       await pause(PAUSE_MS);
 
