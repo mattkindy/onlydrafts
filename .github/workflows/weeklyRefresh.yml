@@ -67,12 +67,16 @@ jobs:
       # week.ts pulls this season's files and Sleeper's projections,
       # counts this season's touches and builds the site. A release
       # nflverse has not published yet leaves the site as it was.
+      # Half a point a catch, because the board is public and half PPR is
+      # the middle of the three: it is half a point off a standard league
+      # and half off a full PPR one, where scoring PPR is a full point
+      # wrong for anybody in standard. A private league passes --league.
       - name: refresh the week
         env:
           SEASON: ${{ inputs.season }}
           WEEK: ${{ inputs.week }}
         run: |
-          args=()
+          args=(--scoring half)
           if [ -n "$SEASON" ]; then
             args+=(--season "$SEASON")
           fi
