@@ -336,7 +336,7 @@ export const FILLS = 8;
  * The same draw serves every turn, so a man gone by your fourth pick
  * is still gone by your fifth.
  */
-function drawnPick(p: Player, fill: number): number {
+export function drawnPick(p: Player, fill: number): number {
   if (!p.adp) {
     return Infinity;
   }
