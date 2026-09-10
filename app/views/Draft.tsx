@@ -261,15 +261,9 @@ function Clock({ state, teams }: { state: DraftNow; teams: number }) {
 /** how many cards the whole board opens with, and steps by */
 const A_PAGE = 60;
 
-/**
- * How many weeks to draw when the board is scored by what a man adds to
- * your wins. A dozen rosters are drawn for the whole board and this
- * many weeks takes under a tenth of a second on a laptop, so the page
- * keeps up with a draft that redraws every ten seconds. The difference
- * it reads is paired, both sides drawing the same weeks, so it is
- * steadier than the count on its own suggests.
- */
-const WEEKS_DRAWN = 2000;
+// shared out over the drawn drafts; about half a second a board, and
+// at two thousand the top five of a round reordered from run to run
+const WEEKS_DRAWN = 6000;
 
 interface Scored {
   p: Player;
