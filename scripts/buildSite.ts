@@ -144,6 +144,45 @@ function slateRow(
   };
 }
 
+interface Slate {
+  season: number;
+  week: number;
+  preseason: boolean;
+  players: ReturnType<typeof slateRow>[];
+}
+
+/** what the slate file says about itself, or nothing if it is unreadable */
+function slateThere(text: string): { preseason?: boolean } {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Writes a week's slate, unless the one already there was built from
+ * played games and this one comes from the preseason path. A season
+ * whose weekly stats nflverse has not published yet builds a preseason
+ * slate, and a scheduled refresh that runs before the release lands
+ * would otherwise turn a played week's numbers back into projections.
+ */
+async function writeSlate(path: string, slate: Slate): Promise<void> {
+  const there = slateThere(await readFile(path, "utf8").catch(() => ""));
+
+  if (slate.preseason && there.preseason === false) {
+    console.log(
+      `week ${slate.week} already has a slate from played games, so the ` +
+        "preseason one is not written",
+    );
+    return;
+  }
+
+  await writeFile(path, JSON.stringify(slate));
+  const from = slate.preseason ? " from the preseason path" : "";
+  console.log(`week ${slate.week}${from}: ${slate.players.length} players`);
+}
+
 /**
  * Each man's place by one model over the parts of his play. A man the
  * advanced stat files have never seen is left out rather than guessed
@@ -498,12 +537,11 @@ async function main(): Promise<void> {
         ))
       .sort((a, b) => b.average - a.average);
 
-    await writeFile(
+    await writeSlate(
       join(DOCS, "data", `slate-${season}-${week}.json`),
-      JSON.stringify({ season, week, preseason: false, players: rows }),
+      { season, week, preseason: false, players: rows },
     );
     index.push({ season, week });
-    console.log(`week ${week}: ${rows.length} players`);
   }
 
   // season draft board with replacement value, for the draft view
@@ -945,12 +983,11 @@ async function main(): Promise<void> {
       })
       .sort((a, b) => b.average - a.average);
 
-    await writeFile(
+    await writeSlate(
       join(DOCS, "data", `slate-${season}-${week}.json`),
-      JSON.stringify({ season, week, preseason: true, players: rows }),
+      { season, week, preseason: true, players: rows },
     );
     index.push({ season, week });
-    console.log(`week ${week} from the preseason path: ${rows.length} players`);
   }
 
   console.log("simulating seasons for the board...");
