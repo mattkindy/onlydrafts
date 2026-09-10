@@ -1023,8 +1023,8 @@ describe("a man too thin to have a spread", () => {
     /**
      * The shape of a spread survives the scaling, since every figure
      * moves by the same ratio, so this is the file's own opinion of how
-     * a man varies. Fifteen passes the widest we ship, which is a
-     * fringe receiver at fourteen, and catches Homer at fifty six.
+     * a man varies. The board drops anybody at ten or wider, so fifteen
+     * leaves room and still catches Homer at fifty six.
      */
     for (const p of men) {
       if (!p.game?.["ev"]) {
