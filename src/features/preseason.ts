@@ -23,6 +23,7 @@ import {
 } from "../backtest/intervals.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { PART_NAMES, type StatParts } from "./seasonSummary.js";
+import { assertTrainable } from "./trainable.js";
 import { scoring } from "../scoring/active.js";
 import {
   fitPartsModel, predictParts, partsByPosition, blankParts,
@@ -73,11 +74,15 @@ export async function buildPreseasonWorld(
 
   const data = await buildSeasonData(seasons);
   const train: SeasonExample[] = [];
+  const bySeason = new Map<number, number>();
 
   for (const target of seasons.filter((s) => s >= 2017 && s < season)) {
-    train.push(...(await examplesForTransition(target, data)));
+    const rows = await examplesForTransition(target, data);
+    bySeason.set(target, rows.length);
+    train.push(...rows);
   }
 
+  assertTrainable(train, bySeason);
   const fit = fitSeasonModel(train);
   /**
    * The same model again, part by part, so what it says can be scored
