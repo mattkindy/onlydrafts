@@ -317,12 +317,17 @@ export async function loadPlayerStats(
     .filter((row) => row["season_type"] === "REG" && row["player_id"])
     .map((row) => {
       const n = (key: string) => toNumber(row[key]) ?? 0;
+      // A column the release renamed is absent under the other name and
+      // reads as nought, which is a number rather than a gap, so nothing
+      // downstream can tell it from a man who threw none.
+      const either = (...keys: string[]) =>
+        toNumber(keys.map((key) => row[key]).find((v) => v !== undefined)) ?? 0;
 
       const statLine: StatLine = {
         ...emptyStatLine(),
         passYds: n("passing_yards"),
         passTd: n("passing_tds"),
-        interceptions: n("interceptions"),
+        interceptions: either("passing_interceptions", "interceptions"),
         rushYds: n("rushing_yards"),
         rushTd: n("rushing_tds"),
         receptions: n("receptions"),
