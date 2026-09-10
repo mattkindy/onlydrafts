@@ -37,6 +37,7 @@ export const DEFAULT_SEASON = { weeks: 17, runs: 2000, roleDrift: 0.9 };
 
 export interface Spread {
   p10: number; p25: number; median: number; p75: number; p90: number;
+  mean: number;
 }
 
 export interface PlayerSeason {
@@ -137,6 +138,7 @@ export function simulateSeason(
       p10: quantile(sorted, 0.1), p25: quantile(sorted, 0.25),
       median: quantile(sorted, 0.5), p75: quantile(sorted, 0.75),
       p90: quantile(sorted, 0.9),
+      mean: sorted.reduce((a, b) => a + b, 0) / Math.max(1, sorted.length),
     };
   };
 

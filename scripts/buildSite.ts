@@ -824,7 +824,9 @@ async function main(): Promise<void> {
    * so the level stays where it is and only the shape is taken. Each
    * man's simulated spread is scaled to sit around his projection.
    */
-  const shapeOf = new Map<string, { q1: number; q3: number; low: number; high: number }>();
+  const shapeOf = new Map<
+    string, { q1: number; mid: number; q3: number; low: number; high: number }
+  >();
 
   try {
     const positions = new Map<string, string>();
@@ -851,19 +853,20 @@ async function main(): Promise<void> {
       );
 
       for (const player of simulated) {
-        const middle = player.weekly.median;
+        const mean = player.weekly.mean;
 
-        if (middle <= 0) {
+        if (mean <= 0) {
           continue;
         }
 
-        // as a share of his own median, so it can be hung on the
-        // season model's projection rather than the simulation's
+        // as a share of his own mean, since the projection it is hung
+        // on is a mean; a thin man's median can be a tenth of his mean
         shapeOf.set(player.playerId, {
-          q1: player.weekly.p25 / middle,
-          q3: player.weekly.p75 / middle,
-          low: player.weekly.p10 / middle,
-          high: player.weekly.p90 / middle,
+          q1: player.weekly.p25 / mean,
+          mid: player.weekly.median / mean,
+          q3: player.weekly.p75 / mean,
+          low: player.weekly.p10 / mean,
+          high: player.weekly.p90 / mean,
         });
       }
     }
@@ -900,15 +903,16 @@ async function main(): Promise<void> {
       const sorted = [...his].sort((a, b) => a - b);
       const at = (q: number) => sorted[Math.floor(q * (sorted.length - 1))]!;
       const middle = at(0.5);
+      const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
 
-      if (middle <= 0) {
+      if (mean <= 0) {
         continue;
       }
 
       const stretched = (q: number) =>
-        Math.max(0, middle + (at(q) - middle) * WIDER) / middle;
+        Math.max(0, middle + (at(q) - middle) * WIDER) / mean;
       shapeOf.set(playerId, {
-        q1: stretched(0.25), q3: stretched(0.75),
+        q1: stretched(0.25), mid: stretched(0.5), q3: stretched(0.75),
         low: stretched(0.1), high: stretched(0.9),
       });
       fromWalk++;
@@ -1067,7 +1071,7 @@ async function main(): Promise<void> {
         game: {
           ev: Number(p.projectedPpg.toFixed(1)),
           q1: perGame(0.25, shape?.q1),
-          mid: Number(p.projectedPpg.toFixed(1)),
+          mid: perGame(0.5, shape?.mid),
           q3: perGame(0.75, shape?.q3),
           low: perGame(0.1, shape?.low),
           high: perGame(0.9, shape?.high),
