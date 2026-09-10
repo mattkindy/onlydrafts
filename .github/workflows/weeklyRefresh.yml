@@ -1,0 +1,111 @@
+name: weekly refresh
+
+# Tuesday 11:00 UTC is 07:00 in the summer and 06:00 in the winter on the
+# US east coast, after Monday night is scored. Sunday 12:00 UTC is 08:00
+# and 07:00, a few hours before the early games. Actions cron is UTC and
+# does not follow daylight saving, so both sit well clear of the boundary.
+on:
+  schedule:
+    - cron: "0 11 * * 2"
+    - cron: "0 12 * * 0"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "season to refresh, the one being played if empty"
+        required: false
+      week:
+        description: "week to build, the coming one if empty"
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: name this week
+        id: stamp
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      # The nflverse files are gitignored and about a gigabyte, so they are
+      # cached rather than fetched again every run. A new key each week
+      # restores the newest copy and saves a fresh one. An unused entry
+      # expires after a week, so a quiet fortnight means the fill below
+      # downloads the history again, which works but takes far longer.
+      - name: the nflverse downloads
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: nflverse-raw-v1-${{ steps.stamp.outputs.week }}
+          restore-keys: nflverse-raw-v1-
+
+      # Every season from 2016 trains the weekly model, so the build needs
+      # each one's stats and rosters. --no-plays leaves out the per-play
+      # files, which are read only for the season being rebuilt, and the
+      # step downloads nothing a restored cache already has.
+      - name: fill in the seasons the models train on
+        run: |
+          npx tsx scripts/fetchData.ts \
+            --seasons "2016-$(( $(date -u +%Y) - 1 ))" --no-plays
+
+      # week.ts pulls this season's files and Sleeper's projections,
+      # counts this season's touches and builds the site. A release
+      # nflverse has not published yet leaves the site as it was.
+      - name: refresh the week
+        env:
+          SEASON: ${{ inputs.season }}
+          WEEK: ${{ inputs.week }}
+        run: |
+          args=()
+          if [ -n "$SEASON" ]; then
+            args+=(--season "$SEASON")
+          fi
+          if [ -n "$WEEK" ]; then
+            args+=(--weeks "$WEEK")
+          fi
+          npx tsx scripts/week.ts "${args[@]}"
+
+      - name: what the site now shows
+        id: built
+        run: |
+          season=$(jq -r ".boardSeason" docs/data/index.json)
+          week=$(jq -r --argjson s "$season" \
+            '[.weeks[] | select(.season == $s) | .week] | max // "none"' \
+            docs/data/index.json)
+          echo "season=$season" >> "$GITHUB_OUTPUT"
+          echo "week=$week" >> "$GITHUB_OUTPUT"
+
+      - name: commit the refreshed site
+        env:
+          SEASON: ${{ steps.built.outputs.season }}
+          WEEK: ${{ steps.built.outputs.week }}
+        run: |
+          git add docs data/curated
+
+          if git diff --cached --quiet; then
+            echo "$SEASON week $WEEK was already up to date, nothing to commit" \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(site): refresh $SEASON week $WEEK"
+          git pull --rebase --quiet origin "$GITHUB_REF_NAME"
+          git push
+          echo "committed the $SEASON week $WEEK refresh" >> "$GITHUB_STEP_SUMMARY"
