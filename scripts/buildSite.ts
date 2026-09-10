@@ -2,7 +2,7 @@
 // JSON for the requested weeks, ready for GitHub Pages.
 // Run: npx tsx scripts/buildSite.ts --league <sleeper id> --weeks 10-12
 
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import {
@@ -426,6 +426,24 @@ async function takePasserLines(
   }
 
   console.log(`${taken} passers take the joint line`);
+}
+
+/**
+ * Vite cannot empty docs first, since the data lives there too, so a
+ * scheduled build would collect a stale bundle a week forever.
+ */
+async function dropStaleAssets(): Promise<void> {
+  const page = await readFile(join(DOCS, "index.html"), "utf8");
+  const dir = join(DOCS, "assets");
+
+  for (const name of await readdir(dir).catch(() => [])) {
+    if (page.includes(name)) {
+      continue;
+    }
+
+    await rm(join(dir, name));
+    console.log(`dropped the old ${name}`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -1553,6 +1571,7 @@ async function main(): Promise<void> {
     cwd: join(import.meta.dirname, ".."),
     stdio: "inherit",
   });
+  await dropStaleAssets();
   console.log(`site written to ${DOCS}`);
 }
 
