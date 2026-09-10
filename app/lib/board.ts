@@ -89,6 +89,33 @@ const scaled = (of: Record<string, number>, by: number, places: number) =>
   Object.fromEntries(Object.entries(of)
     .map(([at, n]) => [at, Number((n * by).toFixed(places))]));
 
+/**
+ * How many times his middle week a man's high week can run before we
+ * stop believing the spread. Everyone the projection is sure of comes in
+ * between two and four, and nine is the widest on the whole board.
+ */
+const WIDEST_WEEK = 10;
+
+/**
+ * A spread too wide to believe. Asked in multiples so the answer is the
+ * same whatever the build scored: half a point a catch gives a fringe
+ * receiver half the middle week a full point does, and his high week
+ * barely moves, so the multiple doubles on a man whose role never changed.
+ */
+function runsAway(band: Record<string, number>): boolean {
+  const middle = band["ev"] ?? 0;
+
+  return middle > 0 && (band["high"] ?? 0) / middle >= WIDEST_WEEK;
+}
+
+/** no spread on the card, rather than one that disagrees with him */
+function forgetSpread(p: Player): void {
+  p.game = null;
+  p.sim = p.sim
+    ? { ev: 0, q1: 0, mid: 0, q3: 0, low: 0, high: 0, games: p.sim.games }
+    : null;
+}
+
 export function rescore(players: Player[], league: League): Player[] {
   const { pays } = league;
   const room = roomFor(pays);
@@ -159,8 +186,18 @@ export function rescore(players: Player[], league: League): Player[] {
      * among all backs.
      */
     if (built <= 0.5) {
-      p.game = null;
-      p.sim = p.sim ? { ev: 0, q1: 0, mid: 0, q3: 0, low: 0, high: 0, games: p.sim.games } : null;
+      forgetSpread(p);
+      continue;
+    }
+
+    /**
+     * The file can also give us a spread that already runs away, and
+     * scaling cannot fix that: every figure moves by the same ratio, so
+     * the shape comes through unchanged. Kyle Williams came in at three
+     * a game with a fifty seven point high week.
+     */
+    if (runsAway(p.game!)) {
+      forgetSpread(p);
       continue;
     }
 
