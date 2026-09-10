@@ -5,6 +5,7 @@
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { seasonsAsked } from "../src/data/seasons.js";
+import { currentSeason } from "../src/data/nflverse.js";
 
 const RAW_DIR = join(import.meta.dirname, "..", "data", "raw");
 
@@ -98,6 +99,14 @@ const PLAYER_FILES: [url: string, name: string][] = [
     "https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_season_pass.csv",
     "advstats_pass.csv",
   ],
+  [
+    "https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_season_rec.csv",
+    "advstats_rec.csv",
+  ],
+  [
+    "https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_season_rush.csv",
+    "advstats_rush.csv",
+  ],
 ];
 
 async function exists(path: string): Promise<boolean> {
@@ -149,6 +158,9 @@ async function tryDownload(
   }
 }
 
+/** seasons left with no weekly stats under either name */
+const unread: number[] = [];
+
 async function main(): Promise<void> {
   const seasons = seasonsAsked(process.argv, [2021, 2022, 2023, 2024, 2025]);
   const plays = !process.argv.includes("--no-plays");
@@ -161,8 +173,19 @@ async function main(): Promise<void> {
   }
 
   for (const season of seasons) {
+    // Both names are tried for every season and one of the two 404s,
+    // since nflverse renamed the release after 2024. A season left with
+    // neither has no weekly rows for anything to train on.
     await tryDownload(playerStatsUrl(season), `player_stats_${season}.csv`);
     await tryDownload(renamedStatsUrl(season), `stats_player_week_${season}.csv`);
+
+    if (
+      !(await exists(join(RAW_DIR, `player_stats_${season}.csv`))) &&
+      !(await exists(join(RAW_DIR, `stats_player_week_${season}.csv`)))
+    ) {
+      unread.push(season);
+    }
+
     await tryDownload(weeklyRosterUrl(season), `roster_weekly_${season}.csv`);
     await tryDownload(snapCountsUrl(season), `snap_counts_${season}.csv`);
     await tryDownload(injuriesUrl(season), `injuries_${season}.csv`);
@@ -190,6 +213,20 @@ async function main(): Promise<void> {
   if (missing.length > 0) {
     console.warn(`\n${missing.length} files were not available:`);
     for (const line of missing) console.warn("  " + line);
+  }
+
+  // The season being played has none until its first games are scored,
+  // and the build copes with that. An earlier season without them means
+  // a release moved, and everything trained on it loses its rows.
+  const cannot = unread.filter((season) => season !== currentSeason());
+
+  if (cannot.length > 0) {
+    console.error(
+      `\nno weekly stats under either name for ${cannot.join(", ")}. ` +
+        "Check whether the nflverse release moved again: the two tried " +
+        "are player_stats and stats_player.",
+    );
+    process.exit(1);
   }
 }
 
