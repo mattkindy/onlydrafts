@@ -100,10 +100,13 @@ The walk now beats a man's own average at every position except running
 back, where it is level: QB .174 against .130, WR .336 against .232, TE
 .3855 against .243, RB .420 against .421.
 
-WIDE_LEAN, resting a thin cell on a man's own leaning at a wider pool
-instead of his position's, is still off and is now worth another look,
-since it gained on both seasons at the play layer once the window was
-fixed.
+WIDE_LEAN rests a thin cell on a man's own leaning at a wider pool
+instead of on his position's. It is off, and it was benched at 400 with
+the window fixed: the week fell to .376 from .3915 and the first 24 to
+.7128 from .7147, though it had gained on both seasons at the play
+layer. Splitting a man's season in half says his own leaning in a thin
+cell agrees with itself at .44, so the signal is there; borrowing it
+from a wider pool is not the way to reach it.
 
 
 The board bench has no noise in it. Replaying the same code twice writes
