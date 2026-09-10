@@ -4,6 +4,7 @@ import type { WeeklyAvailability } from "../data/weeklyStatus.js";
 import type { RosterAppearance } from "../graph/build.js";
 import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
 import { buildWeeklyVolume, weeklyVolume } from "./weeklyVolume.js";
+import { NO_CHANGE, type StaffChange } from "./staffChange.js";
 import {
   clubCalendar,
   clubWeeksMissed,
@@ -97,6 +98,8 @@ export interface WeeklyExample {
   backfieldShareRecent: number;
   /** team's neutral-situation pass rate before this week, 0.57 unknown */
   passTendency: number;
+  /** what changed on his club's offensive staff going into this season */
+  staff: StaffChange;
   /** his club listed him Questionable on this week's report */
   questionable: boolean;
   /** he was limited in practice this week, or did not practice */
@@ -227,6 +230,7 @@ function buildRooms(
 export interface TendencyInputs {
   weekCounts: Map<string, { neutralPlays: number; neutralPasses: number }>;
   priorSeasonRate: Map<string, number>;
+  staff?: Map<string, StaffChange>;
 }
 
 export function buildWeeklyExamples(
@@ -500,6 +504,7 @@ export function buildWeeklyExamples(
       backfieldShareRecent:
         reference.position === "RB" ? clubMeanOf(backfieldShare) : 0,
       passTendency: tendencyFor(teamId, week),
+      staff: tendencies?.staff?.get(teamId) ?? NO_CHANGE,
       questionable: status?.questionable ?? false,
       limitedPractice: status?.limitedPractice ?? false,
       absenceShare: rooms.shareOut(teamId, reference.position, week),
