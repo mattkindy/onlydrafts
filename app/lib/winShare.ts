@@ -48,10 +48,24 @@ export interface Baseline {
   started: Record<string, number>;
 }
 
+/** The season is this many weeks, and every man has a bye in one of them. */
+export const SEASON_WEEKS = 18;
+
 /**
- * A man's weeks, zeroed where he does not play. How many games he is
- * expected to play already prices his injury history and his age, so a
- * fragile man misses weeks here rather than being marked down evenly.
+ * Which week of the season a drawn week is. Every man's draws share
+ * the count, so two men with the same bye miss the same draws, and a
+ * roster that stacks a bye week feels it instead of each man missing
+ * a week of his own.
+ */
+export function weekOfDraw(i: number): number {
+  return (i % SEASON_WEEKS) + 1;
+}
+
+/**
+ * A man's weeks, zeroed where he does not play: his bye, and the games
+ * he is expected to miss. How many games he is expected to play already
+ * prices his injury history and his age, so a fragile man misses weeks
+ * here rather than being marked down evenly.
  */
 export function weeksOf(p: Player, draws = DRAWS): number[] {
   let his = drawn.get(p);
@@ -82,7 +96,7 @@ const drawn = new WeakMap<Player, Map<number, number[]>>();
 
 function drawWeeks(p: Player, draws: number): number[] {
   const g = p.game;
-  const plays = (p.games ?? 17) / 17;
+  const plays = (p.games ?? SEASON_WEEKS - 1) / (SEASON_WEEKS - 1);
 
   if (!g?.["ev"]) {
     return new Array(draws).fill(0) as number[];
@@ -100,7 +114,13 @@ function drawWeeks(p: Player, draws: number): number[] {
 
   const out = streamFor(p.key + "|out", draws);
 
-  return weeks.map((week, i) => (out[i]! < plays ? week : 0));
+  return weeks.map((week, i) => {
+    if (p.bye != null && weekOfDraw(i) === p.bye) {
+      return 0;
+    }
+
+    return out[i]! < plays ? week : 0;
+  });
 }
 
 interface Seat {
