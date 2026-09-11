@@ -408,6 +408,8 @@
   table.lineup td.slot { color: var(--faint); font-size: .62rem;
     text-transform: uppercase; width: 2.1rem; }
   table.lineup td.val { text-align: right; font-weight: 700; width: 2.4rem; }
+  table.lineup td.proj { color: var(--faint); font-weight: 400;
+    width: 2.2rem; }
   table.lineup td.state { width: 3.4rem; text-align: right; }
   table.lineup .badge { padding: .1rem .3rem; letter-spacing: .04em; }
   @media (max-width: 480px) {
