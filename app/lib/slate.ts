@@ -30,6 +30,13 @@ export interface SlateRow {
   blend: number;
   floor: number;
   ceiling: number;
+  /**
+   * His quartiles, where the build shipped them. An older slate has only
+   * the floor, the middle and the ceiling, and then whoever draws his
+   * week has to put the quartiles somewhere itself.
+   */
+  q1?: number;
+  q3?: number;
   questionable: boolean;
   gamesMissedRecent: number;
   absenceShare: number;
@@ -105,6 +112,8 @@ interface FileRow {
   average?: number;
   floor: number;
   ceiling: number;
+  q1?: number;
+  q3?: number;
   questionable?: boolean;
   gamesMissedRecent?: number;
   gamesMissed?: number;
@@ -136,6 +145,8 @@ function readRow(row: FileRow): SlateRow {
     blend: row.blend ?? row.average ?? row.ours,
     floor: row.floor,
     ceiling: row.ceiling,
+    q1: row.q1,
+    q3: row.q3,
     questionable: Boolean(row.questionable),
     gamesMissedRecent: row.gamesMissedRecent ?? row.gamesMissed ?? 0,
     absenceShare: row.absenceShare ?? 0,

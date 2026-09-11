@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   alternativesFor, bestLineupFor, fractionLeft, initialForm, liveDraws, oddsFor,
-  sideTotals, starterState, statesFrom, stockLine,
+  sideTotals, spreadOf, starterState, statesFrom, stockLine,
 } from "./matchups.ts";
 import type { GameState } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
@@ -119,6 +119,22 @@ describe("oddsFor", () => {
     );
 
     expect(new Set(totals)).toEqual(new Set([5]));
+  });
+});
+
+describe("spreadOf", () => {
+  it("takes the quartiles a slate ships", () => {
+    const his = spreadOf({ ...row("Ja'Marr", "CIN", 16), q1: 9, q3: 21 });
+
+    expect(his.q1).toBe(9);
+    expect(his.q3).toBe(21);
+  });
+
+  it("puts them halfway when the slate has none", () => {
+    const his = spreadOf(row("Ja'Marr", "CIN", 10));
+
+    expect(his.q1).toBeCloseTo(7);
+    expect(his.q3).toBeCloseTo(14);
   });
 });
 
