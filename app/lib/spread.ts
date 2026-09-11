@@ -81,44 +81,79 @@ export function streamFor(name: string, draws = DRAWS): number[] {
 }
 
 /**
- * Weeks drawn from a shipped spread, reading its five figures as points
- * on the inverse of his distribution and going straight between them.
- * Outside the tenth and the ninetieth it keeps the slope it arrived
- * with, since a week out there happens one time in five.
+ * Where one number between nought and one lands on his distribution,
+ * reading the five shipped figures as points on its inverse and going
+ * straight between them. Outside the tenth and the ninetieth it keeps
+ * the slope it arrived with, since a week out there happens one time in
+ * five.
+ */
+function weekAt(points: number[], u: number): number {
+  if (u <= AT[0]!) {
+    const slope = (points[1]! - points[0]!) / (AT[1]! - AT[0]!);
+
+    return points[0]! + (u - AT[0]!) * slope;
+  }
+
+  if (u >= AT[4]!) {
+    const slope = (points[4]! - points[3]!) / (AT[4]! - AT[3]!);
+
+    return points[4]! + (u - AT[4]!) * slope;
+  }
+
+  let at = 1;
+
+  while (at < AT.length - 1 && u > AT[at]!) {
+    at++;
+  }
+
+  const span = (u - AT[at - 1]!) / (AT[at]! - AT[at - 1]!);
+
+  return points[at - 1]! + span * (points[at]! - points[at - 1]!);
+}
+
+/**
+ * Weeks drawn from a shipped spread.
+ *
+ * The numbers that pick the weeks are his own by default. A caller who
+ * wants his weeks to move with the rest of his game supplies them
+ * instead, and as long as they are uniform his distribution is the same
+ * one either way.
  */
 export function weeksFromSpread(
-  spread: Spread, name: string, draws = DRAWS,
+  spread: Spread, name: string, draws = DRAWS, uniforms?: number[],
 ): number[] {
   const points = [spread.low, spread.q1, spread.mid, spread.q3, spread.high];
   const rand = mulberry32(seedOf(name));
-  const out: number[] = [];
 
-  for (let i = 0; i < draws; i++) {
-    const u = rand();
+  return Array.from({ length: draws }, (_, i) =>
+    weekAt(points, uniforms ? uniforms[i]! : rand()));
+}
 
-    if (u <= AT[0]!) {
-      const slope = (points[1]! - points[0]!) / (AT[1]! - AT[0]!);
-      out.push(points[0]! + (u - AT[0]!) * slope);
-      continue;
-    }
+/**
+ * A run of standard normal numbers, this name's own, paired off the
+ * uniform stream by Box-Muller so the factors a copula adds up are
+ * normal and deterministic.
+ */
+export function normalStream(name: string, draws = DRAWS): number[] {
+  const us = streamFor(name, draws * 2);
 
-    if (u >= AT[4]!) {
-      const slope = (points[4]! - points[3]!) / (AT[4]! - AT[3]!);
-      out.push(points[4]! + (u - AT[4]!) * slope);
-      continue;
-    }
+  return Array.from({ length: draws }, (_, i) => {
+    const u = Math.max(1e-12, us[i * 2]!);
 
-    let at = 1;
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * us[i * 2 + 1]!);
+  });
+}
 
-    while (at < AT.length - 1 && u > AT[at]!) {
-      at++;
-    }
+/** the normal CDF, Abramowitz and Stegun 7.1.26 on the error function */
+export function normalCdf(z: number): number {
+  const sign = z < 0 ? -1 : 1;
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const erf = 1 - t * Math.exp(-x * x) * (
+    0.254829592 + t * (-0.284496736 + t * (
+      1.421413741 + t * (-1.453152027 + t * 1.061405429))));
 
-    const span = (u - AT[at - 1]!) / (AT[at]! - AT[at - 1]!);
-    out.push(points[at - 1]! + span * (points[at]! - points[at - 1]!));
-  }
-
-  return out;
+  return 0.5 * (1 + sign * erf);
 }
 
 /** the counting events a defence is paid for, none of them common */
