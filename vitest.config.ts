@@ -9,5 +9,7 @@ export default defineConfig({
   plugins: [preact()],
   test: {
     environmentMatchGlobs: [["app/**", "jsdom"]],
+    // agent worktrees carry a whole copy of the tree, tests included
+    exclude: ["**/node_modules/**", "**/.claude/**"],
   },
 });
