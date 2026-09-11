@@ -44,6 +44,8 @@ interface FileRow {
 export interface Board {
   players: Player[];
   plusMinus: Map<string, { plus: string[]; minus: string[] }>;
+  /** who each side plays each week, missing on an older file */
+  schedule?: Record<string, (string | null)[]> | null;
 }
 
 /** the file changes far more often than a browser expects */
@@ -55,7 +57,10 @@ export async function loadMeta(): Promise<Meta> {
 
 export async function loadBoard(season: number): Promise<Board> {
   const said = await fetch(`data/board-${season}.json${fresh()}`)
-    .then((r) => r.json()) as { players: FileRow[] };
+    .then((r) => r.json()) as {
+      players: FileRow[];
+      schedule?: Record<string, (string | null)[]> | null;
+    };
   const plusMinus = new Map<string, { plus: string[]; minus: string[] }>();
 
   const players = said.players.map((row): Player => {
@@ -82,5 +87,5 @@ export async function loadBoard(season: number): Promise<Board> {
     };
   });
 
-  return { players, plusMinus };
+  return { players, plusMinus, schedule: said.schedule ?? null };
 }
