@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { fractionLeft, oddsFor, sideTotals, statesFrom } from "./matchups.ts";
+import {
+  bestLineupFor, fractionLeft, liveDraws, oddsFor, sideTotals, starterState,
+  statesFrom,
+} from "./matchups.ts";
 import type { GameState } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
 import type { SlateRow } from "./slate.ts";
+import { weeksFromSpread } from "./spread.ts";
 
-const row = (name: string, team: string, blend: number): SlateRow => ({
+const row = (
+  name: string, team: string, blend: number,
+  position = "WR", opponent = "NE",
+): SlateRow => ({
   playerId: name,
   name,
-  position: "WR",
+  position,
   team,
-  opponent: "NE",
+  opponent,
   home: true,
   ours: blend,
   sleeper: blend,
@@ -100,6 +107,162 @@ describe("oddsFor", () => {
     );
 
     expect(new Set(totals)).toEqual(new Set([5]));
+  });
+});
+
+function corr(a: number[], b: number[]): number {
+  const mean = (its: number[]) =>
+    its.reduce((sum, n) => sum + n, 0) / its.length;
+  const [ma, mb] = [mean(a), mean(b)];
+  let top = 0;
+  let sa = 0;
+  let sb = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    top += (a[i]! - ma) * (b[i]! - mb);
+    sa += (a[i]! - ma) ** 2;
+    sb += (b[i]! - mb) ** 2;
+  }
+
+  return top / Math.sqrt(sa * sb);
+}
+
+const mean = (its: number[]) =>
+  its.reduce((sum, n) => sum + n, 0) / its.length;
+
+const at = (its: number[], q: number) =>
+  [...its].sort((a, b) => a - b)[Math.floor(q * its.length)]!;
+
+describe("liveDraws", () => {
+  const stack = rowsFor(
+    row("qb", "BUF", 22, "QB", "MIA"),
+    row("wr", "BUF", 18, "WR", "MIA"),
+    row("def", "MIA", 8, "DEF", "BUF"),
+    row("far", "KC", 16, "WR", "DEN"),
+  );
+  const toPlay = states({
+    BUF: { where: "pre", left: 1 },
+    MIA: { where: "pre", left: 1 },
+    KC: { where: "pre", left: 1 },
+    DEN: { where: "pre", left: 1 },
+  });
+  const men = ["qb", "wr", "def", "far"].map((key) => ({ key, points: 0 }));
+
+  it("moves two men in the same game together and leaves two games apart", () => {
+    const live = liveDraws(men, stack, toPlay, 4000);
+
+    expect(corr(live.toCome("qb"), live.toCome("wr"))).toBeGreaterThan(0.3);
+    expect(Math.abs(corr(live.toCome("qb"), live.toCome("far"))))
+      .toBeLessThan(0.05);
+  });
+
+  it("leaves a man's own week where it was before anybody shared a factor", () => {
+    const live = liveDraws(men, stack, toPlay, 8000);
+    const his = live.toCome("wr");
+    const alone = weeksFromSpread(
+      { ev: 18, mid: 18, low: 7.2, high: 32.4, q1: 12.6, q3: 25.2 },
+      "wr",
+      8000,
+    );
+
+    expect(mean(his)).toBeCloseTo(mean(alone), 0);
+
+    for (const q of [0.1, 0.5, 0.9]) {
+      expect(at(his, q)).toBeCloseTo(at(alone, q), 0);
+    }
+  });
+
+  it("lifts a teammate and sinks the other defence when a man runs hot", () => {
+    const half = states({
+      BUF: { where: "in", left: 0.5 },
+      MIA: { where: "in", left: 0.5 },
+      KC: { where: "pre", left: 1 },
+      DEN: { where: "pre", left: 1 },
+    });
+    const otherwise = ["wr", "def", "far"].map((key) => ({ key, points: 0 }));
+    const onPace = liveDraws(
+      [{ key: "qb", points: 11 }, ...otherwise], stack, half, 6000);
+    const hot = liveDraws(
+      [{ key: "qb", points: 34 }, ...otherwise], stack, half, 6000);
+
+    expect(mean(hot.toCome("wr"))).toBeGreaterThan(mean(onPace.toCome("wr")));
+    expect(mean(hot.toCome("def"))).toBeLessThan(mean(onPace.toCome("def")));
+    expect(hot.toCome("far")).toEqual(onPace.toCome("far"));
+  });
+});
+
+describe("a man the slate leaves out", () => {
+  const board = new Map([["buf", {
+    name: "BUF",
+    key: "buf",
+    position: "DEF",
+    team: "BUF",
+    game: { ev: 9, q1: 5, mid: 8.5, q3: 12, low: 3, high: 16 },
+  }]]);
+
+  it("draws his week off the board when the week has no row for him", () => {
+    const totals = sideTotals(
+      side("me", 0, [{ key: "buf", slot: "DEF", points: 0 }]),
+      new Map(),
+      states({ BUF: { where: "pre", left: 1 } }),
+      4000,
+      undefined,
+      board,
+    );
+
+    expect(mean(totals)).toBeGreaterThan(6);
+    expect(mean(totals)).toBeLessThan(12);
+  });
+
+  it("says nothing about a man neither the week nor the board has", () => {
+    expect(starterState({ key: "nobody" }, new Map(), states({}), board))
+      .toBeNull();
+    expect(starterState({ key: "buf" }, new Map(), states({}), board))
+      .toEqual({ where: "pre", left: 1 });
+  });
+});
+
+describe("bestLineupFor", () => {
+  const rows = rowsFor(
+    row("scrub", "BUF", 4),
+    row("stud", "KC", 22),
+    row("kept", "DEN", 14),
+    row("locked", "LA", 3),
+  );
+  const yetToPlay = states({
+    BUF: { where: "pre", left: 1 },
+    KC: { where: "pre", left: 1 },
+    DEN: { where: "pre", left: 1 },
+    LA: { where: "in", left: 0.5 },
+  });
+  const them = side("you", 0, [{ key: "kept", slot: "WR", points: 0 }]);
+
+  it("starts the better man off the bench", () => {
+    const mine: Side = {
+      owner: "me",
+      points: 0,
+      starters: [{ key: "scrub", slot: "WR", points: 0 }],
+      bench: [{ key: "stud", points: 0 }],
+    };
+    const best = bestLineupFor(mine, them, ["WR"], rows, yetToPlay, 3000);
+
+    expect(best.swaps).toHaveLength(1);
+    expect(best.swaps[0]).toMatchObject({ starts: "stud", benches: "scrub", slot: "WR" });
+    expect(best.starters.map((s) => s.key)).toEqual(["stud"]);
+    expect(best.odds).toBeGreaterThan(0.5);
+  });
+
+  it("leaves a starter whose game has kicked off where he is", () => {
+    const mine: Side = {
+      owner: "me",
+      points: 2,
+      starters: [{ key: "locked", slot: "WR", points: 2 }],
+      bench: [{ key: "stud", points: 0 }],
+    };
+    const best = bestLineupFor(mine, them, ["WR"], rows, yetToPlay, 3000);
+
+    expect(best.swaps).toEqual([]);
+    expect(best.starters.map((s) => s.key)).toEqual(["locked"]);
   });
 });
 

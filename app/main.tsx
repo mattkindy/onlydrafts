@@ -677,7 +677,10 @@ function App() {
           <Matchups
             games={games}
             rows={slateRows}
+            men={men}
             mine={active.team}
+            slots={active.slots ?? null}
+            season={week.season}
             week={week.week}
             status={gamesStatus || weekStatus}
           />
