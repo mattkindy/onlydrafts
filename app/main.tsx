@@ -212,11 +212,15 @@ function App() {
       return [];
     }
 
-    return rescore(board.players, {
-      teams: active?.size ?? 12,
-      slots: active?.slots ?? null,
-      pays: active?.pays ?? {},
-    });
+    return rescore(
+      board.players,
+      {
+        teams: active?.size ?? 12,
+        slots: active?.slots ?? null,
+        pays: active?.pays ?? {},
+      },
+      board.schedule,
+    );
   }, [board, active]);
 
   const byKey = useMemo(() => new Map(men.map((p) => [p.key, p])), [men]);
