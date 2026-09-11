@@ -16,7 +16,7 @@ import { loadBoard, loadMeta, type Board } from "./lib/data.ts";
 import { rescore, roomFor } from "./lib/board.ts";
 import { keep, stored, normalizeName } from "./lib/store.ts";
 import {
-  NeedsEspnCookies, PROVIDERS, sleeperPlayers, type League,
+  NeedsEspnCookies, PROVIDERS, sleeperPlayers, type League, type Matchup,
 } from "./lib/providers.ts";
 import { markedKeepers, saveMarkedKeepers } from "./lib/keepers.ts";
 import { draftNow } from "./lib/draftWatch.ts";
@@ -29,6 +29,7 @@ import { DraftRating } from "./views/DraftRating.tsx";
 import { Keepers } from "./views/Keepers.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
 import { Start } from "./views/Start.tsx";
+import { Matchups } from "./views/Matchups.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import {
   loadSlate, rosterKeys, weekRefs, type Slate, type WeekRef,
@@ -52,7 +53,9 @@ const ORDER_MEANS: Record<Order, string> = {
     "your next turn",
 };
 
-type View = "leagues" | "roster" | "keepers" | "draft" | "rating" | "start" | "waivers";
+type View =
+  | "leagues" | "roster" | "keepers" | "draft" | "rating" | "start"
+  | "matchups" | "waivers";
 
 const COPY: Record<View, [string, string, string]> = {
   leagues: [
@@ -84,6 +87,11 @@ const COPY: Record<View, [string, string, string]> = {
     "Who to start",
     "One week, ranked by projected points, with your own men marked so you can set a lineup.",
     "Our number and Sleeper's sit side by side. Where they disagree by three points or more the row is marked, and Sleeper has the better of those about 55% of the time.",
+  ],
+  matchups: [
+    "Matchups",
+    "Every game in your league this week, with what each side has scored and how often it wins from here.",
+    "The chance counts only the part of each game still to play, so a lead with everybody done is the whole thing and a lead with a back to come is not.",
   ],
   waivers: [
     "Who to add",
@@ -163,6 +171,8 @@ function App() {
   const [week, setWeek] = useState<WeekRef | null>(null);
   const [slate, setSlate] = useState<Slate | null>(null);
   const [weekStatus, setWeekStatus] = useState("");
+  const [games, setGames] = useState<Matchup[]>([]);
+  const [gamesStatus, setGamesStatus] = useState("");
 
   useEffect(() => {
     loadMeta()
@@ -183,7 +193,7 @@ function App() {
 
   /** the week itself is only fetched once you ask for that tab */
   useEffect(() => {
-    if (view !== "start" || !week) {
+    if ((view !== "start" && view !== "matchups") || !week) {
       return;
     }
 
@@ -201,6 +211,41 @@ function App() {
 
     return () => { stale = true; };
   }, [view, week]);
+
+  /** the league's own games, which only the provider knows */
+  useEffect(() => {
+    if (view !== "matchups" || !active || !week) {
+      return;
+    }
+
+    const asks = PROVIDERS[active.provider]!.matchupsFor;
+
+    if (!asks) {
+      setGamesStatus(active.provider + " will not say what this week's games are.");
+
+      return;
+    }
+
+    let stale = false;
+
+    setGames([]);
+    setGamesStatus("");
+    asks(active, week.week)
+      .then((got) => { if (!stale) { setGames(got); } })
+      .catch((e: Error) => {
+        if (!stale) {
+          setGamesStatus("could not read this week's games: " + e.message);
+        }
+      });
+
+    return () => { stale = true; };
+  }, [view, week, active]);
+
+  /** the week's projections, under the same key a lineup uses for a man */
+  const slateRows = useMemo(
+    () => new Map((slate?.rows ?? []).map((r) => [normalizeName(r.name), r])),
+    [slate],
+  );
 
   /**
    * The board in this league's terms. Nothing here needs the model to
@@ -365,7 +410,10 @@ function App() {
 
       {view !== "leagues" && (
         <div id="subnav">
-          {(["roster", "keepers", "draft", "rating", "start", "waivers"] as View[]).map((v) => (
+          {([
+            "roster", "keepers", "draft", "rating", "start", "matchups",
+            "waivers",
+          ] as View[]).map((v) => (
             <button
               key={v}
               class={v === view ? "on" : ""}
@@ -618,6 +666,16 @@ function App() {
             slate={slate}
             roster={active ? rosterKeys(active.myRoster) : null}
             status={weekStatus}
+          />
+        )}
+
+        {active && view === "matchups" && week && (
+          <Matchups
+            games={games}
+            rows={slateRows}
+            mine={active.team}
+            week={week.week}
+            status={gamesStatus || weekStatus}
           />
         )}
 
