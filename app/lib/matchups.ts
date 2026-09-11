@@ -158,17 +158,19 @@ export async function gameStates(
 }
 
 /**
- * A man's week read as a spread. Two of the five figures the drawing
- * wants are not shipped per week, so each one is put halfway between the
- * two either side of it.
+ * A man's week read as a spread. An older slate ships only the floor,
+ * the middle and the ceiling, and then each quartile is put halfway
+ * between the two figures either side of it. Halfway is narrower than
+ * the quartile really is, because the residuals are skewed, so a slate
+ * that ships them is taken at its word.
  */
-const spreadOf = (row: SlateRow) => ({
+export const spreadOf = (row: SlateRow) => ({
   ev: row.blend,
   mid: row.blend,
   low: row.floor,
   high: row.ceiling,
-  q1: (row.floor + row.blend) / 2,
-  q3: (row.blend + row.ceiling) / 2,
+  q1: row.q1 ?? (row.floor + row.blend) / 2,
+  q3: row.q3 ?? (row.blend + row.ceiling) / 2,
 });
 
 /** the board in this league's terms, by the key a lineup uses for a man */

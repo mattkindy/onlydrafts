@@ -83,21 +83,25 @@ export function streamFor(name: string, draws = DRAWS): number[] {
 /**
  * Where one number between nought and one lands on his distribution,
  * reading the five shipped figures as points on its inverse and going
- * straight between them. Outside the tenth and the ninetieth it keeps
- * the slope it arrived with, since a week out there happens one time in
- * five.
+ * straight between them.
+ *
+ * Outside the tenth and the ninetieth it follows a normal tail instead:
+ * the quantile becomes a normal, and the last segment inside says how
+ * many points a unit of normal is worth out there. Going straight on in
+ * u put the ninety-ninth week barely above the ceiling, which left a
+ * side's total far too narrow once eight of them were added up.
  */
-function weekAt(points: number[], u: number): number {
+export function weekAt(points: number[], u: number): number {
   if (u <= AT[0]!) {
-    const slope = (points[1]! - points[0]!) / (AT[1]! - AT[0]!);
+    const slope = (points[1]! - points[0]!) / (AT_Z[1]! - AT_Z[0]!);
 
-    return points[0]! + (u - AT[0]!) * slope;
+    return points[0]! + (normalQuantile(u) - AT_Z[0]!) * slope;
   }
 
   if (u >= AT[4]!) {
-    const slope = (points[4]! - points[3]!) / (AT[4]! - AT[3]!);
+    const slope = (points[4]! - points[3]!) / (AT_Z[4]! - AT_Z[3]!);
 
-    return points[4]! + (u - AT[4]!) * slope;
+    return points[4]! + (normalQuantile(u) - AT_Z[4]!) * slope;
   }
 
   let at = 1;
@@ -154,15 +158,15 @@ export function quantileOf(spread: Spread, score: number): number {
     [spread.low, spread.q1, spread.mid, spread.q3, spread.high]);
 
   if (score <= points[0]!) {
-    const slope = (AT[1]! - AT[0]!) / (points[1]! - points[0]!);
+    const slope = (AT_Z[1]! - AT_Z[0]!) / (points[1]! - points[0]!);
 
-    return AT[0]! + (score - points[0]!) * slope;
+    return normalCdf(AT_Z[0]! + (score - points[0]!) * slope);
   }
 
   if (score >= points[4]!) {
-    const slope = (AT[4]! - AT[3]!) / (points[4]! - points[3]!);
+    const slope = (AT_Z[4]! - AT_Z[3]!) / (points[4]! - points[3]!);
 
-    return AT[4]! + (score - points[4]!) * slope;
+    return normalCdf(AT_Z[4]! + (score - points[4]!) * slope);
   }
 
   let at = 1;
@@ -233,6 +237,9 @@ export function normalQuantile(p: number): number {
 
   return (low + high) / 2;
 }
+
+/** the five shipped quantiles as normals, for the tails weekAt extends */
+const AT_Z = AT.map((p) => normalQuantile(p));
 
 /** the counting events a defence is paid for, none of them common */
 const DEFENCE_EVENTS = ["sack", "int", "fum_rec", "def_td", "safe", "blk_kick"];

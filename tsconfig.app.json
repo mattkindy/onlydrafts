@@ -18,6 +18,7 @@
     "scripts/checkWinShare.ts",
     "scripts/myPicksEval.ts",
     "scripts/betterDraft.ts",
-    "scripts/draftWalk.ts"
+    "scripts/draftWalk.ts",
+    "scripts/matchupCalibration.ts"
   ]
 }

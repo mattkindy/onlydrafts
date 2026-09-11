@@ -137,6 +137,8 @@ function slateRow(
     ceiling: Number(
       outcomeQuantile(residuals, e.position, average, 0.9).toFixed(1),
     ),
+    q1: Number(outcomeQuantile(residuals, e.position, average, 0.25).toFixed(1)),
+    q3: Number(outcomeQuantile(residuals, e.position, average, 0.75).toFixed(1)),
     snaps: Math.round(e.snapRecent * 100),
     questionable: e.questionable,
     gamesMissed: e.gamesMissedRecent,
