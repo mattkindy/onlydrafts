@@ -384,3 +384,23 @@
   table.ranks tr.split td { background: color-mix(in srgb, var(--mark) 10%, transparent); }
   table.ranks tr.picked td { background: color-mix(in srgb, var(--go) 16%, transparent); }
   table.ranks .badge { margin-left: .3rem; }
+
+  /* one head to head. The bar between the two sides is the win chance,
+     filled from the left for the side named on the left. */
+  .card.matchup { display: grid; grid-template-columns: 1fr 1fr;
+    gap: .35rem .75rem; }
+  .card.matchup.on { border-color: var(--go); }
+  .card.matchup .team { display: flex; flex-direction: column; }
+  .card.matchup .team:last-of-type { text-align: right; }
+  .card.matchup .odds { grid-column: 1 / -1; height: 8px;
+    background: var(--chip); border-radius: 999px; overflow: hidden; }
+  .card.matchup .odds u { display: block; height: 100%;
+    background: var(--go); }
+  .card.matchup .lineups { grid-column: 1 / -1; display: grid;
+    grid-template-columns: 1fr 1fr; gap: .75rem; }
+  table.lineup { width: 100%; border-collapse: collapse; font-size: .74rem; }
+  table.lineup td { padding: .15rem .25rem;
+    border-bottom: 1px solid var(--edge); }
+  table.lineup td.slot { color: var(--faint); font-size: .66rem;
+    text-transform: uppercase; }
+  table.lineup td.val { text-align: right; font-weight: 700; }
