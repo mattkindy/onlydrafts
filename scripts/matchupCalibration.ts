@@ -90,6 +90,8 @@ interface Man {
   team: string;
   opponent: string;
   top: boolean;
+  ours: number;
+  sleeper: number;
   blend: number;
   floor: number;
   ceiling: number;
@@ -106,6 +108,25 @@ interface Variant {
   /** how much the spread around his middle is widened */
   inflate: number;
   copula: boolean;
+  /** whose projection is the middle of his week */
+  centre?: Centre;
+}
+
+type Centre = "blend" | "ours" | "sleeper" | "byPosition";
+
+/** the Sleeper weight the position tables in the backtest asked for */
+const BY_POSITION: Record<string, number> = { QB: 0.25, RB: 0.75, WR: 0.5, TE: 0.5 };
+
+function centreOf(man: Man, centre: Centre = "blend"): number {
+  const at: Record<Centre, () => number> = {
+    blend: () => man.blend,
+    ours: () => man.ours,
+    sleeper: () => man.sleeper,
+    byPosition: () =>
+      blendPoints(man.ours, man.sleeper, BY_POSITION[man.position] ?? 0.5),
+  };
+
+  return at[centre]();
 }
 
 const VARIANTS: Variant[] = [
@@ -117,6 +138,9 @@ const VARIANTS: Variant[] = [
   { name: "A+B, no copula", quartiles: "measured", tail: "normal", inflate: 1, copula: false },
   { name: "A+B+C 1.10", quartiles: "measured", tail: "normal", inflate: 1.1, copula: true },
   { name: "A+B+C 1.25", quartiles: "measured", tail: "normal", inflate: 1.25, copula: true },
+  { name: "A+B, ours alone", quartiles: "measured", tail: "normal", inflate: 1, copula: true, centre: "ours" },
+  { name: "A+B, Sleeper alone", quartiles: "measured", tail: "normal", inflate: 1, copula: true, centre: "sleeper" },
+  { name: "A+B, blend by position", quartiles: "measured", tail: "normal", inflate: 1, copula: true, centre: "byPosition" },
 ];
 
 function pointsFor(man: Man, variant: Variant): number[] {
@@ -126,13 +150,17 @@ function pointsFor(man: Man, variant: Variant): number[] {
   const q3 = variant.quartiles === "measured"
     ? man.q3
     : (man.blend + man.ceiling) / 2;
-  const five = [man.floor, q1, man.blend, q3, man.ceiling];
+  const shift = centreOf(man, variant.centre) - man.blend;
+  const five = [man.floor, q1, man.blend, q3, man.ceiling]
+    .map((p) => p + shift);
 
   if (variant.inflate === 1) {
     return five;
   }
 
-  return five.map((p) => man.blend + variant.inflate * (p - man.blend));
+  const middle = man.blend + shift;
+
+  return five.map((p) => middle + variant.inflate * (p - middle));
 }
 
 /**
@@ -172,6 +200,8 @@ interface Tally {
   sides: number;
   impliedDiff: number;
   realizedDiff: number;
+  /** how far a side's projected total sat from what it scored */
+  sideError: number;
   /** predicted and realized win rate by how big the projected edge is */
   edges: { predicted: number; won: number; count: number }[];
 }
@@ -190,6 +220,7 @@ const emptyTally = (): Tally => ({
   sides: 0,
   impliedDiff: 0,
   realizedDiff: 0,
+  sideError: 0,
   edges: EDGES.map(() => ({ predicted: 0, won: 0, count: 0 })),
 });
 
@@ -239,6 +270,7 @@ function record(
   tally.realizedSide += (myActual - myMean) * (myActual - myMean) +
     (theirActual - theirMean) * (theirActual - theirMean);
   tally.sides += 2;
+  tally.sideError += Math.abs(myActual - myMean) + Math.abs(theirActual - theirMean);
 
   const diff = mine.map((n, i) => n - theirs[i]!);
   const actualDiff = myActual - theirActual;
@@ -304,9 +336,11 @@ function menOfWeek(
     const ours = predictWeeklyByPosition(weekly, e);
     const sleeper = projections.get(
       projectionKey(season, week, e.playerId))?.points;
-    const blend = sleeper === undefined
-      ? ours
-      : blendPoints(ours, sleeper, SHIPPED_BLEND_WEIGHT);
+    if (sleeper === undefined) {
+      continue;
+    }
+
+    const blend = blendPoints(ours, sleeper, SHIPPED_BLEND_WEIGHT);
 
     if (blend < LOW_BAR || !e.teamId || !e.opponent) {
       continue;
@@ -321,6 +355,8 @@ function menOfWeek(
       team: e.teamId.toUpperCase(),
       opponent: e.opponent.toUpperCase(),
       top: false,
+      ours,
+      sleeper,
       blend,
       floor: quantile(0.1),
       q1: quantile(0.25),
@@ -378,7 +414,8 @@ function show(name: string, tally: Tally): void {
     `log loss ${(tally.logLoss / tally.pairs).toFixed(4)}`);
   console.log(
     `  side sd: drawn ${sideSd.toFixed(1)}  realized ${sideReal.toFixed(1)}  ` +
-    `(x${(sideReal / sideSd).toFixed(2)})`);
+    `(x${(sideReal / sideSd).toFixed(2)})  ` +
+    `total mae ${(tally.sideError / tally.sides).toFixed(2)}`);
   console.log(
     `  margin sd: drawn ${diffSd.toFixed(1)}  realized ${diffReal.toFixed(1)}  ` +
     `(x${(diffReal / diffSd).toFixed(2)})`);
