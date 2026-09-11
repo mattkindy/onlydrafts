@@ -160,6 +160,8 @@ function App() {
   const [manual, setManual] = useState(() => stored("manual", ""));
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  /** the team being opened, while its board is scored */
+  const [opening, setOpening] = useState<string | null>(null);
   const [showing, setShowing] = useState<Player | null>(null);
   const [espnHelp, setEspnHelp] = useState(false);
   const [draft, setDraft] = useState<DraftNow>(NOTHING);
@@ -364,12 +366,22 @@ function App() {
     return !picked || picked === lg.userId;
   }), [leagues, everyTeam, active]);
 
+  /**
+   * Opening a league rescores the whole board and draws every man's
+   * weeks before the draft view can paint, which freezes the page for a
+   * second or two. The loader is painted first, and the work starts on
+   * the frame after.
+   */
   const open = (lg: League) => {
-    setActive(lg);
-    keep("active", lg);
-    keep(seatKey(lg), lg.userId);
-    setEveryTeam(false);
-    setView("draft");
+    setOpening(lg.team);
+    setTimeout(() => {
+      setActive(lg);
+      keep("active", lg);
+      keep(seatKey(lg), lg.userId);
+      setEveryTeam(false);
+      setView("draft");
+      setOpening(null);
+    }, 50);
   };
 
   const markKeeper = (p: Player) => {
@@ -586,6 +598,11 @@ function App() {
                     <button onClick={() => setEveryTeam(true)}>
                       pick a different one
                     </button>
+                  </p>
+                )}
+                {opening && (
+                  <p class="loading">
+                    <span class="spin" /> scoring the board for {opening}
                   </p>
                 )}
                 <div class="cards">

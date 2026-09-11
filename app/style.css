@@ -242,6 +242,13 @@
   .up { color: var(--go); }
   .down { color: var(--mark); }
   .hint { color: var(--faint); font-size: .82rem; margin: .2rem 0 .6rem; }
+  .loading { display: flex; align-items: center; gap: .5rem;
+    color: var(--faint); font-size: .82rem; }
+  .spin { width: .9rem; height: .9rem; border-radius: 50%;
+    border: 2px solid var(--edge); border-top-color: var(--go);
+    animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
   .scroll { overflow-x: auto; }
   .sheet { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 14px; padding: 1.2rem 1.4rem; max-width: 34rem; width: 100%; }
