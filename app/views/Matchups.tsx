@@ -14,9 +14,11 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 
 import {
-  gameStates, oddsFor, starterState, type GameState,
+  bestLineupFor, gameStates, projectedFor, standingFor, starterState,
+  type GameState, type Lines,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
+import type { Player } from "../lib/scoring.ts";
 import type { SlateRow } from "../lib/slate.ts";
 
 /** how often the scoreboard is read again while a game is on */
@@ -25,8 +27,13 @@ const EVERY = 60_000;
 interface Props {
   games: Matchup[];
   rows: Map<string, SlateRow>;
+  /** the board in this league's terms, for the men the slate leaves out */
+  men: Player[];
   /** your own team's name in the league, so your game can lead */
   mine: string;
+  /** the seats the league starts, for the lineup it says you could put out */
+  slots: string[] | null;
+  season: number;
   week: number;
   status?: string;
 }
@@ -34,17 +41,19 @@ interface Props {
 const pct = (share: number) => (100 * share).toFixed(0) + "%";
 
 /** done, playing or yet to play, as a word and a class */
-const MARK: Record<GameState["where"], [string, string]> = {
+const MARK: Record<GameState["where"] | "none", [string, string]> = {
   post: ["done", "even"],
   in: ["playing", "up"],
   pre: ["to play", "warn"],
+  none: ["no line", "even"],
 };
 
 function Lineup(
-  { side, rows, states }: {
+  { side, rows, states, lines }: {
     side: Side;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
+    lines: Lines;
   },
 ) {
   return (
@@ -52,14 +61,24 @@ function Lineup(
       <tbody>
         {side.starters.map((starter, i) => {
           const row = rows.get(starter.key);
-          const [word, tone] = MARK[starterState(starter, rows, states).where];
+          const man = lines.get(starter.key);
+          const state = starterState(starter, rows, states, lines);
+          const [word, tone] = MARK[state?.where ?? "none"];
+          const projected = projectedFor(starter.key, rows, lines);
 
           return (
             <tr key={starter.key + i}>
               <td class="slot">{starter.slot}</td>
-              <td>{row?.name ?? starter.key}</td>
+              <td>{row?.name ?? man?.name ?? starter.key}</td>
               <td class="val">{starter.points.toFixed(1)}</td>
-              <td><span class={"badge " + tone}>{word}</span></td>
+              <td class="val proj">
+                {projected === null || !state || state.left <= 0
+                  ? ""
+                  : (projected * state.left).toFixed(1)}
+              </td>
+              <td class="state">
+                <span class={"badge " + tone}>{word}</span>
+              </td>
             </tr>
           );
         })}
@@ -68,25 +87,77 @@ function Lineup(
   );
 }
 
+/**
+ * Your own lineup against the best one you could put out, when the card
+ * is yours. Both are drawn against the same opponent, so the difference
+ * between the two is the lineup rather than the drawing.
+ */
+function Advice(
+  { game, at, slots, rows, states, lines, odds }: {
+    game: Matchup;
+    at: number;
+    slots: string[] | null;
+    rows: Map<string, SlateRow>;
+    states: Map<string, GameState>;
+    lines: Lines;
+    odds: number;
+  },
+) {
+  const best = useMemo(
+    () => bestLineupFor(
+      game.sides[at]!, game.sides[1 - at]!, slots, rows, states,
+      undefined, lines),
+    [game, at, slots, rows, states, lines],
+  );
+  const named = (key: string) =>
+    rows.get(key)?.name ?? lines.get(key)?.name ?? key;
+
+  if (!best.swaps.length) {
+    return (
+      <p class="hint">
+        You win {pct(odds)} of the time, and no change to the lineup does
+        better.
+      </p>
+    );
+  }
+
+  return (
+    <p class="hint">
+      You win {pct(odds)} of the time. The best lineup wins{" "}
+      {pct(best.odds)}:{" "}
+      {best.swaps.map((swap, i) => (
+        <span key={swap.starts}>
+          {i > 0 ? ", " : ""}
+          start {named(swap.starts)} over {named(swap.benches)}{" "}
+          ({swap.slot}), +{(100 * swap.gains).toFixed(1)}%
+        </span>
+      ))}.
+    </p>
+  );
+}
+
 function Game(
-  { game, rows, states, mine }: {
+  { game, rows, states, slots, lines, mine }: {
     game: Matchup;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
-    mine: boolean;
+    slots: string[] | null;
+    lines: Lines;
+    mine: number;
   },
 ) {
-  const odds = useMemo(
-    () => oddsFor(game, rows, states),
-    [game, rows, states],
+  const { odds, projected } = useMemo(
+    () => standingFor(game, rows, states, lines),
+    [game, rows, states, lines],
   );
 
   return (
-    <div class={"card plain matchup" + (mine ? " on" : "")}>
+    <div class={"card plain matchup" + (mine >= 0 ? " on" : "")}>
       {game.sides.map((side, at) => (
         <div class="team" key={side.owner + at}>
           <span class="nm">{side.owner}</span>
           <span class="big">{side.points.toFixed(1)}</span>
+          <span class="val">{projected[at]!.toFixed(1)} projected</span>
           <span class="val">{pct(odds[at]!)} to win</span>
         </div>
       ))}
@@ -97,16 +168,37 @@ function Game(
       >
         <u style={{ width: pct(odds[0]) }} />
       </div>
+      {mine >= 0 && (
+        <Advice
+          game={game}
+          at={mine}
+          slots={slots}
+          rows={rows}
+          states={states}
+          lines={lines}
+          odds={odds[mine]!}
+        />
+      )}
       <div class="lineups">
         {game.sides.map((side, at) => (
-          <Lineup key={side.owner + at} side={side} rows={rows} states={states} />
+          <Lineup
+            key={side.owner + at}
+            side={side}
+            rows={rows}
+            states={states}
+            lines={lines}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-export function Matchups({ games, rows, mine, week, status }: Props) {
+export function Matchups(
+  { games, rows, men, mine, slots, season, week, status }: Props,
+) {
+  const lines = useMemo(
+    () => new Map(men.map((p) => [p.key, p])), [men]);
   const [states, setStates] = useState<Map<string, GameState> | null>(null);
   const [read, setRead] = useState<Date | null>(null);
   const [trouble, setTrouble] = useState("");
@@ -120,7 +212,7 @@ export function Matchups({ games, rows, mine, week, status }: Props) {
   useEffect(() => {
     let stale = false;
 
-    gameStates()
+    gameStates(season, week)
       .then((got) => {
         if (!stale) {
           setStates(got);
@@ -135,7 +227,7 @@ export function Matchups({ games, rows, mine, week, status }: Props) {
       });
 
     return () => { stale = true; };
-  }, [reads]);
+  }, [reads, season, week]);
 
   const live = states
     ? [...states.values()].some((s) => s.where === "in")
@@ -179,7 +271,9 @@ export function Matchups({ games, rows, mine, week, status }: Props) {
             game={game}
             rows={rows}
             states={states}
-            mine={game.sides.some((s) => s.owner === mine)}
+            slots={slots}
+            lines={lines}
+            mine={game.sides.findIndex((s) => s.owner === mine)}
           />
         ))}
       </div>
