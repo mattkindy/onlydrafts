@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  bestLineupFor, fractionLeft, liveDraws, oddsFor, sideTotals, starterState,
-  statesFrom,
+  alternativesFor, bestLineupFor, fractionLeft, initialForm, liveDraws, oddsFor,
+  sideTotals, starterState, statesFrom, stockLine,
 } from "./matchups.ts";
 import type { GameState } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
@@ -98,15 +98,108 @@ describe("oddsFor", () => {
     expect(mean).toBeLessThan(8 + 0.5 * 20 + 1.5);
   });
 
-  it("scores a starter the week has no projection for on points alone", () => {
+  it("gives a kicker nobody has a line on the position's stock week", () => {
     const totals = sideTotals(
       side("me", 5, [{ key: "nobody", slot: "K", points: 5 }]),
+      new Map(),
+      states({}),
+      4000,
+    );
+
+    expect(mean(totals)).toBeGreaterThan(5 + 6);
+    expect(mean(totals)).toBeLessThan(5 + 10);
+  });
+
+  it("scores a man in no stock position on his points alone", () => {
+    const totals = sideTotals(
+      side("me", 5, [{ key: "nobody", slot: "WR", points: 5 }]),
       new Map(),
       states({}),
       20,
     );
 
     expect(new Set(totals)).toEqual(new Set([5]));
+  });
+});
+
+describe("stockLine", () => {
+  it("has a kicker and a defence, and nobody else", () => {
+    expect(stockLine("K")?.blend).toBe(8);
+    expect(stockLine("DEF")?.blend).toBe(7);
+    expect(stockLine("WR")).toBeNull();
+  });
+
+  it("marks the line as stock, so a page can say so", () => {
+    expect(stockLine("K")?.stock).toBe(true);
+  });
+});
+
+describe("initialForm", () => {
+  it("cuts the first name to an initial", () => {
+    expect(initialForm("Christian McCaffrey")).toBe("C. McCaffrey");
+  });
+
+  it("keeps everything after the first name", () => {
+    expect(initialForm("Michael Pittman Jr.")).toBe("M. Pittman Jr.");
+  });
+
+  it("leaves a one word name alone", () => {
+    expect(initialForm("BUF")).toBe("BUF");
+  });
+});
+
+describe("alternativesFor", () => {
+  const rows = rowsFor(
+    row("scrub", "BUF", 4),
+    row("stud", "KC", 22),
+    row("started", "DEN", 12),
+    row("keeper", "LA", 11, "QB"),
+  );
+  const mySide: Side = {
+    owner: "me",
+    points: 0,
+    starters: [
+      { key: "keeper", slot: "QB", points: 0 },
+      { key: "started", slot: "WR", points: 0 },
+    ],
+    bench: [
+      { key: "stud", points: 0 },
+      { key: "scrub", points: 0 },
+    ],
+  };
+  const them: Side = {
+    owner: "them",
+    points: 0,
+    starters: [{ key: "scrub2", slot: "WR", points: 12 }],
+    bench: [],
+  };
+  const choices = alternativesFor(
+    mySide, them, ["QB", "WR"], rows,
+    states({ BUF: { where: "pre", left: 1 }, KC: { where: "pre", left: 1 },
+      DEN: { where: "pre", left: 1 }, LA: { where: "pre", left: 1 } }),
+  );
+
+  it("gives one section per seat, in lineup order", () => {
+    expect(choices.map((c) => c.slot)).toEqual(["QB", "WR"]);
+  });
+
+  it("only offers men the seat takes", () => {
+    expect(choices[0]!.options).toEqual([]);
+    expect(choices[1]!.options.map((o) => o.key)).toEqual(["stud", "scrub"]);
+  });
+
+  it("puts the man who helps most first, and prices him above nought", () => {
+    expect(choices[1]!.options[0]!.gains).toBeGreaterThan(0);
+    expect(choices[1]!.options[1]!.gains).toBeLessThan(0);
+  });
+
+  it("marks a man whose game has kicked off as locked", () => {
+    const shut = alternativesFor(
+      mySide, them, ["QB", "WR"], rows,
+      states({ KC: { where: "in", left: 0.5 } }),
+    );
+
+    expect(shut[1]!.options.find((o) => o.key === "stud")!.locked).toBe(true);
   });
 });
 

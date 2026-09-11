@@ -216,7 +216,7 @@ function App() {
 
   /** the league's own games, which only the provider knows */
   useEffect(() => {
-    if (view !== "matchups" || !active || !week) {
+    if ((view !== "matchups" && view !== "start") || !active || !week) {
       return;
     }
 
@@ -686,7 +686,12 @@ function App() {
             onWeek={setWeek}
             slate={slate}
             roster={active ? rosterKeys(active.myRoster) : null}
-            status={weekStatus}
+            games={games}
+            rows={slateRows}
+            men={men}
+            mine={active?.team ?? null}
+            slots={active?.slots ?? null}
+            status={gamesStatus || weekStatus}
           />
         )}
 

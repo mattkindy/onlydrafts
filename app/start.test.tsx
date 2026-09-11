@@ -12,6 +12,7 @@ import { render } from "preact";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { Start } from "./views/Start.tsx";
+import { WeekRanks } from "./views/WeekRanks.tsx";
 import {
   isSplit, readSlate, rosterKeys, verdict, weekRefs, type SlateRow,
 } from "./lib/slate.ts";
@@ -29,13 +30,7 @@ const at = (name: string): SlateRow =>
 let where: HTMLElement;
 
 const draw = (roster: Set<string> | null = null) => {
-  render(
-    <Start
-      weeks={WEEKS} picked={WEEKS[0]!} onWeek={() => {}} slate={slate}
-      roster={roster}
-    />,
-    where,
-  );
+  render(<WeekRanks slate={slate} roster={roster} />, where);
 };
 
 const names = () =>
@@ -164,6 +159,7 @@ describe("who to start", () => {
     render(
       <Start
         weeks={[]} picked={null} onWeek={() => {}} slate={null} roster={null}
+        games={[]} rows={new Map()} men={[]} mine={null} slots={null}
       />,
       where,
     );

@@ -183,7 +183,41 @@ export interface Line {
   opponent: string | null;
   /** the middle of it, which is what a projected total adds up */
   blend: number;
+  /**
+   * True when nobody has a number for this man and the position's stock
+   * week is standing in, so a page can say the figure is a guess.
+   */
+  stock: boolean;
 }
+
+/**
+ * A plain week for a position, for a man neither the slate nor the board
+ * knows. Kickers and defences are the ones this happens to, and either
+ * scores about a touchdown most weeks, so counting nought was worse than
+ * counting the position's usual.
+ */
+const STOCK: Record<string, Spread> = {
+  K: { ev: 8, q1: 4.5, mid: 7.5, q3: 11, low: 2, high: 15 },
+  DEF: { ev: 7, q1: 3, mid: 6, q3: 10, low: -1, high: 17 },
+};
+
+/** the stock week for a position, where there is one worth drawing */
+export const stockLine = (position: string): Line | null => {
+  const spread = STOCK[position];
+
+  if (!spread) {
+    return null;
+  }
+
+  return {
+    spread,
+    position,
+    team: null,
+    opponent: null,
+    blend: spread.ev,
+    stock: true,
+  };
+};
 
 /**
  * What the week says about a man, and failing that what the board does.
@@ -195,7 +229,7 @@ export interface Line {
  * not come with it, so he shares no factor with anybody.
  */
 export function lineOf(
-  key: string, rows: Map<string, SlateRow>, lines?: Lines,
+  key: string, rows: Map<string, SlateRow>, lines?: Lines, position?: string,
 ): Line | null {
   const row = rows.get(key);
 
@@ -206,6 +240,7 @@ export function lineOf(
       team: row.team.toUpperCase(),
       opponent: row.opponent.toUpperCase() || null,
       blend: row.blend,
+      stock: false,
     };
   }
 
@@ -213,7 +248,7 @@ export function lineOf(
   const game = man?.game;
 
   if (!man || !game?.["ev"]) {
-    return null;
+    return position ? stockLine(position) : null;
   }
 
   const ev = game["ev"]!;
@@ -231,8 +266,26 @@ export function lineOf(
     team: man.team?.toUpperCase() ?? null,
     opponent: null,
     blend: ev,
+    stock: false,
   };
 }
+
+/** a man on the field, as the pages that draw him need him */
+export interface Starter {
+  key: string;
+  points?: number;
+  /** the seat he is in, which says what position to fall back on */
+  slot?: string;
+}
+
+/** the position a seat implies, for a man nobody has a line on */
+const hintOf = (slot: string | undefined) =>
+  slot && slot in STOCK ? slot : undefined;
+
+/** what the week, the board, or the position says about a man in a seat */
+export const lineFor = (
+  man: Starter, rows: Map<string, SlateRow>, lines?: Lines,
+) => lineOf(man.key, rows, lines, hintOf(man.slot));
 
 /** where his game has got to, off whichever team the line gives him */
 const stateAt = (line: Line, states: Map<string, GameState>): GameState =>
@@ -326,7 +379,7 @@ interface Watching {
  * the simple treatment, and it leaves him unit variance.
  */
 export function liveDraws(
-  men: { key: string; points: number }[],
+  men: Starter[],
   rows: Map<string, SlateRow>,
   states: Map<string, GameState>,
   draws: number,
@@ -336,7 +389,7 @@ export function liveDraws(
   const watched = new Map<string, Watching>();
 
   for (const man of men) {
-    const line = lineOf(man.key, rows, lines);
+    const line = lineFor(man, rows, lines);
 
     if (!line || watched.has(man.key)) {
       continue;
@@ -347,7 +400,7 @@ export function liveDraws(
       ? Math.min(1, Math.max(0, 1 - state.left))
       : 0;
     const at = played > 0
-      ? quantileOf(line.spread, man.points / played)
+      ? quantileOf(line.spread, (man.points ?? 0) / played)
       : 0.5;
 
     watched.set(man.key, {
@@ -539,9 +592,9 @@ export interface Best {
 
 /** a man nobody can move: his game has kicked off */
 const locked = (
-  key: string, rows: Map<string, SlateRow>, states: Map<string, GameState>,
+  man: Starter, rows: Map<string, SlateRow>, states: Map<string, GameState>,
   lines?: Lines,
-) => starterState({ key }, rows, states, lines)?.where !== "pre";
+) => starterState(man, rows, states, lines)?.where !== "pre";
 
 /**
  * Whether this slot takes a man of that position. A slot nobody here
@@ -584,7 +637,7 @@ export function bestLineupFor(
   const theirs = sideTotals(against, rows, states, draws, live);
   const benched = side.bench
     .map((man) => ({ man, line: lineOf(man.key, rows, lines) }))
-    .filter((his) => his.line && !locked(his.man.key, rows, states, lines));
+    .filter((his) => his.line && !locked(his.man, rows, states, lines));
   const scoredBy = (man: { key: string; points: number }, i: number) =>
     man.points + live.toCome(man.key)[i]!;
   let starters = [...side.starters];
@@ -607,7 +660,7 @@ export function bestLineupFor(
 
       for (const starter of starters) {
         if (
-          locked(starter.key, rows, states, lines) ||
+          locked(starter, rows, states, lines) ||
           !takes(starter.slot, position, slots)
         ) {
           continue;
@@ -655,17 +708,106 @@ const bencher = (bench: Side["bench"], key: string) =>
  * slate leaves out read as done with nought.
  */
 export function starterState(
-  starter: { key: string },
+  starter: Starter,
   rows: Map<string, SlateRow>,
   states: Map<string, GameState>,
   lines?: Lines,
 ): GameState | null {
-  const line = lineOf(starter.key, rows, lines);
+  const line = lineFor(starter, rows, lines);
 
   return line ? stateAt(line, states) : null;
 }
 
 /** what a man is projected to add from here, on top of what he has */
 export const projectedFor = (
-  key: string, rows: Map<string, SlateRow>, lines?: Lines,
-) => lineOf(key, rows, lines)?.blend ?? null;
+  key: string, rows: Map<string, SlateRow>, lines?: Lines, slot?: string,
+) => lineFor({ key, slot }, rows, lines)?.blend ?? null;
+
+/**
+ * A name short enough for a phone: the first name cut to an initial. Only
+ * the leading word goes, so a suffix or a two word surname survives.
+ */
+export function initialForm(name: string): string {
+  const words = name.trim().split(/\s+/);
+  const first = words[0];
+
+  if (words.length < 2 || !first) {
+    return name.trim();
+  }
+
+  return `${first[0]}. ${words.slice(1).join(" ")}`;
+}
+
+/** one bench man measured against the starter in a seat */
+export interface Alternative {
+  key: string;
+  position: string;
+  /** what starting him instead would do to the win chance */
+  gains: number;
+  /** his game has kicked off, so the league will not take the change */
+  locked: boolean;
+}
+
+/** a seat, who is in it, and who else could be */
+export interface SlotChoice {
+  slot: string;
+  starter: Side["starters"][number];
+  /** the starter's own game has kicked off, so he cannot come out */
+  locked: boolean;
+  options: Alternative[];
+}
+
+/** how many draws the alternatives are read off, per seat and per man */
+export const CHOICE_DRAWS = 2000;
+
+/**
+ * Every seat in your lineup with the bench men who could take it, each
+ * with what starting him would do to your chance of winning this week.
+ *
+ * One set of draws serves the whole board, so every answer is measured
+ * against the same opponent and the differences between them are the men
+ * rather than the drawing.
+ */
+export function alternativesFor(
+  side: Side,
+  against: Side,
+  slots: string[] | null | undefined,
+  rows: Map<string, SlateRow>,
+  states: Map<string, GameState>,
+  draws = CHOICE_DRAWS,
+  lines?: Lines,
+): SlotChoice[] {
+  const live = liveDraws(
+    [...side.starters, ...side.bench, ...against.starters, ...against.bench],
+    rows, states, draws, lines,
+  );
+  const theirs = sideTotals(against, rows, states, draws, live);
+  const scoredBy = (man: Starter, i: number) =>
+    (man.points ?? 0) + live.toCome(man.key)[i]!;
+  const totals = Array.from({ length: draws }, (_, i) =>
+    side.starters.reduce((sum, man) => sum + scoredBy(man, i), 0));
+  const odds = winChance(totals, theirs);
+  const benched = side.bench
+    .map((man) => ({ man, line: lineOf(man.key, rows, lines) }))
+    .filter((his) => his.line !== null);
+
+  return side.starters.map((starter) => {
+    const shut = locked(starter, rows, states, lines);
+    const options = benched
+      .filter((his) => takes(starter.slot, his.line!.position, slots))
+      .map((his) => {
+        const swapped = totals.map((total, i) =>
+          total - scoredBy(starter, i) + scoredBy(his.man, i));
+
+        return {
+          key: his.man.key,
+          position: his.line!.position,
+          gains: winChance(swapped, theirs) - odds,
+          locked: shut || locked(his.man, rows, states, lines),
+        };
+      })
+      .sort((a, b) => b.gains - a.gains);
+
+    return { slot: starter.slot, starter, locked: shut, options };
+  });
+}
