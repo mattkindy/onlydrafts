@@ -13,7 +13,9 @@
  */
 
 import { lineupOf, type Player } from "./scoring.ts";
-import { DRAWS, streamFor, weeksFromSpread } from "./spread.ts";
+import {
+  DRAWS, normalCdf, normalStream, streamFor, weeksFromSpread,
+} from "./spread.ts";
 
 const FLEX_POSITIONS = ["RB", "WR", "TE"];
 
@@ -62,6 +64,145 @@ export function weekOfDraw(i: number): number {
 }
 
 /**
+ * How a man's week moves with the other men in his game.
+ *
+ * Everybody still reads his week off his own five figures, so nobody's
+ * distribution changes. What changes is where in it he lands: the number
+ * that picks the quantile comes from a normal put through the normal
+ * CDF, and that normal is shared factors plus his own noise, scaled to
+ * unit variance. That is a Gaussian copula. One factor per team is the
+ * game script, one more per team the pass catchers take with opposite
+ * signs so two of them do not inherit the script between them, and one
+ * per game ties the two sides together. The loadings are measured in
+ * docs/game-correlation.md.
+ */
+const SCRIPT_LOAD = 0.65;
+const SPLIT_LOAD = 0.65;
+const QB_LOAD = 0.6;
+const DEF_LOAD = -0.5;
+const GAME_LOAD = 0.45;
+
+const PASS_CATCHERS = ["WR", "TE"];
+
+/** the other side each team plays in a given week, when anybody knows */
+export type OpponentOf = (team: string, week: number) => string | null;
+
+let opponentOf: OpponentOf | null = null;
+let topCatchers: Set<string> | null = null;
+
+/**
+ * Who each team's first pass catcher is, which decides the sign he takes
+ * the split factor with. A draw cannot see a man's teammates, so the
+ * board says once, here, and the weeks drawn before it spoke are thrown
+ * away because they were drawn without it.
+ *
+ * The split factor only has two signs, so the first pass catcher comes
+ * out uncorrelated with each of the others, and any two of the others
+ * pick up about 0.42 between them where the measurement says nought.
+ */
+export function notePassCatchers(
+  players: Player[], opponents: OpponentOf | null = null,
+): void {
+  const best = new Map<string, Player>();
+
+  for (const p of players) {
+    if (!p.team || !PASS_CATCHERS.includes(p.position)) {
+      continue;
+    }
+
+    const had = best.get(p.team);
+
+    if (!had || (p.ppg ?? 0) > (had.ppg ?? 0)) {
+      best.set(p.team, p);
+    }
+  }
+
+  topCatchers = new Set([...best.values()].map((p) => p.key));
+  opponentOf = opponents;
+  drawn = new WeakMap();
+}
+
+const factors = new Map<string, number[]>();
+
+function factorFor(seed: string, draws: number): number[] {
+  const at = `${seed}|${draws}`;
+  let its = factors.get(at);
+
+  if (!its) {
+    its = normalStream(seed, draws);
+    factors.set(at, its);
+  }
+
+  return its;
+}
+
+/**
+ * A team's game script in one drawn week: its own factor, and, where the
+ * fixture is known, a share of the factor the two sides of that game
+ * have in common. The game factor is seeded off both team names sorted,
+ * so each side reaches the same number without asking the other.
+ */
+function scriptAt(team: string, i: number, draws: number): number {
+  const own = factorFor(`script|${team}`, draws)[i]!;
+  const against = opponentOf?.(team, weekOfDraw(i)) ?? null;
+
+  if (!against) {
+    return own;
+  }
+
+  const pair = [team, against].sort().join("|");
+  const game = factorFor(`game|${pair}|${weekOfDraw(i)}`, draws)[i]!;
+
+  return Math.sqrt(1 - GAME_LOAD * GAME_LOAD) * own + GAME_LOAD * game;
+}
+
+const rest = (load: number) => Math.sqrt(Math.max(0, 1 - load * load));
+
+/** what a pass catcher's two loadings leave for his own noise */
+const CATCHER_REST = Math.sqrt(Math.max(
+  0, 1 - SCRIPT_LOAD * SCRIPT_LOAD - SPLIT_LOAD * SPLIT_LOAD));
+
+function normalFor(p: Player, i: number, draws: number): number {
+  const own = factorFor(`own|${p.key}`, draws)[i]!;
+
+  if (!p.team) {
+    return own;
+  }
+
+  if (p.position === "QB") {
+    return QB_LOAD * scriptAt(p.team, i, draws) + rest(QB_LOAD) * own;
+  }
+
+  if (p.position === "DEF") {
+    const against = opponentOf?.(p.team, weekOfDraw(i)) ?? null;
+
+    if (!against) {
+      return own;
+    }
+
+    return DEF_LOAD * scriptAt(against, i, draws) + rest(DEF_LOAD) * own;
+  }
+
+  if (!PASS_CATCHERS.includes(p.position)) {
+    return own;
+  }
+
+  const script = scriptAt(p.team, i, draws);
+
+  // without the board's word on who is first there is no sign to take
+  // the split factor with, so he takes the script and nothing else
+  if (!topCatchers) {
+    return SCRIPT_LOAD * script + rest(SCRIPT_LOAD) * own;
+  }
+
+  const sign = topCatchers.has(p.key) ? 1 : -1;
+  const split = factorFor(`split|${p.team}`, draws)[i]!;
+
+  return SCRIPT_LOAD * script + SPLIT_LOAD * sign * split
+    + CATCHER_REST * own;
+}
+
+/**
  * A man's weeks, zeroed where he does not play: his bye, and the games
  * he is expected to miss. How many games he is expected to play already
  * prices his injury history and his age, so a fragile man misses weeks
@@ -92,7 +233,7 @@ export function weeksOf(p: Player, draws = DRAWS): number[] {
  * once for every candidate and drew every man's weeks again each time.
  * The arrays are shared, so nobody writes into one.
  */
-const drawn = new WeakMap<Player, Map<number, number[]>>();
+let drawn = new WeakMap<Player, Map<number, number[]>>();
 
 function drawWeeks(p: Player, draws: number): number[] {
   const g = p.game;
@@ -110,6 +251,7 @@ function drawWeeks(p: Player, draws: number): number[] {
     },
     p.key,
     draws,
+    Array.from({ length: draws }, (_, i) => normalCdf(normalFor(p, i, draws))),
   );
 
   const out = streamFor(p.key + "|out", draws);
