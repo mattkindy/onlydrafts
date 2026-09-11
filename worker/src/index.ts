@@ -18,8 +18,13 @@
 
 const ESPN = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons";
 
-/** the views the draft page reads, so a caller cannot ask for more */
-const VIEWS = ["mTeam", "mSettings", "mRoster", "mDraftDetail"];
+/** every view the page is allowed to ask for, so nobody asks for more */
+const VIEWS = [
+  "mTeam", "mSettings", "mRoster", "mDraftDetail", "mMatchupScore",
+];
+
+/** what the draft page reads, used when a caller asks for no views */
+const DRAFT_VIEWS = ["mTeam", "mSettings", "mRoster", "mDraftDetail"];
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -45,8 +50,18 @@ export default {
 
     const swid = request.headers.get("x-espn-swid") ?? "";
     const s2 = request.headers.get("x-espn-s2") ?? "";
+    const wantedViews = asked.searchParams.getAll("view")
+      .filter((view) => VIEWS.includes(view));
+    const week = asked.searchParams.get("scoringPeriodId") ?? "";
+
+    if (week && !/^\d{1,2}$/.test(week)) {
+      return answer({ error: "a scoring period is a week number" }, 400);
+    }
+
     const at = `${ESPN}/${season}/segments/0/leagues/${leagueId}` +
-      "?" + VIEWS.map((view) => `view=${view}`).join("&");
+      "?" + (wantedViews.length ? wantedViews : DRAFT_VIEWS)
+        .map((view) => `view=${view}`).join("&") +
+      (week ? `&scoringPeriodId=${week}` : "");
     const said = await fetch(at, {
       headers: swid && s2 ? { cookie: `SWID=${swid}; espn_s2=${s2}` } : {},
     });
