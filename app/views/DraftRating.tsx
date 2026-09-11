@@ -55,6 +55,26 @@ function TeamRow(
   );
 }
 
+function NowTeamRow(
+  { team, at, grade, mine, sinceDraft, starters }:
+  {
+    team: TeamShare; at: number; grade: string; mine: boolean;
+    sinceDraft: number; starters: { p: Player }[];
+  },
+) {
+  return (
+    <tr class={mine ? "on" : ""}>
+      <td>{at}</td>
+      <td>{team.owner}</td>
+      <td>{grade}</td>
+      <td>{pct(team.wins)}</td>
+      <td>{signed(sinceDraft)}</td>
+      <td>{team.picks}</td>
+      <td>{starters.slice(0, 3).map((s) => s.p.name).join(", ")}</td>
+    </tr>
+  );
+}
+
 export function DraftRating(props: Props) {
   const { league, board, byKey } = props;
   const curve = marketCurve(board);
@@ -112,18 +132,57 @@ export function DraftRating(props: Props) {
    * replayed draft come to about half a second, which is fine on
    * opening the page and not on every keystroke elsewhere.
    */
-  const { rated, picks } = useMemo(() => {
+  const { rated, picks, nowRated, sinceDraft } = useMemo(() => {
     const room = roomFor(board, league.slots, league.size, WEEKS_DRAWN);
     const everyPick = [...drafted.values()].flat();
+    const rated = shareTeams(teams, board, league.slots, room);
+    const draftedWins = new Map(rated.map((t) => [t.owner, t.wins]));
+    /**
+     * A man kept off the board today was never assigned a turn, so he
+     * is priced as if taken one pick past the last one anybody made.
+     */
+    const lastPick = Math.max(0, ...everyPick.map((t) => t.at)) + 1;
+    const nowTeams = league.allRosters.length > 0 && drafted.size > 0
+      ? league.allRosters.map((r) => {
+          const at = new Map(
+            (drafted.get(r.owner) ?? []).map((t) => [t.p.key, t.at]));
+
+          return {
+            owner: r.owner,
+            took: r.keys
+              .map((m) => byKey.get(m.key))
+              .filter((p): p is Player => Boolean(p))
+              .map((p) => ({ at: at.get(p.key) ?? lastPick, p, kept: false })),
+          };
+        })
+      : [];
+    const nowRated = nowTeams.length > 0
+      ? shareTeams(nowTeams, board, league.slots, room)
+      : [];
+    const sinceDraft = new Map(
+      nowRated.map((t) => [t.owner, t.wins - (draftedWins.get(t.owner) ?? t.wins)]));
 
     return {
-      rated: shareTeams(teams, board, league.slots, room),
+      rated,
       picks: sharePicks(mine, everyPick, board, league.slots, room),
+      nowRated,
+      sinceDraft,
     };
   }, [board, league, props.made]);
   const grades = gradesFor(rated.map((t) => ({ owner: t.owner, perPick: t.over })));
   const startersOf = new Map(teams.map((t) =>
     [t.owner, fillLineup(t.took.map((x) => x.p), league.slots, curve).starters]));
+  const nowGrades = gradesFor(
+    nowRated.map((t) => ({ owner: t.owner, perPick: sinceDraft.get(t.owner) ?? 0 })));
+  const nowStartersOf = new Map(
+    (league.allRosters.length > 0 && drafted.size > 0 ? league.allRosters : [])
+      .map((r) => [
+        r.owner,
+        fillLineup(
+          r.keys.map((m) => byKey.get(m.key)).filter((p): p is Player => Boolean(p)),
+          league.slots, curve,
+        ).starters,
+      ]));
 
   if (rated.length === 0) {
     return (
@@ -181,6 +240,39 @@ export function DraftRating(props: Props) {
             `${pick.name} (${pick.position}, ${pick.who}, ${asRound(pick.overall, league.size)})`)
             .join(", ")}.
         </div>
+      )}
+
+      {nowRated.length > 0 && (
+        <>
+          <div class="empty">
+            The same measure against each team's roster as it stands today,
+            so a trade or a waiver run since the draft shows up as ground
+            gained or lost from where the draft left it.
+          </div>
+
+          <table class="rating">
+            <thead>
+              <tr>
+                <th>#</th><th>team</th><th>grade</th>
+                <th>wins a week now</th><th>since the draft</th>
+                <th>picks</th><th>best three</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nowRated.map((team, i) => (
+                <NowTeamRow
+                  key={team.owner}
+                  team={team}
+                  at={i + 1}
+                  grade={nowGrades.get(team.owner) ?? "C"}
+                  mine={team.owner === league.team}
+                  sinceDraft={sinceDraft.get(team.owner) ?? 0}
+                  starters={nowStartersOf.get(team.owner) ?? []}
+                />
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
 
       {picks.length > 0 && (
