@@ -12,12 +12,9 @@
  * by different amounts because their usage rows differ.
  */
 
-import { loadPlayerStats } from "../data/nflverse.js";
 import type { GameRow } from "../data/nflverse.js";
 import { loadTendencies } from "../data/tendencies.js";
 import { loadWeeklyInjuryStatus } from "../data/weeklyStatus.js";
-import { fantasyPoints } from "../scoring/fantasyPoints.js";
-import { scoring } from "../scoring/active.js";
 import type { PreseasonWorld } from "./preseason.js";
 import type { SeasonExample } from "./seasonModel.js";
 import type { WeeklyExample } from "./weekly.js";
@@ -90,6 +87,40 @@ function scheduleOf(games: GameRow[], season: number) {
   }
 
   return byTeam;
+}
+
+/**
+ * What each club scored per game in a season, from the scoreboard.
+ *
+ * The weekly kernel learned impliedTotal from the Vegas number, which is
+ * the points a team is expected to put on the board, a little over
+ * twenty. Handing it a roster's fantasy points instead put every club
+ * near fifty and the kernel a long way outside anything it was fitted
+ * on.
+ */
+function teamScoringFor(games: GameRow[], season: number): Map<string, number> {
+  const scored = new Map<string, { points: number; games: number }>();
+
+  const add = (team: string, points: number) => {
+    const entry = scored.get(team) ?? { points: 0, games: 0 };
+    entry.points += points;
+    entry.games += 1;
+    scored.set(team, entry);
+  };
+
+  for (const game of games) {
+    if (game.season !== season || game.homeScore === undefined ||
+      game.awayScore === undefined) {
+      continue;
+    }
+
+    add(game.homeTeamId, game.homeScore);
+    add(game.awayTeamId, game.awayScore);
+  }
+
+  return new Map(
+    [...scored].map(([team, e]) => [team, e.points / Math.max(1, e.games)]),
+  );
 }
 
 /**
@@ -227,15 +258,7 @@ export async function preseasonWeeklyInput(
   world: PreseasonWorld,
   exampleById: Map<string, SeasonExample>,
 ): Promise<PreseasonWeeklyInput> {
-  const scored = new Map<string, { points: number; weeks: Set<number> }>();
-
-  for (const w of await loadPlayerStats(world.season - 1)) {
-    const entry = scored.get(w.teamId) ??
-      { points: 0, weeks: new Set<number>() };
-    entry.points += fantasyPoints(w.statLine, scoring());
-    entry.weeks.add(w.week);
-    scored.set(w.teamId, entry);
-  }
+  const scored = teamScoringFor(world.games, world.season - 1);
 
   const passRate = new Map<string, number>();
 
@@ -264,10 +287,7 @@ export async function preseasonWeeklyInput(
       status.get(`${playerId}|${week}`)?.questionable ?? false,
     oppAdjust: world.oppAdjust,
     oppIndex: world.oppIndex,
-    teamScoring: new Map(
-      [...scored].map(([team, e]) =>
-        [team, e.points / Math.max(1, e.weeks.size)]),
-    ),
+    teamScoring: scored,
     passRate,
     staff: (await staffChangesFor(world.season)).changes,
   };
