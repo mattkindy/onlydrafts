@@ -163,6 +163,30 @@ export interface Lineup {
 
 const FLEX_SLOTS = ["FLEX", "WRRB_FLEX", "REC_FLEX", "SUPER_FLEX"];
 
+/** the positions a flex takes, which is what lets one back displace another */
+export const FLEX_POSITIONS = ["RB", "WR", "TE"];
+
+/** whether a lineup is counted under this slot at all */
+export const knownSlot = (slot: string): boolean =>
+  slot in { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 } ||
+  FLEX_SLOTS.includes(slot);
+
+/**
+ * Whether a starting slot takes a man of this position. A superflex takes
+ * a quarterback as well, which is the whole point of one.
+ */
+export function slotTakes(slot: string, position: string): boolean {
+  if (slot === "SUPER_FLEX") {
+    return position === "QB" || FLEX_POSITIONS.includes(position);
+  }
+
+  if (FLEX_SLOTS.includes(slot)) {
+    return FLEX_POSITIONS.includes(position);
+  }
+
+  return slot === position;
+}
+
 /** the lineup a league starts, split into named slots and flexes */
 export function lineupOf(slots: string[] | null | undefined): Lineup {
   const named: Record<string, number> = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 };

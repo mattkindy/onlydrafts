@@ -130,6 +130,53 @@ export function weeksFromSpread(
 }
 
 /**
+ * The five shipped figures, nudged up wherever two of them are equal,
+ * so going backwards from a score to a quantile never divides by nought.
+ */
+function rising(points: number[]): number[] {
+  const out = [points[0]!];
+
+  for (let at = 1; at < points.length; at++) {
+    out.push(Math.max(points[at]!, out[at - 1]! + 1e-9));
+  }
+
+  return out;
+}
+
+/**
+ * Which quantile of his week a score is at, the other way round from
+ * weekAt. This is how a man's afternoon so far is read as evidence: what
+ * he is on pace for goes in, and where that lands on his own
+ * distribution comes out.
+ */
+export function quantileOf(spread: Spread, score: number): number {
+  const points = rising(
+    [spread.low, spread.q1, spread.mid, spread.q3, spread.high]);
+
+  if (score <= points[0]!) {
+    const slope = (AT[1]! - AT[0]!) / (points[1]! - points[0]!);
+
+    return AT[0]! + (score - points[0]!) * slope;
+  }
+
+  if (score >= points[4]!) {
+    const slope = (AT[4]! - AT[3]!) / (points[4]! - points[3]!);
+
+    return AT[4]! + (score - points[4]!) * slope;
+  }
+
+  let at = 1;
+
+  while (at < AT.length - 1 && score > points[at]!) {
+    at++;
+  }
+
+  const span = (score - points[at - 1]!) / (points[at]! - points[at - 1]!);
+
+  return AT[at - 1]! + span * (AT[at]! - AT[at - 1]!);
+}
+
+/**
  * A run of standard normal numbers, this name's own, paired off the
  * uniform stream by Box-Muller so the factors a copula adds up are
  * normal and deterministic.
@@ -154,6 +201,37 @@ export function normalCdf(z: number): number {
       1.421413741 + t * (-1.453152027 + t * 1.061405429))));
 
   return 0.5 * (1 + sign * erf);
+}
+
+/** as far out as a quantile is read, since the CDF is flat past it */
+const FURTHEST = 8;
+
+/**
+ * The normal CDF backwards. A quantile of a man's week goes in and the
+ * normal behind it comes out, which is what turns a score he has
+ * already put up into evidence about the factors a copula shares out.
+ *
+ * Halved rather than approximated in its own right, so it inverts the
+ * CDF above exactly instead of the two disagreeing in the tails. Forty
+ * halvings of sixteen leave nothing anybody can see, and this is called
+ * once per man rather than once per draw.
+ */
+export function normalQuantile(p: number): number {
+  const want = Math.min(1 - 1e-12, Math.max(1e-12, p));
+  let low = -FURTHEST;
+  let high = FURTHEST;
+
+  for (let i = 0; i < 40; i++) {
+    const mid = (low + high) / 2;
+
+    if (normalCdf(mid) < want) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  return (low + high) / 2;
 }
 
 /** the counting events a defence is paid for, none of them common */

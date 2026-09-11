@@ -6,10 +6,7 @@
  * answered by drawing weeks rather than by counting points.
  */
 
-import { lineupOf, type Player } from "./scoring.ts";
-
-/** the positions a flex takes, which is what makes one back displace another */
-const FLEX_POSITIONS = ["RB", "WR", "TE"];
+import { FLEX_POSITIONS, lineupOf, type Player } from "./scoring.ts";
 
 export type Fills = "named" | "flex" | "bench";
 
