@@ -47,6 +47,20 @@ export interface Provider {
   wants: string;
   leaguesFor: (who: string, season: number) => Promise<League[]>;
   draftNow: ((league: League) => Promise<DraftNow | null>) | null;
+  matchupsFor?: (league: League, week: number) => Promise<Matchup[]>;
+}
+
+export interface Matchup {
+  /** the two sides, home first when the provider says which */
+  sides: [Side, Side];
+}
+
+export interface Side {
+  owner: string;
+  points: number;
+  /** each starter, in lineup order, with what he has scored so far this week */
+  starters: { key: string; slot: string; points: number }[];
+  bench: { key: string; points: number }[];
 }
 
 export interface DraftNow {
@@ -334,6 +348,22 @@ interface SleeperRoster {
 }
 
 /**
+ * One Sleeper man as the board knows him, or nothing when the id is not
+ * in the player file. An empty lineup slot arrives as the id "0", so
+ * the caller has to cope with nobody being there.
+ */
+const sleeperManOf = (men: SleeperMen, id: string): Man | null => {
+  const p = men[id];
+
+  return p ? { name: p.n, key: normalizeName(p.n), pos: p.p } : null;
+};
+
+const sleeperMenOf = (men: SleeperMen, ids: string[] | undefined): Man[] =>
+  (ids ?? [])
+    .map((id) => sleeperManOf(men, id))
+    .filter((m): m is Man => Boolean(m));
+
+/**
  * Which rounds each team still holds.
  *
  * Keeping a man costs the pick he is priced at, so a team without that
@@ -402,8 +432,6 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       (users as { user_id: string; display_name: string }[])
         .map((u) => [u.user_id, u.display_name]),
     );
-    const manOf = (id: string) => men[id];
-
     out.push({
       provider: "sleeper",
       leagueId: String(lg["league_id"]),
@@ -415,10 +443,7 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       userId: user.user_id,
       team: nameOf.get(user.user_id) ?? username,
       members: Object.fromEntries(nameOf),
-      myRoster: (mine?.players ?? [])
-        .map(manOf)
-        .filter((p): p is { n: string; p: string } => Boolean(p))
-        .map((p) => ({ name: p.n, key: normalizeName(p.n), pos: p.p })),
+      myRoster: sleeperMenOf(men, mine?.players),
       myPicks: held(mine ? mine.roster_id : -1),
       // where you sit in the order, so a keeper is priced against the
       // pick you would actually make rather than the middle of a round
@@ -427,10 +452,7 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       allRosters: (rosters as SleeperRoster[]).map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
         picks: held(r.roster_id),
-        keys: (r.players ?? [])
-          .map(manOf)
-          .filter((p): p is { n: string; p: string } => Boolean(p))
-          .map((p) => ({ name: p.n, key: normalizeName(p.n), pos: p.p })),
+        keys: sleeperMenOf(men, r.players),
       })),
     });
   }
@@ -452,6 +474,89 @@ async function sleeperDraft(league: League): Promise<DraftNow | null> {
   };
 }
 
+interface SleeperMatchup {
+  matchup_id: number | null;
+  roster_id: number;
+  points?: number;
+  starters?: string[];
+  players?: string[];
+  starters_points?: number[];
+  players_points?: Record<string, number>;
+}
+
+/**
+ * The slots a starter can fill, in the order Sleeper lists a lineup.
+ *
+ * roster_positions counts the whole roster, bench and injured reserve
+ * included, and the starters array covers only the slots that play. Left
+ * unfiltered every lineup would be labelled a slot or two off the end.
+ */
+const sleeperStartingSlots = (slots: string[] | null) =>
+  (slots ?? []).filter((slot) => !["BN", "IR", "TAXI"].includes(slot));
+
+/** this week's games, both sides of each, as Sleeper has them now */
+async function sleeperMatchups(
+  league: League,
+  week: number,
+): Promise<Matchup[]> {
+  const [raw, rosters] = await Promise.all([
+    ask("/league/" + league.leagueId + "/matchups/" + week),
+    ask("/league/" + league.leagueId + "/rosters"),
+  ]);
+  const men = await sleeperPlayers();
+  const ownerOf = new Map(
+    (rosters as SleeperRoster[] ?? []).map((r) => [
+      r.roster_id,
+      league.members[r.owner_id] ?? r.owner_id,
+    ]),
+  );
+  const slots = sleeperStartingSlots(league.slots);
+
+  const sideOf = (side: SleeperMatchup): Side => {
+    const scored = side.players_points ?? {};
+    const starting = side.starters ?? [];
+    const starters: Side["starters"] = [];
+
+    for (const [i, id] of starting.entries()) {
+      const man = sleeperManOf(men, id);
+
+      if (man) {
+        starters.push({
+          key: man.key,
+          slot: slots[i] ?? man.pos ?? "FLEX",
+          points: side.starters_points?.[i] ?? scored[id] ?? 0,
+        });
+      }
+    }
+
+    return {
+      owner: ownerOf.get(side.roster_id) ?? String(side.roster_id),
+      points: side.points ?? 0,
+      starters,
+      bench: (side.players ?? [])
+        .filter((id) => !starting.includes(id))
+        .map((id) => ({ key: sleeperManOf(men, id)?.key, points: scored[id] ?? 0 }))
+        .filter((b): b is { key: string; points: number } => Boolean(b.key)),
+    };
+  };
+
+  const paired = new Map<number, SleeperMatchup[]>();
+
+  for (const side of (raw ?? []) as SleeperMatchup[]) {
+    if (side.matchup_id === null || side.matchup_id === undefined) {
+      continue;
+    }
+
+    paired.set(side.matchup_id, [...paired.get(side.matchup_id) ?? [], side]);
+  }
+
+  // a bye week, or a league still filling up, leaves a matchup id with
+  // one roster under it, and there is no game to show for that
+  return [...paired.values()]
+    .filter((sides) => sides.length === 2)
+    .map((sides) => ({ sides: [sideOf(sides[0]!), sideOf(sides[1]!)] as [Side, Side] }));
+}
+
 export class NeedsEspnCookies extends Error {}
 
 /**
@@ -460,7 +565,7 @@ export class NeedsEspnCookies extends Error {}
  * cannot set them by hand. The relay can, so its address and the two
  * cookies stay in this browser and go nowhere else.
  */
-async function throughTheWorker(leagueId: string, season: number) {
+async function throughTheWorker(leagueId: string, season: number, query: string) {
   const where = stored("espnWorker", "") || ESPN_WORKER;
   const swid = stored("espnSwid", "");
   const s2 = stored("espnS2", "");
@@ -473,7 +578,7 @@ async function throughTheWorker(leagueId: string, season: number) {
 
   const said = await fetch(
     where.replace(/\/+$/, "") + "/espn/" + encodeURIComponent(leagueId) +
-      "?season=" + season,
+      "?season=" + season + query,
     { headers: { "x-espn-swid": swid, "x-espn-s2": s2 } },
   ).then((r) => r.json()).catch(() => null);
 
@@ -512,15 +617,32 @@ export function espnCookiesFrom(pasted: string) {
  * ESPN's choice. So a private league is tried this way first, in case
  * it opens for nothing, and only then does it come down to the relay.
  */
-async function espnAnswer(leagueId: string, season: number) {
+async function espnAnswer(
+  leagueId: string,
+  season: number,
+  views: string[] = ["mTeam", "mSettings", "mRoster", "mDraftDetail"],
+  week?: number,
+) {
+  const query = views.map((view) => "&view=" + view).join("") +
+    (week === undefined ? "" : "&scoringPeriodId=" + week);
   const at = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/" +
     season + "/segments/0/leagues/" + encodeURIComponent(leagueId) +
-    "?view=mTeam&view=mSettings&view=mRoster&view=mDraftDetail";
+    "?" + query.slice(1);
   const answered = await fetch(at, { credentials: "include" }).catch(() => null);
 
   return answered?.ok
     ? await answered.json()
-    : await throughTheWorker(leagueId, season);
+    : await throughTheWorker(leagueId, season, query);
+}
+
+interface EspnEntry {
+  playerId?: number;
+  lineupSlotId?: number;
+  playerPoolEntry?: {
+    /** what he has scored in the week that was asked for */
+    appliedStatTotal?: number;
+    player?: { id?: number; fullName?: string; defaultPositionId?: number };
+  };
 }
 
 interface EspnTeam {
@@ -528,9 +650,30 @@ interface EspnTeam {
   name?: string;
   location?: string;
   nickname?: string;
-  roster?: { entries?: { playerId?: number; playerPoolEntry?: { player?: {
-    id?: number; fullName?: string; defaultPositionId?: number;
-  } } }[] };
+  roster?: { entries?: EspnEntry[] };
+}
+
+/**
+ * One ESPN man as the board knows him.
+ *
+ * A roster entry usually spells the man out, but sometimes gives only
+ * his number, and then the player list is the only way to know him.
+ */
+function espnManOf(men: EspnMen, entry: EspnEntry): Man | null {
+  const man = entry.playerPoolEntry?.player;
+  const id = man?.id ?? entry.playerId;
+  const listed = id ? men[id] : undefined;
+
+  if (man?.fullName) {
+    const pos = ESPN_POSITIONS[man.defaultPositionId ?? -1] ?? listed?.p ?? "";
+    const name = espnNameOf(id!, man.fullName, pos);
+
+    return { name, key: normalizeName(name), pos };
+  }
+
+  return listed
+    ? { name: listed.n, key: normalizeName(listed.n), pos: listed.p }
+    : null;
 }
 
 interface EspnPick {
@@ -642,26 +785,10 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
   const teams = said.teams as EspnTeam[];
   const nameOf = (team: EspnTeam) =>
     (team.name ?? [team.location, team.nickname].filter(Boolean).join(" ")).trim();
-  // a roster entry usually spells the man out, but sometimes gives only
-  // his number, and then the player list is the only way to know him
   const men = await espnPlayers(season).catch(() => ({} as EspnMen));
   const menOf = (team: EspnTeam): Man[] => (team.roster?.entries ?? [])
-    .map((e) => {
-      const man = e.playerPoolEntry?.player;
-      const id = man?.id ?? e.playerId;
-      const listed = id ? men[id] : undefined;
-
-      if (man?.fullName) {
-        const pos = ESPN_POSITIONS[man.defaultPositionId ?? -1] ??
-          listed?.p ?? "";
-
-        return { name: espnNameOf(id!, man.fullName, pos), pos };
-      }
-
-      return listed ? { name: listed.n, pos: listed.p } : null;
-    })
-    .filter((m): m is { name: string; pos: string } => Boolean(m))
-    .map((m) => ({ name: m.name, key: normalizeName(m.name), pos: m.pos }));
+    .map((e) => espnManOf(men, e))
+    .filter((m): m is Man => Boolean(m));
   const rounds = Math.max(
     ...(said.draftDetail?.picks ?? []).map((p: EspnPick) => p.roundId),
     ROUNDS,
@@ -767,6 +894,84 @@ async function espnDraft(league: League): Promise<DraftNow | null> {
   };
 }
 
+interface EspnScoreSide {
+  teamId: number;
+  totalPoints?: number;
+  totalPointsLive?: number;
+  rosterForCurrentScoringPeriod?: { entries?: EspnEntry[] };
+}
+
+interface EspnGame {
+  matchupPeriodId?: number;
+  home?: EspnScoreSide;
+  away?: EspnScoreSide;
+}
+
+/** ESPN's numbers for the bench and for injured reserve */
+const ESPN_BENCH = new Set([20, 21]);
+
+/** this week's games, both sides of each, as ESPN has them now */
+async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
+  const said = await espnAnswer(
+    league.leagueId,
+    league.season,
+    ["mTeam", "mMatchupScore", "mRoster"],
+    week,
+  );
+
+  if (!said?.schedule) {
+    return [];
+  }
+
+  const men = await espnPlayers(league.season).catch(() => ({} as EspnMen));
+  const teams = (said.teams ?? []) as EspnTeam[];
+  const ownerOf = new Map(teams.map((t) => [
+    t.id,
+    (t.name ?? [t.location, t.nickname].filter(Boolean).join(" ")).trim(),
+  ]));
+
+  const sideOf = (side: EspnScoreSide): Side => {
+    const starters: Side["starters"] = [];
+    const bench: Side["bench"] = [];
+
+    for (const entry of side.rosterForCurrentScoringPeriod?.entries ?? []) {
+      const man = espnManOf(men, entry);
+
+      if (!man) {
+        continue;
+      }
+
+      const slot = entry.lineupSlotId ?? -1;
+      const points = entry.playerPoolEntry?.appliedStatTotal ?? 0;
+
+      if (ESPN_BENCH.has(slot)) {
+        bench.push({ key: man.key, points });
+      } else {
+        starters.push({
+          key: man.key,
+          slot: ESPN_SLOTS[slot] ?? man.pos ?? "FLEX",
+          points,
+        });
+      }
+    }
+
+    return {
+      // the live total is only there once a game is under way, so before
+      // kickoff the settled total is the one to use
+      owner: ownerOf.get(side.teamId) ?? String(side.teamId),
+      points: side.totalPointsLive ?? side.totalPoints ?? 0,
+      starters,
+      bench,
+    };
+  };
+
+  return (said.schedule as EspnGame[])
+    .filter((game) => game.matchupPeriodId === week && game.home && game.away)
+    .map((game) => ({
+      sides: [sideOf(game.home!), sideOf(game.away!)] as [Side, Side],
+    }));
+}
+
 export const PROVIDERS: Record<string, Provider> = {
   sleeper: {
     label: "Sleeper",
@@ -774,6 +979,7 @@ export const PROVIDERS: Record<string, Provider> = {
     wants: "username",
     leaguesFor: (who) => sleeperLeagues(who),
     draftNow: sleeperDraft,
+    matchupsFor: sleeperMatchups,
   },
   espn: {
     label: "ESPN",
@@ -781,6 +987,7 @@ export const PROVIDERS: Record<string, Provider> = {
     wants: "league id",
     leaguesFor: espnLeagues,
     draftNow: espnDraft,
+    matchupsFor: espnMatchups,
   },
 };
 
