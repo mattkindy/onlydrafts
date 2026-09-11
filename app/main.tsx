@@ -29,6 +29,7 @@ import { DraftRating } from "./views/DraftRating.tsx";
 import { Keepers } from "./views/Keepers.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
 import { Start } from "./views/Start.tsx";
+import { Waivers } from "./views/Waivers.tsx";
 import {
   loadSlate, rosterKeys, weekRefs, type Slate, type WeekRef,
 } from "./lib/slate.ts";
@@ -86,8 +87,8 @@ const COPY: Record<View, [string, string, string]> = {
   ],
   waivers: [
     "Who to add",
-    "Your players next to the best available at each position, so you can see whether a pickup is an upgrade.",
-    "",
+    "Everybody no team in your league has, ranked by what adding him does to how often you win a week. Then what dropping each of your own men would cost.",
+    "Both numbers are points of win chance over the rest of the season, so a pickup is worth making when the man you add beats the man you drop.",
   ],
 };
 
@@ -111,16 +112,6 @@ function payDescription(pays: Record<string, number> | null | undefined): string
 const NOTHING: DraftNow = {
   taken: new Set(), mine: new Set(), teams: {}, rosteredBy: {}, grid: null,
 };
-
-function SeasonNotStarted() {
-  return (
-    <div class="empty">
-      <b>The season has not kicked off yet.</b> Weekly projections need a
-      few games of this year's snaps and targets, so they turn on about a
-      month in. Until then use <b>draft help</b> and <b>my roster</b>.
-    </div>
-  );
-}
 
 /**
  * One team in one league.
@@ -395,7 +386,7 @@ function App() {
           empty one still draws as a white strip across the page */}
       <div
         class="controls"
-        hidden={!["leagues", "keepers", "draft"].includes(view)}
+        hidden={!["leagues", "keepers", "draft", "waivers"].includes(view)}
       >
         {view === "leagues" && (
           <>
@@ -435,6 +426,20 @@ function App() {
               }}
             />
           </label>
+        )}
+
+        {view === "waivers" && (
+          <span id="posfilter">
+            {POSITIONS.map((where) => (
+              <button
+                key={where}
+                class={where === posFilter ? "on" : ""}
+                onClick={() => setPosFilter(where)}
+              >
+                {where.toLowerCase()}
+              </button>
+            ))}
+          </span>
         )}
 
         {view === "draft" && (
@@ -616,7 +621,14 @@ function App() {
           />
         )}
 
-        {view === "waivers" && <SeasonNotStarted />}
+        {board && active && view === "waivers" && (
+          <Waivers
+            men={men}
+            league={active}
+            posFilter={posFilter}
+            onMore={setShowing}
+          />
+        )}
       </div>
 
       <p class="hint">{legend}</p>
