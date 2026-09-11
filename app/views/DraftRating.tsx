@@ -156,9 +156,9 @@ export function DraftRating(props: Props) {
           };
         })
       : [];
-    const nowRated = nowTeams.length > 0
-      ? shareTeams(nowTeams, board, league.slots, room)
-      : [];
+    // by what it wins today, since the slots it drafted from are history
+    const nowRated = shareTeams(nowTeams, board, league.slots, room)
+      .sort((a, b) => b.wins - a.wins);
     const sinceDraft = new Map(
       nowRated.map((t) => [t.owner, t.wins - (draftedWins.get(t.owner) ?? t.wins)]));
 
@@ -173,7 +173,7 @@ export function DraftRating(props: Props) {
   const startersOf = new Map(teams.map((t) =>
     [t.owner, fillLineup(t.took.map((x) => x.p), league.slots, curve).starters]));
   const nowGrades = gradesFor(
-    nowRated.map((t) => ({ owner: t.owner, perPick: sinceDraft.get(t.owner) ?? 0 })));
+    nowRated.map((t) => ({ owner: t.owner, perPick: t.wins })));
   const nowStartersOf = new Map(
     (league.allRosters.length > 0 && drafted.size > 0 ? league.allRosters : [])
       .map((r) => [
@@ -255,7 +255,7 @@ export function DraftRating(props: Props) {
               <tr>
                 <th>#</th><th>team</th><th>grade</th>
                 <th>wins a week now</th><th>since the draft</th>
-                <th>picks</th><th>best three</th>
+                <th>men</th><th>best three</th>
               </tr>
             </thead>
             <tbody>
