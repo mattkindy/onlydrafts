@@ -2,24 +2,28 @@
  * Every head to head in the league this week, with a live win chance.
  *
  * The points are whatever the league has scored so far. The chance is
- * drawn from the week's projections, with only the part of each game
- * still to play counted, so a side that is behind with everybody done
- * reads nought and one sitting on a lead with a back yet to play does
- * not read as safe.
+ * drawn from the week's projections, counting only the part of each
+ * game still to play, so a side behind with everybody done reads nought.
  *
- * Your own game comes first. While any game is under way the scoreboard
- * is read again every minute; when none is, it is read once.
+ * A card pairs the two lineups seat by seat. A man who is done shows
+ * bright points and no projection, a man playing gets a green edge on
+ * his side of the row, and a man yet to kick off shows a faint one.
+ *
+ * Your own game comes first, and the scoreboard is read again every
+ * minute while any game is under way.
  */
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 
 import {
-  bestLineupFor, gameStates, projectedFor, standingFor, starterState,
+  gameStates, lineFor, standingFor, starterState,
   type GameState, type Lines,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
 import type { Player } from "../lib/scoring.ts";
 import type { SlateRow } from "../lib/slate.ts";
+import { Advice, nameOf, pct } from "./Advice.tsx";
+import { ManName } from "./ManName.tsx";
 
 /** how often the scoreboard is read again while a game is on */
 const EVERY = 60_000;
@@ -38,101 +42,74 @@ interface Props {
   status?: string;
 }
 
-const pct = (share: number) => (100 * share).toFixed(0) + "%";
-
-/** done, playing or yet to play, as a word and a class */
-const MARK: Record<GameState["where"] | "none", [string, string]> = {
-  post: ["done", "even"],
-  in: ["playing", "up"],
-  pre: ["to play", "warn"],
-  none: ["no line", "even"],
-};
-
-function Lineup(
-  { side, rows, states, lines }: {
-    side: Side;
+/** one man on one side of a row, mirrored when he is the away side */
+function Man(
+  { starter, rows, states, lines, at }: {
+    starter: Side["starters"][number] | undefined;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
+    at: 0 | 1;
   },
 ) {
-  return (
-    <table class="lineup">
-      <tbody>
-        {side.starters.map((starter, i) => {
-          const row = rows.get(starter.key);
-          const man = lines.get(starter.key);
-          const state = starterState(starter, rows, states, lines);
-          const [word, tone] = MARK[state?.where ?? "none"];
-          const projected = projectedFor(starter.key, rows, lines);
+  if (!starter) {
+    return <div class={"man " + (at ? "away" : "home")} />;
+  }
 
-          return (
-            <tr key={starter.key + i}>
-              <td class="slot">{starter.slot}</td>
-              <td>{row?.name ?? man?.name ?? starter.key}</td>
-              <td class="val">{starter.points.toFixed(1)}</td>
-              <td class="val proj">
-                {projected === null || !state || state.left <= 0
-                  ? ""
-                  : (projected * state.left).toFixed(1)}
-              </td>
-              <td class="state">
-                <span class={"badge " + tone}>{word}</span>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+  const line = lineFor(starter, rows, lines);
+  const state = starterState(starter, rows, states, lines);
+  const playing = state?.where === "in";
+  const done = !state || state.left <= 0;
+  const toCome = line && !done ? line.blend * (state?.left ?? 1) : null;
+
+  return (
+    <div
+      class={"man " + (at ? "away" : "home") + (playing ? " live" : "") +
+        (done ? " done" : "")}
+    >
+      <ManName name={nameOf(starter.key, rows, lines)} team={line?.team} />
+      <span class="num">
+        <b>{starter.points.toFixed(1)}</b>
+        <i>
+          {toCome === null ? "" : toCome.toFixed(1)}
+          {line?.stock && toCome !== null ? " stock" : ""}
+        </i>
+      </span>
+    </div>
   );
 }
 
 /**
- * Your own lineup against the best one you could put out, when the card
- * is yours. Both are drawn against the same opponent, so the difference
- * between the two is the lineup rather than the drawing.
+ * The two lineups paired seat by seat. The sides can be set differently,
+ * so they are paired by position in the list and a side with fewer men
+ * leaves its half of the row empty.
  */
-function Advice(
-  { game, at, slots, rows, states, lines, odds }: {
+function Lineups(
+  { game, rows, states, lines }: {
     game: Matchup;
-    at: number;
-    slots: string[] | null;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
-    odds: number;
   },
 ) {
-  const best = useMemo(
-    () => bestLineupFor(
-      game.sides[at]!, game.sides[1 - at]!, slots, rows, states,
-      undefined, lines),
-    [game, at, slots, rows, states, lines],
-  );
-  const named = (key: string) =>
-    rows.get(key)?.name ?? lines.get(key)?.name ?? key;
-
-  if (!best.swaps.length) {
-    return (
-      <p class="hint">
-        You win {pct(odds)} of the time, and no change to the lineup does
-        better.
-      </p>
-    );
-  }
+  const deep = Math.max(
+    game.sides[0].starters.length, game.sides[1].starters.length);
 
   return (
-    <p class="hint">
-      You win {pct(odds)} of the time. The best lineup wins{" "}
-      {pct(best.odds)}:{" "}
-      {best.swaps.map((swap, i) => (
-        <span key={swap.starts}>
-          {i > 0 ? ", " : ""}
-          start {named(swap.starts)} over {named(swap.benches)}{" "}
-          ({swap.slot}), +{(100 * swap.gains).toFixed(1)}%
-        </span>
-      ))}.
-    </p>
+    <div class="lineups">
+      {Array.from({ length: deep }, (_, i) => {
+        const home = game.sides[0].starters[i];
+        const away = game.sides[1].starters[i];
+
+        return (
+          <div class="seat" key={i}>
+            <Man starter={home} rows={rows} states={states} lines={lines} at={0} />
+            <span class="chip">{home?.slot ?? away?.slot ?? ""}</span>
+            <Man starter={away} rows={rows} states={states} lines={lines} at={1} />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -157,8 +134,8 @@ function Game(
         <div class="team" key={side.owner + at}>
           <span class="nm">{side.owner}</span>
           <span class="big">{side.points.toFixed(1)}</span>
-          <span class="val">{projected[at]!.toFixed(1)} projected</span>
-          <span class="val">{pct(odds[at]!)} to win</span>
+          <span class="val">{projected[at]!.toFixed(1)} proj</span>
+          <span class="val win">{pct(odds[at]!)}</span>
         </div>
       ))}
       <div
@@ -170,8 +147,8 @@ function Game(
       </div>
       {mine >= 0 && (
         <Advice
-          game={game}
-          at={mine}
+          side={game.sides[mine]!}
+          against={game.sides[1 - mine]!}
           slots={slots}
           rows={rows}
           states={states}
@@ -179,17 +156,7 @@ function Game(
           odds={odds[mine]!}
         />
       )}
-      <div class="lineups">
-        {game.sides.map((side, at) => (
-          <Lineup
-            key={side.owner + at}
-            side={side}
-            rows={rows}
-            states={states}
-            lines={lines}
-          />
-        ))}
-      </div>
+      <Lineups game={game} rows={rows} states={states} lines={lines} />
     </div>
   );
 }

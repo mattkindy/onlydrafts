@@ -1,26 +1,27 @@
 /**
- * One week, ranked, so you can set a lineup.
+ * Your own lineup, seat by seat, with who else could take each one.
  *
- * The table is everybody the model has a number for, not only your own
- * men, because half of setting a lineup is deciding whether the man on
- * your bench beats the one you were going to start. Your own are marked
- * and there is a switch to hide the rest.
+ * Every alternative is priced the way the matchup card prices a swap:
+ * how often you beat this week's opponent if he starts there instead of
+ * the man who is in the seat. The two tabs run the same machinery on the
+ * same draws, so the numbers on them agree.
  *
- * Compare mode is for the question people actually ask, which is not
- * "how many points" but "which of these two". The bands it reports come
- * from the pair bench and are printed with the answer, so a two point
- * gap is not read as if it settled anything.
+ * A man whose game has kicked off is still shown, marked locked, because
+ * knowing you missed him is worth more than hiding him.
  */
 
-import { useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 
 import {
-  isSplit, onRoster, splitBy, splitNote, verdict, SPLIT_AT, STARTER_OUT_AT,
-  type Slate, type SlateRow, type WeekRef,
-} from "../lib/slate.ts";
-import { normalizeName } from "../lib/store.ts";
-
-const POSITIONS = ["ALL", "QB", "RB", "WR", "TE"];
+  alternativesFor, gameStates, lineFor, starterState,
+  type GameState, type Lines, type SlotChoice,
+} from "../lib/matchups.ts";
+import type { Matchup, Side } from "../lib/providers.ts";
+import type { Player } from "../lib/scoring.ts";
+import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
+import { Advice, nameOf } from "./Advice.tsx";
+import { ManName } from "./ManName.tsx";
+import { WeekRanks } from "./WeekRanks.tsx";
 
 interface Props {
   weeks: WeekRef[];
@@ -29,141 +30,171 @@ interface Props {
   slate: Slate | null;
   /** the men on your team, or nothing when no league is connected */
   roster: Set<string> | null;
+  /** this week's games in your league, for the one you are in */
+  games: Matchup[];
+  rows: Map<string, SlateRow>;
+  /** the board in this league's terms, for the men the slate leaves out */
+  men: Player[];
+  /** your own team's name in the league */
+  mine: string | null;
+  slots: string[] | null;
   status?: string;
 }
 
-/** what the league office and his side's injuries say about one man */
-function Chips({ row }: { row: SlateRow }) {
-  return (
-    <>
-      {row.questionable && (
-        <span class="badge warn" title="listed questionable this week">
-          questionable
-        </span>
-      )}
-      {row.gamesMissedRecent > 0 && (
-        <span
-          class="badge even"
-          title={`he has missed ${row.gamesMissedRecent} of the last few games`}
-        >
-          missed {row.gamesMissedRecent}
-        </span>
-      )}
-      {row.absenceShare >= STARTER_OUT_AT && (
-        <span
-          class="badge even"
-          title={`about ${Math.round(row.absenceShare * 100)}% of his side's ` +
-            "usual work is missing, so there is more of it for him"}
-        >
-          starter out
-        </span>
-      )}
-    </>
-  );
-}
+const signed = (gains: number) =>
+  (gains > 0 ? "+" : "") + (100 * gains).toFixed(1) + "%";
 
-/** floor to ceiling, with what he is projected for marked inside it */
-function Spread({ row, max }: { row: SlateRow; max: number }) {
-  const pct = (v: number) => Math.max(0, Math.min(100, (v / max) * 100));
+/** what a man is worth this week, as the seat headings and options read it */
+function Numbers(
+  { line, left }: {
+    line: ReturnType<typeof lineFor>;
+    /** how much of his game is still to play */
+    left: number;
+  },
+) {
+  if (!line) {
+    return <span class="seat-fig">no line</span>;
+  }
 
   return (
-    <span
-      class="fc"
-      title={`${row.floor.toFixed(1)} in a bad week, ` +
-        `${row.ceiling.toFixed(1)} in a good one`}
-    >
-      <u style={{ left: pct(row.floor) + "%", right: (100 - pct(row.ceiling)) + "%" }} />
-      <b style={{ left: pct(row.blend) + "%" }} />
+    <span class="seat-fig">
+      <b>{(line.blend * left).toFixed(1)}</b> proj{" "}
+      <i>
+        {line.spread.low.toFixed(1)} to {line.spread.high.toFixed(1)}
+      </i>
+      {line.stock && <i> stock</i>}
     </span>
   );
 }
 
-function Compare({ pair }: { pair: [SlateRow, SlateRow] }) {
-  const [a, b] = pair;
-  const call = verdict(a, b);
+function Seat(
+  { choice, rows, states, lines }: {
+    choice: SlotChoice;
+    rows: Map<string, SlateRow>;
+    states: Map<string, GameState>;
+    lines: Lines;
+  },
+) {
+  const at = (key: string, slot?: string) => {
+    const line = lineFor({ key, slot }, rows, lines);
+    const state = starterState({ key, slot }, rows, states, lines);
+
+    return { line, left: state?.left ?? 1 };
+  };
+  const his = at(choice.starter.key, choice.slot);
 
   return (
-    <div class="clock">
-      <div class="big">{call.says}</div>
-      <div class="sub">
-        {call.gap.toFixed(1)} points between them
-        {call.start ? `, ${call.start.name} ahead` : ""}
-      </div>
-      <table class="line">
-        <thead>
-          <tr>
-            <th />
-            <th>opp</th>
-            <th>ours</th>
-            <th>sleeper</th>
-            <th>blend</th>
-            <th>floor</th>
-            <th>ceiling</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pair.map((row) => (
-            <tr key={row.playerId}>
-              <th>{row.name}</th>
-              <td>{row.home ? "" : "@"}{row.opponent}</td>
-              <td>{row.ours.toFixed(1)}</td>
-              <td>{row.sleeper === null ? "-" : row.sleeper.toFixed(1)}</td>
-              <td><b>{row.blend.toFixed(1)}</b></td>
-              <td>{row.floor.toFixed(1)}</td>
-              <td>{row.ceiling.toFixed(1)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <section class="seat-card">
+      <h3>
+        <span class="chip">{choice.slot}</span>
+        <ManName
+          name={nameOf(choice.starter.key, rows, lines)}
+          team={his.line?.team}
+        />
+        <span class="now">{choice.starter.points.toFixed(1)}</span>
+        <Numbers line={his.line} left={his.left} />
+        {choice.locked && <span class="badge even">locked</span>}
+      </h3>
+
+      {choice.options.length === 0
+        ? <p class="hint">Nobody on the bench can take this seat.</p>
+        : (
+          <ul class="options">
+            {choice.options.map((option) => {
+              const other = at(option.key);
+
+              return (
+                <li key={option.key} class={option.locked ? "shut" : ""}>
+                  <ManName
+                    name={nameOf(option.key, rows, lines)}
+                    team={other.line?.team}
+                  />
+                  <Numbers line={other.line} left={other.left} />
+                  <span class={"delta" + (option.gains > 0 ? " up" : "")}>
+                    {signed(option.gains)}
+                  </span>
+                  {option.locked && <span class="badge even">locked</span>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+    </section>
+  );
+}
+
+/** your side of this week's game, and the side across from it */
+function myGame(games: Matchup[], mine: string | null) {
+  for (const game of games) {
+    const at = game.sides.findIndex((s) => s.owner === mine);
+
+    if (at >= 0) {
+      return { side: game.sides[at]!, against: game.sides[1 - at]! };
+    }
+  }
+
+  return null;
+}
+
+function Lineup(
+  { side, against, slots, rows, states, lines }: {
+    side: Side;
+    against: Side;
+    slots: string[] | null;
+    rows: Map<string, SlateRow>;
+    states: Map<string, GameState>;
+    lines: Lines;
+  },
+) {
+  const choices = useMemo(
+    () => alternativesFor(side, against, slots, rows, states, undefined, lines),
+    [side, against, slots, rows, states, lines],
+  );
+
+  return (
+    <>
+      {choices.map((choice, i) => (
+        <Seat
+          key={choice.starter.key + i}
+          choice={choice}
+          rows={rows}
+          states={states}
+          lines={lines}
+        />
+      ))}
+    </>
   );
 }
 
 export function Start(props: Props) {
-  const { slate, roster } = props;
-  const [posFilter, setPosFilter] = useState("ALL");
-  const [query, setQuery] = useState("");
-  const [mineOnly, setMineOnly] = useState(false);
-  const [picks, setPicks] = useState<SlateRow[]>([]);
+  const { games, mine, rows, slots, slate, roster } = props;
+  const [states, setStates] = useState<Map<string, GameState> | null>(null);
+  const [trouble, setTrouble] = useState("");
+  const [wholeWeek, setWholeWeek] = useState(false);
+  const season = props.picked?.season;
+  const week = props.picked?.week;
 
-  const rows = useMemo(() => {
-    const all = slate?.rows ?? [];
-    const wanted = query.trim();
+  useEffect(() => {
+    if (season === undefined || week === undefined) {
+      return;
+    }
 
-    return all
-      .filter((row) => posFilter === "ALL" || row.position === posFilter)
-      .filter((row) => !mineOnly || onRoster(roster, row))
-      .filter((row) => !wanted ||
-        normalizeName(row.name).includes(normalizeName(wanted)))
-      .sort((a, b) => b.blend - a.blend);
-  }, [slate, posFilter, mineOnly, query, roster]);
+    let stale = false;
 
-  const max = Math.max(1, ...rows.map((row) => row.ceiling));
+    gameStates(season, week)
+      .then((got) => { if (!stale) { setStates(got); setTrouble(""); } })
+      .catch((e: Error) => {
+        if (!stale) {
+          setTrouble("could not read the scoreboard: " + e.message);
+        }
+      });
 
-  /**
-   * Two men, and only two men at the same position. Picking somebody
-   * else's position starts the comparison over on him rather than
-   * refusing the click, since a refusal with no explanation reads as a
-   * broken button.
-   */
-  const pick = (row: SlateRow) => {
-    setPicks((held) => {
-      if (held.some((h) => h.playerId === row.playerId)) {
-        return held.filter((h) => h.playerId !== row.playerId);
-      }
+    return () => { stale = true; };
+  }, [season, week]);
 
-      const first = held[0];
-
-      if (!first || first.position !== row.position) {
-        return [row];
-      }
-
-      return [first, row];
-    });
-  };
-
-  const pair: [SlateRow, SlateRow] | null =
-    picks.length === 2 ? [picks[0]!, picks[1]!] : null;
+  const lines = useMemo(
+    () => new Map(props.men.map((p) => [p.key, p])), [props.men]);
+  const ours = useMemo(() => myGame(games, mine), [games, mine]);
 
   if (!props.weeks.length) {
     return (
@@ -188,7 +219,6 @@ export function Start(props: Props) {
 
               if (found) {
                 props.onWeek(found);
-                setPicks([]);
               }
             }}
           >
@@ -200,44 +230,10 @@ export function Start(props: Props) {
           </select>
         </label>
 
-        <span id="posfilter">
-          {POSITIONS.map((where) => (
-            <button
-              key={where}
-              class={where === posFilter ? "on" : ""}
-              onClick={() => setPosFilter(where)}
-            >
-              {where.toLowerCase()}
-            </button>
-          ))}
-        </span>
-
-        <label>
-          find{" "}
-          <input
-            size={12} placeholder="a name" value={query}
-            onInput={(e) => setQuery(e.currentTarget.value)}
-          />
-        </label>
-
-        {roster && (
-          <label>
-            <input
-              type="checkbox" checked={mineOnly}
-              onChange={(e) => setMineOnly(e.currentTarget.checked)}
-            />{" "}
-            my roster only
-          </label>
-        )}
-
-        {picks.length > 0 && (
-          <button onClick={() => setPicks([])}>clear the comparison</button>
-        )}
-
         <span id="status">{props.status ?? ""}</span>
       </div>
 
-      {!slate && <div class="empty">reading the week...</div>}
+      {trouble && <p class="hint">{trouble}</p>}
 
       {slate?.preseason && (
         <p class="hint">
@@ -246,85 +242,49 @@ export function Start(props: Props) {
         </p>
       )}
 
-      {pair && <Compare pair={pair} />}
+      {ours && states && (
+        <>
+          <Advice
+            side={ours.side}
+            against={ours.against}
+            slots={slots}
+            rows={rows}
+            states={states}
+            lines={lines}
+          />
+          <p class="hint">
+            Against {ours.against.owner} this week. Each man is priced by
+            what starting him in that seat does to your chance of winning.
+          </p>
+          <Lineup
+            side={ours.side}
+            against={ours.against}
+            slots={slots}
+            rows={rows}
+            states={states}
+            lines={lines}
+          />
+        </>
+      )}
 
-      {picks.length === 1 && (
+      {ours && !states && <div class="empty">reading the scoreboard...</div>}
+
+      {!ours && (
         <p class="hint">
-          Now pick another {picks[0]!.position} to compare against{" "}
-          {picks[0]!.name}.
+          You have no game to set a lineup against this week, so here is
+          the whole week ranked instead.
         </p>
       )}
 
-      {slate && (
-        <>
-          <p class="hint">
-            Ranked by the blend of our number and Sleeper's. A row in
-            amber is one where the two disagree by {SPLIT_AT} points or more;
-            hover it to see which way. Press compare on two men at the
-            same position for a straight answer.
-          </p>
-
-          <div class="scroll">
-            <table class="ranks">
-              <thead>
-                <tr>
-                  <th>player</th>
-                  <th>team</th>
-                  <th>opp</th>
-                  <th class="n">ours</th>
-                  <th class="n">sleeper</th>
-                  <th class="n">blend</th>
-                  <th>floor to ceiling</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const chosen = picks.some((h) => h.playerId === row.playerId);
-
-                  return (
-                    <tr
-                      key={row.playerId}
-                      class={[
-                        onRoster(roster, row) ? "mine" : "",
-                        isSplit(row) ? "split" : "",
-                        chosen ? "picked" : "",
-                      ].filter(Boolean).join(" ")}
-                      title={isSplit(row) ? splitNote(row) : undefined}
-                      onClick={() => pick(row)}
-                    >
-                      <td>
-                        <span class="who">{row.name}</span>{" "}
-                        <span class="pos">{row.position}</span>
-                        <Chips row={row} />
-                      </td>
-                      <td>{row.team}</td>
-                      <td>{row.home ? "" : "@"}{row.opponent}</td>
-                      <td class="n">{row.ours.toFixed(1)}</td>
-                      <td class="n">
-                        {row.sleeper === null ? "-" : row.sleeper.toFixed(1)}
-                        {isSplit(row) && (
-                          <span class={"chip " + (splitBy(row) > 0 ? "up" : "down")}>
-                            {splitBy(row) > 0 ? "+" : ""}
-                            {splitBy(row).toFixed(1)}
-                          </span>
-                        )}
-                      </td>
-                      <td class="n"><b>{row.blend.toFixed(1)}</b></td>
-                      <td><Spread row={row} max={max} /></td>
-                      <td class="mark">{chosen ? "•" : ""}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {rows.length === 0 && (
-            <div class="empty">Nobody here matches that.</div>
-          )}
-        </>
+      {ours && (
+        <p class="hint">
+          <button onClick={() => setWholeWeek((on) => !on)}>
+            {wholeWeek ? "hide the whole week" : "show the whole week"}
+          </button>
+        </p>
       )}
+
+      {(!ours || wholeWeek) && <WeekRanks slate={slate} roster={roster} />}
     </>
   );
 }
