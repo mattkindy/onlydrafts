@@ -16,6 +16,7 @@ import { payFor, scoredHere, startedHere, type Pays, type Player } from "./scori
 import type { Roster } from "./providers.ts";
 import { replacementBar } from "./replacementPool.ts";
 import { defenceWeeks, spreadOf } from "./spread.ts";
+import { notePassCatchers } from "./winShare.ts";
 
 export interface League {
   teams: number;
@@ -116,7 +117,15 @@ function forgetSpread(p: Player): void {
     : null;
 }
 
-export function rescore(players: Player[], league: League): Player[] {
+/**
+ * A season's fixtures as the board ships them: eighteen entries a team,
+ * the opponent each week and nothing in the bye week.
+ */
+export type Schedule = Record<string, (string | null)[]>;
+
+export function rescore(
+  players: Player[], league: League, schedule?: Schedule | null,
+): Player[] {
   const { pays } = league;
   const room = roomFor(pays);
   const started = startedHere(league.slots, league.teams);
@@ -388,6 +397,18 @@ export function rescore(players: Player[], league: League): Player[] {
     .filter((p) => p.adp)
     .sort((a, b) => a.adp! - b.adp!)
     .forEach((p, i) => { p.adpRank = i + 1; });
+
+  /**
+   * The drawn weeks need to know who each team's first pass catcher is
+   * and who it plays, and both of those are the board's to say rather
+   * than one player's.
+   */
+  notePassCatchers(
+    men,
+    schedule
+      ? (team, week) => schedule[team]?.[week - 1] ?? null
+      : null,
+  );
 
   return men;
 }

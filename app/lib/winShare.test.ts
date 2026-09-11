@@ -9,8 +9,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  baselineFor, projectedRoster, takeNowFor, weeksOf, winChance,
-  winShareFor,
+  baselineFor, notePassCatchers, projectedRoster, takeNowFor, weeksOf,
+  winChance, winShareFor,
 } from "./winShare.ts";
 import type { Player } from "./scoring.ts";
 
@@ -408,6 +408,65 @@ describe("taking a man now, with the rest of the draft filled around him", () =>
       );
 
       expect(worth(p).added).toBeCloseTo(drawn - passed, 10);
+    }
+  });
+});
+
+/** how two runs of drawn weeks move together, over the weeks both played */
+function corr(a: number[], b: number[]): number {
+  const pairs = a.map((x, i) => [x, b[i]!] as const)
+    .filter(([x, y]) => x > 0 && y > 0);
+  const mx = pairs.reduce((s, p) => s + p[0], 0) / pairs.length;
+  const my = pairs.reduce((s, p) => s + p[1], 0) / pairs.length;
+  let cov = 0;
+  let vx = 0;
+  let vy = 0;
+
+  for (const [x, y] of pairs) {
+    cov += (x - mx) * (y - my);
+    vx += (x - mx) ** 2;
+    vy += (y - my) ** 2;
+  }
+
+  return cov / Math.sqrt(vx * vy);
+}
+
+const onTeam = (p: Player, team: string): Player => ({ ...p, team });
+
+describe("men in the same game", () => {
+  const DRAWN = 4000;
+
+  it("moves a quarterback and his own receiver together", () => {
+    const qb = onTeam(aMan("homeQb", "QB", 18), "AAA");
+    const wr = onTeam(aMan("homeWr", "WR", 14), "AAA");
+    notePassCatchers([qb, wr]);
+
+    expect(corr(weeksOf(qb, DRAWN), weeksOf(wr, DRAWN))).toBeGreaterThan(0.3);
+  });
+
+  it("leaves two men on different teams alone", () => {
+    const qb = onTeam(aMan("oneQb", "QB", 18), "AAA");
+    const wr = onTeam(aMan("otherWr", "WR", 14), "BBB");
+    notePassCatchers([qb, wr]);
+
+    expect(Math.abs(corr(weeksOf(qb, DRAWN), weeksOf(wr, DRAWN))))
+      .toBeLessThan(0.05);
+  });
+
+  it("keeps a man's own spread whether or not he has a team", () => {
+    const alone = aMan("loner", "WR", 14);
+    const teamed = onTeam(aMan("loner", "WR", 14), "AAA");
+    notePassCatchers([teamed]);
+    const at = (its: number[], q: number) => {
+      const sorted = its.filter((n) => n > 0).sort((x, y) => x - y);
+
+      return sorted[Math.floor(q * sorted.length)]!;
+    };
+    const his = weeksOf(alone, DRAWN);
+    const theirs = weeksOf(teamed, DRAWN);
+
+    for (const q of [0.1, 0.5, 0.9]) {
+      expect(at(theirs, q)).toBeCloseTo(at(his, q), 0);
     }
   });
 });

@@ -1545,9 +1545,26 @@ async function main(): Promise<void> {
       (b as unknown as { blend: number }).blend,
   );
 
+  /**
+   * Who each side plays each week, so the page can move the men in one
+   * game together: the two quarterbacks, and a defence against the
+   * offence it is facing.
+   */
+  const schedule: Record<string, (string | null)[]> = {};
+
+  for (const [team, weeks] of weekOpp) {
+    const its = new Array(18).fill(null) as (string | null)[];
+
+    for (const { week, opponent } of weeks) {
+      its[week - 1] = opponent;
+    }
+
+    schedule[team] = its;
+  }
+
   await writeFile(
     join(DOCS, "data", `board-${season}.json`),
-    JSON.stringify({ season, players: [...board, ...others] }),
+    JSON.stringify({ season, players: [...board, ...others], schedule }),
   );
   console.log(`board: ${board.length} players`);
 
