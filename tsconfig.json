@@ -28,6 +28,8 @@
     "scripts/betterDraft.ts",
     "scripts/draftWalk.ts",
     "scripts/matchupCalibration.ts",
-    "scripts/liveRemainderEval.ts"
+    "scripts/liveRemainderEval.ts",
+    "scripts/buildSimTables.ts",
+    "scripts/simAgreement.ts"
   ]
 }
