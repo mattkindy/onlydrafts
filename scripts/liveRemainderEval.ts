@@ -397,7 +397,7 @@ function menOfWeek(
       playerId, name: playerId, position, team, opponent, home: true,
       ours: line.ours, sleeper: line.sleeper, blend,
       floor: five[0]!, q1: five[1]!, q3: five[3]!, ceiling: five[4]!,
-      questionable: false, gamesMissedRecent: 0, absenceShare: 0,
+      catches: 0, questionable: false, gamesMissedRecent: 0, absenceShare: 0,
     });
     lineFor.set(playerId, {
       key: playerId, playerId, position, team, opponent, five, blend,

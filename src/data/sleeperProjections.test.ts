@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   joinProjectionsToGsis,
   projectionKey,
+  sleeperPointsUnder,
   type SleeperProjectionRow,
 } from "./sleeperProjections.js";
 
@@ -23,7 +24,7 @@ describe("joinProjectionsToGsis", () => {
     const joined = joinProjectionsToGsis(
       2024,
       3,
-      [row("11576", { pts_ppr: 5.4, rec_tgt: 1.4, rush_att: 5.8 })],
+      [row("11576", { pts_ppr: 5.4, rec_tgt: 1.4, rush_att: 5.8, rec: 1.1 })],
       crosswalk,
     );
 
@@ -36,6 +37,7 @@ describe("joinProjectionsToGsis", () => {
         points: 5.4,
         targets: 1.4,
         carries: 5.8,
+        catches: 1.1,
       },
     ]);
   });
@@ -76,5 +78,23 @@ describe("joinProjectionsToGsis", () => {
 
   it("builds the same key from a season, week and player", () => {
     expect(projectionKey(2025, 7, "00-0030279")).toBe("2025|7|00-0030279");
+  });
+});
+
+describe("sleeperPointsUnder", () => {
+  const chase = joinProjectionsToGsis(
+    2026, 1, [row("1479", { pts_ppr: 20, rec: 6 }, "WR")], crosswalk,
+  )[0]!;
+
+  it("takes the difference a catch pays off the full PPR number", () => {
+    expect(sleeperPointsUnder(chase, 0.5)).toBe(17);
+    expect(sleeperPointsUnder(chase, 0)).toBe(14);
+    expect(sleeperPointsUnder(chase, 1)).toBe(20);
+  });
+
+  it("leaves a row fetched before catches were kept as published", () => {
+    const older = { ...chase, catches: undefined };
+
+    expect(sleeperPointsUnder(older, 0)).toBe(20);
   });
 });

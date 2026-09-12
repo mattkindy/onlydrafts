@@ -8,8 +8,8 @@
  * be matched to a weekly example, and guessing by name would quietly
  * pair up the wrong men.
  *
- * The points column is full PPR, which is what the repo's default
- * scoring uses.
+ * The points column is full PPR. The catches column lets a build in
+ * another scoring take the point a catch back off.
  */
 
 import { readFile } from "node:fs/promises";
@@ -32,6 +32,8 @@ export interface SleeperProjection {
   points: number;
   targets: number;
   carries: number;
+  /** undefined on a row fetched before catches were kept */
+  catches?: number;
 }
 
 /** one row of the projections endpoint, cut down to what is used */
@@ -40,9 +42,26 @@ export interface SleeperProjectionRow {
   player?: { position?: string | null } | null;
   stats?: {
     pts_ppr?: number | null;
+    rec?: number | null;
     rec_tgt?: number | null;
     rush_att?: number | null;
   } | null;
+}
+
+/**
+ * His Sleeper points under a league's scoring. Sleeper's three formats
+ * differ only in what a catch pays, so the full PPR number less the
+ * difference per catch is exactly what Sleeper would publish for the
+ * league. A row without catches stays as published.
+ */
+export function sleeperPointsUnder(
+  projection: SleeperProjection, perCatch: number,
+): number {
+  if (projection.catches === undefined) {
+    return projection.points;
+  }
+
+  return projection.points + (perCatch - 1) * projection.catches;
 }
 
 export function joinProjectionsToGsis(
@@ -74,6 +93,7 @@ export function joinProjectionsToGsis(
       points,
       targets: row.stats?.rec_tgt ?? 0,
       carries: row.stats?.rush_att ?? 0,
+      catches: row.stats?.rec ?? 0,
     });
   }
 
@@ -109,6 +129,10 @@ export async function loadSleeperWeekly(): Promise<
         targets: Number(row["targets"]),
         carries: Number(row["carries"]),
       };
+
+      if (row["catches"] !== undefined && row["catches"] !== "") {
+        projection.catches = Number(row["catches"]);
+      }
 
       return [
         projectionKey(projection.season, projection.week, projection.gsisId),

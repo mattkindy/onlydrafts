@@ -13,6 +13,8 @@ import type { PlayerWeekStats } from "../src/data/nflverse.js";
 import {
   loadSleeperWeekly,
   projectionKey,
+  sleeperPointsUnder,
+  type SleeperProjection,
 } from "../src/data/sleeperProjections.js";
 import {
   weeklyExamplesForSeason,
@@ -155,7 +157,9 @@ function earlyWeekLine(
  * when Sleeper has nothing, and the file is sorted by it. `floor` and
  * `ceiling` are the tenth and ninetieth of the outcome around that
  * average. `snaps` is a whole percent; `gamesMissed` is out of his last
- * four club weeks; `absenceShare` runs 0 to 1.
+ * four club weeks; `absenceShare` runs 0 to 1. Every point figure is
+ * in the build's scoring, and `catches` says how many receptions are
+ * behind them, so a league paying a catch differently can move them.
  *
  * Both the in-season slate and the preseason one below are written
  * through here, so the two files have the same shape and the app does
@@ -165,11 +169,12 @@ function slateRow(
   residuals: ResidualModel,
   e: WeeklyExample,
   ours: number,
-  sleeper: number | undefined,
+  projection: SleeperProjection | undefined,
 ) {
-  // `sleeper` is reported as Sleeper published it, so a reader can
-  // compare the two lines, while the average uses his number with his
-  // quarterback bias taken off.
+  const sleeper = projection
+    ? sleeperPointsUnder(projection, scoring().receptions)
+    : undefined;
+  // the average uses Sleeper's number with his quarterback bias taken off
   const average =
     sleeper === undefined
       ? ours
@@ -193,6 +198,7 @@ function slateRow(
     ),
     q1: Number(outcomeQuantile(residuals, e.position, average, 0.25).toFixed(1)),
     q3: Number(outcomeQuantile(residuals, e.position, average, 0.75).toFixed(1)),
+    catches: Number((projection?.catches ?? e.receptionsRecent).toFixed(2)),
     snaps: Math.round(e.snapRecent * 100),
     questionable: e.questionable,
     gamesMissed: e.gamesMissedRecent,
@@ -204,6 +210,8 @@ interface Slate {
   season: number;
   week: number;
   preseason: boolean;
+  /** what a catch paid when the rows were scored */
+  perCatch: number;
   players: ReturnType<typeof slateRow>[];
 }
 
@@ -658,13 +666,16 @@ async function main(): Promise<void> {
             histories.get(e.playerId),
             priors,
           ),
-          projections.get(projectionKey(season, week, e.playerId))?.points,
+          projections.get(projectionKey(season, week, e.playerId)),
         ))
       .sort((a, b) => b.average - a.average);
 
     await writeSlate(
       join(DOCS, "data", `slate-${season}-${week}.json`),
-      { season, week, preseason: false, players: rows },
+      {
+        season, week, preseason: false, perCatch: scoring().receptions,
+        players: rows,
+      },
     );
     index.push({ season, week });
   }
@@ -1125,14 +1136,17 @@ async function main(): Promise<void> {
           residuals,
           row,
           ours,
-          projections.get(projectionKey(season, week, p.playerId))?.points,
+          projections.get(projectionKey(season, week, p.playerId)),
         )];
       })
       .sort((a, b) => b.average - a.average);
 
     await writeSlate(
       join(DOCS, "data", `slate-${season}-${week}.json`),
-      { season, week, preseason: true, players: rows },
+      {
+        season, week, preseason: true, perCatch: scoring().receptions,
+        players: rows,
+      },
     );
     index.push({ season, week });
   }
