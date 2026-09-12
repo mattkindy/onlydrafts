@@ -927,7 +927,41 @@ export interface FactorExtras {
    * possession receiver widens to possession receivers.
    */
   alike?: Map<string, string[]>;
+  /**
+   * What each man's own per-touch history says, as a multiple of his
+   * position's average. Given it, a drawn gain and a drawn score for
+   * that man are pulled to the rate the component line reads instead of
+   * to the rate his three seasons of plays read.
+   */
+  perMan?: Map<string, PerManLevel>;
+  /**
+   * Who a man too thin to sample borrows plays from: the men on his own
+   * side who have the trailing usage, busiest first. `alike` reaches
+   * across the league for men who resemble him, which still leaves a
+   * throw to a fourth receiver drawn from the crowd.
+   */
+  standIn?: Map<string, string[]>;
 }
+
+/**
+ * A man's shrunk per-touch rates as a multiple of his position's, one
+ * number per call for the yards and one for the scores.
+ */
+export interface PerManLevel {
+  runYards: number;
+  runScore: number;
+  passYards: number;
+  passScore: number;
+  /** and the same for a quarterback, per attempt he throws */
+  throwYards: number;
+  throwScore: number;
+}
+
+/** how far a reconciled rate may move a draw either way */
+const RECONCILE_BAND = { low: 0.6, high: 1.6 };
+
+const withinBand = (ratio: number): number =>
+  Math.max(RECONCILE_BAND.low, Math.min(RECONCILE_BAND.high, ratio));
 
 /**
  * The counting pass on its own, so it can run once and be kept.
@@ -1244,7 +1278,7 @@ export function fitPlayFactors(
 ): PlayFactors {
   const {
     projected, split, lately, pairing, playLevel, depth, people, plays,
-    alike, formation, coverage, look, afterCatch, positions,
+    alike, formation, coverage, look, afterCatch, positions, perMan, standIn,
   } = extras;
   const {
     cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
@@ -2385,10 +2419,140 @@ export function fitPlayFactors(
    * field alike, then everything he has done on this call. Room to
    * run is asked of the pool the same way the pooled path asks it.
    */
+  /**
+   * What a touch of this call comes to for a position, over every man
+   * the pools have. This is the sim's own baseline for a man, and it is
+   * what a reconciled rate has to be expressed against: `perMan` says
+   * how a man compares with his position, so the sim's side of the
+   * comparison has to be scoped the same way or every tight end moves.
+   */
+  const positionMeans = new Map<string, { yards: number; touches: number }>();
+
+  if (perMan && positions) {
+    for (const [key, rate] of byMan) {
+      const at = key.lastIndexOf("|");
+      const position = positions.get(key.slice(0, at));
+
+      if (!position) {
+        continue;
+      }
+
+      const into = positionMeans.get(`${position}|${key.slice(at + 1)}`) ??
+        { yards: 0, touches: 0 };
+      into.yards += rate.yards;
+      into.touches += rate.touches;
+      positionMeans.set(`${position}|${key.slice(at + 1)}`, into);
+    }
+  }
+
+  const meanFor = (of: { yards: number; touches: number } | undefined) =>
+    of && of.touches > 0 ? of.yards / of.touches : 0;
+
+  const positionMean = (player: string, call: Call) =>
+    meanFor(positionMeans.get(`${positions?.get(player) ?? ""}|${call}`));
+
+  /** his own history against his position's, for the yards on this call */
+  const wantedYards = (player: string, call: Call) => {
+    const his = perMan?.get(player);
+
+    if (!his) {
+      return 1;
+    }
+
+    return call === "run" ? his.runYards : his.passYards;
+  };
+
+  /**
+   * The reconciliation the pooled draw needs. Its level term is his own
+   * plays over the league's on this call, so his history has to arrive
+   * on that scale too: his multiple of his position, times what his
+   * position comes to against the league.
+   */
+  const reconciledLevel = (player: string, call: Call, passer?: string) => {
+    const mine = positionMean(player, call);
+    const league = meanFor(leagueOn.get(call));
+
+    if (mine <= 0 || league <= 0) {
+      return undefined;
+    }
+
+    const throwing = call === "pass" && passer
+      ? perMan?.get(passer)?.throwYards ?? 1
+      : 1;
+
+    return withinBand(wantedYards(player, call) * throwing) * (mine / league);
+  };
+
+  /**
+   * And the reconciliation his own plays need, which is a smaller one:
+   * those plays already are him, so what is left is his history against
+   * what they say.
+   */
+  const reconciledSample = (player: string, call: Call, passer?: string) => {
+    const his = byMan.get(`${player}|${call}`);
+    const mine = positionMean(player, call);
+    const throwing = call === "pass" && passer
+      ? perMan?.get(passer)?.throwYards ?? 1
+      : 1;
+    const wanted = withinBand(wantedYards(player, call) * throwing);
+
+    if (!his || his.touches < 25 || mine <= 0) {
+      return wanted;
+    }
+
+    return withinBand(wanted / Math.max(0.4, meanFor(his) / mine));
+  };
+
+  /** how often a play from this spot on this call reaches the end zone */
+  const crossesHere = (state: PlayState, call: Call) => {
+    const cell = atCounts(state, settings.least, call);
+
+    return cell.plays === 0 ? 0.2 : cell.scores / cell.plays;
+  };
+
+  /**
+   * A drawn gain moved onto the goal line, or off it, so that the man
+   * crosses as often as his own touchdown rate says. Only inside the
+   * twenty: further out a score is a broken long gain, which the long
+   * end of the pool already decides, and promoting draws out there
+   * would hand the walk touchdowns from the forty.
+   */
+  const atHisScoreRate = (
+    state: PlayState, call: Call, player: string, gained: number,
+    uniform: () => number, passer?: string,
+  ) => {
+    const his = perMan?.get(player);
+
+    if (!his || state.yardline > 20) {
+      return gained;
+    }
+
+    const throwing = call === "pass" && passer
+      ? perMan?.get(passer)?.throwScore ?? 1
+      : 1;
+    const wants = withinBand(
+      (call === "run" ? his.runScore : his.passScore) * throwing,
+    );
+    const scored = gained >= state.yardline;
+
+    if (wants > 1 && !scored && gained > 0) {
+      const base = Math.min(0.8, crossesHere(state, call));
+      const promote = base > 0 ? ((wants - 1) * base) / (1 - base) : 0;
+
+      return uniform() < promote ? state.yardline : gained;
+    }
+
+    if (wants < 1 && scored && uniform() < 1 - wants) {
+      return Math.max(0, Math.min(gained, state.yardline - 1));
+    }
+
+    return gained;
+  };
+
   /** widened play lists, one per man and call, built once */
   const pooled = new Map<string, number[]>();
 
-  const hisOwnPlay = plays
+  const hisOwnDraw = plays
     ? (
         state: PlayState, call: Call, player: string, uniform: () => number,
         passer?: string,
@@ -2437,6 +2601,23 @@ export function fitPlayFactors(
           if (his.length < 25 && alike) {
             for (const twin of alike.get(player) ?? []) {
               his = his.concat(plays.ofMan.get(`${twin}|${call}`) ?? []);
+
+              if (his.length >= 60) {
+                break;
+              }
+            }
+          }
+
+          /**
+           * And the men on his own side who have the trailing usage,
+           * busiest first, for whoever `alike` could not fill either.
+           * The alternative is the pooled draw, which gains 4.62 where
+           * a targeted throw gains 7.33, so a fourth receiver is better
+           * off borrowing from the men his side actually throws to.
+           */
+          if (his.length < 25 && standIn) {
+            for (const busy of standIn.get(player) ?? []) {
+              his = his.concat(plays.ofMan.get(`${busy}|${call}`) ?? []);
 
               if (his.length >= 60) {
                 break;
@@ -2626,7 +2807,43 @@ export function fitPlayFactors(
       }
     : undefined;
 
-  return {
+  /**
+   * The same draw with his own rates put back on it. His plays are three
+   * seasons deep and unshrunk, so a man who broke two long ones in a
+   * thin sample keeps making them; the component line reads four games
+   * and last season and pulls a thin man toward his position.
+   */
+  const hisOwnPlay = hisOwnDraw && perMan
+    ? (
+        state: PlayState, call: Call, player: string, uniform: () => number,
+        passer?: string,
+        sides?: {
+          offence?: string; defence?: string;
+          passer?: string; season?: number; week?: number;
+          shotgun?: boolean; shell?: string;
+        },
+      ) => {
+        const drawn = hisOwnDraw(state, call, player, uniform, passer, sides);
+
+        if (!drawn) {
+          return undefined;
+        }
+
+        const yards = drawn.yards > 0
+          ? Math.min(
+              state.yardline,
+              Math.round(drawn.yards * reconciledSample(player, call, passer)),
+            )
+          : drawn.yards;
+
+        return {
+          yards: atHisScoreRate(state, call, player, yards, uniform, passer),
+          caught: drawn.caught,
+        };
+      }
+    : hisOwnDraw;
+
+  const built: PlayFactors = {
     /**
      * The snap settled before the call, which is how football works
      * and measures worse: every drawn layer adds variance, and a
@@ -3105,9 +3322,23 @@ export function fitPlayFactors(
         : longOnes.yards.length ? longOnes
         : wentNowhere;
       const drawn = drawWeighted(end, uniform);
+      /**
+       * What his own per-touch history says, when a caller has handed
+       * the rates in. It replaces the level below rather than stacking
+       * on it: both say how good a man is at this, the level off three
+       * unshrunk seasons and the history off four games and last season
+       * pulled toward his position.
+       */
+      const reconciled = perMan
+        ? reconciledLevel(player, call, sides?.passer)
+        : undefined;
 
       if (!found?.league || drawn <= 0) {
-        return drawn > 0 ? whole(drawn * tilt.gain) : drawn;
+        if (drawn <= 0) {
+          return drawn;
+        }
+
+        return whole(drawn * tilt.gain * (reconciled ?? 1));
       }
 
       // and his level on top, against what everybody made over the
@@ -3149,11 +3380,12 @@ export function fitPlayFactors(
       const level = playLevel && sides
         ? playLevel.levelFor(state, call, player, sides)
         : his / Math.max(0.1, league);
-      const said = ORDINARY_LEVEL || process.env["NO_LONG_SHAPE"]
+      const asDrawn = ORDINARY_LEVEL || process.env["NO_LONG_SHAPE"]
         ? level
         : leagueLongRate > 0 && hisLongRate > 0
         ? level * (leagueLongRate / hisLongRate) ** 0.5
         : level;
+      const said = reconciled ?? asDrawn;
       /**
        * How much of his level to say, which is not the same on a run
        * as on a throw. A throw is already drawn from the pool at his
@@ -3236,4 +3468,16 @@ export function fitPlayFactors(
     atTheGoal: (state, call, gained, uniform) =>
       settleAtGoal(state, call, gained, uniform, goalSample(state, call)),
   };
+
+  if (perMan) {
+    const drawnFromThePool = built.gains;
+    built.gains = (state, call, player, uniform, sides) =>
+      atHisScoreRate(
+        state, call, player,
+        drawnFromThePool(state, call, player, uniform, sides),
+        uniform, sides?.passer,
+      );
+  }
+
+  return built;
 }
