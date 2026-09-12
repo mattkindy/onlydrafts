@@ -183,11 +183,7 @@ async function main(): Promise<void> {
   for (const call of ["run", "pass"] as Call[]) {
     for (let down = 0; down < 4; down++) {
       for (let field = 0; field < FIELD_BANDS; field++) {
-        const state = stateAt(DOWNS[down]!, 2, field, 3, 0);
-        const rate = world.rules.turnoverAt
-          ? world.rules.turnoverAt(state, call)
-          : world.rules.turnoverRate(call);
-        turnover.push(clampByte(rate * 2550));
+        turnover.push(clampByte(world.rules.turnoverRate(call) * 2550));
       }
     }
   }
