@@ -18,6 +18,7 @@ import { standardNormal } from "../sim/rng.js";
 import type { PlayerLine } from "./playerWeek.js";
 import type { Call, PlayFactors } from "./playFactors.js";
 import type { EndingRules, ClockRules } from "./driveFromFactors.js";
+import type { DriveEnd } from "./drive.js";
 import type { FourthDown } from "../features/fitFourthDown.js";
 import type { PlayClock } from "../features/fitPlayClock.js";
 import {
@@ -244,6 +245,51 @@ const pointsFor = (drive: FactorDrive) =>
   drive.ending === "touchdown" ? 6 : drive.ending === "fieldGoal" ? 3 : 0;
 
 /**
+ * What a side scores while the other one has the ball.
+ *
+ * Only a side's own drives have ever been scored here, and over 2022
+ * to 2025 a side takes 0.99 points a game that no drive of its own
+ * produced. That is most of the point a game the engine is short, and
+ * no drive of the offence's can make it up. The README beside the
+ * scripts has where each rate comes from.
+ */
+const RETURNED_FOR_SIX: Record<DriveEnd, number> = {
+  touchdown: 0, fieldGoal: 0, missedKick: 0, clock: 0, downs: 0,
+  turnover: Number(process.env["RETURN_TAKEAWAY"] ?? 0.077),
+  punt: Number(process.env["RETURN_PUNT"] ?? 0.0039),
+};
+const RETURNED_KICKOFF = Number(process.env["RETURN_KICKOFF"] ?? 0.0025);
+/** off, for telling this apart from what the offence does */
+const returns = !process.env["NO_RETURNS"];
+const SAFETY_FROM_DEEP = Number(process.env["SAFETY_DEEP"] ?? 0.024);
+/** where a drive has to start for the safety rate above to apply */
+const DEEP = 90;
+
+/**
+ * What the side without the ball took off this possession, if anything.
+ *
+ * A drive that scored is left alone, since the walk has no fumble
+ * returned out of the end zone.
+ */
+const takenBack = (
+  drive: FactorDrive, startedAt: number, uniform: () => number,
+): "touchdown" | "safety" | undefined => {
+  if (pointsFor(drive) > 0) {
+    return undefined;
+  }
+
+  if (uniform() < RETURNED_FOR_SIX[drive.ending]) {
+    return "touchdown";
+  }
+
+  if (startedAt >= DEEP && uniform() < SAFETY_FROM_DEEP) {
+    return "safety";
+  }
+
+  return undefined;
+};
+
+/**
  * Two sides alternating. The side that did not receive to start the
  * game receives to start the second half, as it does really.
  */
@@ -464,6 +510,24 @@ export function playGame(
     points[withBall.team] = points[withBall.team]! + scored;
     drives[withBall.team] = drives[withBall.team]! + 1;
 
+    /**
+     * What the other side took while this drive was on, and the
+     * kickoff it took back when this one scored. Either touchdown
+     * leaves the side it was scored on receiving, so the ball comes
+     * back here instead of changing hands.
+     */
+    const gaveUp = returns ? takenBack(drive, startAt, uniform) : undefined;
+    const kickoffGone = returns && scored > 0 &&
+      uniform() < RETURNED_KICKOFF;
+
+    if (gaveUp || kickoffGone) {
+      const extraPoint = rules.afterTouchdown ?? DEFAULT_AFTER_TOUCHDOWN;
+      points[against.team] = points[against.team]! +
+        (gaveUp === "safety"
+          ? 2
+          : 6 + (uniform() < extraPoint.extraPointRate ? 1 : 0));
+    }
+
     if (secondHalf && secondsLeft <= 300 && margin > 0 &&
         timeouts[against.team]! > 0) {
       timeouts[against.team]! -= Math.min(timeouts[against.team]!, 2);
@@ -478,9 +542,17 @@ export function playGame(
     // and a start of 52.47 matches none of them, so every lookup
     // widens past the spot it was asked about
     // a score means the other side receives a kickoff, not a spot
-    startAt = drive.ending === "touchdown" || drive.ending === "fieldGoal"
+    const kickedOff = scored > 0 || gaveUp !== undefined;
+    startAt = kickedOff
       ? kickedTo()
       : Math.max(1, Math.min(99, Math.round(drive.handsOverAt)));
+
+    // a touchdown the other side returned, or a kickoff it took back,
+    // leaves this side receiving again
+    if (gaveUp === "touchdown" || kickoffGone) {
+      continue;
+    }
+
     const wasOn = withBall;
     withBall = against;
     against = wasOn;
