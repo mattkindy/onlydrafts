@@ -629,6 +629,12 @@ and a safety hands over the way a drive that ended any other way does.
 `NO_RETURNS` turns the lot off, for telling this apart from what the
 offence does.
 
+The remainder bench has not been run since, so the only numbers for it
+are still the ones above: MAE 6.15 and bias -1.96 on a side's remaining
+points at the end of the first quarter. Three quarters of a game is
+0.74 of the point a game, so that much of the -1.96 is what this
+change can account for and the rest is the offence.
+
 Why no bench saw it. `boxScoreEval.ts` scores a side's points against
 the sum of its own drives' points, so a return is not in its truth and
 never could be. `liveRemainderEval.ts` scores against the scoreboard,
