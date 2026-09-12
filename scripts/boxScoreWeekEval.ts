@@ -149,7 +149,7 @@ interface Row {
  * The variants of the walk on disk, each played once by
  * scripts/walkWeekCache.ts with `VARIANT` set to the same name.
  */
-const VARIANTS = ["component"];
+const VARIANTS = ["component", "component-rates", "component-full"];
 
 async function rowsFor(
   season: number,
@@ -398,6 +398,38 @@ function variantUsage(row: Row, variant: string, weight: number): Usage {
   };
 }
 
+/**
+ * The three ways of reading one variant of the walk: its touches put
+ * through the man's own rates, half of that swap, and the walk's own
+ * points. Every variant is read the same way, so the rows come from one
+ * place and a new variant only has to be named in `VARIANTS`.
+ */
+function waysOfReading(variant: string): Candidate[] {
+  return [
+    {
+      name: `sim, ${variant}: usage`,
+      of: (row, prior) =>
+        row.walks.has(variant)
+          ? pointsFrom(variantUsage(row, variant, 1), historyRates(row, prior))
+          : undefined,
+      usage: (row) => variantUsage(row, variant, 1),
+    },
+    {
+      name: `sim, ${variant}: half`,
+      of: (row, prior) =>
+        row.walks.has(variant)
+          ? pointsFrom(
+            variantUsage(row, variant, 0.5), historyRates(row, prior))
+          : undefined,
+      usage: (row) => variantUsage(row, variant, 0.5),
+    },
+    {
+      name: `sim, ${variant}: points`,
+      of: (row) => row.walks.get(variant)?.points,
+    },
+  ];
+}
+
 const CANDIDATES: Candidate[] = [
   { name: "ours (shipped ridge)", of: ourLine },
   { name: "sleeper", of: (row) => row.sleeper },
@@ -477,27 +509,7 @@ const CANDIDATES: Candidate[] = [
     usage: (row) => walkUsage(row, 0.5),
   },
   { name: "(b) walk points", of: (row) => row.walkPoints },
-  {
-    name: "sim, component shares: usage",
-    of: (row, prior) =>
-      row.walks.has("component")
-        ? pointsFrom(variantUsage(row, "component", 1), historyRates(row, prior))
-        : undefined,
-    usage: (row) => variantUsage(row, "component", 1),
-  },
-  {
-    name: "sim, component shares: half",
-    of: (row, prior) =>
-      row.walks.has("component")
-        ? pointsFrom(
-          variantUsage(row, "component", 0.5), historyRates(row, prior))
-        : undefined,
-    usage: (row) => variantUsage(row, "component", 0.5),
-  },
-  {
-    name: "sim, component shares: points",
-    of: (row) => row.walks.get("component")?.points,
-  },
+  ...VARIANTS.flatMap(waysOfReading),
   {
     name: "(c) early from prior season",
     of: (row, prior) => {
