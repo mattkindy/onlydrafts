@@ -33,12 +33,35 @@ import {
 } from "../src/data/sleeperProjections.js";
 import {
   blendPoints,
+  debiasedSleeper,
   SHIPPED_BLEND_WEIGHT,
+  SLEEPER_QB_BIAS,
 } from "../src/features/sleeperBlend.js";
 import {
   loadWalkWeekly,
   walkKey,
 } from "../src/features/walkWeeklyCache.js";
+import {
+  addBox,
+  boxOf as componentBoxOf,
+  componentPoints,
+  componentRates,
+  componentUsage as usageForComponent,
+  COMPONENT_THROUGH_WEEK,
+  COMPONENT_WINDOW,
+  emptyBox,
+  perGame,
+  pointsFrom as pointsFromParts,
+  positionRatePriors,
+  ratesFrom,
+  rawRates,
+  scaleUsage,
+  usageOf,
+  type Box,
+  type History,
+  type Rates,
+  type Usage,
+} from "../src/features/componentWeek.js";
 import { normalCdf } from "../app/lib/spread.ts";
 
 const RULES = presets.ppr;
@@ -46,190 +69,27 @@ const TRAIN = [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023];
 const TEST = [2024, 2025];
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 const LAST_WEEK = 17;
-const EARLY_THROUGH = 4;
-const WINDOW = 4;
+const EARLY_THROUGH = COMPONENT_THROUGH_WEEK;
+const WINDOW = COMPONENT_WINDOW;
 const DEFAULT_IMPLIED = 21.5;
 
 /** a man under this is nobody's starter, so lineups are drawn above it */
 const LOW_BAR = 5;
 const LINEUPS = 120;
 
-/** what a man did in one week, on both sides of usage times rate */
-interface Box {
-  passAtt: number;
-  carries: number;
-  targets: number;
-  passYds: number;
-  passTd: number;
-  interceptions: number;
-  rushYds: number;
-  rushTd: number;
-  receptions: number;
-  recYds: number;
-  recTd: number;
-  points: number;
-}
+const boxOf = (s: PlayerWeekStats): Box => componentBoxOf(s, RULES);
+const pointsFrom = (usage: Usage, rates: Rates): number =>
+  pointsFromParts(usage, rates, RULES);
 
-interface Usage {
-  passAtt: number;
-  carries: number;
-  targets: number;
-}
-
-/** per-opportunity rates, which is what shrinks toward a position prior */
-interface Rates {
-  ypa: number;
-  passTdRate: number;
-  intRate: number;
-  ypc: number;
-  rushTdRate: number;
-  ypt: number;
-  catchRate: number;
-  recTdRate: number;
-}
-
-function boxOf(s: PlayerWeekStats): Box {
-  const line = s.statLine;
-
-  return {
-    passAtt: s.passing.attempts,
-    carries: s.carries,
-    targets: s.targets,
-    passYds: line.passYds,
-    passTd: line.passTd,
-    interceptions: line.interceptions,
-    rushYds: line.rushYds,
-    rushTd: line.rushTd,
-    receptions: line.receptions,
-    recYds: line.recYds,
-    recTd: line.recTd,
-    points: fantasyPoints(line, RULES),
-  };
-}
-
-const emptyBox = (): Box => ({
-  passAtt: 0, carries: 0, targets: 0, passYds: 0, passTd: 0,
-  interceptions: 0, rushYds: 0, rushTd: 0, receptions: 0, recYds: 0,
-  recTd: 0, points: 0,
-});
-
-function addBox(into: Box, from: Box): void {
-  for (const key of Object.keys(into) as (keyof Box)[]) {
-    into[key] += from[key];
-  }
-}
-
-const usageOf = (box: Box): Usage => ({
-  passAtt: box.passAtt, carries: box.carries, targets: box.targets,
-});
-
-function scaleUsage(usage: Usage, by: number): Usage {
-  return {
-    passAtt: usage.passAtt * by,
-    carries: usage.carries * by,
-    targets: usage.targets * by,
-  };
-}
-
-function mixUsage(a: Usage, b: Usage, weight: number): Usage {
-  return {
-    passAtt: (1 - weight) * a.passAtt + weight * b.passAtt,
-    carries: (1 - weight) * a.carries + weight * b.carries,
-    targets: (1 - weight) * a.targets + weight * b.targets,
-  };
-}
-
-/**
- * Points from a man's opportunities and his rates, under the league's
- * rules. This is the whole component model in one place, so a candidate
- * differs only in where its usage and its rates come from.
- */
-function pointsFrom(usage: Usage, rates: Rates): number {
-  const passing = usage.passAtt *
-    (RULES.passYds * rates.ypa + RULES.passTd * rates.passTdRate +
-      RULES.interceptions * rates.intRate);
-  const rushing = usage.carries *
-    (RULES.rushYds * rates.ypc + RULES.rushTd * rates.rushTdRate);
-  const receiving = usage.targets *
-    (RULES.recYds * rates.ypt + RULES.receptions * rates.catchRate +
-      RULES.recTd * rates.recTdRate);
-
-  return passing + rushing + receiving;
-}
-
-/** how many opportunities a rate needs before it stops being the prior */
-const SHRINK = { passAtt: 80, carries: 40, targets: 30 };
-
-function ratesFrom(box: Box, prior: Rates, shrink = SHRINK): Rates {
-  const per = (total: number, count: number, k: number, floor: number) =>
-    (total + k * floor) / (count + k);
-
-  return {
-    ypa: per(box.passYds, box.passAtt, shrink.passAtt, prior.ypa),
-    passTdRate: per(box.passTd, box.passAtt, shrink.passAtt, prior.passTdRate),
-    intRate: per(box.interceptions, box.passAtt, shrink.passAtt, prior.intRate),
-    ypc: per(box.rushYds, box.carries, shrink.carries, prior.ypc),
-    rushTdRate: per(box.rushTd, box.carries, shrink.carries, prior.rushTdRate),
-    ypt: per(box.recYds, box.targets, shrink.targets, prior.ypt),
-    catchRate: per(box.receptions, box.targets, shrink.targets, prior.catchRate),
-    recTdRate: per(box.recTd, box.targets, shrink.targets, prior.recTdRate),
-  };
-}
-
-/** the same rates with no shrinkage, which is what one week itself says */
-function rawRates(box: Box, prior: Rates): Rates {
-  const per = (total: number, count: number, floor: number) =>
-    count > 0 ? total / count : floor;
-
-  return {
-    ypa: per(box.passYds, box.passAtt, prior.ypa),
-    passTdRate: per(box.passTd, box.passAtt, prior.passTdRate),
-    intRate: per(box.interceptions, box.passAtt, prior.intRate),
-    ypc: per(box.rushYds, box.carries, prior.ypc),
-    rushTdRate: per(box.rushTd, box.carries, prior.rushTdRate),
-    ypt: per(box.recYds, box.targets, prior.ypt),
-    catchRate: per(box.receptions, box.targets, prior.catchRate),
-    recTdRate: per(box.recTd, box.targets, prior.recTdRate),
-  };
-}
-
-/**
- * League-average rates for each position over the training seasons, so a
- * man with three carries behind him is read as an average back rather
- * than as whatever those three carries did.
- */
+/** the league-average rates the component model shrinks toward */
 async function positionPriors(): Promise<Map<string, Rates>> {
-  const totals = new Map<string, Box>();
+  const weeks: PlayerWeekStats[] = [];
 
   for (const season of TRAIN) {
-    for (const s of await loadPlayerStats(season)) {
-      if (!POSITIONS.includes(s.position)) {
-        continue;
-      }
-
-      const into = totals.get(s.position) ?? emptyBox();
-      addBox(into, boxOf(s));
-      totals.set(s.position, into);
-    }
+    weeks.push(...(await loadPlayerStats(season)));
   }
 
-  const priors = new Map<string, Rates>();
-
-  for (const [position, box] of totals) {
-    const per = (total: number, count: number) => (count > 0 ? total / count : 0);
-    priors.set(position, {
-      ypa: per(box.passYds, box.passAtt),
-      passTdRate: per(box.passTd, box.passAtt),
-      intRate: per(box.interceptions, box.passAtt),
-      ypc: per(box.rushYds, box.carries),
-      rushTdRate: per(box.rushTd, box.carries),
-      ypt: per(box.recYds, box.targets),
-      catchRate: per(box.receptions, box.targets),
-      recTdRate: per(box.recTd, box.targets),
-    });
-  }
-
-  return priors;
+  return positionRatePriors(weeks, RULES);
 }
 
 /** the implied points and the opponent for every team-week with a line */
@@ -348,41 +208,9 @@ async function rowsFor(
   return rows;
 }
 
-/** per game over whichever window a candidate is reading */
-function perGame(box: Box, count: number): Box {
-  if (count <= 0) {
-    return emptyBox();
-  }
-
-  const out = emptyBox();
-
-  for (const key of Object.keys(out) as (keyof Box)[]) {
-    out[key] = box[key] / count;
-  }
-
-  return out;
-}
-
-/** what a row's own history says his rates are, prior season included */
-function historyRates(row: Row, prior: Rates): Rates {
-  const box = emptyBox();
-  addBox(box, row.trailing);
-  addBox(box, row.prev);
-
-  return ratesFrom(box, prior);
-}
-
-/** the per-game usage a candidate leans on when it has no better idea */
-function baseUsage(row: Row): Usage {
-  const recent = usageOf(perGame(row.trailing, row.trailingGames));
-  const before = usageOf(perGame(row.prev, row.prevGames));
-
-  if (row.trailingGames >= 3 || row.prevGames === 0) {
-    return recent;
-  }
-
-  return mixUsage(before, recent, row.trailingGames / 3);
-}
+const historyRates = (row: Row, prior: Rates): Rates =>
+  componentRates(row, prior);
+const baseUsage = (row: History): Usage => usageForComponent(row);
 
 function trailingPoints(row: Row): number {
   if (row.trailingGames > 0) {
@@ -412,6 +240,72 @@ function ourLine(row: Row): number {
 
   return trailingPoints(row);
 }
+
+/**
+ * The line the site ships from week 5 on, and the component line before
+ * it, which is the split the numbers below argue for.
+ */
+function earlyComponentLine(row: Row, prior: Rates): number {
+  if (row.week > EARLY_THROUGH) {
+    return ourLine(row);
+  }
+
+  return componentPoints(row, prior, RULES);
+}
+
+/**
+ * How many points Sleeper gives a position more than it scores. Sleeper
+ * only publishes from 2024, so there is no training season to fit this
+ * on: a row's bias comes from the other test season, which keeps the
+ * number it is scored against out of its own fit.
+ */
+const fittedSleeperBias = new Map<string, number>();
+
+function sleeperBiasKey(season: number, position: string): string {
+  return `${season}|${position}`;
+}
+
+function fitSleeperBias(rows: Row[]): void {
+  const sums = new Map<string, { total: number; n: number }>();
+
+  for (const row of rows) {
+    if (row.sleeper === undefined) {
+      continue;
+    }
+
+    const key = sleeperBiasKey(row.season, row.position);
+    const cell = sums.get(key) ?? { total: 0, n: 0 };
+    cell.total += row.sleeper - row.actual.points;
+    cell.n++;
+    sums.set(key, cell);
+  }
+
+  for (const season of TEST) {
+    for (const position of POSITIONS) {
+      let total = 0;
+      let n = 0;
+
+      for (const other of TEST) {
+        if (other === season) {
+          continue;
+        }
+
+        const cell = sums.get(sleeperBiasKey(other, position));
+        total += cell?.total ?? 0;
+        n += cell?.n ?? 0;
+      }
+
+      fittedSleeperBias.set(sleeperBiasKey(season, position), n ? total / n : 0);
+    }
+  }
+}
+
+const fixedDebiased = (row: Row): number =>
+  debiasedSleeper(row.position, row.sleeper!);
+
+const fittedDebiased = (row: Row): number =>
+  row.sleeper! -
+  (fittedSleeperBias.get(sleeperBiasKey(row.season, row.position)) ?? 0);
 
 interface Candidate {
   name: string;
@@ -475,8 +369,7 @@ const CANDIDATES: Candidate[] = [
   { name: "naive trailing 4", of: trailingPoints },
   {
     name: "(a) component",
-    of: (row, prior) =>
-      pointsFrom(componentUsage(row), historyRates(row, prior)),
+    of: (row, prior) => componentPoints(row, prior, RULES),
     usage: componentUsage,
   },
   {
@@ -492,6 +385,36 @@ const CANDIDATES: Candidate[] = [
         : blendPoints(
           pointsFrom(componentUsage(row), historyRates(row, prior)),
           row.sleeper,
+          SHIPPED_BLEND_WEIGHT,
+        ),
+  },
+  {
+    name: "component wk1-4, blend 0.5",
+    of: (row, prior) =>
+      row.sleeper === undefined
+        ? undefined
+        : blendPoints(
+          earlyComponentLine(row, prior), row.sleeper, SHIPPED_BLEND_WEIGHT),
+  },
+  {
+    name: `same, QB debias ${SLEEPER_QB_BIAS}`,
+    of: (row, prior) =>
+      row.sleeper === undefined
+        ? undefined
+        : blendPoints(
+          earlyComponentLine(row, prior),
+          fixedDebiased(row),
+          SHIPPED_BLEND_WEIGHT,
+        ),
+  },
+  {
+    name: "same, fitted debias",
+    of: (row, prior) =>
+      row.sleeper === undefined
+        ? undefined
+        : blendPoints(
+          earlyComponentLine(row, prior),
+          fittedDebiased(row),
           SHIPPED_BLEND_WEIGHT,
         ),
   },
@@ -803,7 +726,8 @@ function scoreMatchups(
 /** which candidates get a matchup number, being those with a full line */
 const BRIERED = [
   "ours (shipped ridge)", "sleeper", "blend 0.5", "(a) component",
-  "(a) component, blend 0.5",
+  "(a) component, blend 0.5", "component wk1-4, blend 0.5",
+  `same, QB debias ${SLEEPER_QB_BIAS}`, "same, fitted debias",
 ];
 
 async function main(): Promise<void> {
@@ -845,10 +769,18 @@ async function main(): Promise<void> {
   const rand = mulberry32(20240901);
   let rows = 0;
 
+  const bySeason = new Map<number, Row[]>();
+
+  for (const season of TEST) {
+    bySeason.set(season, await rowsFor(season, teams, sleeper, ridge, walk));
+  }
+
+  fitSleeperBias([...bySeason.values()].flat());
+
   for (const season of TEST) {
     const byWeek = new Map<number, Row[]>();
 
-    for (const row of await rowsFor(season, teams, sleeper, ridge, walk)) {
+    for (const row of bySeason.get(season) ?? []) {
       byWeek.set(row.week, [...(byWeek.get(row.week) ?? []), row]);
     }
 
@@ -909,6 +841,9 @@ async function main(): Promise<void> {
 
   console.log(
     `2024 and 2025, weeks 1 to ${LAST_WEEK}, ${rows} player-weeks, full PPR`);
+  console.log(
+    "\nsleeper's bias fitted on the other test season: " +
+    [...fittedSleeperBias].map(([k, v]) => `${k} ${v.toFixed(2)}`).join(", "));
   showPoints("points per man per week, every week", tallies);
   showUsage(tallies);
   showPoints(
