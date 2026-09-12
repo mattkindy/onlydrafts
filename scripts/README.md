@@ -594,3 +594,43 @@ their own. On these two they cover 61 to 77%, and with the 1.2 stretch
 they come to 80.4% at tight end and 82.9% at receiver, which is close
 enough to the target that the stretch is doing work again. Since neither
 walk should ship, nothing downstream changes.
+
+## The point a game the engine had no way to score
+
+The engine scores a side's own drives and nothing else. Over 2022 to
+2025 a side scored 22.39 points a game and its own drives produced
+21.40, so a point a game comes from somewhere the walk cannot reach.
+That is measured off `drives.csv` against the final scores, 2174 team
+games.
+
+The play by play says where it comes from, per side per game:
+
+```
+  pick six          0.064
+  fumble return     0.033
+  punt return       0.015
+  kickoff return    0.011
+  safety            0.026
+```
+
+which is 0.92 points a side a game. The rest is blocked kicks and
+defensive conversions.
+
+As rates on the thing that produces them: an interception comes back
+for a touchdown 8.7% of the time and a lost fumble 6.4%, so 7.7% of
+the takeaways the walk knows, since it does not tell the two apart. A
+punt goes back 0.39% of the time and a kickoff after a score 0.25%. Of
+the 60 safeties, 49 came on a drive that started at or inside the ten,
+and 2019 drives started there, so 2.4% of those.
+
+`gameFromDrives.ts` now draws all five. Either touchdown leaves the
+side it was scored on receiving, so the ball does not change hands,
+and a safety hands over the way a drive that ended any other way does.
+`NO_RETURNS` turns the lot off, for telling this apart from what the
+offence does.
+
+Why no bench saw it. `boxScoreEval.ts` scores a side's points against
+the sum of its own drives' points, so a return is not in its truth and
+never could be. `liveRemainderEval.ts` scores against the scoreboard,
+which has every point on it, and that is the bench where the missing
+point a game shows up as bias.
