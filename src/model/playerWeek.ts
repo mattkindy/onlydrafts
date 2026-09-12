@@ -13,6 +13,7 @@
  */
 
 import type { StatLine } from "../scoring/fantasyPoints.js";
+import { poisson } from "../sim/rng.js";
 
 export interface TeamWeek {
   /** pass attempts the offence is expected to throw */
@@ -64,23 +65,6 @@ const BLANK: StatLine = {
   passYds: 0, passTd: 0, interceptions: 0, rushYds: 0, rushTd: 0,
   receptions: 0, recYds: 0, recTd: 0, fumblesLost: 0, twoPointConversions: 0,
 };
-
-function poisson(mean: number, uniform: () => number): number {
-  if (mean <= 0) {
-    return 0;
-  }
-
-  const limit = Math.exp(-mean);
-  let count = 0;
-  let product = uniform();
-
-  while (product > limit) {
-    count++;
-    product *= uniform();
-  }
-
-  return count;
-}
 
 /** Marsaglia and Tsang, with the small-shape boost */
 function gamma(shape: number, draws: Draws): number {

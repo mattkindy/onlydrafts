@@ -302,6 +302,61 @@ export function hasPlayerStats(season: number): boolean {
   );
 }
 
+export interface TeamDefenceWeek {
+  season: number;
+  week: number;
+  teamId: string;
+  opponentId: string;
+  /** what the club's defence counted that week, under the pay categories */
+  parts: Record<string, number>;
+}
+
+/**
+ * Every club's defensive week, added up from the men who played it.
+ *
+ * A fumble recovery is fumble_recovery_opp: def_fumbles is a defender
+ * losing one of his own, about a tenth of a game, so reading that as
+ * the recovery was costing every defence a point and a half a week.
+ */
+export async function loadTeamDefenceWeeks(
+  season: number,
+): Promise<TeamDefenceWeek[]> {
+  const rows = await readRows(`stats_player_week_${season}.csv`)
+    .catch(() => []);
+  const byTeamWeek = new Map<string, TeamDefenceWeek>();
+
+  for (const row of rows) {
+    const week = toNumber(row["week"]) ?? 0;
+
+    if (!week || week > 18 || row["season_type"] !== "REG") {
+      continue;
+    }
+
+    const teamId = canonicalTeam(row["team"] ?? "");
+    const at = `${week}|${teamId}`;
+    const its = byTeamWeek.get(at) ?? {
+      season, week, teamId,
+      opponentId: canonicalTeam(row["opponent_team"] ?? ""),
+      parts: {},
+    };
+    const n = (key: string) => toNumber(row[key]) ?? 0;
+    const add = (part: string, count: number) => {
+      its.parts[part] = (its.parts[part] ?? 0) + count;
+    };
+
+    add("sack", n("def_sacks"));
+    add("int", n("def_interceptions"));
+    add("fum_rec", n("fumble_recovery_opp"));
+    add("def_td", n("def_tds"));
+    add("safe", n("def_safeties"));
+    add("blk_kick",
+      n("def_punt_blocks") + n("def_fg_blocks") + n("def_pat_blocks"));
+    byTeamWeek.set(at, its);
+  }
+
+  return [...byTeamWeek.values()];
+}
+
 export async function loadPlayerStats(
   season: number,
 ): Promise<PlayerWeekStats[]> {

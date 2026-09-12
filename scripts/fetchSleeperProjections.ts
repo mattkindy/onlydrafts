@@ -1,6 +1,8 @@
 /**
  * Downloads Sleeper's weekly projections and writes them to
  * data/curated/sleeperWeekly.csv, one row per player-week, keyed by gsis id.
+ * The defences come down in the same call and go to
+ * data/curated/sleeperDefenceWeekly.csv, keyed by team abbreviation.
  *
  * The endpoint needs no auth, so the only politeness is going one week at a
  * time with a pause between calls. A week nobody has projected yet comes
@@ -13,15 +15,20 @@ import { writeFile } from "node:fs/promises";
 import { fetchSleeperGsisIds } from "../src/data/sleeper.js";
 import { comingWeek, currentSeason, loadGames } from "../src/data/nflverse.js";
 import {
+  defenceProjectionsToCsv,
+  joinDefenceProjections,
   joinProjectionsToGsis,
+  loadSleeperDefences,
   loadSleeperWeekly,
   projectionKey,
+  SLEEPER_DEFENCE_PATH,
   SLEEPER_WEEKLY_PATH,
+  type SleeperDefence,
   type SleeperProjection,
   type SleeperProjectionRow,
 } from "../src/data/sleeperProjections.js";
 
-const POSITIONS = ["QB", "RB", "WR", "TE"];
+const POSITIONS = ["QB", "RB", "WR", "TE", "DEF"];
 const LAST_WEEK = 18;
 const PAUSE_MS = 400;
 
@@ -75,6 +82,7 @@ async function main(): Promise<void> {
   console.log(`${gsisBySleeperId.size} sleeper players have a gsis id`);
 
   const all: SleeperProjection[] = [];
+  const defences: SleeperDefence[] = [];
 
   for (const season of seasons) {
     let seasonRows = 0;
@@ -97,11 +105,17 @@ async function main(): Promise<void> {
         break;
       }
 
-      const joined = joinProjectionsToGsis(season, week, raw, gsisBySleeperId);
+      const defenceRaw = raw.filter((r) => r.player?.position === "DEF");
+      const joined = joinProjectionsToGsis(
+        season, week, raw.filter((r) => r.player?.position !== "DEF"),
+        gsisBySleeperId,
+      );
       all.push(...joined);
+      defences.push(...joinDefenceProjections(season, week, defenceRaw));
       seasonRows += joined.length;
       console.log(
-        `${season} week ${week}: ${joined.length} of ${raw.length} rows joined`,
+        `${season} week ${week}: ${joined.length} of ${raw.length} rows ` +
+        `joined, ${defenceRaw.length} defences`,
       );
     }
 
@@ -128,6 +142,19 @@ async function main(): Promise<void> {
   );
   await writeFile(SLEEPER_WEEKLY_PATH, toCsv(merged));
   console.log(`fetched ${all.length} rows, wrote ${merged.length}`);
+
+  const keptDefences = new Map(await loadSleeperDefences());
+
+  for (const row of defences) {
+    keptDefences.set(projectionKey(row.season, row.week, row.team), row);
+  }
+
+  await writeFile(
+    SLEEPER_DEFENCE_PATH, defenceProjectionsToCsv([...keptDefences.values()]),
+  );
+  console.log(
+    `fetched ${defences.length} defence weeks, wrote ${keptDefences.size}`,
+  );
 }
 
 main().catch((error) => {
