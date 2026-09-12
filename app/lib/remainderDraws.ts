@@ -121,7 +121,22 @@ export function remainderInWorker(
   });
 }
 
-/** the tables for a season, fetched once and kept */
+const fileFor = (season: number): Promise<SimTables | null> =>
+  fetch(`data/sim-${season}.json`)
+    .then((answered) => answered.ok
+      ? (answered.json() as Promise<SimTables>)
+      : null)
+    .catch(() => null);
+
+/**
+ * The tables for a season, fetched once and kept.
+ *
+ * Last season's tables answer when this season has none of its own. The
+ * sides are the same franchises and the fitted play behaviour barely
+ * moves over one summer, so a stale cast is a better live answer than
+ * no engine at all. Where a man has moved or arrived he will be absent,
+ * and an absent man falls back to the copula on his own.
+ */
 const loaded = new Map<number, Promise<SimTables | null>>();
 
 export function simTablesFor(season: number): Promise<SimTables | null> {
@@ -131,11 +146,8 @@ export function simTablesFor(season: number): Promise<SimTables | null> {
     return already;
   }
 
-  const asked = fetch(`data/sim-${season}.json`)
-    .then((answered) => answered.ok
-      ? (answered.json() as Promise<SimTables>)
-      : null)
-    .catch(() => null);
+  const asked = fileFor(season)
+    .then((tables) => tables ?? fileFor(season - 1));
   loaded.set(season, asked);
 
   return asked;
