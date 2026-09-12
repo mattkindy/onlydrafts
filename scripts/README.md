@@ -233,3 +233,99 @@ back, is the fix. Everything else in here follows from it.
 Each one changes what the next is measured against, and the yardage has
 to come out within a percent or two at the end of it, so they want
 doing together with the box score evals beside them.
+
+# Where the weekly points line has room left
+
+`npx tsx scripts/boxScoreWeekEval.ts` scores every way of guessing one
+man's week over 2024 and 2025, weeks 1 to 17, by position and split at
+week 4. It runs in about twenty seconds. Everything is full PPR, because
+Sleeper's points column is PPR.
+
+Two rows are the reason the bench exists. "Oracle: usage known" gets the
+man's actual targets, carries and pass attempts and has to guess his
+rates from his own history. "Oracle: rates known" gets the rates and has
+to guess the usage. Together they say which half of a usage model has the
+points in it.
+
+Points per man per week, mae and bias:
+
+```
+  candidate                          QB wk1-4       RB wk1-4       WR wk1-4       TE wk1-4      QB wk5-17      RB wk5-17      WR wk5-17      TE wk5-17
+  ours (shipped ridge)             6.45/+0.26     4.45/-0.17     4.75/+0.41     3.49/+0.37     6.29/-0.13     4.28/+0.24     4.29/+0.00     3.56/-0.26
+  sleeper                          6.80/+3.65     4.09/-0.28     4.44/-0.04     3.40/+0.00     6.67/+2.69     4.26/-0.20     4.37/-0.16     3.66/-0.82
+  blend 0.5                        6.33/+1.54     4.22/-0.25     4.64/+0.19     3.51/+0.26     6.22/+0.79     4.31/-0.00     4.38/-0.09     3.64/-0.56
+  naive trailing 4                 6.92/+0.22     4.26/-0.48     4.83/-0.14     3.54/-0.14     6.53/-0.36     4.46/-0.02     4.45/-0.05     3.77/-0.22
+  (a) component                    6.25/+0.52     4.18/-0.19     4.48/+0.11     3.36/+0.24     6.39/-0.06     4.33/-0.08     4.35/+0.07     3.61/-0.30
+  (a) component, vegas lift        6.30/+0.77     4.20/-0.10     4.49/+0.21     3.38/+0.31     6.37/+0.26     4.33/+0.06     4.37/+0.21     3.62/-0.22
+  (a) component, blend 0.5         6.30/+1.68     4.12/-0.27     4.54/+0.03     3.45/+0.17     6.31/+0.89     4.32/-0.15     4.39/-0.04     3.68/-0.57
+  (c) early from prior season      6.50/+0.71     4.47/-0.00     4.74/+0.48     3.51/+0.50     6.29/-0.13     4.28/+0.24     4.29/+0.00     3.56/-0.26
+  oracle: usage known              4.88/+0.61     2.75/+0.01     2.91/+0.19     1.89/+0.17     5.25/+0.01     2.94/-0.03     2.99/+0.07     2.31/-0.13
+  oracle: rates known              4.27/+0.43     3.14/-0.20     3.41/+0.02     2.61/+0.06     4.12/+0.16     3.12/-0.17     3.28/+0.12     2.85/-0.03
+```
+
+The game simulator has only played the odd weeks, so its candidates are
+reported again over that subset, where every line is worse than on the
+full set because those weeks are a harder draw:
+
+```
+  candidate                          QB wk1-4       RB wk1-4       WR wk1-4       TE wk1-4      QB wk5-17      RB wk5-17      WR wk5-17      TE wk5-17
+  ours (shipped ridge)             5.91/-0.00     4.98/+0.07     5.22/+0.20     4.16/+0.09     6.53/-1.13     4.45/+0.38     4.93/-0.06     4.42/-0.89
+  blend 0.5                        5.89/+1.87     4.46/-0.01     4.93/-0.10     3.86/-0.10     6.48/+0.53     4.44/+0.16     4.87/-0.08     4.40/-1.10
+  (a) component                    5.52/+0.70     4.66/-0.07     4.97/-0.19     4.10/-0.12     6.79/-0.85     4.63/+0.12     5.06/+0.18     4.52/-0.81
+  (b) walk usage                   5.73/-0.50     4.64/-0.73     4.94/-0.29     3.86/-0.43     6.96/-1.53     4.52/-0.71     5.12/-0.17     4.46/-1.16
+  (b) walk usage, half             5.58/+0.10     4.58/-0.40     4.86/-0.24     3.89/-0.28     6.83/-1.19     4.46/-0.30     4.96/+0.00     4.41/-0.98
+  (b) walk points                  5.68/+0.13     4.75/-0.67     5.05/-1.21     3.61/-0.91     7.34/-0.74     4.53/-0.67     5.21/-0.86     4.49/-1.78
+```
+
+Targets and carries, mae per man per week, over every week:
+
+```
+  candidate                         QB tgt/car      RB tgt/car      WR tgt/car      TE tgt/car
+  (a) component                      0.02/1.86       1.22/3.32       1.89/0.21       1.56/0.07
+  (b) walk usage                     0.03/2.13       1.29/3.61       2.20/0.22       1.89/0.08
+  (b) walk usage, half               0.03/1.84       1.25/3.44       2.07/0.23       1.85/0.08
+```
+
+Matchup Brier over the same random lineups, under a normal approximation
+rather than the app's copula draws, so read the numbers against each
+other and not against the shipped calibration bench:
+
+```
+  sleeper                                    0.2085
+  (a) component, blend 0.5                   0.2125
+  blend 0.5                                  0.2129
+  ours (shipped ridge)                       0.2241
+  (a) component                              0.2253
+```
+
+## Reading it
+
+Most of what is left to win is usage, not efficiency, and it is not close
+at running back and receiver. Handing the model a back's actual carries
+and targets takes his error from 4.33 to 2.94, a third of it, where
+handing it his actual yards per carry and touchdown rate takes it to
+3.12. At receiver the same split is 4.35 down to 2.99 against 3.28. The
+one position that goes the other way is quarterback, where knowing the
+rates is worth more than knowing the attempts (4.12 against 5.25), which
+fits a position whose points come from yards per attempt and touchdowns
+rather than from how often he throws. So a better weekly line at the
+skill positions means predicting touches, and the component model's own
+usage error says where that work is: it misses a back's carries by 3.3 a
+game and a receiver's targets by 1.9.
+
+The component model already beats the shipped ridge across the early
+weeks, by 0.20 at quarterback, 0.27 at back, 0.27 at receiver and 0.13 at
+tight end, and it loses by about a tenth from week 5 on. That is the
+split to ship: the ridge has four weeks of in-season form to fit and
+nothing before that, and a man's previous season put through per-touch
+rates is a better guess in September than his season line is. Three
+things that looked worth trying are not. Scaling a man's touches by his
+side's implied total costs a tenth of a point everywhere, so Vegas is
+already in the ridge and adding it again double counts. The game
+simulator's touches are worse than his trailing four games at predicting
+his own touches, at every position, and its points are biased a point
+and a half low at quarterback and tight end, so it belongs nowhere near
+the usage input until that bias is fixed. And splitting the residual
+model into 10 or 20 buckets instead of 5 moves the Brier by 0.0004: it
+does widen the top of the band, a back projected for 22 going from a
+21.6-point eighty to 24.9, but nothing downstream notices.
