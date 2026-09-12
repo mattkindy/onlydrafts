@@ -37,6 +37,8 @@ export interface SlateRow {
    */
   q1?: number;
   q3?: number;
+  /** the receptions behind his points, so another scoring can move them */
+  catches: number;
   questionable: boolean;
   gamesMissedRecent: number;
   absenceShare: number;
@@ -48,8 +50,13 @@ export interface Slate {
   generated: string;
   /** nobody has played a game yet, so these come from last season's rates */
   preseason: boolean;
+  /** what a catch paid when the rows were scored */
+  perCatch: number;
   rows: SlateRow[];
 }
+
+/** what the scheduled build scores, for a slate written before it said */
+const BUILT_PER_CATCH = 0.5;
 
 /** the file changes far more often than a browser expects */
 const fresh = () => "?v=" + Math.floor(Date.now() / 60000);
@@ -114,6 +121,7 @@ interface FileRow {
   ceiling: number;
   q1?: number;
   q3?: number;
+  catches?: number;
   questionable?: boolean;
   gamesMissedRecent?: number;
   gamesMissed?: number;
@@ -125,6 +133,7 @@ interface FileSlate {
   week: number;
   generated?: string;
   preseason?: boolean;
+  perCatch?: number;
   rows?: FileRow[];
   players?: FileRow[];
 }
@@ -147,6 +156,7 @@ function readRow(row: FileRow): SlateRow {
     ceiling: row.ceiling,
     q1: row.q1,
     q3: row.q3,
+    catches: row.catches ?? 0,
     questionable: Boolean(row.questionable),
     gamesMissedRecent: row.gamesMissedRecent ?? row.gamesMissed ?? 0,
     absenceShare: row.absenceShare ?? 0,
@@ -159,7 +169,42 @@ export function readSlate(said: FileSlate): Slate {
     week: said.week,
     generated: said.generated ?? "",
     preseason: said.preseason ?? false,
+    perCatch: said.perCatch ?? BUILT_PER_CATCH,
     rows: (said.rows ?? said.players ?? []).map(readRow),
+  };
+}
+
+/**
+ * The slate in a league's scoring. The rows were scored once, at the
+ * build, and the three usual formats differ only in what a catch pays,
+ * so every point figure moves by the difference times his catches. A
+ * league paying what the build paid gets the rows back untouched.
+ */
+export function slateUnder(slate: Slate, perCatch: number): Slate {
+  const shift = perCatch - slate.perCatch;
+
+  if (shift === 0) {
+    return slate;
+  }
+
+  const moved = (row: SlateRow, points: number | null | undefined) =>
+    points === null || points === undefined
+      ? points
+      : Number((points + shift * row.catches).toFixed(1));
+
+  return {
+    ...slate,
+    perCatch,
+    rows: slate.rows.map((row) => ({
+      ...row,
+      ours: moved(row, row.ours)!,
+      sleeper: moved(row, row.sleeper) ?? null,
+      blend: moved(row, row.blend)!,
+      floor: moved(row, row.floor)!,
+      ceiling: moved(row, row.ceiling)!,
+      q1: moved(row, row.q1) ?? undefined,
+      q3: moved(row, row.q3) ?? undefined,
+    })),
   };
 }
 

@@ -32,7 +32,7 @@ import { Start } from "./views/Start.tsx";
 import { Matchups } from "./views/Matchups.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import {
-  loadSlate, rosterKeys, weekRefs, type Slate, type WeekRef,
+  loadSlate, rosterKeys, slateUnder, weekRefs, type Slate, type WeekRef,
 } from "./lib/slate.ts";
 
 export type Order = "war" | "rank" | "adp";
@@ -171,7 +171,7 @@ function App() {
   const [marks, setMarks] = useState(0);
   const [weeks, setWeeks] = useState<WeekRef[]>([]);
   const [week, setWeek] = useState<WeekRef | null>(null);
-  const [slate, setSlate] = useState<Slate | null>(null);
+  const [built, setSlate] = useState<Slate | null>(null);
   const [weekStatus, setWeekStatus] = useState("");
   const [games, setGames] = useState<Matchup[]>([]);
   const [gamesStatus, setGamesStatus] = useState("");
@@ -242,6 +242,20 @@ function App() {
 
     return () => { stale = true; };
   }, [view, week, active]);
+
+  /**
+   * The week in this league's scoring. The build scored it once, and
+   * a league that pays a catch differently moves every man by his
+   * catches. Without a league, or one saved before its scoring was
+   * kept, it reads as built.
+   */
+  const slate = useMemo(() => {
+    if (!built || !active?.pays) {
+      return built;
+    }
+
+    return slateUnder(built, active.pays["rec"] ?? 0);
+  }, [built, active]);
 
   /** the week's projections, under the same key a lineup uses for a man */
   const slateRows = useMemo(

@@ -331,6 +331,18 @@ not. The component line in weeks 1 to 4 with that de-bias is what the
 site now writes: 6.02/4.12/4.54/3.45 against the shipped blend's
 6.33/4.22/4.64/3.51, and the same numbers from week 5 on.
 
+The site is built at half a point a catch and Sleeper publishes full
+PPR, and until September 2026 the two were blended as they came, so
+every receiver in the slate was three points or so too high for a half
+PPR league and more for a standard one. Sleeper's three formats differ
+only in what a catch pays, so his full PPR number less half a point a
+catch is exactly his half PPR number, and the fetch now keeps his
+catches so the build can do that sum. The slate ships those catches
+too, along with what a catch paid, and the app moves every point figure
+by the difference for the league it is showing. The board never had
+this problem because it ships the parts of a game and scores them on
+the way in.
+
 The component model already beats the shipped ridge across the early
 weeks, by 0.20 at quarterback, 0.27 at back, 0.27 at receiver and 0.13 at
 tight end, and it loses by about a tenth from week 5 on. That is the

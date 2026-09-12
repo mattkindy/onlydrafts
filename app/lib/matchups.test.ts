@@ -24,6 +24,7 @@ const row = (
   blend,
   floor: blend * 0.4,
   ceiling: blend * 1.8,
+  catches: 0,
   questionable: false,
   gamesMissedRecent: 0,
   absenceShare: 0,

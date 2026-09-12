@@ -58,10 +58,11 @@ function parseSeasons(arg: string | undefined): number[] {
 }
 
 function toCsv(rows: SleeperProjection[]): string {
-  const header = "season,week,gsisId,position,points,targets,carries";
+  const header = "season,week,gsisId,position,points,targets,carries,catches";
   const lines = rows.map(
     (r) =>
-      `${r.season},${r.week},${r.gsisId},${r.position},${r.points},${r.targets},${r.carries}`,
+      `${r.season},${r.week},${r.gsisId},${r.position},${r.points},` +
+      `${r.targets},${r.carries},${r.catches ?? ""}`,
   );
 
   return [header, ...lines].join("\n") + "\n";
