@@ -347,3 +347,85 @@ the usage input until that bias is fixed. And splitting the residual
 model into 10 or 20 buckets instead of 5 moves the Brier by 0.0004: it
 does widen the top of the band, a back projected for 22 going from a
 21.6-point eighty to 24.9, but nothing downstream notices.
+
+## The simulator on trailing shares
+
+The simulator used to take each man's cut of the work from August's
+projection pulled toward the season. It now has a second setting,
+`VARIANT=component npx tsx scripts/walkWeekCache.ts`, where every man's
+share of his side's carries and of its targets comes from the trailing
+usage the component line reads, and the cast is the men who have any of
+that usage rather than the twelve largest projected shares. The bench
+reads both walks off disk, so the rows below are the same odd weeks of
+2024 and 2025 played twice.
+
+Targets and carries, mae per man per week:
+
+```
+  candidate                         QB tgt/car      RB tgt/car      WR tgt/car      TE tgt/car
+  (a) component                      0.02/1.86       1.22/3.32       1.89/0.21       1.56/0.07
+  (b) walk usage                     0.03/2.13       1.29/3.61       2.20/0.22       1.89/0.08
+  sim, component shares              0.03/1.95       1.29/3.61       2.09/0.22       1.85/0.09
+  sim, component shares: half        0.03/1.83       1.27/3.46       2.06/0.22       1.82/0.08
+```
+
+Points, over the weeks the walk has played:
+
+```
+  candidate                          QB wk1-4       RB wk1-4       WR wk1-4       TE wk1-4      QB wk5-17      RB wk5-17      WR wk5-17      TE wk5-17
+  (a) component                    5.52/+0.70     4.66/-0.07     4.97/-0.19     4.10/-0.12     6.79/-0.85     4.63/+0.12     5.06/+0.18     4.52/-0.81
+  (b) walk usage                   5.73/-0.50     4.64/-0.73     4.94/-0.29     3.86/-0.43     6.96/-1.53     4.52/-0.71     5.12/-0.17     4.46/-1.16
+  sim, component shares            5.65/+0.16     4.70/-1.06     5.26/-0.45     3.78/-0.37     6.89/-1.31     4.70/-1.18     5.16/-0.39     4.72/-1.13
+  sim, component shares: half      5.56/+0.43     4.71/-0.55     5.19/-0.33     3.93/-0.17     6.81/-1.08     4.66/-0.49     5.14/-0.07     4.67/-0.97
+  sim, component shares: points    5.90/+1.65     4.60/-1.06     5.28/-1.32     3.75/-0.81     7.28/+0.17     4.70/-1.05     5.31/-0.99     4.74/-1.63
+```
+
+Trailing shares move the touches the way they were meant to and not far
+enough to win. A receiver's targets are missed by 2.09 a game instead of 2.20, a
+tight end's from 1.89 to 1.85, and a quarterback's carries from 2.13 to
+1.95, while a back's carries do not move at all: 3.61 either way,
+against the component line's 3.32. So the simulator still loses the
+touches bench at every position, and the gate for shipping it as the
+pre-game line is not met.
+
+The points say the same and add a warning. Quarterback comes down a
+little in both splits, but the low bias at back and tight end gets
+worse, from -0.73 to -1.06 early at back and from -0.71 to -1.18 from
+week 5. Sharper shares hand more of the work to the busiest men, and
+because a targeted play is short everywhere (the bands at the top of
+this file), giving a busy man more of it puts more work through a rate
+that gains too little. Nothing here reconciles a man's per-touch yards
+and touchdown rate against what his own history says, which is the next
+thing to do and is where that bias should come off.
+
+What the trailing shares do win outright is the width of the runs:
+
+```
+                shipped walk                     component walk
+            run sd  week sd  covered  1.2   run sd  week sd  covered  1.2
+  QB          6.83     8.91    66.3%  72.0%   7.45     8.90    67.2%  77.1%
+  RB          5.09     6.40    70.7%  81.1%   5.59     6.42    75.5%  84.3%
+  WR          5.65     7.26    73.4%  79.6%   6.05     7.12    77.6%  83.2%
+  TE          4.51     6.45    74.8%  79.6%   4.94     6.28    79.1%  83.9%
+```
+
+"run sd" is how far the forty runs of a fixture sit from their own
+middle, "week sd" how far a man's actual sat from that middle, and the
+last two columns how much of his eighty per cent band the runs cover,
+first as they come and then with the 1.2 stretch the site ships. The
+runs come out wider on trailing shares, because who gets the ball now
+varies more from run to run, and they cover 79.1% at tight end and
+77.6% at receiver on their own. The stretch is no longer needed at those
+two and now overshoots everywhere, 84.3% at back and 83.9% at tight end
+against a target of 80%. If this setting ships, `DEALT_WIDER` wants
+refitting to about 1.05 rather than keeping 1.2, and at quarterback it
+is still doing work: the runs cover 67.2% where his weeks are 8.9 wide
+against the runs' 7.45.
+
+Two things this pass did not do. The per-man rate reconciliation above
+is unmeasured, and so is the pass-catcher fallback, which the top of
+this file says has to land with the sacks in the same change. And
+`scripts/matchupCalibration.ts` was left alone: a lineup there needs all
+seven men drawn, the walk has only played the odd weeks, and a Brier
+over the subset of lineups where every seat has simulator runs cannot be
+read against the 0.2112 the shipped bench reports.
