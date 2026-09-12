@@ -36,8 +36,40 @@ export interface GameState {
   left: number;
 }
 
+/**
+ * One game in progress, in the terms a play by play simulation of the
+ * rest of it needs: who has the ball, where it is, what down it is, and
+ * how much time and how many timeouts are left.
+ *
+ * Both teams are given by their board code, and every Record here is
+ * keyed by those codes. The ball fields go missing between plays, when
+ * ESPN drops the situation from the scoreboard altogether, so a caller
+ * has to cope with them being undefined even for a game that is on.
+ */
+export interface LiveSituation {
+  home: string;
+  away: string;
+  points: Record<string, number>;
+  /** seconds left in the whole game, nought once overtime starts */
+  secondsLeft: number;
+  withBall?: string;
+  /** yards from the other team's goal line, one to ninety nine */
+  yardline?: number;
+  down?: number;
+  toGo?: number;
+  timeouts: Record<string, number>;
+  redZone: boolean;
+  secondHalf: boolean;
+  /** the two minute warning of this half has not come round yet */
+  warningLeft: boolean;
+}
+
 /** four quarters of fifteen minutes */
 const REGULATION = 60;
+
+const SECONDS_IN_QUARTER = 900;
+
+const SECONDS_IN_HALF = 1800;
 
 /** and an overtime period, which is ten in the regular season */
 const OVERTIME = 10;
@@ -87,16 +119,38 @@ export function fractionLeft(
 
 interface ScoreboardStatus {
   period?: number;
+  /** seconds left in the period, where displayClock is the same as "12:34" */
+  clock?: number;
   displayClock?: string;
   type?: { state?: string };
 }
 
+interface ScoreboardCompetitor {
+  homeAway?: string;
+  score?: string | number;
+  team?: { id?: string; abbreviation?: string };
+}
+
+interface ScoreboardSituation {
+  possession?: string;
+  /** counted from the goal line the team with the ball is defending */
+  yardLine?: number;
+  down?: number;
+  distance?: number;
+  homeTimeouts?: number;
+  awayTimeouts?: number;
+  isRedZone?: boolean;
+}
+
+interface ScoreboardCompetition {
+  status?: ScoreboardStatus;
+  situation?: ScoreboardSituation;
+  competitors?: ScoreboardCompetitor[];
+}
+
 interface ScoreboardEvent {
   status?: ScoreboardStatus;
-  competitions?: {
-    status?: ScoreboardStatus;
-    competitors?: { team?: { abbreviation?: string } }[];
-  }[];
+  competitions?: ScoreboardCompetition[];
 }
 
 /** one game's state, read off however the scoreboard describes it */
@@ -138,6 +192,99 @@ export function statesFrom(said: {
   return out;
 }
 
+/** seconds left in the whole game, counting overtime as none */
+export function secondsLeftOf(status: ScoreboardStatus | undefined): number {
+  const at = status?.period ?? 1;
+
+  if (at > 4) {
+    return 0;
+  }
+
+  const onTheClock = status?.clock ?? 0;
+
+  return Math.max(0, (4 - at) * SECONDS_IN_QUARTER + onTheClock);
+}
+
+const sideOf = (
+  competitors: ScoreboardCompetitor[], homeAway: string, fallback: number,
+) => competitors.find((c) => c.homeAway === homeAway) ?? competitors[fallback];
+
+const downOf = (down: number | undefined) =>
+  down !== undefined && down >= 1 && down <= 4 ? down : undefined;
+
+function situationOf(
+  game: ScoreboardCompetition, status: ScoreboardStatus | undefined,
+): LiveSituation | undefined {
+  const competitors = game.competitors ?? [];
+  const home = sideOf(competitors, "home", 0);
+  const away = sideOf(competitors, "away", 1);
+  const homeCode = home?.team?.abbreviation;
+  const awayCode = away?.team?.abbreviation;
+
+  if (!homeCode || !awayCode) {
+    return undefined;
+  }
+
+  const at = game.situation;
+  const withBall = competitors.find((c) => c.team?.id === at?.possession);
+  const ballCode = withBall?.team?.abbreviation;
+  const secondsLeft = secondsLeftOf(status);
+  const leftInHalf = secondsLeft > SECONDS_IN_HALF
+    ? secondsLeft - SECONDS_IN_HALF
+    : secondsLeft;
+
+  return {
+    home: boardTeam(homeCode),
+    away: boardTeam(awayCode),
+    points: {
+      [boardTeam(homeCode)]: Number(home?.score ?? 0),
+      [boardTeam(awayCode)]: Number(away?.score ?? 0),
+    },
+    secondsLeft,
+    withBall: ballCode ? boardTeam(ballCode) : undefined,
+    yardline: ballCode !== undefined && at?.yardLine !== undefined
+      ? Math.min(99, Math.max(1, 100 - at.yardLine))
+      : undefined,
+    down: downOf(at?.down),
+    toGo: downOf(at?.down) === undefined ? undefined : at?.distance,
+    timeouts: {
+      [boardTeam(homeCode)]: at?.homeTimeouts ?? 3,
+      [boardTeam(awayCode)]: at?.awayTimeouts ?? 3,
+    },
+    redZone: at?.isRedZone === true,
+    secondHalf: secondsLeft <= SECONDS_IN_HALF,
+    warningLeft: leftInHalf > 120,
+  };
+}
+
+/**
+ * The games that are on, each one under both teams' board codes so a
+ * lookup by either side finds it.
+ */
+export function situationsFrom(said: {
+  events?: ScoreboardEvent[];
+}): Map<string, LiveSituation> {
+  const out = new Map<string, LiveSituation>();
+
+  for (const event of said.events ?? []) {
+    const game = event.competitions?.[0];
+    const status = game?.status ?? event.status;
+
+    if (!game || stateOf(status).where !== "in") {
+      continue;
+    }
+
+    const live = situationOf(game, status);
+
+    if (live) {
+      out.set(live.home, live);
+      out.set(live.away, live);
+    }
+  }
+
+  return out;
+}
+
 /**
  * The scoreboard for one week. Asked for by week rather than taken as it
  * comes, because the bare scoreboard is whatever ESPN thinks today is,
@@ -146,7 +293,10 @@ export function statesFrom(said: {
  */
 export async function gameStates(
   season: number, week: number,
-): Promise<Map<string, GameState>> {
+): Promise<{
+  states: Map<string, GameState>;
+  situations: Map<string, LiveSituation>;
+}> {
   const answered = await fetch(
     `${SCOREBOARD}?seasontype=2&week=${week}&dates=${season}`);
 
@@ -154,7 +304,9 @@ export async function gameStates(
     throw new Error("ESPN would not hand over the scoreboard.");
   }
 
-  return statesFrom(await answered.json());
+  const said = await answered.json();
+
+  return { states: statesFrom(said), situations: situationsFrom(said) };
 }
 
 /**
@@ -386,6 +538,7 @@ export function liveDraws(
   states: Map<string, GameState>,
   draws: number,
   lines?: Lines,
+  remainder?: Map<string, number[]>,
 ): Live {
   const top = topCatchers(rows);
   const watched = new Map<string, Watching>();
@@ -458,6 +611,13 @@ export function liveDraws(
 
     if (!his || his.state.left <= 0) {
       return new Array(draws).fill(0) as number[];
+    }
+
+    const simmed = remainder?.get(key);
+
+    if (simmed?.length) {
+      return Array.from({ length: draws },
+        (_, i) => simmed[i % simmed.length]!);
     }
 
     const { played } = his;

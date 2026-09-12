@@ -182,7 +182,7 @@ export function Start(props: Props) {
     let stale = false;
 
     gameStates(season, week)
-      .then((got) => { if (!stale) { setStates(got); setTrouble(""); } })
+      .then((got) => { if (!stale) { setStates(got.states); setTrouble(""); } })
       .catch((e: Error) => {
         if (!stale) {
           setTrouble("could not read the scoreboard: " + e.message);
