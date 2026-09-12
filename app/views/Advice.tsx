@@ -30,20 +30,26 @@ interface Props {
   lines: Lines;
   /** how often you win with the lineup you have, where the caller has it */
   odds?: number;
+  /** what the remainder engine says a man in a live game still has to come */
+  remainder?: Map<string, number[]> | null;
 }
 
 export function Advice(
-  { side, against, slots, rows, states, lines, odds }: Props,
+  { side, against, slots, rows, states, lines, odds, remainder }: Props,
 ) {
+  const played = remainder ?? undefined;
   const best = useMemo(
-    () => bestLineupFor(side, against, slots, rows, states, undefined, lines),
-    [side, against, slots, rows, states, lines],
+    () => bestLineupFor(
+      side, against, slots, rows, states, undefined, lines, played),
+    [side, against, slots, rows, states, lines, played],
   );
   const standing = useMemo(
     () => odds === undefined
-      ? standingFor({ sides: [side, against] }, rows, states, lines).odds[0]
+      ? standingFor(
+          { sides: [side, against] }, rows, states, lines, undefined, played,
+        ).odds[0]
       : odds,
-    [odds, side, against, rows, states, lines],
+    [odds, side, against, rows, states, lines, played],
   );
 
   if (!best.swaps.length) {
