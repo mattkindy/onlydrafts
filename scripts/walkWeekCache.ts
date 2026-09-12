@@ -31,12 +31,29 @@ import {
 const RUNS = Number(process.env["RUNS"] ?? 40);
 
 /**
+ * How many shares to cut the weeks into. Each keeps the whole play store
+ * in memory, so ten of them on twelve cores had not finished a week in
+ * fifty minutes, where one share plays a week in under two.
+ */
+const SHARES = Number(process.env["SHARES"] ?? 6);
+
+/**
  * Which walk to play. `component` takes each man's cut of the work from
  * his trailing usage instead of August's projection, and writes its own
  * file so the bench can read both at once.
  */
 const VARIANT = process.env["VARIANT"] ?? "";
 const componentShares = VARIANT.includes("component");
+/**
+ * `component-rates` adds the per-man reconciliation on top of the shares,
+ * and `component-full` adds the pass-catcher fallback and the sacks. The
+ * sacks come in through `POOL_WASTE`, which fitPlayFactors reads off the
+ * environment once, so a share gets it when it is spawned rather than
+ * from an option.
+ */
+const componentRates = VARIANT.includes("rates") || VARIANT.includes("full");
+const standIn = VARIANT.includes("full");
+const poolWaste: Record<string, string> = standIn ? { POOL_WASTE: "1" } : {};
 const outPath = VARIANT ? walkWeeklyPathFor(VARIANT) : WALK_WEEKLY_PATH;
 const RULES = presets.ppr;
 const POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -79,6 +96,8 @@ async function oneWeek(season: number, week: number): Promise<WalkWeekRow[]> {
 
   const world = await buildWorld(season, week, true, positions, {
     componentShares,
+    componentRates,
+    standIn,
   });
   const walked = walkWeek(world, season, week, games, RULES, RUNS);
   const rows: WalkWeekRow[] = [];
@@ -124,11 +143,13 @@ if (asShare) {
 } else {
   const printed = await acrossCores({
     script: import.meta.filename,
+    shares: SHARES,
     env: {
       RUNS: String(RUNS),
       SEASONS: seasons.join(","),
       WEEKS: weeks.join(","),
       VARIANT,
+      ...poolWaste,
     },
   });
   const all: WalkWeekRow[] = [];
