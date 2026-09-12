@@ -154,13 +154,64 @@ export type From = (seed: string, draws: number) => number[];
 export function normalAt(
   mix: Mix, i: number, draws: number, from: From = factorFor,
 ): number {
-  let z = mix.own * from(mix.ownSeed, draws)[i]!;
+  return sharedAt(mix, i, draws, from) +
+    mix.own * from(mix.ownSeed, draws)[i]!;
+}
+
+/** the shared part of a man's copula normal, his own noise left out */
+export function sharedAt(
+  mix: Mix, i: number, draws: number, from: From = factorFor,
+): number {
+  let z = 0;
 
   for (const term of mix.terms) {
     z += term.load * from(term.factor, draws)[i]!;
   }
 
   return z;
+}
+
+/** how much of a man's game is behind him, and where his pace puts him */
+export interface Pace {
+  played: number;
+  /** the normal his pace so far corresponds to */
+  z: number;
+}
+
+/**
+ * A man's copula normal written as a straight line in his own noise, so
+ * a caller can either draw that noise or ask where the line crosses a
+ * total it has to beat.
+ *
+ * Once his game is under way part of his own noise is behind him, so the
+ * rest of his week is shrunk towards what his pace implies by the
+ * fraction played, which leaves him unit variance.
+ */
+export function normalLine(
+  mix: Mix, shared: number, pace: Pace,
+): { middle: number; width: number } {
+  if (pace.played <= 0) {
+    return { middle: shared, width: mix.own };
+  }
+
+  return {
+    middle: (1 - pace.played) * shared + pace.played * pace.z,
+    width: mix.own * Math.sqrt(Math.max(0, 1 - pace.played * pace.played)),
+  };
+}
+
+/**
+ * The same man, tied only to the factors named. What he was loaded on
+ * elsewhere goes into his own noise, so his week has the distribution it
+ * had and moves with nobody outside that list.
+ */
+export function tiedTo(mix: Mix, factors: Set<string>): Mix {
+  const terms = mix.terms.filter((term) => factors.has(term.factor));
+  const loose = mix.terms.filter((term) => !factors.has(term.factor));
+  const own = loose.reduce(
+    (sum, term) => sum + term.load * term.load, mix.own * mix.own);
+
+  return { ...mix, terms, own: Math.sqrt(own) };
 }
 
 /** a man whose week is partly played, and where his pace puts him */

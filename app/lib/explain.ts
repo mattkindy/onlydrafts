@@ -1,20 +1,25 @@
 /**
  * Why one man beats another in a seat, in pieces a reader can follow.
  *
- * A swap is priced by drawing the week for both rosters and counting how
- * often your side ends up ahead, which gives a percentage and no account
- * of where it came from. This takes the same draws apart into four
- * pieces: his projected points, how wide his week is, how his week moves
- * with the opponent's lineup, and how it moves with the rest of yours.
+ * Nothing here counts wins. In each draw the shared factors and every
+ * other man's week stay at what that draw made them, and the only thing
+ * left free is the man in the seat's own noise. His week is a ladder
+ * in that noise, so the noise he needs to carry the lineup over the
+ * opponent is written down rather than searched for, and a draw gives
+ * a probability instead of a nought or a one.
  *
- * Each piece changes one thing about his draws and counts again, so the
- * four add up to the change exactly. Re-ordering a run of draws breaks a
- * tie between two men without touching either distribution, and both men
- * are re-ordered the same way so only the men differ.
+ * The four pieces each change one thing about him and ask again, each
+ * measured against the step before it, so they add up to the whole
+ * change exactly.
  */
 
-import { streamFor } from "./spread.ts";
-import { winChance } from "./winShare.ts";
+import {
+  normalLine, sharedAt, tiedTo, type From, type Mix, type Pace,
+} from "./copula.ts";
+import {
+  normalCdf, normalQuantile, pointsOf, quantileOf, shiftedBy, weekAt,
+  type Spread,
+} from "./spread.ts";
 
 export interface Pieces {
   /** what the difference in projected points is worth */
@@ -38,100 +43,162 @@ export interface Explanation extends Pieces {
   width: { starter: number; candidate: number };
 }
 
-export interface Swapping {
-  /** what the rest of your starters put up, draw by draw */
-  others: number[];
-  /** what the man in the seat puts up */
-  starter: number[];
-  /** and the man who would take it from him */
-  candidate: number[];
-  /** what the opponent's lineup puts up */
-  theirs: number[];
+/** one of the two men in the seat, and how his week was drawn */
+export interface Contender {
+  /** what the draws give him on top of what he has already scored */
+  week: number[];
+  /** the five shipped figures those draws are read off */
+  spread: Spread;
+  mix: Mix;
+  /** what he has put up already, which no draw moves */
+  scored: number;
+  /** the share of his week still to be drawn */
+  left: number;
+  pace: Pace;
 }
 
-const mean = (its: number[]) =>
-  its.reduce((sum, n) => sum + n, 0) / Math.max(1, its.length);
+/** the seat a man is priced in: everything about the week that is not him */
+export interface Seat {
+  /** what the rest of your starters put up, draw by draw */
+  others: number[];
+  /** what the opponent's lineup puts up */
+  theirs: number[];
+  /** what each factor came out at, draw by draw, as the men were drawn */
+  factors: From;
+  /** the factors the opponent's starters are loaded on */
+  against: string[];
+  /** and the factors the rest of your own starters are loaded on */
+  alongside: string[];
+}
+
+/**
+ * What he is projected for, off the shipped figures rather than off the
+ * draws, so the gap the reader is shown is the gap between the two
+ * projections on the page and not that gap plus a little drawing.
+ */
+const projectedFor = (his: Contender) =>
+  his.scored + his.left * his.spread.ev;
 
 function deviation(its: number[]): number {
-  const middle = mean(its);
+  const middle = its.reduce((sum, n) => sum + n, 0) / Math.max(1, its.length);
   const squares = its.reduce((sum, n) => sum + (n - middle) ** 2, 0);
 
   return Math.sqrt(squares / Math.max(1, its.length));
 }
 
-/**
- * The order a fixed stream puts the draws in. Fixed rather than random,
- * so a page opened twice explains a swap the same way both times.
- */
-function orderOf(name: string, draws: number): number[] {
-  const stream = streamFor(name, draws);
+/** what the opponent is ahead by before the man in the seat plays */
+const gapsIn = (seat: Seat, draws: number) =>
+  Array.from({ length: draws }, (_, i) => seat.theirs[i]! - seat.others[i]!);
 
-  return Array.from({ length: draws }, (_, i) => i)
-    .sort((a, b) => stream[a]! - stream[b]!);
-}
+/** below this his week is settled and there is nothing left to average */
+const NO_ROOM = 1e-9;
 
 /**
- * The same draws in a different order: the values sorted, then dealt out
- * in the order the stream asks for. What comes back has the distribution
- * it went in with and no tie left to anybody else's draws.
+ * The chance he clears the gap in one draw, over his own noise and
+ * nothing else. Everything the draw fixed stays fixed, so the answer is
+ * where his ladder crosses the gap, read back through the normal that
+ * picks his quantile.
  */
-function reordered(its: number[], order: number[]): number[] {
-  const sorted = [...its].sort((a, b) => a - b);
-  const out = new Array(its.length).fill(0) as number[];
+function chanceAt(
+  his: Contender, spread: Spread, mix: Mix, gap: number,
+  i: number, draws: number, factors: From,
+): number {
+  const needs = gap - his.scored;
 
-  order.forEach((at, rank) => { out[at] = sorted[rank]!; });
-
-  return out;
-}
-
-const shiftedTo = (its: number[], middle: number) => {
-  const by = middle - mean(its);
-
-  return its.map((n) => n + by);
-};
-
-/**
- * How many times a piece is measured on a fresh re-ordering before the
- * four are averaged. One re-ordering is one sample of a world where the
- * tie is gone, and on a few thousand draws that sample is worth about a
- * point of win chance on its own, which is the size of the pieces. Six
- * of them cut that to something a reader can act on.
- */
-const ROUNDS = 6;
-
-/** what starting each of the two men does to your chance of winning */
-export function explainSwap(swapping: Swapping): Explanation {
-  const { others, starter, candidate, theirs } = swapping;
-  const draws = Math.min(
-    others.length, starter.length, candidate.length, theirs.length);
-  const won = (his: number[], against: number[]) =>
-    winChance(others.map((rest, i) => rest + his[i]!), against);
-  const projected = { starter: mean(starter), candidate: mean(candidate) };
-  const odds = won(starter, theirs);
-  const gains = won(candidate, theirs) - odds;
-  const pieces: Pieces = { points: 0, spread: 0, opponent: 0, ownLineup: 0 };
-
-  for (let round = 0; round < ROUNDS; round++) {
-    const loose = reordered(theirs, orderOf(`explain|against|${round}`, draws));
-    const apart = orderOf(`explain|apart|${round}`, draws);
-    const aloneStarter = reordered(starter, apart);
-    const flat = won(aloneStarter, loose);
-    const shifted = won(shiftedTo(aloneStarter, projected.candidate), loose);
-    const swapped = won(reordered(candidate, apart), loose);
-    const tied = won(candidate, loose) - won(starter, loose);
-
-    pieces.points += (shifted - flat) / ROUNDS;
-    pieces.spread += (swapped - shifted) / ROUNDS;
-    pieces.ownLineup += (tied - (swapped - flat)) / ROUNDS;
-    pieces.opponent += (gains - tied) / ROUNDS;
+  if (his.left <= 0) {
+    return needs < 0 ? 1 : 0;
   }
 
+  const { middle, width } = normalLine(
+    mix, sharedAt(mix, i, draws, factors), his.pace);
+
+  if (width <= NO_ROOM) {
+    const week = weekAt(pointsOf(spread), normalCdf(middle));
+
+    return his.left * week > needs ? 1 : 0;
+  }
+
+  const crossing = normalQuantile(quantileOf(spread, needs / his.left));
+
+  return 1 - normalCdf((crossing - middle) / width);
+}
+
+function chanceOver(
+  his: Contender, spread: Spread, mix: Mix, gaps: number[], factors: From,
+): number {
+  let sum = 0;
+
+  for (let i = 0; i < gaps.length; i++) {
+    sum += chanceAt(his, spread, mix, gaps[i]!, i, gaps.length, factors);
+  }
+
+  return sum / Math.max(1, gaps.length);
+}
+
+/** every factor the seat ties him to, on either side of the matchup */
+const tyingIn = (seat: Seat) => new Set([...seat.against, ...seat.alongside]);
+
+/** how often you win the week with this man in the seat */
+export function chanceWith(seat: Seat, his: Contender): number {
+  const draws = Math.min(seat.others.length, seat.theirs.length);
+
+  return chanceOver(
+    his, his.spread, tiedTo(his.mix, tyingIn(seat)),
+    gapsIn(seat, draws), seat.factors);
+}
+
+/**
+ * His ladder moved so that what he adds is projected for so much more.
+ * A man with part of his week behind him only draws the rest of it, so
+ * the ladder has to move further than his total does.
+ */
+function movedTo(his: Contender, by: number): Spread {
+  if (his.left <= 0) {
+    return his.spread;
+  }
+
+  return shiftedBy(his.spread, by / his.left);
+}
+
+/** what starting each of the two men does to your chance of winning */
+export function explainSwap(
+  seat: Seat, starter: Contender, candidate: Contender,
+): Explanation {
+  const draws = Math.min(
+    seat.others.length, seat.theirs.length,
+    starter.week.length, candidate.week.length);
+  const gaps = gapsIn(seat, draws);
+  const tying = tyingIn(seat);
+  const alongside = new Set(seat.alongside);
+  const nobody = new Set<string>();
+  const chance = (his: Contender, spread: Spread, keep: Set<string>) =>
+    chanceOver(his, spread, tiedTo(his.mix, keep), gaps, seat.factors);
+  const projected = {
+    starter: projectedFor(starter),
+    candidate: projectedFor(candidate),
+  };
+  const odds = chance(starter, starter.spread, tying);
+  const gains = chance(candidate, candidate.spread, tying) - odds;
+  // tied to nobody, so what is about him alone is not also a correlation
+  const flat = chance(starter, starter.spread, nobody);
+  const shifted = chance(
+    starter, movedTo(starter, projected.candidate - projected.starter), nobody);
+  const swapped = chance(candidate, candidate.spread, nobody);
+  const tied = chance(candidate, candidate.spread, alongside) -
+    chance(starter, starter.spread, alongside);
+
   return {
-    ...pieces,
+    points: shifted - flat,
+    spread: swapped - shifted,
+    ownLineup: tied - (swapped - flat),
+    opponent: gains - tied,
     gains,
     odds,
     projected,
-    width: { starter: deviation(starter), candidate: deviation(candidate) },
+    width: {
+      starter: deviation(starter.week),
+      candidate: deviation(candidate.week),
+    },
   };
 }
 
