@@ -488,12 +488,40 @@ async function takePasserLines(
  * Vite cannot empty docs first, since the data lives there too, so a
  * scheduled build would collect a stale bundle a week forever.
  */
-async function dropStaleAssets(): Promise<void> {
-  const page = await readFile(join(DOCS, "index.html"), "utf8");
+/**
+ * Everything the page still reaches, following one asset to the next.
+ *
+ * The page points at the entry chunk and the entry chunk points at the
+ * worker, so checking the page alone deleted the worker on every build.
+ */
+async function assetsInUse(names: string[]): Promise<Set<string>> {
   const dir = join(DOCS, "assets");
+  const page = await readFile(join(DOCS, "index.html"), "utf8");
+  const live = new Set(names.filter((name) => page.includes(name)));
+  const toRead = [...live];
 
-  for (const name of await readdir(dir).catch(() => [])) {
-    if (page.includes(name)) {
+  while (toRead.length) {
+    const name = toRead.pop()!;
+    const text = await readFile(join(dir, name), "utf8").catch(() => "");
+
+    for (const other of names) {
+      if (!live.has(other) && text.includes(other)) {
+        live.add(other);
+        toRead.push(other);
+      }
+    }
+  }
+
+  return live;
+}
+
+async function dropStaleAssets(): Promise<void> {
+  const dir = join(DOCS, "assets");
+  const names = await readdir(dir).catch(() => []);
+  const live = await assetsInUse(names);
+
+  for (const name of names) {
+    if (live.has(name)) {
       continue;
     }
 
@@ -1676,6 +1704,20 @@ async function main(): Promise<void> {
       '<meta http-equiv="refresh" content="0; url=../">' +
       '<title>moved</title><p>The draft board is <a href="../">up a level' +
       "</a> now.</p>",
+  );
+
+  /**
+   * The tables the live pages play the rest of a game out with. It
+   * wants the roster of a week, so it takes the latest week the slate
+   * was written for, and a side on its bye that week is filled in from
+   * the nearest week it played.
+   */
+  const latest = index
+    .filter((one) => one.season === season)
+    .reduce((most, one) => Math.max(most, one.week), 1);
+  execFileSync(
+    "npx", ["tsx", "scripts/buildSimTables.ts", String(season), String(latest)],
+    { cwd: join(import.meta.dirname, ".."), stdio: "inherit" },
   );
 
   // The page is a Preact app now, so typescript checks it and vite

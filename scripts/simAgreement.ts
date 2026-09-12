@@ -67,8 +67,10 @@ async function main(): Promise<void> {
   }
 
   let teamGap = 0;
+  let teamBias = 0;
   let teamN = 0;
   let manGap = 0;
+  let manBias = 0;
   let manN = 0;
   let started = Date.now();
   let nodeMillis = 0;
@@ -138,8 +140,9 @@ async function main(): Promise<void> {
     }
 
     for (const team of [stop.home, stop.away]) {
-      teamGap += Math.abs(
-        mean(nodeTeam[team]!) - mean(played.teamPoints[team]!));
+      const gap = mean(played.teamPoints[team]!) - mean(nodeTeam[team]!);
+      teamGap += Math.abs(gap);
+      teamBias += gap;
       teamN++;
     }
 
@@ -150,14 +153,18 @@ async function main(): Promise<void> {
         continue;
       }
 
-      manGap += Math.abs(mean(its) - mean(theirs));
+      const gap = mean(theirs) - mean(its);
+      manGap += Math.abs(gap);
+      manBias += gap;
       manN++;
     }
   }
 
   console.log(`${stops.length} checkpoints, ${RUNS} runs each`);
-  console.log(`team points: mean gap ${(teamGap / (teamN || 1)).toFixed(2)}`);
-  console.log(`per man: mean gap ${(manGap / (manN || 1)).toFixed(2)} ` +
+  console.log(`team points: mean gap ${(teamGap / (teamN || 1)).toFixed(2)}, ` +
+    `browser less node ${(teamBias / (teamN || 1)).toFixed(2)}`);
+  console.log(`per man: mean gap ${(manGap / (manN || 1)).toFixed(2)}, ` +
+    `browser less node ${(manBias / (manN || 1)).toFixed(2)}, ` +
     `over ${manN} men`);
   console.log(`node ${(nodeMillis / (stops.length || 1)).toFixed(0)} ms a ` +
     `game, browser ${(browserMillis / (stops.length || 1)).toFixed(0)} ms`);
