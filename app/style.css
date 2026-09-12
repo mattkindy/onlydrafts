@@ -451,3 +451,9 @@
   .options li.shut { opacity: .55; }
   .options .delta { margin-left: auto; font-weight: 700; color: var(--muted); }
   .options .delta.up { color: var(--go); }
+  .why { flex-basis: 100%; margin: .15rem 0 .1rem; font-size: .72rem;
+    color: var(--muted); display: flex; flex-wrap: wrap; gap: .3rem .5rem;
+    align-items: baseline; }
+  .why .said { flex-basis: 100%; }
+  .why .piece { color: var(--faint); white-space: nowrap; }
+  .why .piece b { color: var(--muted); font-weight: 700; }

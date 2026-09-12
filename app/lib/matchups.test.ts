@@ -210,6 +210,35 @@ describe("alternativesFor", () => {
     expect(choices[1]!.options[1]!.gains).toBeLessThan(0);
   });
 
+  it("explains the close call and says nothing about the wide gap", () => {
+    const close = rowsFor(
+      row("near", "DEN", 12), row("alike", "LA", 11.4),
+      row("keeper", "SEA", 11, "QB"));
+    const seat: Side = {
+      owner: "me",
+      points: 0,
+      starters: [
+        { key: "keeper", slot: "QB", points: 0 },
+        { key: "near", slot: "WR", points: 0 },
+      ],
+      bench: [{ key: "alike", points: 0 }],
+    };
+    const level: Side = {
+      owner: "them",
+      points: 0,
+      starters: [{ key: "nobody", slot: "WR", points: 23 }],
+      bench: [],
+    };
+    const calls = alternativesFor(
+      seat, level, ["QB", "WR"], close, states({}));
+    const why = calls[1]!.options[0]!.why!;
+
+    expect(why.points + why.spread + why.opponent + why.ownLineup)
+      .toBeCloseTo(why.gains, 10);
+    expect(choices[1]!.options.find((o) => o.key === "stud")!.why)
+      .toBeUndefined();
+  });
+
   it("marks a man whose game has kicked off as locked", () => {
     const shut = alternativesFor(
       mySide, them, ["QB", "WR"], rows,
