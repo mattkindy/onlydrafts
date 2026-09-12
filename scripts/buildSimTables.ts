@@ -16,7 +16,7 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { buildWorld } from "../src/features/playedWorld.js";
-import { loadPlayerStats } from "../src/data/nflverse.js";
+import { loadPlayerStats, loadWeeklyRosters } from "../src/data/nflverse.js";
 import { DEFAULT_AFTER_TOUCHDOWN } from "../src/features/afterTouchdown.js";
 import type { Call, PlayState } from "../src/model/playFactors.js";
 import { seededRng } from "../src/sim/rng.js";
@@ -88,6 +88,22 @@ async function main(): Promise<void> {
     positions.set(row.playerId, row.position);
     nameOf.set(row.playerId, row.playerName);
   }
+
+  const rosters = await loadWeeklyRosters(SEASON);
+  const byWeek = new Map<number, Set<string>>();
+
+  for (const row of rosters) {
+    const already = byWeek.get(row.week) ?? new Set<string>();
+    byWeek.set(row.week, already);
+    already.add(row.teamId);
+  }
+
+  const playedIn = (week: number) => byWeek.get(week) ?? new Set<string>();
+  const everyTeam = [...new Set(rosters.map((row) => row.teamId))].sort();
+  const weeks = [...byWeek.keys()].sort((a, b) => a - b);
+  const nearestWeeks = (from: number) =>
+    weeks.filter((week) => week !== from)
+      .sort((a, b) => Math.abs(a - from) - Math.abs(b - from) || b - a);
 
   const world = await buildWorld(
     SEASON, WEEK, true, positions, { componentShares: true });
@@ -210,11 +226,15 @@ async function main(): Promise<void> {
 
   for (let yard = 1; yard <= 99; yard++) {
     for (let dist = 0; dist < DIST_BANDS; dist++) {
-      const odds = world.fourth.chances({
-        down: 4, toGo: Math.min(DIST_MID[dist]!, yard), yardline: yard,
-        margin: 0, secondsLeft: 1200,
-      });
-      fourth.push(rateByte(odds.go), rateByte(odds.kick));
+      for (let margin = 0; margin < MARGIN_BANDS; margin++) {
+        for (let time = 0; time < TIME_BANDS; time++) {
+          const odds = world.fourth.chances({
+            down: 4, toGo: Math.min(DIST_MID[dist]!, yard), yardline: yard,
+            margin: MARGIN_MID[margin]!, secondsLeft: TIME_MID[time]!,
+          });
+          fourth.push(rateByte(odds.go), rateByte(odds.kick));
+        }
+      }
     }
   }
 
@@ -248,10 +268,10 @@ async function main(): Promise<void> {
     penalty.map((yards) => yards - YARD_OFFSET)));
 
   if (world.factors.matchup) {
-    for (const offence of teams) {
+    for (const offence of everyTeam) {
       const row: number[] = [];
 
-      for (const defence of teams) {
+      for (const defence of everyTeam) {
         for (const call of ["run", "pass"] as Call[]) {
           row.push(clampByte(
             world.factors.matchup(offence, defence, call) * 128));
@@ -262,13 +282,15 @@ async function main(): Promise<void> {
     }
   }
 
-  tables.league.teamOrder = teams;
+  tables.league.teamOrder = everyTeam;
 
-  for (const team of teams) {
-    const side = world.sideFor(team);
+  const tablesForTeam = (
+    from: Awaited<ReturnType<typeof buildWorld>>, team: string,
+  ) => {
+    const side = from.sideFor(team);
 
     if (!side) {
-      continue;
+      return null;
     }
 
     const men = side.among.filter((id, at) => side.among.indexOf(id) === at);
@@ -338,7 +360,7 @@ async function main(): Promise<void> {
       }
     }
 
-    tables.teams[team] = {
+    return {
       passer: side.passer ?? "",
       men: men.map((id) => ({
         id,
@@ -350,6 +372,43 @@ async function main(): Promise<void> {
       caught: asBytes(caught),
       gains,
     };
+  };
+
+  for (const team of teams) {
+    const built = tablesForTeam(world, team);
+
+    if (built) {
+      tables.teams[team] = built;
+    }
+  }
+
+  /**
+   * A side on its bye has no roster that week, so `buildWorld` never
+   * sees it and the live page would have nothing to play its next game
+   * with. It is built from the nearest week it did play instead.
+   */
+  for (const week of nearestWeeks(WEEK)) {
+    const short = everyTeam.filter((team) => !tables.teams[team]);
+
+    if (!short.length) {
+      break;
+    }
+
+    if (!short.some((team) => playedIn(week).has(team))) {
+      continue;
+    }
+
+    console.log(`week ${week} fills in ${short.join(", ")}`);
+    const fallback = await buildWorld(
+      SEASON, week, true, positions, { componentShares: true });
+
+    for (const team of short) {
+      const built = tablesForTeam(fallback, team);
+
+      if (built) {
+        tables.teams[team] = built;
+      }
+    }
   }
 
   const out = join("docs", "data", `sim-${SEASON}.json`);
