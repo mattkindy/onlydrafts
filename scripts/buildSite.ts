@@ -7,15 +7,29 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import {
   comingWeek, currentSeason, hasPlayerStats, loadGames, loadPlayerStats,
-  loadWeeklyRosters,
+  loadTeamDefenceWeeks, loadWeeklyRosters,
 } from "../src/data/nflverse.js";
-import type { PlayerWeekStats } from "../src/data/nflverse.js";
+import type { GameRow, PlayerWeekStats } from "../src/data/nflverse.js";
 import {
+  loadSleeperDefences,
   loadSleeperWeekly,
   projectionKey,
   sleeperPointsUnder,
+  type SleeperDefence,
   type SleeperProjection,
 } from "../src/data/sleeperProjections.js";
+import {
+  bracketOf,
+  DEFENCE_PARTS,
+  drawDefenceWeeks,
+  drawnQuantile,
+  payDefence,
+  projectDefenceWeek,
+  seedOfName as seedOf,
+  STANDARD_DEFENCE_PAYS,
+  TRAILING_WEEKS,
+  type Parts as DefenceTally,
+} from "../src/features/defenceWeek.js";
 import {
   weeklyExamplesForSeason,
   weeklyProspectiveForWeek,
@@ -206,13 +220,211 @@ function slateRow(
   };
 }
 
+type SlateRowShape = ReturnType<typeof slateRow>;
+
 interface Slate {
   season: number;
   week: number;
   preseason: boolean;
   /** what a catch paid when the rows were scored */
   perCatch: number;
-  players: ReturnType<typeof slateRow>[];
+  players: SlateRowShape[];
+}
+
+/** what the line expects a side to score where a fixture has no line */
+const IMPLIED_WITHOUT_A_LINE = 22.3;
+
+/** Sleeper ranks the early weeks better than our own line does */
+const SLEEPER_THROUGH_WEEK = 4;
+
+const DEFENCE_DRAWS = 2000;
+
+/** one defence's paid week, brackets and all */
+const paidDefenceWeek = (parts: DefenceTally, allowed: number) =>
+  payDefence(parts, STANDARD_DEFENCE_PAYS) +
+  (STANDARD_DEFENCE_PAYS[bracketOf(allowed)] ?? 0);
+
+/**
+ * Sleeper's defence week paid under our ladder. Its own total pays a
+ * return touchdown that we do not, so its parts are repaid where it
+ * published them, and its total is used where it did not.
+ */
+function sleeperDefencePaid(said: SleeperDefence | undefined) {
+  if (!said) {
+    return undefined;
+  }
+
+  if (said.pointsAllowed <= 0) {
+    return said.points;
+  }
+
+  return paidDefenceWeek(said.parts, said.pointsAllowed);
+}
+
+/** two defences from the slate, so a run can be read at a glance */
+function sayDefenceRows(rows: SlateRowShape[]): void {
+  for (const team of ["BUF", "LAC"]) {
+    const row = rows.find((r) => r.position === "DEF" && r.team === team);
+
+    if (!row) {
+      console.log(`  ${team} has no defence row`);
+      continue;
+    }
+
+    console.log(
+      `  ${row.name} ${row.opponent}: ours ${row.ours}, ` +
+      `sleeper ${row.sleeper}, blend ${row.average}, ` +
+      `floor ${row.floor}, q1 ${row.q1}, q3 ${row.q3}, ` +
+      `ceiling ${row.ceiling}`,
+    );
+  }
+}
+
+/**
+ * A defence's row in the slate, the same shape as a skill player's.
+ *
+ * `ours` is the weekly defence line: the defence's own recent weeks,
+ * the sacks the other side gives up and what the line expects that side
+ * to score. `sleeper` is Sleeper's parts paid under the same ladder.
+ * Through week four Sleeper ranks defences better than our line does,
+ * so the blend takes its number there and ours from week five, which is
+ * what the defence bench found.
+ *
+ * The floor and the ceiling come from drawing the week off the parts,
+ * the way the start/sit view draws the board's defence, rather than off
+ * the skill-position residuals, which know nothing about brackets.
+ */
+async function defenceSlateRows(
+  season: number, week: number, games: GameRow[],
+): Promise<SlateRowShape[]> {
+  const sleeperDefences = await loadSleeperDefences();
+  const played = (await loadTeamDefenceWeeks(season))
+    .filter((w) => w.week < week);
+  const lastSeason = await loadTeamDefenceWeeks(season - 1);
+  const allowed = new Map<string, number>();
+  const implied = new Map<string, number>();
+  const fixtures: { team: string; against: string; home: boolean }[] = [];
+
+  for (const g of games) {
+    const at = (team: string) => `${g.season}|${g.week}|${team}`;
+
+    if (g.homeScore !== undefined && g.awayScore !== undefined) {
+      allowed.set(at(g.homeTeamId), g.awayScore);
+      allowed.set(at(g.awayTeamId), g.homeScore);
+    }
+
+    if (g.totalLine !== undefined && g.spreadLine !== undefined) {
+      implied.set(at(g.homeTeamId), g.totalLine / 2 - g.spreadLine / 2);
+      implied.set(at(g.awayTeamId), g.totalLine / 2 + g.spreadLine / 2);
+    }
+
+    if (g.season === season && g.week === week) {
+      fixtures.push(
+        { team: g.homeTeamId, against: g.awayTeamId, home: true },
+        { team: g.awayTeamId, against: g.homeTeamId, home: false },
+      );
+    }
+  }
+
+  /** what each side has given up in sacks a game, this season or last */
+  const sacksAllowed = new Map<string, number>();
+  const tally = new Map<string, { sacks: number; games: number }>();
+
+  for (const w of played.length ? played : lastSeason) {
+    const so = tally.get(w.opponentId) ?? { sacks: 0, games: 0 };
+    so.sacks += w.parts["sack"] ?? 0;
+    so.games++;
+    tally.set(w.opponentId, so);
+  }
+
+  for (const [team, so] of tally) {
+    sacksAllowed.set(team, so.sacks / so.games);
+  }
+
+  /** each defence's own weeks, oldest first, and last season's average */
+  const ownWeeks = new Map<string, { paid: number; parts: DefenceTally }[]>();
+
+  for (const w of [...played].sort((a, b) => a.week - b.week)) {
+    const gave = allowed.get(`${season}|${w.week}|${w.teamId}`);
+
+    if (gave === undefined) {
+      continue;
+    }
+
+    ownWeeks.set(w.teamId, [
+      ...(ownWeeks.get(w.teamId) ?? []),
+      { paid: paidDefenceWeek(w.parts, gave), parts: w.parts },
+    ]);
+  }
+
+  const lastYear = new Map<string, number>();
+  const lastYearGames = new Map<string, { paid: number; games: number }>();
+
+  for (const w of lastSeason) {
+    const gave = allowed.get(`${season - 1}|${w.week}|${w.teamId}`);
+
+    if (gave === undefined) {
+      continue;
+    }
+
+    const so = lastYearGames.get(w.teamId) ?? { paid: 0, games: 0 };
+    so.paid += paidDefenceWeek(w.parts, gave);
+    so.games++;
+    lastYearGames.set(w.teamId, so);
+  }
+
+  for (const [team, so] of lastYearGames) {
+    lastYear.set(team, so.paid / so.games);
+  }
+
+  return fixtures.map(({ team, against, home }) => {
+    const own = (ownWeeks.get(team) ?? []).slice(-TRAILING_WEEKS);
+    const line = projectDefenceWeek({
+      ownPaid: (ownWeeks.get(team) ?? []).map((w) => w.paid),
+      lastYearPaid: lastYear.get(team) ?? 7,
+      ownParts: Object.fromEntries(DEFENCE_PARTS.map((part) => [
+        part,
+        own.reduce((sum, w) => sum + (w.parts[part] ?? 0), 0) /
+          Math.max(1, own.length),
+      ])),
+      ownGames: own.length,
+      oppSacksAllowed: sacksAllowed.get(against) ?? 2.37,
+      impliedAgainst: implied.get(`${season}|${week}|${team}`) ??
+        IMPLIED_WITHOUT_A_LINE,
+    });
+    const sleeper = sleeperDefencePaid(
+      sleeperDefences.get(projectionKey(season, week, team)),
+    );
+    const average = week <= SLEEPER_THROUGH_WEEK && sleeper !== undefined
+      ? sleeper
+      : line.paid;
+    // the spread comes off our parts either way, centred on the blend
+    const shift = average - line.paid;
+    const weeks = drawDefenceWeeks(
+      line.parts, STANDARD_DEFENCE_PAYS, seedOf(team), DEFENCE_DRAWS,
+    ).map((n) => n + shift);
+    const at = (q: number) => Number(drawnQuantile(weeks, q).toFixed(1));
+
+    return {
+      name: team,
+      key: normalizeName(team),
+      position: "DEF",
+      team,
+      opponent: (home ? "v " : "@ ") + against,
+      ours: Number(line.paid.toFixed(1)),
+      sleeper: sleeper === undefined ? null : Number(sleeper.toFixed(1)),
+      average: Number(average.toFixed(1)),
+      floor: at(0.1),
+      ceiling: at(0.9),
+      q1: at(0.25),
+      q3: at(0.75),
+      catches: 0,
+      snaps: 100,
+      questionable: false,
+      gamesMissed: 0,
+      absenceShare: 0,
+    };
+  });
 }
 
 /** what the slate file says about itself, or nothing if it is unreadable */
@@ -654,7 +866,7 @@ async function main(): Promise<void> {
     console.log(`  the walk played ${walked.played} fixtures of week ${week}`);
 
     const histories = earlyHistories.get(week) ?? new Map<string, History>();
-    const rows = (await weeklyProspectiveForWeek(season, week, games))
+    const players = (await weeklyProspectiveForWeek(season, week, games))
       .map((e) =>
         slateRow(
           residuals,
@@ -667,8 +879,11 @@ async function main(): Promise<void> {
             priors,
           ),
           projections.get(projectionKey(season, week, e.playerId)),
-        ))
-      .sort((a, b) => b.average - a.average);
+        ));
+    const rows = [
+      ...players,
+      ...(await defenceSlateRows(season, week, games)),
+    ].sort((a, b) => b.average - a.average);
 
     await writeSlate(
       join(DOCS, "data", `slate-${season}-${week}.json`),
@@ -677,6 +892,7 @@ async function main(): Promise<void> {
         players: rows,
       },
     );
+    sayDefenceRows(rows);
     index.push({ season, week });
   }
 
@@ -1121,7 +1337,7 @@ async function main(): Promise<void> {
   if (weeks.length === 0) {
     const week = asked[0]!;
     const saidExamples = preseasonWeeklyExamples(saidInput);
-    const rows = world.players
+    const players = world.players
       .filter((p) => ["QB", "RB", "WR", "TE"].includes(p.position))
       .flatMap((p) => {
         const row = saidExamples.get(p.playerId)?.find((e) => e.week === week);
@@ -1138,8 +1354,11 @@ async function main(): Promise<void> {
           ours,
           projections.get(projectionKey(season, week, p.playerId)),
         )];
-      })
-      .sort((a, b) => b.average - a.average);
+      });
+    const rows = [
+      ...players,
+      ...(await defenceSlateRows(season, week, games)),
+    ].sort((a, b) => b.average - a.average);
 
     await writeSlate(
       join(DOCS, "data", `slate-${season}-${week}.json`),
@@ -1148,6 +1367,7 @@ async function main(): Promise<void> {
         players: rows,
       },
     );
+    sayDefenceRows(rows);
     index.push({ season, week });
   }
 
@@ -1328,7 +1548,9 @@ async function main(): Promise<void> {
     };
     add("sack", num(row, "def_sacks"));
     add("int", num(row, "def_interceptions"));
-    add("fum_rec", num(row, "def_fumbles"));
+    // def_fumbles is a defender losing his own, a tenth of a game. What
+    // a defence is paid for is recovering the other side's.
+    add("fum_rec", num(row, "fumble_recovery_opp"));
     add("def_td", num(row, "def_tds"));
     add("safe", num(row, "def_safeties"));
     add("blk_kick",

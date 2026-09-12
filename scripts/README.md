@@ -693,3 +693,75 @@ the kicker where the staff would have gone for it. The remaining 0.65
 is worth another look: with the per-man bias at -0.05, whatever is
 still generous is not reaching anybody's fantasy line, which points at
 the kicks rather than the gains.
+
+## A defence gets a week of its own
+
+The board projected a defence by dividing last season's box score by
+seventeen, so every week said the same thing whatever the fixture. That
+orders defences within a week no better than chance.
+
+`scripts/defenceWeekEval.ts` scores each candidate against the actual
+paid week over all 1088 defence weeks of 2024 and 2025 that Sleeper has
+a projection for. Which defence to start is a question about the order
+inside one week, so the number to read is the mean Spearman within a
+week, with the mean absolute error and the bias beside it.
+
+```
+every week            MAE   bias   rank corr
+  ours (the board)    4.32   0.54    0.065
+  sleeper (pts_std)   4.08   0.79    0.314
+  sleeper's parts     3.91   0.23    0.319
+  rival               3.85  -0.12    0.341
+  rival + sleeper     3.86   0.06    0.350
+  what ships          3.84   0.06    0.357
+  perfect             0.00   0.00    1.000
+  constant            4.09  -0.00    0.000
+
+weeks 1 to 4          MAE   bias   rank corr
+  ours (the board)    4.02   0.45    0.167
+  sleeper's parts     3.91   0.32    0.249
+  rival               3.90  -0.13    0.198
+  what ships          3.91   0.32    0.249
+
+weeks 5 on            MAE   bias   rank corr
+  ours (the board)    4.42   0.57    0.035
+  sleeper's parts     3.91   0.20    0.339
+  rival               3.84  -0.12    0.382
+  what ships          3.82  -0.02    0.388
+```
+
+Nothing beats a flat constant by much on the error, which is how noisy
+a defence week is. The ordering is where the difference is: the board
+reads 0.035 from week 5 on, and the new line reads 0.388.
+
+The rival is a four weight fit: the defence's own last six paid weeks,
+the sacks the other side gives up a game, and what the betting line
+expects that side to score. The opponent's giveaways were in it and
+came out, because the weight would not settle (-0.58 fitting on 2025,
++0.59 fitting on 2024) and dropping it cost nothing. Fitted on one
+season and scored on the other, both ways round.
+
+So `src/features/defenceWeek.ts` ships the fit, on 2024 and 2025
+together, and hands the week back as parts: a rate per event and a
+chance of each points-allowed bracket, which a league pays under its
+own ladder the way it pays the board. The points allowed come off the
+line (-2.61 + 1.146 x the implied total, spread 8.9) and the counting
+rates are the defence's own shrunk toward the league, then scaled so
+the parts pay what the fit said.
+
+Sleeper ranks the early weeks better, 0.249 against 0.202, because the
+rival has no weeks of its own to read yet. So the slate's blend takes
+Sleeper's number through week 4 and ours from week 5.
+
+Sleeper's own `pts_std` runs 0.56 above its parts paid under our
+ladder, because it pays a kick or punt return touchdown that a defence
+ladder does not. Repaying its parts is both closer to our truth and
+better ordered, so that is what the slate compares against.
+
+One correctness fix came out of this. A defence's fumble recoveries
+were read from `def_fumbles`, which is a defender losing one of his
+own, about a tenth of a game. The recovery is `fumble_recovery_opp`, at
+about 0.47 a game, so every actual defence week was a point and a half
+light and the board's line with it. That is fixed in the board and in
+this bench. `defenceForecastEval.ts` and `defenceMatchupEval.ts` still
+read the old column.
