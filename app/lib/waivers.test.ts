@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { addsFor, dropsFor } from "./waivers.ts";
+import { addsFor, capacityOf, dropsFor, netFor, openSpotsFor } from "./waivers.ts";
 import { weeksOf } from "./winShare.ts";
 import type { Player } from "./scoring.ts";
 
@@ -59,6 +59,41 @@ describe("adding a man off the wire", () => {
     expect(good.added).toBeGreaterThan(poor.added);
     expect(adds[0]!.p.key).toBe("goodK");
     expect(good.starts).toBeGreaterThan(0.9);
+  });
+});
+
+describe("how many men a roster can carry", () => {
+  it("counts the bench and leaves out injured reserve and taxi", () => {
+    const full = [...SLOTS, "BN", "BN", "BN", "IR", "TAXI"];
+
+    expect(capacityOf(full)).toBe(SLOTS.length + 3);
+    expect(openSpotsFor(full, SLOTS.length + 1)).toBe(2);
+    expect(openSpotsFor(full, 99)).toBe(0);
+    expect(capacityOf(null)).toBe(null);
+    expect(openSpotsFor(null, 4)).toBe(null);
+  });
+});
+
+describe("what a pickup is worth once it is paid for", () => {
+  it("costs nobody when there is a spot open", () => {
+    const roster = aRoster();
+    const room = aRoom();
+    const [add] = addsFor(roster, [aMan("goodK", "K", 11)], SLOTS, room);
+    const paid = netFor(roster, add!, SLOTS, room, 2);
+
+    expect(paid.drop).toBe(null);
+    expect(paid.net).toBe(add!.added);
+  });
+
+  it("drops the man who costs least, never the man being added", () => {
+    const roster = [...aRoster(), aMan("rb5", "RB", 4)];
+    const room = aRoom();
+    const [add] = addsFor(roster, [aMan("goodK", "K", 11)], SLOTS, room);
+    const paid = netFor(roster, add!, SLOTS, room, 0);
+
+    expect(paid.drop?.key).toBe("rb5");
+    expect(paid.net).toBeGreaterThan(0);
+    expect(paid.net).toBeLessThanOrEqual(add!.added);
   });
 });
 
