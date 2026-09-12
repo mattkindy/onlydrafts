@@ -347,3 +347,39 @@ the usage input until that bias is fixed. And splitting the residual
 model into 10 or 20 buckets instead of 5 moves the Brier by 0.0004: it
 does widen the top of the band, a back projected for 22 going from a
 21.6-point eighty to 24.9, but nothing downstream notices.
+
+## Playing out the rest of a game that is under way
+
+The live pages price what a man still has to come by taking his whole
+week line and multiplying it by the fraction of the game left, and then
+the copula posterior pulls that toward what he has already done. Neither
+of them knows the score, the clock or who has the ball. The game engine
+does, now that `playGame` takes a starting state, so the third way to
+answer the question is to play the rest of the game out snap by snap and
+add up what each man gets.
+
+`scripts/aggregateCheckpoints.ts` stops every played game at six snaps
+and writes them to `data/curated/checkpoints-<season>.csv`: the end of
+each of the first three quarters, the middle of the second quarter, the
+first third down of the second quarter, and the first snap inside the
+twenty in the third. Each one gives the state the engine takes over
+from, what each man had scored by then, and what the rest of the game
+gave him, all in PPR. 2024 gives 1595 of them over 272 games and
+2025 gives 1602.
+
+`scripts/liveRemainderEval.ts` scores the three ways against that, by
+position and by checkpoint, for weeks 3, 6, 9, 12 and 15 of 2024 and
+2025. It also scores the two sides' remaining points on their own, which
+is the check on whether the engine is right about the game at all before
+anybody argues about a receiver, and it pairs random lineups off the
+week's pool to get a Brier score and an implied against realised spread,
+each man's draws being what he has plus what the variant says is left.
+The sim ships if it wins on error at every position at half time and at
+the end of the third quarter and stays level with them on the Brier
+score and the spread.
+
+The bench is written and its pieces are tested, and the numbers are not
+in yet: one week of one season with 40 runs a checkpoint had not finished
+after fourteen minutes, and almost all of that is the weekly fit and
+`buildWorld` rather than the simulation, so a sharded run has to be timed
+before the tables can be filled in.
