@@ -68,6 +68,38 @@ it("the shipped files load and score end to end", async () => {
 });
 
 /**
+ * A defence is in the week's slate like anyone else, and the start/sit
+ * view has to find it by the key it keys a defence with, which is the
+ * side's abbreviation in lower case.
+ */
+it("puts a defence in the slate the views can find", async () => {
+  const { readSlate } = await import("./lib/slate.ts");
+  const { lineOf } = await import("./lib/matchups.ts");
+  const file = JSON.parse(
+    readFileSync(join(DATA, "slate-2026-1.json"), "utf8"),
+  );
+  const slate = readSlate(file);
+  const defences = slate.rows.filter((r) => r.position === "DEF");
+
+  expect(defences.length).toBeGreaterThan(20);
+
+  for (const d of defences) {
+    expect(d.blend, `${d.name} blend ${d.blend}`).toBeGreaterThan(1);
+    expect(d.blend, `${d.name} blend ${d.blend}`).toBeLessThan(16);
+    expect(d.floor).toBeLessThan(d.blend);
+    expect(d.ceiling).toBeGreaterThan(d.blend);
+    expect(d.opponent, d.name).not.toBe("");
+  }
+
+  const rows = new Map(slate.rows.map((r) => [r.playerId, r]));
+  const buffalo = lineOf("buf", rows);
+
+  expect(buffalo?.position).toBe("DEF");
+  expect(buffalo?.team).toBe("BUF");
+  expect(buffalo?.blend).toBeGreaterThan(1);
+});
+
+/**
  * The big number on a card is the middle of his spread, and his value
  * is worked out from what he scores. If those are not the same number
  * the card argues with itself, which is how one man read 19.8 a game

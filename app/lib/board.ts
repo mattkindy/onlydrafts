@@ -174,7 +174,19 @@ export function rescore(
       : null;
 
     if (drawn) {
-      const moved = drawn.ev > 0 ? (p.ppg ?? 0) / drawn.ev : 0;
+      /**
+       * A league paying almost nothing for a defence draws it a middle
+       * week of about nothing, and scaling from that runs away the same
+       * way it does for a man at a tenth of a point, so the guards below
+       * apply here too.
+       */
+      if (drawn.ev <= 0.5 || runsAway({ ...drawn })) {
+        p.game = null;
+        p.sim = null;
+        continue;
+      }
+
+      const moved = (p.ppg ?? 0) / drawn.ev;
       p.game = scaled({ ...drawn }, moved, 1);
       p.sim = { ...scaled({ ...drawn }, moved * 17, 0), games: 17 };
       continue;
