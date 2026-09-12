@@ -458,10 +458,111 @@ refitting to about 1.05 rather than keeping 1.2, and at quarterback it
 is still doing work: the runs cover 67.2% where his weeks are 8.9 wide
 against the runs' 7.45.
 
-Two things this pass did not do. The per-man rate reconciliation above
-is unmeasured, and so is the pass-catcher fallback, which the top of
-this file says has to land with the sacks in the same change. And
-`scripts/matchupCalibration.ts` was left alone: a lineup there needs all
+The per-man rate reconciliation and the pass-catcher fallback both have
+numbers now, in the next section. `scripts/matchupCalibration.ts` was
+left alone: a lineup there needs all
 seven men drawn, the walk has only played the odd weeks, and a Brier
 over the subset of lineups where every seat has simulator runs cannot be
 read against the 0.2112 the shipped bench reports.
+
+## Reconciling the rates, and the fallback with the sacks
+
+Two more walks, each played over the same odd weeks of 2024 and 2025 and
+each written to its own file.
+
+`VARIANT=component-rates` keeps the trailing shares and adds the per-man
+rates. Every man gets one multiplier per call, his shrunk yards per
+target over what his position averages, likewise per carry, likewise for
+his touchdowns, and a quarterback gets the same per attempt he throws.
+The pooled draw's level term is replaced by it outright, since both say
+how good a man is at this. His own sampled plays get the smaller
+correction of his history against what those plays already say. The
+touchdown multiplier moves a drawn gain onto the goal line, or off it,
+inside the twenty.
+
+`VARIANT=component-full` adds the two the top of this file asks for
+together: the sacks and the throwaways go into the depth pools the
+pooled draw samples, and a man too thin to sample borrows the plays of
+the busy men on his own side before he falls back to the crowd.
+
+Targets and carries, mae per man per week:
+
+```
+  candidate                         QB tgt/car      RB tgt/car      WR tgt/car      TE tgt/car
+  (a) component                      0.02/1.86       1.22/3.32       1.89/0.21       1.56/0.07
+  sim, component shares              0.03/1.95       1.29/3.61       2.09/0.22       1.85/0.09
+  sim, component-rates               0.03/1.93       1.29/3.58       2.12/0.22       1.86/0.09
+  sim, component-full                0.03/1.95       1.29/3.59       2.10/0.22       1.86/0.09
+```
+
+Points, over the weeks the walk has played:
+
+```
+  candidate                          QB wk1-4       RB wk1-4       WR wk1-4       TE wk1-4      QB wk5-17      RB wk5-17      WR wk5-17      TE wk5-17
+  (a) component                    5.52/+0.70     4.66/-0.07     4.97/-0.19     4.10/-0.12     6.79/-0.85     4.63/+0.12     5.06/+0.18     4.52/-0.81
+  sleeper                          6.55/+3.74     4.27/-0.07     4.86/-0.36     3.63/-0.36     6.85/+2.27     4.44/-0.04     4.89/-0.09     4.42/-1.30
+  sim, component shares            5.65/+0.16     4.70/-1.06     5.26/-0.45     3.78/-0.37     6.89/-1.31     4.70/-1.18     5.16/-0.39     4.72/-1.13
+  sim, component-rates             5.59/+0.11     4.67/-1.03     5.26/-0.44     3.87/-0.32     6.87/-1.30     4.71/-1.13     5.21/-0.46     4.70/-1.12
+  sim, component-full              5.69/+0.16     4.70/-1.03     5.28/-0.45     3.85/-0.37     6.88/-1.28     4.70/-1.12     5.18/-0.44     4.76/-1.14
+  sim, component-rates: points     6.69/+1.45     4.65/-1.15     5.40/-1.20     3.92/-0.86     7.99/+0.36     4.78/-1.07     5.46/-0.88     4.83/-1.68
+  sim, component-full: points      7.02/+1.40     4.81/-1.08     5.48/-1.19     3.88/-0.95     8.03/-0.11     4.81/-1.11     5.37/-1.02     4.87/-1.80
+```
+
+The run spread:
+
+```
+                component walk              component-rates            component-full
+            run sd  week sd  cov  1.2   run sd  week sd  cov  1.2   run sd  week sd  cov  1.2
+  QB          7.45     8.90 67.2 77.1     7.41     9.86 63.3 71.3     7.33     9.89 60.8 72.0
+  RB          5.59     6.42 75.5 84.3     5.57     6.55 74.8 83.1     5.50     6.61 74.1 82.6
+  WR          6.05     7.12 77.6 83.2     6.15     7.32 76.6 82.7     6.10     7.27 77.2 82.9
+  TE          4.94     6.28 79.1 83.9     4.94     6.41 76.4 81.5     4.91     6.48 75.2 80.4
+```
+
+## Reading it
+
+Neither one works. The gate was to beat `(a) component` at every
+position in both splits, and no position is won in either split by
+either walk: the touches still miss a back's carries by 3.58 against the
+component line's 3.32 and a receiver's targets by 2.12 against 1.89, and
+the points lose everywhere except tight end early, which the trailing
+shares already won.
+
+The rates were meant to take the low bias off back and tight end, and
+they do not. A back's bias goes from -1.06 to -1.03 in weeks 1 to 4 and
+from -1.18 to -1.13 from week 5, which is a twentieth of a point where
+the gap to the component line is a point. So the bias is not in the
+per-touch rates. Sharper shares hand a busy man more work and the work
+itself is short; reconciling what he makes of a touch against his own
+history does not lengthen it, because his history is measured over the
+same short plays. The shortfall the top of this file works out, a
+targeted play needing 15 to 25% more near the goal, is the thing to fix,
+and it lives in how the sampled draw is conditioned rather than in any
+per-man number.
+
+Where the rates do bite is the walk's own points, and they bite the
+wrong way: a quarterback's error goes from 5.90 to 6.69 early and from
+7.28 to 7.99 from week 5. His passing yards are his receivers' catches,
+so a throw is now multiplied twice, once for the receiver and once for
+the passer, and the two compound. One multiplier per throw is what that
+says, and the passer is the one to keep.
+
+Putting the sacks in the depth pools and giving a thin man the busy
+men's plays moves almost nothing, 2.10 receiver targets against 2.12 and
+a bias inside a hundredth. The fallback was already much smaller than
+the 20.5% at the top of this file: restricting `among` to the men with
+trailing usage had taken most of it out, so there was little left for
+the stand-in pool to catch, and the sacks on the pooled path arrive
+where the sampled path already had them.
+
+The runs get worse as a fit. `week sd` rises at every position on both
+walks, a back's from 6.42 to 6.61 and a quarterback's from 8.90 to 9.89,
+and coverage falls with it. So the reconciliation moves men further from
+where their weeks land.
+
+`DEALT_WIDER` stays at 1.2. The case for refitting it to about 1.05 was
+read off the component walk, where the raw runs covered 75 to 79% on
+their own. On these two they cover 61 to 77%, and with the 1.2 stretch
+they come to 80.4% at tight end and 82.9% at receiver, which is close
+enough to the target that the stretch is doing work again. Since neither
+walk should ship, nothing downstream changes.
