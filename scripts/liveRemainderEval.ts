@@ -416,6 +416,11 @@ async function main(): Promise<void> {
   if (!asShare) {
     const printed = await acrossCores({
       script: import.meta.filename,
+      /**
+       * Each share fits a whole world of its own, so a machine short
+       * of memory wants fewer shares than it has cores.
+       */
+      shares: Number(process.env["SHARES_WANTED"] ?? 0) || undefined,
       env: {
         RUNS: String(RUNS), LINEUPS: String(LINEUPS),
         SEASONS_ARG: SEASONS.join(","), WEEKS_ARG: WEEKS.join(","),
