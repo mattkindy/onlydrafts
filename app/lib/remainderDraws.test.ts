@@ -5,8 +5,8 @@
  * decision and it is worth pinning down.
  */
 
-import { describe, expect, it } from "vitest";
-import { gamesToPlay, pastHalfTime } from "./remainderDraws.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { gamesToPlay, pastHalfTime, simTablesFor } from "./remainderDraws.ts";
 import type { LiveSituation } from "./matchups.ts";
 
 const at = (secondsLeft: number): LiveSituation => ({
@@ -50,5 +50,30 @@ describe("which games are played out", () => {
     const games = gamesToPlay(new Map([["NE", here], ["KC", there]]));
 
     expect(games[0]!.seed).not.toBe(games[1]!.seed);
+  });
+});
+
+describe("finding a season's tables", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("takes last season's when this season has none", async () => {
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", (url: string) => {
+      asked.push(url);
+
+      return Promise.resolve({
+        ok: url.includes("2098"),
+        json: () => Promise.resolve({ season: 2098 }),
+      });
+    });
+
+    expect(await simTablesFor(2099)).toEqual({ season: 2098 });
+    expect(asked).toEqual(["data/sim-2099.json", "data/sim-2098.json"]);
+  });
+
+  it("gives up rather than reaching back further", async () => {
+    vi.stubGlobal("fetch", () => Promise.resolve({ ok: false }));
+
+    expect(await simTablesFor(2097)).toBe(null);
   });
 });
