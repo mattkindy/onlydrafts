@@ -432,7 +432,7 @@ function printDriveCheckReport(
  * own slice is a small sample) and repeat itself eight times over.
  */
 async function fanOutForChecks(): Promise<void> {
-  const shares = Math.min(8, roomFor());
+  const shares = Number(process.env["SHARES_WANTED"]) || Math.min(8, roomFor());
   const printed = await acrossCores({
     script: import.meta.filename,
     shares,
