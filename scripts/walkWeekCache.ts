@@ -37,6 +37,16 @@ const RUNS = Number(process.env["RUNS"] ?? 40);
  */
 const VARIANT = process.env["VARIANT"] ?? "";
 const componentShares = VARIANT.includes("component");
+/**
+ * `component-rates` adds the per-man reconciliation on top of the shares,
+ * and `component-full` adds the pass-catcher fallback and the sacks. The
+ * sacks come in through `POOL_WASTE`, which fitPlayFactors reads off the
+ * environment once, so a share gets it when it is spawned rather than
+ * from an option.
+ */
+const componentRates = VARIANT.includes("rates") || VARIANT.includes("full");
+const standIn = VARIANT.includes("full");
+const poolWaste: Record<string, string> = standIn ? { POOL_WASTE: "1" } : {};
 const outPath = VARIANT ? walkWeeklyPathFor(VARIANT) : WALK_WEEKLY_PATH;
 const RULES = presets.ppr;
 const POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -79,6 +89,8 @@ async function oneWeek(season: number, week: number): Promise<WalkWeekRow[]> {
 
   const world = await buildWorld(season, week, true, positions, {
     componentShares,
+    componentRates,
+    standIn,
   });
   const walked = walkWeek(world, season, week, games, RULES, RUNS);
   const rows: WalkWeekRow[] = [];
@@ -129,6 +141,7 @@ if (asShare) {
       SEASONS: seasons.join(","),
       WEEKS: weeks.join(","),
       VARIANT,
+      ...poolWaste,
     },
   });
   const all: WalkWeekRow[] = [];
