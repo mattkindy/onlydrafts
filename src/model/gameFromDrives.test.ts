@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EndingRules } from "./driveFromFactors.js";
-import { onTheDay } from "./driveFromFactors.js";
+import { onTheDay, walkDrive } from "./driveFromFactors.js";
+import { GAME_DEFAULTS, playGame } from "./gameFromDrives.js";
+import type { GameStart } from "./gameFromDrives.js";
 import type { PlayClock } from "../features/fitPlayClock.js";
 import type { FourthDown } from "../features/fitFourthDown.js";
 import type { PlayFactors } from "./playFactors.js";
@@ -195,5 +197,87 @@ describe("the width of a side's day", () => {
     expect(mean).toBeCloseTo(1, 1);
     expect(spread).toBeGreaterThan(0.17);
     expect(spread).toBeLessThan(0.24);
+  });
+});
+
+describe("a game picked up part way through", () => {
+  const home = sideOf("HOME", ["Abe", "Bob", "Cal"]);
+  const away = sideOf("AWAY", ["Dan", "Eli", "Fay"]);
+  const gameRules = {
+    rules, fourth, clock: { isLast: 0, lastLength: () => 12 }, ticking,
+  };
+  const played = (from?: GameStart) =>
+    playGame(home, away, gameRules, seededRng(7), { ...GAME_DEFAULTS, from });
+
+  it("plays the same game when the state given is the kickoff", () => {
+    const seeded = played({
+      points: { HOME: 0, AWAY: 0 },
+      secondsLeft: GAME_DEFAULTS.length,
+      timeouts: { HOME: 3, AWAY: 3 },
+      warningLeft: true,
+      secondHalf: false,
+    });
+
+    expect(seeded).toEqual(played());
+  });
+
+  it("takes the scoreboard, the ball and the clock it is handed", () => {
+    const game = played({
+      points: { HOME: 17, AWAY: 10 },
+      secondsLeft: 900,
+      withBall: "AWAY",
+      yardline: 63,
+      timeouts: { HOME: 2, AWAY: 1 },
+      warningLeft: true,
+      secondHalf: true,
+    });
+
+    expect(game.possessions[0]?.team).toBe("AWAY");
+    expect(game.possessions[0]?.startedAt).toBe(63);
+    expect(game.possessions[0]?.margin).toBe(-7);
+    expect(game.points["HOME"]).toBeGreaterThanOrEqual(17);
+    expect(game.points["AWAY"]).toBeGreaterThanOrEqual(10);
+  });
+
+  it("gives the leader the game with a second left", () => {
+    const game = played({
+      points: { HOME: 24, AWAY: 20 },
+      secondsLeft: 1,
+      withBall: "HOME",
+      yardline: 70,
+      timeouts: { HOME: 3, AWAY: 0 },
+      warningLeft: false,
+      secondHalf: true,
+    });
+
+    expect(game.possessions).toHaveLength(0);
+    expect(game.points).toEqual({ HOME: 24, AWAY: 20 });
+  });
+});
+
+describe("a drive picked up part way through", () => {
+  /** nobody gains anything, so the down is all that ends the drive */
+  const stuck: PlayFactors = { ...factors, gains: () => 0 };
+  const punts: FourthDown = {
+    chances: () => ({ go: 0, kick: 0, punt: 1 }), choose: () => "punt",
+  };
+  const clock = { isLast: 0, lastLength: () => 12 };
+  const from = (down: number, toGo: number) =>
+    walkDrive(
+      43, stuck, rules, punts, ["Abe"], seededRng(3), clock,
+      { offence: "HOME", defence: "AWAY" }, ticking,
+      { yardline: 43, margin: 0, secondsLeft: 1200, down, toGo },
+    );
+
+  it("has one snap left when it starts on third down", () => {
+    expect(from(3, 7).plays).toHaveLength(1);
+    expect(from(1, 10).plays).toHaveLength(3);
+  });
+
+  it("punts straight away when it starts on fourth down", () => {
+    const drive = from(4, 7);
+
+    expect(drive.plays).toHaveLength(0);
+    expect(drive.ending).toBe("punt");
   });
 });

@@ -166,6 +166,9 @@ export interface Opening {
   /** this side's lead, since it moves what gets called */
   margin: number;
   secondsLeft: number;
+  /** the down and distance, when the drive is picked up part way through */
+  down?: number;
+  toGo?: number;
 }
 
 /** the seconds inside which a side kicks whatever the down */
@@ -259,7 +262,11 @@ export function walkDrive(
 ): FactorDrive {
   const plays: FactorPlay[] = [];
   const state: PlayState = {
-    down: 1, toGo: 10, yardline: opening.yardline,
+    down: opening.down ?? 1,
+    toGo: opening.toGo === undefined
+      ? 10
+      : Math.min(opening.toGo, opening.yardline),
+    yardline: opening.yardline,
     margin: opening.margin, secondsLeft: opening.secondsLeft,
   };
   let took = 0;

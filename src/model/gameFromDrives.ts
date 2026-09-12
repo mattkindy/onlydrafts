@@ -78,6 +78,47 @@ export interface GameSettings {
    * apart from everything else.
    */
   startsAt?: (uniform: () => number) => number;
+  /**
+   * The score, the clock and the ball part way through a game, so the
+   * walk can play out the rest of one. Without it every game opens nil
+   * apiece with a coin flip.
+   */
+  from?: GameStart;
+}
+
+/**
+ * A game in progress, as the walk needs to see it to take over.
+ *
+ * Every field the opening used to fix is here, so a caller can hand
+ * over a scoreboard, a clock and a ball. The coin flip and the opening
+ * kickoff are still drawn whether or not this is given, so a state
+ * that leaves `withBall` and `yardline` out plays the same game the
+ * walk would have played on its own.
+ */
+export interface GameStart {
+  /** the scoreboard, by team */
+  points: Record<string, number>;
+  secondsLeft: number;
+  /** the team with the ball, or the coin flip's answer when left out */
+  withBall?: string;
+  /** yards to the goal, or the opening kickoff's spot when left out */
+  yardline?: number;
+  down?: number;
+  toGo?: number;
+  timeouts: Record<string, number>;
+  warningLeft: boolean;
+  secondHalf: boolean;
+  /**
+   * Who took the opening kickoff, since the other side receives to
+   * start the second half. Without it the flip decides, which is only
+   * right for a state that has not reached half time.
+   */
+  receivedFirst?: string;
+  /**
+   * Set when the state is a side about to kick off rather than a side
+   * with the ball on a yard line, so the spot is drawn.
+   */
+  kickoffPending?: boolean;
 }
 
 export const GAME_DEFAULTS: GameSettings = {
@@ -261,7 +302,11 @@ export function playGame(
     away.factors.startsGame?.(uniform);
   }
 
-  const points: Record<string, number> = { [home.team]: 0, [away.team]: 0 };
+  const from = settings.from;
+  const points: Record<string, number> = from
+    ? { [home.team]: from.points[home.team] ?? 0,
+        [away.team]: from.points[away.team] ?? 0 }
+    : { [home.team]: 0, [away.team]: 0 };
   const drives: Record<string, number> = { [home.team]: 0, [away.team]: 0 };
   const possessions: Possession[] = [];
   /**
@@ -275,14 +320,30 @@ export function playGame(
       ? settings.kickoffAt(uniform)
       : uniform() < 0.62 ? 70 : Math.round(60 + uniform() * 20);
 
-  const receivedFirst = uniform() < 0.5 ? home : away;
-  let withBall = receivedFirst === home ? away : home;
+  // the flip and the opening kickoff are drawn either way, so a seeded
+  // state plays the same game out of the same stream of draws
+  const flipped = uniform() < 0.5 ? home : away;
+  const receivedFirst = from?.receivedFirst
+    ? (from.receivedFirst === home.team ? home : away)
+    : flipped;
+  const kickedOpeningTo = kickedTo();
+  const sideNamed = (team: string) => (team === home.team ? home : away);
+  let withBall = from?.withBall
+    ? sideNamed(from.withBall)
+    : (flipped === home ? away : home);
   let against = withBall === home ? away : home;
-  let startAt = kickedTo();
-  let secondsLeft = settings.length;
-  const timeouts: Record<string, number> = { [home.team]: 3, [away.team]: 3 };
-  let warningLeft = true;
-  let secondHalf = false;
+  let startAt = from?.kickoffPending
+    ? kickedTo()
+    : from?.yardline ?? kickedOpeningTo;
+  let firstDown = from?.kickoffPending ? undefined : from?.down;
+  let firstToGo = from?.kickoffPending ? undefined : from?.toGo;
+  let secondsLeft = from?.secondsLeft ?? settings.length;
+  const timeouts: Record<string, number> = from
+    ? { [home.team]: from.timeouts[home.team] ?? 3,
+        [away.team]: from.timeouts[away.team] ?? 3 }
+    : { [home.team]: 3, [away.team]: 3 };
+  let warningLeft = from ? from.warningLeft : true;
+  let secondHalf = from ? from.secondHalf : false;
 
   while (secondsLeft > 0 && possessions.length < settings.mostDrives) {
     // half time: the clock resets and the other side receives
@@ -294,6 +355,8 @@ export function playGame(
       timeouts[home.team] = 3;
       timeouts[away.team] = 3;
       warningLeft = true;
+      firstDown = undefined;
+      firstToGo = undefined;
     }
 
     if (settings.startsAt) {
@@ -320,7 +383,12 @@ export function playGame(
 
     const opening: Opening = settings.frozen
       ? { yardline: startAt, margin: 0, secondsLeft: 1800 }
-      : { yardline: startAt, margin, secondsLeft };
+      : {
+          yardline: startAt, margin, secondsLeft,
+          down: firstDown, toGo: firstToGo,
+        };
+    firstDown = undefined;
+    firstToGo = undefined;
     const itsOwnDrives = withBall.drives
       ? { ...rules.rules, ...withBall.drives }
       : rules.rules;
