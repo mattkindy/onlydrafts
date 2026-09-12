@@ -10,7 +10,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { leagueOf, remainderFor, type RemainderState } from "./remainder.ts";
-import type { SimTables } from "./simTables.ts";
+import {
+  DIST_BANDS, MARGIN_BANDS, TIME_BANDS, type SimTables,
+} from "./simTables.ts";
 
 const PATH = "docs/data/sim-2025.json";
 const PPR = {
@@ -41,6 +43,16 @@ describe.skipIf(!existsSync(PATH))("the rest of a game, played in the browser", 
     timeouts: { [home]: 3, [away]: 3 },
     warningLeft: true, secondHalf: true,
   };
+
+  /**
+   * A table built against an older layout reads short, and the engine
+   * would take the missing bytes for a zero and punt every fourth down
+   * without saying so. The shape is checked instead.
+   */
+  it("ships a fourth down table the engine's indexing fits", () => {
+    expect(league.fourth.length)
+      .toBe(99 * DIST_BANDS * MARGIN_BANDS * TIME_BANDS * 2);
+  });
 
   it("gives a half's worth of points to each side", () => {
     const played = remainderFor(tables, league, atHalf, 400, PPR, 11)!;

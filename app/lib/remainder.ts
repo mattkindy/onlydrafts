@@ -254,12 +254,18 @@ const turnoverAt = (
   return (league.turnover[at] ?? 25) / 2550;
 };
 
-/** go, kick or punt on fourth down, drawn off the league's choices */
+/**
+ * Go, kick or punt on fourth down. The score and the clock move this a
+ * long way: a side behind in the fourth goes for it where the same side
+ * level in the first would punt.
+ */
 function fourthChoice(
-  league: LeagueTables, yardline: number, toGo: number, uniform: () => number,
+  league: LeagueTables, yardline: number, toGo: number, margin: number,
+  secondsLeft: number, uniform: () => number,
 ): number {
-  const at = ((Math.max(1, Math.min(99, yardline)) - 1) * DIST_BANDS +
-    distBand(toGo)) * 2;
+  const at = ((((Math.max(1, Math.min(99, yardline)) - 1) * DIST_BANDS +
+    distBand(toGo)) * MARGIN_BANDS + marginBand(margin)) * TIME_BANDS +
+    timeBand(secondsLeft)) * 2;
   const go = (league.fourth[at] ?? 30) / 255;
   const kick = (league.fourth[at + 1] ?? 0) / 255;
   const drawn = uniform();
@@ -326,7 +332,8 @@ function walkDrive(
     }
 
     if (down === 4) {
-      const choice = fourthChoice(league, yardline, toGo, uniform);
+      const choice =
+        fourthChoice(league, yardline, toGo, margin, clock, uniform);
 
       if (choice === 1) {
         return kicks();
