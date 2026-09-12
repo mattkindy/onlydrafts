@@ -258,6 +258,9 @@ Points per man per week, mae and bias:
   (a) component                    6.25/+0.52     4.18/-0.19     4.48/+0.11     3.36/+0.24     6.39/-0.06     4.33/-0.08     4.35/+0.07     3.61/-0.30
   (a) component, vegas lift        6.30/+0.77     4.20/-0.10     4.49/+0.21     3.38/+0.31     6.37/+0.26     4.33/+0.06     4.37/+0.21     3.62/-0.22
   (a) component, blend 0.5         6.30/+1.68     4.12/-0.27     4.54/+0.03     3.45/+0.17     6.31/+0.89     4.32/-0.15     4.39/-0.04     3.68/-0.57
+  component wk1-4, blend 0.5       6.30/+1.68     4.12/-0.27     4.54/+0.03     3.45/+0.17     6.22/+0.79     4.31/-0.00     4.38/-0.09     3.64/-0.56
+  same, QB debias 3                6.02/+0.18     4.12/-0.27     4.54/+0.03     3.45/+0.17     6.19/-0.71     4.31/-0.00     4.38/-0.09     3.64/-0.56
+  same, fitted debias              6.02/+0.21     4.17/-0.16     4.55/+0.10     3.52/+0.48     6.20/-0.67     4.34/+0.11     4.40/-0.02     3.68/-0.24
   (c) early from prior season      6.50/+0.71     4.47/-0.00     4.74/+0.48     3.51/+0.50     6.29/-0.13     4.28/+0.24     4.29/+0.00     3.56/-0.26
   oracle: usage known              4.88/+0.61     2.75/+0.01     2.91/+0.19     1.89/+0.17     5.25/+0.01     2.94/-0.03     2.99/+0.07     2.31/-0.13
   oracle: rates known              4.27/+0.43     3.14/-0.20     3.41/+0.02     2.61/+0.06     4.12/+0.16     3.12/-0.17     3.28/+0.12     2.85/-0.03
@@ -292,6 +295,9 @@ other and not against the shipped calibration bench:
 
 ```
   sleeper                                    0.2085
+  component wk1-4, blend 0.5                 0.2112
+  same, QB debias 3                          0.2112
+  same, fitted debias                        0.2113
   (a) component, blend 0.5                   0.2125
   blend 0.5                                  0.2129
   ours (shipped ridge)                       0.2241
@@ -312,6 +318,18 @@ rather than from how often he throws. So a better weekly line at the
 skill positions means predicting touches, and the component model's own
 usage error says where that work is: it misses a back's carries by 3.3 a
 game and a receiver's targets by 1.9.
+
+Sleeper gives a quarterback about three points a week more than he
+scores, and half of that goes straight into the blend. Taking a flat three off his
+quarterback number before the blend wins 0.31 of error in weeks 1 to 4
+and 0.03 from week 5, and it takes the bias from +1.68 to +0.18 early.
+Fitting a bias per position instead, on the other test season, comes to
+3.38 for 2024 and 2.48 for 2025 at quarterback and under 0.7 everywhere
+else, and it lands on the same quarterback error while giving back a
+little at back and tight end. So the flat three ships and the fit does
+not. The component line in weeks 1 to 4 with that de-bias is what the
+site now writes: 6.02/4.12/4.54/3.45 against the shipped blend's
+6.33/4.22/4.64/3.51, and the same numbers from week 5 on.
 
 The component model already beats the shipped ridge across the early
 weeks, by 0.20 at quarterback, 0.27 at back, 0.27 at receiver and 0.13 at
