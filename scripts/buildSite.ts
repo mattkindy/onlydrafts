@@ -9,6 +9,7 @@ import {
   comingWeek, currentSeason, hasPlayerStats, loadGames, loadPlayerStats,
   loadWeeklyRosters,
 } from "../src/data/nflverse.js";
+import type { PlayerWeekStats } from "../src/data/nflverse.js";
 import {
   loadSleeperWeekly,
   projectionKey,
@@ -24,8 +25,17 @@ import {
 } from "../src/features/fitWeeklyByPosition.js";
 import {
   blendPoints,
+  debiasedSleeper,
   SHIPPED_BLEND_WEIGHT,
 } from "../src/features/sleeperBlend.js";
+import {
+  componentPoints,
+  historiesForWeek,
+  positionRatePriors,
+  COMPONENT_THROUGH_WEEK,
+  type History,
+  type Rates,
+} from "../src/features/componentWeek.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import {
   buildResidualModel,
@@ -98,6 +108,46 @@ function argOf(flag: string, fallback: string): string {
   return index === -1 ? fallback : process.argv[index + 1]!;
 }
 
+/** how many seasons of weeks the component model's rate priors read */
+const PRIOR_SEASONS = 8;
+
+async function componentPriors(season: number): Promise<Map<string, Rates>> {
+  const weeks: PlayerWeekStats[] = [];
+
+  for (let s = season - PRIOR_SEASONS; s < season; s++) {
+    if (!hasPlayerStats(s)) {
+      continue;
+    }
+
+    weeks.push(...(await loadPlayerStats(s)));
+  }
+
+  return positionRatePriors(weeks, scoring());
+}
+
+/**
+ * The component line through week 4 and the season-anchored ridge line
+ * from week 5, which is the split the weekly bench settled. A man with no
+ * history behind him would come out at nothing, so he keeps the ridge.
+ */
+function earlyWeekLine(
+  week: number,
+  position: string,
+  ridge: number,
+  history: History | undefined,
+  priors: Map<string, Rates>,
+): number {
+  const prior = priors.get(position);
+
+  if (week > COMPONENT_THROUGH_WEEK || !history || !prior) {
+    return ridge;
+  }
+
+  const points = componentPoints(history, prior, scoring());
+
+  return points > 0 ? points : ridge;
+}
+
 /**
  * One row a man, in the slate file the app reads. `ours` is our
  * per-position ridge and `sleeper` is Sleeper's number, null when they
@@ -117,10 +167,14 @@ function slateRow(
   ours: number,
   sleeper: number | undefined,
 ) {
+  // `sleeper` is reported as Sleeper published it, so a reader can
+  // compare the two lines, while the average uses his number with his
+  // quarterback bias taken off.
   const average =
     sleeper === undefined
       ? ours
-      : blendPoints(ours, sleeper, SHIPPED_BLEND_WEIGHT);
+      : blendPoints(
+        ours, debiasedSleeper(e.position, sleeper), SHIPPED_BLEND_WEIGHT);
 
   return {
     name: e.playerName,
@@ -529,6 +583,22 @@ async function main(): Promise<void> {
     : [];
   /** each walked week's points per man, for the weekly mix below */
   const weekWalked = new Map<number, Map<string, number>>();
+  const priors = await componentPriors(season);
+  const prevStats = await loadPlayerStats(season - 1);
+  const thisSeason = hasPlayerStats(season)
+    ? await loadPlayerStats(season)
+    : [];
+  /**
+   * What each man had behind him going into each of the first four
+   * weeks. Before a season is played that is his previous one alone,
+   * which is what the 2026 week 1 slate is built from.
+   */
+  const earlyHistories = new Map<number, Map<string, History>>();
+
+  for (let w = 1; w <= COMPONENT_THROUGH_WEEK; w++) {
+    earlyHistories.set(
+      w, historiesForWeek(thisSeason, prevStats, w, scoring()));
+  }
 
   for (const week of weeks) {
     /**
@@ -547,12 +617,19 @@ async function main(): Promise<void> {
     weekWalked.set(week, walked.points);
     console.log(`  the walk played ${walked.played} fixtures of week ${week}`);
 
+    const histories = earlyHistories.get(week) ?? new Map<string, History>();
     const rows = (await weeklyProspectiveForWeek(season, week, games))
       .map((e) =>
         slateRow(
           residuals,
           e,
-          predictWeeklyByPosition(weekly, e),
+          earlyWeekLine(
+            week,
+            e.position,
+            predictWeeklyByPosition(weekly, e),
+            histories.get(e.playerId),
+            priors,
+          ),
           projections.get(projectionKey(season, week, e.playerId))?.points,
         ))
       .sort((a, b) => b.average - a.average);
@@ -974,7 +1051,25 @@ async function main(): Promise<void> {
       };
     });
 
-    weeklyByPlayer.set(p.playerId, anchorToSeason(mixed, p.projectedPpg));
+    /**
+     * Weeks 1 to 4 come off his usage and his rates instead of his
+     * season anchor. So early there is almost nothing of this season
+     * for the anchor to stand on, and the bench has the component line
+     * ahead at every position by a fifth of a point a week.
+     */
+    weeklyByPlayer.set(
+      p.playerId,
+      anchorToSeason(mixed, p.projectedPpg).map((w) => ({
+        ...w,
+        points: earlyWeekLine(
+          w.week,
+          p.position,
+          w.points,
+          earlyHistories.get(w.week)?.get(p.playerId),
+          priors,
+        ),
+      })),
+    );
   }
 
   /**
