@@ -14,6 +14,14 @@ import { RAW_DIR } from "../data/nflverse.js";
 
 export const WALK_WEEKLY_PATH = join(RAW_DIR, "..", "curated", "walkWeekly.csv");
 
+/**
+ * Where a variant of the walk keeps its week. A bench comparing two
+ * settings needs both on disk at once, so each one writes its own file
+ * under a name of its own.
+ */
+export const walkWeeklyPathFor = (variant: string): string =>
+  join(RAW_DIR, "..", "curated", `walkWeekly-${variant}.csv`);
+
 export interface WalkWeekRow {
   season: number;
   week: number;
@@ -68,19 +76,22 @@ export function parseWalkRows(text: string): Map<string, WalkWeekRow> {
   );
 }
 
-let cached: Map<string, WalkWeekRow> | undefined;
+const cached = new Map<string, Map<string, WalkWeekRow>>();
 
 /** empty when nobody has played the weeks yet */
-export async function loadWalkWeekly(): Promise<Map<string, WalkWeekRow>> {
-  if (cached) {
-    return cached;
+export async function loadWalkWeekly(
+  path = WALK_WEEKLY_PATH,
+): Promise<Map<string, WalkWeekRow>> {
+  const already = cached.get(path);
+
+  if (already) {
+    return already;
   }
 
-  try {
-    cached = parseWalkRows(await readFile(WALK_WEEKLY_PATH, "utf8"));
-  } catch {
-    cached = new Map();
-  }
+  const rows = await readFile(path, "utf8")
+    .then(parseWalkRows)
+    .catch(() => new Map<string, WalkWeekRow>());
+  cached.set(path, rows);
 
-  return cached;
+  return rows;
 }

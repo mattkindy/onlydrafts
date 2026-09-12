@@ -16,7 +16,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../data/csv.js";
-import { loadWeeklyRosters } from "../data/nflverse.js";
+import { loadPlayerStats, loadWeeklyRosters } from "../data/nflverse.js";
+import { presets } from "../scoring/fantasyPoints.js";
+import {
+  componentUsage, emptyBox, historiesForWeek, type History,
+} from "./componentWeek.js";
 import { fitDriveRules, fitTeamDriveRules } from "./driveRules.js";
 import { fitPasserQuality } from "./passerQuality.js";
 import { loadAdp, type AdpEntry } from "../data/adp.js";
@@ -63,11 +67,65 @@ export interface PlayedWorld {
   raw: ReturnType<typeof parseCsv>;
 }
 
+/** an empty history, for a man this season has never seen on the field */
+const noHistory = (): History => ({
+  trailing: emptyBox(), trailingGames: 0, prev: emptyBox(), prevGames: 0,
+});
+
+/**
+ * Each man's share of his side's carries and of its targets, from the
+ * trailing usage the component line reads. August's projection orders
+ * men well and splits them flatly: a side's five busiest take 59.9% of
+ * its throws where a side gives them 74.2%. Trailing usage is the
+ * sharper number, and it is what the weekly bench's best line already
+ * predicts a man's touches from.
+ */
+async function componentSplit(
+  season: number,
+  week: number,
+  onTeam: Map<string, { playerId: string; position: string }[]>,
+): Promise<Map<string, { carries: number; targets: number }>> {
+  const histories = historiesForWeek(
+    await loadPlayerStats(season),
+    await loadPlayerStats(season - 1),
+    week,
+    presets.ppr,
+  );
+  const out = new Map<string, { carries: number; targets: number }>();
+
+  for (const men of onTeam.values()) {
+    const his = men.map((p) => ({
+      playerId: p.playerId,
+      usage: componentUsage(histories.get(p.playerId) ?? noHistory()),
+    }));
+    const carries = his.reduce((sum, p) => sum + p.usage.carries, 0);
+    const targets = his.reduce((sum, p) => sum + p.usage.targets, 0);
+
+    for (const p of his) {
+      out.set(p.playerId, {
+        carries: carries > 0 ? p.usage.carries / carries : 0,
+        targets: targets > 0 ? p.usage.targets / targets : 0,
+      });
+    }
+  }
+
+  return out;
+}
+
+export interface WorldOptions {
+  /**
+   * Take each man's cut of the work from his trailing usage rather than
+   * from August's projection pulled toward the season.
+   */
+  componentShares?: boolean;
+}
+
 export async function buildWorld(
   SCORE_ON: number,
   onlyWeek: number,
   live: boolean,
   positions: Map<string, string>,
+  options: WorldOptions = {},
 ): Promise<PlayedWorld> {
   const LEARN = [SCORE_ON - 4, SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1];
   const raw = parseCsv(await readFile( 
@@ -615,6 +673,20 @@ export async function buildWorld(
   }
 
   /**
+   * Trailing usage replaces the projection outright, quarterbacks with
+   * it, because a share of a side's carries and a quarterback's share
+   * of its plays are two different scales and mixing them would hand
+   * him the wrong slice of the running.
+   */
+  if (live && options.componentShares) {
+    for (const [playerId, his] of await componentSplit(
+      SCORE_ON, onlyWeek, onTeam,
+    )) {
+      split.set(playerId, his);
+    }
+  }
+
+  /**
    * A man listed questionable gets less of the work, and his
    * teammates take the rest.
    *
@@ -664,7 +736,15 @@ export async function buildWorld(
       }))
       .sort((a, b) => b.share - a.share);
     const anyShare = skill.some((p) => p.share > 0);
-    const cast = anyShare ? skill.slice(0, 12) : skill;
+    /**
+     * On trailing usage a man with none of it has not been thrown to or
+     * handed the ball, so he is not one of the men who can be, and the
+     * cast is whoever has usage rather than a fixed dozen.
+     */
+    const used = options.componentShares
+      ? skill.filter((p) => p.share > 0)
+      : skill;
+    const cast = anyShare ? used.slice(0, 12) : skill;
 
     return {
       team, factors, passer,

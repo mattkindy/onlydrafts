@@ -24,10 +24,20 @@ import { acrossCores, myShare } from "../src/sim/acrossCores.js";
 import {
   WALK_WEEKLY_PATH,
   walkRowsToCsv,
+  walkWeeklyPathFor,
   type WalkWeekRow,
 } from "../src/features/walkWeeklyCache.js";
 
 const RUNS = Number(process.env["RUNS"] ?? 40);
+
+/**
+ * Which walk to play. `component` takes each man's cut of the work from
+ * his trailing usage instead of August's projection, and writes its own
+ * file so the bench can read both at once.
+ */
+const VARIANT = process.env["VARIANT"] ?? "";
+const componentShares = VARIANT.includes("component");
+const outPath = VARIANT ? walkWeeklyPathFor(VARIANT) : WALK_WEEKLY_PATH;
 const RULES = presets.ppr;
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 
@@ -67,7 +77,9 @@ async function oneWeek(season: number, week: number): Promise<WalkWeekRow[]> {
     positions.set(s.playerId, s.position);
   }
 
-  const world = await buildWorld(season, week, true, positions);
+  const world = await buildWorld(season, week, true, positions, {
+    componentShares,
+  });
   const walked = walkWeek(world, season, week, games, RULES, RUNS);
   const rows: WalkWeekRow[] = [];
 
@@ -116,6 +128,7 @@ if (asShare) {
       RUNS: String(RUNS),
       SEASONS: seasons.join(","),
       WEEKS: weeks.join(","),
+      VARIANT,
     },
   });
   const all: WalkWeekRow[] = [];
@@ -130,7 +143,7 @@ if (asShare) {
       a.week - b.week ||
       a.playerId.localeCompare(b.playerId),
   );
-  await writeFile(WALK_WEEKLY_PATH, walkRowsToCsv(all));
+  await writeFile(outPath, walkRowsToCsv(all));
   console.log(
     `wrote ${all.length} rows for ${seasons.join(",")} weeks ${weeks.join(",")} at ${RUNS} runs`,
   );

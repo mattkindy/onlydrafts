@@ -40,7 +40,10 @@ import {
 import {
   loadWalkWeekly,
   walkKey,
+  walkWeeklyPathFor,
+  type WalkWeekRow,
 } from "../src/features/walkWeeklyCache.js";
+import { DEALT_WIDER } from "../src/features/walkWeek.js";
 import {
   addBox,
   boxOf as componentBoxOf,
@@ -138,14 +141,23 @@ interface Row {
   /** the game simulator's touches and points, for the weeks it has played */
   walkTouches: number | undefined;
   walkPoints: number | undefined;
+  /** and the same from each variant of the walk that has been played */
+  walks: Map<string, WalkWeekRow>;
 }
+
+/**
+ * The variants of the walk on disk, each played once by
+ * scripts/walkWeekCache.ts with `VARIANT` set to the same name.
+ */
+const VARIANTS = ["component"];
 
 async function rowsFor(
   season: number,
   games: Map<string, TeamWeek>,
   sleeper: Map<string, { points: number }>,
   ridge: Map<string, number>,
-  walk: Map<string, { touches: number; points: number }>,
+  walk: Map<string, WalkWeekRow>,
+  variants: Map<string, Map<string, WalkWeekRow>>,
 ): Promise<Row[]> {
   const stats = await loadPlayerStats(season);
   const prevStats = await loadPlayerStats(season - 1);
@@ -201,6 +213,13 @@ async function rowsFor(
         ridge: ridge.get(`${season}|${s.week}|${playerId}`),
         walkTouches: walked?.touches,
         walkPoints: walked?.points,
+        walks: new Map(
+          [...variants]
+            .map(([name, rows]) =>
+              [name, rows.get(walkKey(season, s.week, playerId))] as const)
+            .filter((pair): pair is [string, WalkWeekRow] =>
+              pair[1] !== undefined),
+        ),
       });
     });
   }
@@ -356,6 +375,29 @@ function walkUsage(row: Row, weight: number): Usage {
   };
 }
 
+/**
+ * The same swap of touches, from a variant of the walk rather than from
+ * the shipped one. A man the variant never dealt keeps his trailing
+ * usage, so the row still scores.
+ */
+function variantUsage(row: Row, variant: string, weight: number): Usage {
+  const base = baseUsage(row);
+  const touches = base.carries + base.targets;
+  const his = row.walks.get(variant);
+
+  if (his === undefined || touches <= 0) {
+    return base;
+  }
+
+  const wanted = (1 - weight) * touches + weight * his.touches;
+
+  return {
+    passAtt: base.passAtt,
+    carries: base.carries * (wanted / touches),
+    targets: base.targets * (wanted / touches),
+  };
+}
+
 const CANDIDATES: Candidate[] = [
   { name: "ours (shipped ridge)", of: ourLine },
   { name: "sleeper", of: (row) => row.sleeper },
@@ -435,6 +477,27 @@ const CANDIDATES: Candidate[] = [
     usage: (row) => walkUsage(row, 0.5),
   },
   { name: "(b) walk points", of: (row) => row.walkPoints },
+  {
+    name: "sim, component shares: usage",
+    of: (row, prior) =>
+      row.walks.has("component")
+        ? pointsFrom(variantUsage(row, "component", 1), historyRates(row, prior))
+        : undefined,
+    usage: (row) => variantUsage(row, "component", 1),
+  },
+  {
+    name: "sim, component shares: half",
+    of: (row, prior) =>
+      row.walks.has("component")
+        ? pointsFrom(
+          variantUsage(row, "component", 0.5), historyRates(row, prior))
+        : undefined,
+    usage: (row) => variantUsage(row, "component", 0.5),
+  },
+  {
+    name: "sim, component shares: points",
+    of: (row) => row.walks.get("component")?.points,
+  },
   {
     name: "(c) early from prior season",
     of: (row, prior) => {
@@ -565,6 +628,79 @@ function showBands(residuals: Map<number, ResidualModel>): void {
       });
       console.log(`  ${String(buckets).padStart(2)} ${position}  ${widths.join("  ")}`);
     }
+  }
+}
+
+/**
+ * How wide the walk's own runs are against how wide a man's weeks
+ * really are. The runs say one number: the spread of what he scored
+ * across the games he was dealt. The week says another: how far his
+ * actual came from the middle of those runs. If the runs are as wide as
+ * the weeks, the hand stretch in `DEALT_WIDER` has nothing left to do,
+ * and the covered column says how much of the eighty per cent band the
+ * runs cover on their own.
+ */
+function showSpread(rows: Row[], variant: string): void {
+  console.log(`\nrun spread against realised, ${variant} walk`);
+  console.log(
+    `  ${"position".padEnd(10)}${["men", "run sd", "week sd", "covered 80", "covered with 1.2"]
+      .map((h) => h.padStart(18)).join("")}`);
+
+  for (const position of POSITIONS) {
+    let n = 0;
+    let runVariance = 0;
+    let weekVariance = 0;
+    let inside = 0;
+    let insideWider = 0;
+
+    for (const row of rows) {
+      if (row.position !== position) {
+        continue;
+      }
+
+      const runs = row.walks.get(variant)?.dealt ?? [];
+
+      if (runs.length < 10) {
+        continue;
+      }
+
+      const middle = runs.reduce((a, b) => a + b, 0) / runs.length;
+      const variance = runs.reduce((s, x) => s + (x - middle) ** 2, 0) /
+        runs.length;
+      const sorted = [...runs].sort((a, b) => a - b);
+      const at = (q: number) =>
+        sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!;
+      const low = at(0.1);
+      const high = at(0.9);
+      n++;
+      runVariance += variance;
+      weekVariance += (row.actual.points - middle) ** 2;
+
+      if (row.actual.points >= low && row.actual.points <= high) {
+        inside++;
+      }
+
+      const wideLow = middle + (low - middle) * DEALT_WIDER;
+      const wideHigh = middle + (high - middle) * DEALT_WIDER;
+
+      if (row.actual.points >= wideLow && row.actual.points <= wideHigh) {
+        insideWider++;
+      }
+    }
+
+    if (!n) {
+      continue;
+    }
+
+    const cells = [
+      String(n),
+      Math.sqrt(runVariance / n).toFixed(2),
+      Math.sqrt(weekVariance / n).toFixed(2),
+      `${((100 * inside) / n).toFixed(1)}%`,
+      `${((100 * insideWider) / n).toFixed(1)}%`,
+    ];
+    console.log(
+      `  ${position.padEnd(10)}${cells.map((c) => c.padStart(18)).join("")}`);
   }
 }
 
@@ -766,13 +902,26 @@ async function main(): Promise<void> {
   const walkTallies = new Map<string, Cell>();
   const briers = new Map<string, Brier>();
   const walk = await loadWalkWeekly();
+  const variants = new Map<string, Map<string, WalkWeekRow>>([
+    ["shipped", walk],
+  ]);
+
+  for (const variant of VARIANTS) {
+    const rows = await loadWalkWeekly(walkWeeklyPathFor(variant));
+
+    if (rows.size) {
+      variants.set(variant, rows);
+    }
+  }
+
   const rand = mulberry32(20240901);
   let rows = 0;
 
   const bySeason = new Map<number, Row[]>();
 
   for (const season of TEST) {
-    bySeason.set(season, await rowsFor(season, teams, sleeper, ridge, walk));
+    bySeason.set(
+      season, await rowsFor(season, teams, sleeper, ridge, walk, variants));
   }
 
   fitSleeperBias([...bySeason.values()].flat());
@@ -849,6 +998,11 @@ async function main(): Promise<void> {
   showPoints(
     "points per man per week, only the weeks the walk has played", walkTallies);
   showBands(residuals);
+
+  for (const variant of variants.keys()) {
+    showSpread([...bySeason.values()].flat(), variant);
+  }
+
   console.log("\nmatchup brier, normal approximation, same lineups throughout");
 
   const ranked = [...briers]
