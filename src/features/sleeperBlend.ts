@@ -32,6 +32,21 @@ export const BLEND_WEIGHTS: readonly number[] = Array.from(
 export const SHIPPED_BLEND_WEIGHT = 0.5;
 
 /**
+ * Sleeper gives a quarterback about three points a week more than he
+ * scores, on both test seasons, and no other position more than half a
+ * point. Taking the three off before the blend wins a quarter of a point
+ * of error at quarterback and leaves every other position where it was.
+ * A per-position bias fitted on the other season did no better. See
+ * scripts/README.md.
+ */
+export const SLEEPER_QB_BIAS = 3;
+
+/** Sleeper's number with his level bias off, which is what the blend reads */
+export function debiasedSleeper(position: string, points: number): number {
+  return position === "QB" ? points - SLEEPER_QB_BIAS : points;
+}
+
+/**
  * How often Sleeper had the better of it when the two projections were
  * three points or more apart, over the 2024 and 2025 slates.
  */
