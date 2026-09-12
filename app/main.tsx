@@ -702,6 +702,7 @@ function App() {
             men={men}
             mine={active.team}
             slots={active.slots ?? null}
+            pays={active.pays ?? {}}
             season={week.season}
             week={week.week}
             status={gamesStatus || weekStatus}

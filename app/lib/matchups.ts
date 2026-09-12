@@ -680,9 +680,10 @@ export function sideTotals(
   draws: number,
   live?: Live,
   lines?: Lines,
+  remainder?: Map<string, number[]>,
 ): number[] {
-  const drawn = live ??
-    liveDraws([...side.starters, ...side.bench], rows, states, draws, lines);
+  const drawn = live ?? liveDraws(
+    [...side.starters, ...side.bench], rows, states, draws, lines, remainder);
   const totals = new Array(draws).fill(0) as number[];
 
   for (const starter of side.starters) {
@@ -716,8 +717,9 @@ export function standingFor(
   states: Map<string, GameState>,
   lines?: Lines,
   draws = LIVE_DRAWS,
+  remainder?: Map<string, number[]>,
 ): Standing {
-  const live = liveDraws(menOf(matchup), rows, states, draws, lines);
+  const live = liveDraws(menOf(matchup), rows, states, draws, lines, remainder);
   const home = sideTotals(matchup.sides[0], rows, states, draws, live);
   const away = sideTotals(matchup.sides[1], rows, states, draws, live);
   const p = winChance(home, away);
@@ -732,8 +734,9 @@ export function oddsFor(
   states: Map<string, GameState>,
   draws = LIVE_DRAWS,
   lines?: Lines,
+  remainder?: Map<string, number[]>,
 ): [number, number] {
-  return standingFor(matchup, rows, states, lines, draws).odds;
+  return standingFor(matchup, rows, states, lines, draws, remainder).odds;
 }
 
 export interface Swap {
@@ -791,10 +794,11 @@ export function bestLineupFor(
   states: Map<string, GameState>,
   draws = LIVE_DRAWS,
   lines?: Lines,
+  remainder?: Map<string, number[]>,
 ): Best {
   const live = liveDraws(
     [...side.starters, ...side.bench, ...against.starters, ...against.bench],
-    rows, states, draws, lines,
+    rows, states, draws, lines, remainder,
   );
   const theirs = sideTotals(against, rows, states, draws, live);
   const benched = side.bench
@@ -938,10 +942,11 @@ export function alternativesFor(
   states: Map<string, GameState>,
   draws = CHOICE_DRAWS,
   lines?: Lines,
+  remainder?: Map<string, number[]>,
 ): SlotChoice[] {
   const live = liveDraws(
     [...side.starters, ...side.bench, ...against.starters, ...against.bench],
-    rows, states, draws, lines,
+    rows, states, draws, lines, remainder,
   );
   const theirs = sideTotals(against, rows, states, draws, live);
   const scoredBy = (man: Starter, i: number) =>
