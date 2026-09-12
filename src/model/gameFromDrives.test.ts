@@ -200,6 +200,45 @@ describe("the width of a side's day", () => {
   });
 });
 
+describe("what a side scores without the ball", () => {
+  /**
+   * Every drive is a takeaway and every takeaway comes back, so the
+   * side that keeps turning it over is the only one with the ball and
+   * the other one has all the points.
+   */
+  const givenAway = async (rate: string) => {
+    vi.resetModules();
+    process.env["RETURN_TAKEAWAY"] = rate;
+    const { playGame: play } = await import("./gameFromDrives.js");
+    delete process.env["RETURN_TAKEAWAY"];
+
+    return play(
+      sideOf("HOME", ["Abe"]), sideOf("AWAY", ["Dan"]),
+      {
+        rules: { ...rules, turnoverRate: () => 1 }, fourth,
+        clock: { isLast: 0, lastLength: () => 12 }, ticking,
+      },
+      seededRng(7),
+    );
+  };
+
+  it("gives the defence a touchdown on a takeaway it brings back", async () => {
+    const game = await givenAway("1");
+    const scored = [...new Set(game.possessions.map((one) => one.team))];
+
+    expect(scored).toHaveLength(1);
+    expect(game.points[scored[0]!]).toBe(0);
+    expect(game.points[scored[0] === "HOME" ? "AWAY" : "HOME"])
+      .toBeGreaterThan(20);
+  });
+
+  it("leaves the score alone when nothing is brought back", async () => {
+    const game = await givenAway("0");
+
+    expect(game.points["HOME"]! + game.points["AWAY"]!).toBeLessThanOrEqual(6);
+  });
+});
+
 describe("a game picked up part way through", () => {
   const home = sideOf("HOME", ["Abe", "Bob", "Cal"]);
   const away = sideOf("AWAY", ["Dan", "Eli", "Fay"]);
