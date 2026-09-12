@@ -378,8 +378,110 @@ The sim ships if it wins on error at every position at half time and at
 the end of the third quarter and stays level with them on the Brier
 score and the spread.
 
-The bench is written and its pieces are tested, and the numbers are not
-in yet: one week of one season with 40 runs a checkpoint had not finished
-after fourteen minutes, and almost all of that is the weekly fit and
-`buildWorld` rather than the simulation, so a sharded run has to be timed
-before the tables can be filled in.
+Week 9 of 2024 and 2025, 174 checkpoints, 60 runs a checkpoint. Each
+cell is the mean absolute error in points and then the bias, so a
+negative number means the variant said less than the man scored.
+
+```
+                  time scaled    copula posterior  remainder sim
+endQ1    QB       5.44 / -0.92   6.24 / -2.51      6.53 / -2.91
+         RB       4.60 /  0.36   4.67 /  0.50      4.64 / -0.42
+         WR       4.71 / -0.87   5.21 / -2.24      5.19 / -1.79
+         TE       4.78 / -1.11   5.68 / -1.88      4.88 / -1.89
+thirdQ2  QB       5.47 / -1.01   6.39 / -2.51      6.58 / -2.86
+         RB       4.67 /  0.20   4.80 /  0.23      4.79 / -0.61
+         WR       4.64 / -0.80   5.21 / -2.00      5.00 / -1.73
+         TE       4.79 / -0.96   5.61 / -1.57      4.68 / -1.32
+midQ2    QB       5.45 / -1.36   6.93 / -2.67      6.54 / -2.58
+         RB       4.46 / -0.03   4.63 / -0.19      4.53 / -0.45
+         WR       4.37 / -0.76   5.21 / -1.64      4.45 / -1.32
+         TE       4.43 / -1.07   5.25 / -1.52      4.63 / -1.38
+half     QB       5.04 / -0.00   6.03 / -0.11      5.23 / -1.28
+         RB       3.74 /  0.29   3.79 /  0.28      3.58 / -0.36
+         WR       3.80 /  0.16   4.55 /  0.16      3.82 / -0.41
+         TE       3.85 / -0.46   4.37 / -0.12      3.72 / -0.84
+redQ3    QB       4.75 / -0.84   5.53 / -1.29      4.93 / -1.23
+         RB       3.56 / -0.11   3.71 / -0.24      3.48 / -0.27
+         WR       3.46 / -0.18   4.14 / -0.30      3.48 / -0.55
+         TE       3.62 / -0.46   4.08 / -0.29      3.77 / -0.65
+endQ3    QB       4.09 / -0.67   4.48 / -0.90      3.57 / -0.98
+         RB       2.80 / -0.30   2.78 / -0.48      2.76 / -0.32
+         WR       2.85 / -0.38   3.13 / -0.48      2.71 / -0.52
+         TE       2.58 / -0.29   2.83 / -0.07      2.53 / -0.48
+```
+
+The two sides' remaining points, which is the sim answering for the game
+rather than for anybody's fantasy team:
+
+```
+endQ1    MAE 6.15  bias -1.96
+thirdQ2  MAE 6.31  bias -2.11
+midQ2    MAE 6.28  bias -1.80
+half     MAE 5.92  bias -0.54
+redQ3    MAE 5.45  bias -0.59
+endQ3    MAE 4.34  bias -0.53
+```
+
+And the paired lineups, about 150 pairs a checkpoint. The two spread
+columns are the width the draws implied against the width that came
+out, first for one side's total and then for the margin between two:
+
+```
+                  brier    side          margin
+endQ1    time     0.2207   14.1 vs 16.8  19.3 vs 24.4
+         copula   0.2306   11.4 vs 20.5  16.1 vs 26.0
+         sim      0.2334   14.7 vs 20.3  20.6 vs 25.7
+thirdQ2  time     0.2029   13.7 vs 15.7  18.6 vs 21.5
+         copula   0.2021   10.8 vs 19.6  15.2 vs 22.8
+         sim      0.2345   14.3 vs 19.9  20.2 vs 23.9
+midQ2    time     0.2056   11.2 vs 16.3  15.3 vs 23.4
+         copula   0.2475    8.0 vs 20.4  11.3 vs 26.7
+         sim      0.2041   13.3 vs 18.2  18.6 vs 24.2
+half     time     0.1429    9.4 vs 13.7  12.8 vs 19.7
+         copula   0.1594    6.3 vs 15.6   8.8 vs 22.3
+         sim      0.1501   12.0 vs 13.9  17.0 vs 20.0
+redQ3    time     0.1367    7.7 vs 12.9  10.5 vs 18.4
+         copula   0.1629    4.7 vs 14.9   6.6 vs 20.9
+         sim      0.1329   11.1 vs 13.3  15.8 vs 18.6
+endQ3    time     0.0968    4.7 vs 10.5   6.4 vs 14.7
+         copula   0.1204    2.3 vs 11.6   3.2 vs 16.2
+         sim      0.0980    8.8 vs 10.7  12.3 vs 14.4
+```
+
+## Reading the remainder
+
+The sim clears the bar. It beats the copula posterior at all four
+positions at half time (6.03 to 5.23 at quarterback, 3.79 to 3.58 at
+back, 4.55 to 3.82 at receiver, 4.37 to 3.72 at tight end) and at all
+four again at the end of the third quarter, where the quarterback gap is
+4.48 to 3.57. It also beats it on the Brier score at both (0.1594 to
+0.1501, and 0.1204 to 0.0980), so the matchup odds do not pay for the
+per-man win.
+
+The spread is where the copula is worst and the sim helps most. At half
+time the copula's draws imply a side scores within 6.3 points of its
+projection when sides actually land 15.6 away, and it implies an 8.8
+point margin where the played one is 22.3. That is draws far too tight,
+which is what makes a live matchup page too sure of the favourite. The
+sim implies 12.0 against 13.9 and 17.0 against 20.0. It is still narrow,
+but it is close enough to argue about rather than out by a factor of
+two.
+
+Early in a game the sim is the worst of the three, and the reason is
+plain in the bias column: it is short 2.9 points on a quarterback at the
+end of the first quarter and short 1.96 on a whole side's remaining
+points. A game with three quarters left is nearly a whole game, so the
+engine's own low scoring has three quarters to accumulate, where the
+week line scaled by the clock inherits a projection that was fitted to
+be unbiased. By half time the remaining bias is down to half a point a
+side and the ordering flips. So the shipped answer should be the clock
+scaling early and the sim from half time on, and the engine's scoring
+bias is the thing to fix before it is trusted before half.
+
+Two cautions. This is one week of each season, so a position cell is 59
+to 159 men and a Brier cell about 150 pairs; the half time and third
+quarter wins are consistent across all four positions, which is harder
+to get by luck than any single one of them, but the size of each win is
+not settled. And the time scaled variant uses the component line rebuilt
+in process rather than the shipped slate, since only two slates were
+ever written to `docs/data`.
