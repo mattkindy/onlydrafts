@@ -8,20 +8,33 @@
  * be matched to a weekly example, and guessing by name would quietly
  * pair up the wrong men.
  *
- * The points column is full PPR. The catches column lets a build in
- * another scoring take the point a catch back off.
+ * The points column is full PPR, and catches let another scoring take
+ * the point a catch back off. A defence comes in parts, in its own file.
  */
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "./csv.js";
-import { RAW_DIR } from "./nflverse.js";
+import { canonicalTeam, RAW_DIR } from "./nflverse.js";
+import { DEFENCE_PARTS, type Parts } from "../features/defenceWeek.js";
 
 export const SLEEPER_WEEKLY_PATH = join(
   RAW_DIR,
   "..",
   "curated",
   "sleeperWeekly.csv",
+);
+
+/**
+ * A defence goes in its own file. Sleeper projects one in parts, a rate
+ * per event and the points it gives up, and none of those columns mean
+ * anything for a skill player.
+ */
+export const SLEEPER_DEFENCE_PATH = join(
+  RAW_DIR,
+  "..",
+  "curated",
+  "sleeperDefenceWeekly.csv",
 );
 
 export interface SleeperProjection {
@@ -45,6 +58,8 @@ export interface SleeperProjectionRow {
     rec?: number | null;
     rec_tgt?: number | null;
     rush_att?: number | null;
+    /** a defence is projected in parts, one column an event */
+    [stat: string]: number | null | undefined;
   } | null;
 }
 
@@ -106,6 +121,92 @@ export function projectionKey(
   gsisId: string,
 ): string {
   return `${season}|${week}|${gsisId}`;
+}
+
+export interface SleeperDefence {
+  season: number;
+  week: number;
+  /** the team abbreviation, which is the id Sleeper gives a defence */
+  team: string;
+  /** Sleeper's own standard number, which pays a return touchdown */
+  points: number;
+  pointsAllowed: number;
+  parts: Parts;
+}
+
+const DEFENCE_COLUMNS = [
+  "season", "week", "team", "points", "pts_allow", ...DEFENCE_PARTS,
+];
+
+export function joinDefenceProjections(
+  season: number,
+  week: number,
+  rows: SleeperProjectionRow[],
+): SleeperDefence[] {
+  return rows.flatMap((row): SleeperDefence[] => {
+    const stats = row.stats;
+
+    if (!row.player_id || !stats) {
+      return [];
+    }
+
+    return [{
+      season,
+      week,
+      team: canonicalTeam(row.player_id),
+      points: stats["pts_std"] ?? 0,
+      pointsAllowed: stats["pts_allow"] ?? 0,
+      parts: Object.fromEntries(
+        DEFENCE_PARTS.map((part) => [part, stats[part] ?? 0]),
+      ),
+    }];
+  });
+}
+
+export function defenceProjectionsToCsv(rows: SleeperDefence[]): string {
+  const lines = [...rows]
+    .sort((a, b) =>
+      a.season - b.season || a.week - b.week || a.team.localeCompare(b.team))
+    .map((r) => [
+      r.season, r.week, r.team, r.points, r.pointsAllowed,
+      ...DEFENCE_PARTS.map((part) => r.parts[part] ?? 0),
+    ].join(","));
+
+  return [DEFENCE_COLUMNS.join(","), ...lines].join("\n") + "\n";
+}
+
+let cachedDefences: Map<string, SleeperDefence> | undefined;
+
+/** every defence week on disk, keyed season, week and team */
+export async function loadSleeperDefences(): Promise<
+  Map<string, SleeperDefence>
+> {
+  if (cachedDefences) {
+    return cachedDefences;
+  }
+
+  const text = await readFile(SLEEPER_DEFENCE_PATH, "utf8").catch(() => "");
+  const num = (row: Record<string, string>, key: string) =>
+    Number(row[key] ?? 0) || 0;
+
+  cachedDefences = new Map(
+    parseCsv(text).map((row) => {
+      const said: SleeperDefence = {
+        season: num(row, "season"),
+        week: num(row, "week"),
+        team: row["team"] ?? "",
+        points: num(row, "points"),
+        pointsAllowed: num(row, "pts_allow"),
+        parts: Object.fromEntries(
+          DEFENCE_PARTS.map((part) => [part, num(row, part)]),
+        ),
+      };
+
+      return [projectionKey(said.season, said.week, said.team), said];
+    }),
+  );
+
+  return cachedDefences;
 }
 
 let cached: Map<string, SleeperProjection> | undefined;
