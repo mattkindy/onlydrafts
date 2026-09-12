@@ -115,6 +115,20 @@ export function weekAt(points: number[], u: number): number {
   return points[at - 1]! + span * (points[at]! - points[at - 1]!);
 }
 
+/** the five shipped figures in the order weekAt reads them */
+export const pointsOf = (spread: Spread) =>
+  [spread.low, spread.q1, spread.mid, spread.q3, spread.high];
+
+/** the same week moved up or down the board by so many points */
+export const shiftedBy = (spread: Spread, by: number): Spread => ({
+  ev: spread.ev + by,
+  q1: spread.q1 + by,
+  mid: spread.mid + by,
+  q3: spread.q3 + by,
+  low: spread.low + by,
+  high: spread.high + by,
+});
+
 /**
  * Weeks drawn from a shipped spread.
  *
@@ -126,7 +140,7 @@ export function weekAt(points: number[], u: number): number {
 export function weeksFromSpread(
   spread: Spread, name: string, draws = DRAWS, uniforms?: number[],
 ): number[] {
-  const points = [spread.low, spread.q1, spread.mid, spread.q3, spread.high];
+  const points = pointsOf(spread);
   const rand = mulberry32(seedOf(name));
 
   return Array.from({ length: draws }, (_, i) =>
@@ -154,8 +168,7 @@ function rising(points: number[]): number[] {
  * distribution comes out.
  */
 export function quantileOf(spread: Spread, score: number): number {
-  const points = rising(
-    [spread.low, spread.q1, spread.mid, spread.q3, spread.high]);
+  const points = rising(pointsOf(spread));
 
   if (score <= points[0]!) {
     const slope = (AT_Z[1]! - AT_Z[0]!) / (points[1]! - points[0]!);

@@ -14,11 +14,12 @@
  */
 
 import {
-  factorFor, factorsOf, mixFor, PASS_CATCHERS, posteriorDraws, posteriorFor,
-  type From, type Mix,
+  factorFor, factorsOf, mixFor, normalLine, PASS_CATCHERS, posteriorDraws,
+  posteriorFor, sharedAt, type From, type Mix, type Pace,
 } from "./copula.ts";
 import {
-  explainSwap, worthExplaining, type Explanation,
+  chanceWith, explainSwap, worthExplaining,
+  type Explanation, type Seat,
 } from "./explain.ts";
 import type { Matchup, Side } from "./providers.ts";
 import {
@@ -515,10 +516,28 @@ interface Watching {
   mix: Mix;
   line: Line;
   state: GameState;
+  /** what he has put up already, which no draw moves */
+  scored: number;
   /** how much of his game is behind him, where it is under way */
   played: number;
   /** the normal his pace so far corresponds to */
   z: number;
+}
+
+/**
+ * How a man's week was drawn, for a caller who would rather ask what his
+ * own noise alone does than count the draws.
+ */
+export interface Drawing {
+  /** what the draws give him on top of what he has already scored */
+  week: number[];
+  /** the five shipped figures those draws are read off */
+  spread: Spread;
+  mix: Mix;
+  scored: number;
+  /** the share of his week still to be drawn */
+  left: number;
+  pace: Pace;
 }
 
 /**
@@ -570,6 +589,7 @@ export function liveDraws(
       ),
       line,
       state,
+      scored: man.points ?? 0,
       played,
       z: normalQuantile(
         Math.min(1 - FURTHEST, Math.max(FURTHEST, at))),
@@ -623,24 +643,14 @@ export function liveDraws(
         (_, i) => simmed[i % simmed.length]!);
     }
 
-    const { played } = his;
-    const left = factorFor(`${key}|left`, draws);
+    const noise = his.played > 0
+      ? factorFor(`${key}|left`, draws)
+      : from(his.mix.ownSeed, draws);
     const us = Array.from({ length: draws }, (_, i) => {
-      let z = 0;
+      const { middle, width } = normalLine(
+        his.mix, sharedAt(his.mix, i, draws, from), his);
 
-      for (const term of his.mix.terms) {
-        z += term.load * from(term.factor, draws)[i]!;
-      }
-
-      if (played <= 0) {
-        return normalCdf(z + his.mix.own * from(his.mix.ownSeed, draws)[i]!);
-      }
-
-      const implied = his.mix.own > 1e-9 ? (his.z - z) / his.mix.own : 0;
-      const own = played * implied +
-        Math.sqrt(Math.max(0, 1 - played * played)) * left[i]!;
-
-      return normalCdf(z + his.mix.own * own);
+      return normalCdf(middle + width * noise[i]!);
     });
     const week = weeksFromSpread(his.line.spread, key, draws, us);
 
@@ -649,17 +659,37 @@ export function liveDraws(
       : week.map((points) => points * his.state.left);
   };
 
+  const toCome = (key: string): number[] => {
+    let his = kept.get(key);
+
+    if (!his) {
+      his = drawFor(key);
+      kept.set(key, his);
+    }
+
+    return his;
+  };
+
   return {
     draws,
-    toCome(key) {
-      let his = kept.get(key);
+    toCome,
+    factorAt: from,
+    drawingOf(key) {
+      const his = watched.get(key);
 
-      if (!his) {
-        his = drawFor(key);
-        kept.set(key, his);
+      // the remainder engine's draws are not read off a ladder
+      if (!his || remainder?.get(key)?.length) {
+        return null;
       }
 
-      return his;
+      return {
+        week: toCome(key),
+        spread: his.line.spread,
+        mix: his.mix,
+        scored: his.scored,
+        left: Math.min(1, Math.max(0, his.state.left)),
+        pace: his,
+      };
     },
   };
 }
@@ -669,6 +699,10 @@ export interface Live {
   draws: number;
   /** what a man might still add to a side, draw by draw */
   toCome: (key: string) => number[];
+  /** what each shared factor came out at, draw by draw */
+  factorAt: From;
+  /** how a man's week was drawn, for a caller pricing a swap out of it */
+  drawingOf: (key: string) => Drawing | null;
 }
 
 /** everybody a matchup puts on the field or on the bench */
@@ -961,32 +995,49 @@ export function alternativesFor(
     (man.points ?? 0) + live.toCome(man.key)[i]!;
   const totals = Array.from({ length: draws }, (_, i) =>
     side.starters.reduce((sum, man) => sum + scoredBy(man, i), 0));
-  const odds = winChance(totals, theirs);
   const benched = side.bench
     .map((man) => ({ man, line: lineOf(man.key, rows, lines) }))
     .filter((his) => his.line !== null);
+  const factorsFor = (men: Starter[]) => factorsOf(
+    men.map((man) => live.drawingOf(man.key)?.mix)
+      .filter((mix): mix is Mix => mix != null));
+  const theirFactors = factorsFor(against.starters);
 
   return side.starters.map((starter) => {
     const shut = locked(starter, rows, states, lines);
     const seated = Array.from({ length: draws }, (_, i) => scoredBy(starter, i));
     const others = totals.map((total, i) => total - seated[i]!);
+    const seat: Seat = {
+      others,
+      theirs,
+      factors: live.factorAt,
+      against: theirFactors,
+      alongside: factorsFor(
+        side.starters.filter((man) => man.key !== starter.key)),
+    };
+    const his = live.drawingOf(starter.key);
+    const odds = his ? chanceWith(seat, his) : winChance(totals, theirs);
     const options = benched
-      .filter((his) => takes(starter.slot, his.line!.position, slots))
-      .map((his) => {
+      .filter((one) => takes(starter.slot, one.line!.position, slots))
+      .map((one) => {
         const instead = Array.from(
-          { length: draws }, (_, i) => scoredBy(his.man, i));
-        const swapped = others.map((rest, i) => rest + instead[i]!);
-        const gains = winChance(swapped, theirs) - odds;
+          { length: draws }, (_, i) => scoredBy(one.man, i));
+        const drawn = live.drawingOf(one.man.key);
+        const chance = his && drawn
+          ? chanceWith(seat, drawn)
+          : winChance(others.map((rest, i) => rest + instead[i]!), theirs);
+        const gains = chance - odds;
         const pointsGap = mean(instead) - mean(seated);
+        const why = his && drawn && worthExplaining(gains, pointsGap)
+          ? explainSwap(seat, his, drawn)
+          : undefined;
 
         return {
-          key: his.man.key,
-          position: his.line!.position,
+          key: one.man.key,
+          position: one.line!.position,
           gains,
-          locked: shut || locked(his.man, rows, states, lines),
-          why: worthExplaining(gains, pointsGap)
-            ? explainSwap({ others, starter: seated, candidate: instead, theirs })
-            : undefined,
+          locked: shut || locked(one.man, rows, states, lines),
+          why,
         };
       })
       .sort((a, b) => b.gains - a.gains);

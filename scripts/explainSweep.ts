@@ -10,7 +10,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { explainSwap } from "../app/lib/explain.ts";
+import { factorsOf, type Mix } from "../app/lib/copula.ts";
+import { chanceWith, explainSwap, type Seat } from "../app/lib/explain.ts";
 import { liveDraws, sideTotals, spreadOf } from "../app/lib/matchups.ts";
 import type { Side } from "../app/lib/providers.ts";
 import { readSlate, type SlateRow } from "../app/lib/slate.ts";
@@ -166,23 +167,45 @@ const pairsFor = (position: string) => {
     .map((b) => [a, b] as const));
 };
 
-/** one built matchup, measured however many draws the caller wants */
-function measure(
+/** one built matchup drawn, with both men in the seat ready to price */
+function swapIn(
   mine: Side, against: Side, seated: string, instead: string, draws: number,
 ) {
   const live = liveDraws(
     [...mine.starters, ...mine.bench, ...against.starters],
     rows, NOBODY, draws);
-
-  return explainSwap({
+  const factorsFor = (men: { key: string }[]) => factorsOf(
+    men.map((one) => live.drawingOf(one.key)?.mix)
+      .filter((mix): mix is Mix => mix != null));
+  const seat: Seat = {
     others: Array.from({ length: draws }, (_, i) =>
       mine.starters.reduce((sum, one) =>
         one.key === seated ? sum : sum + live.toCome(one.key)[i]!, 0)),
-    starter: live.toCome(seated),
-    candidate: live.toCome(instead),
     theirs: sideTotals(against, rows, NOBODY, draws, live),
-  });
+    factors: live.factorAt,
+    against: factorsFor(against.starters),
+    alongside: factorsFor(mine.starters.filter((one) => one.key !== seated)),
+  };
+
+  return { seat, his: live.drawingOf(seated)!, other: live.drawingOf(instead)! };
 }
+
+/** what the swap is worth, which is all a first pass over the week needs */
+function gainsFor(
+  mine: Side, against: Side, seated: string, instead: string, draws: number,
+): number {
+  const { seat, his, other } = swapIn(mine, against, seated, instead, draws);
+
+  return chanceWith(seat, other) - chanceWith(seat, his);
+}
+
+const measure = (
+  mine: Side, against: Side, seated: string, instead: string, draws: number,
+) => {
+  const { seat, his, other } = swapIn(mine, against, seated, instead, draws);
+
+  return explainSwap(seat, his, other);
+};
 
 const found: Found[] = [];
 let tried = 0;
@@ -220,10 +243,10 @@ for (const [position, slot] of WORTH_STARTING) {
       };
       tried++;
 
-      const why = measure(
+      const gains = gainsFor(
         mine, against, man.playerId, alone.playerId, DRAWS);
 
-      if (why.gains <= 0) {
+      if (gains <= 0) {
         continue;
       }
 
@@ -233,7 +256,7 @@ for (const [position, slot] of WORTH_STARTING) {
         theirs: across?.name ?? "nobody in his game",
         mine,
         against,
-        gains: why.gains,
+        gains,
       });
     }
   }
@@ -245,7 +268,7 @@ console.log(
   `week ${slate.week}: ${tried} matchups built, ${found.length} where the ` +
   `lower projection wins more often on ${DRAWS} draws.\n` +
   `The ones below are measured again on ${CONFIRM}, because a piece this ` +
-  `size is about the same size as the noise in ${DRAWS}.\n`);
+  `size is still inside the noise in ${DRAWS}.\n`);
 
 const width = (r: SlateRow) =>
   `${spreadOf(r).low.toFixed(1)} to ${spreadOf(r).high.toFixed(1)}`;
