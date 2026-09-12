@@ -378,90 +378,110 @@ The sim ships if it wins on error at every position at half time and at
 the end of the third quarter and stays level with them on the Brier
 score and the spread.
 
-The bench is written and its pieces are tested, and the numbers are not
-in yet: one week of one season with 40 runs a checkpoint had not finished
-after fourteen minutes, and almost all of that is the weekly fit and
-`buildWorld` rather than the simulation, so a sharded run has to be timed
-before the tables can be filled in.
-
-## The simulator on trailing shares
-
-The simulator used to take each man's cut of the work from August's
-projection pulled toward the season. It now has a second setting,
-`VARIANT=component npx tsx scripts/walkWeekCache.ts`, where every man's
-share of his side's carries and of its targets comes from the trailing
-usage the component line reads, and the cast is the men who have any of
-that usage rather than the twelve largest projected shares. The bench
-reads both walks off disk, so the rows below are the same odd weeks of
-2024 and 2025 played twice.
-
-Targets and carries, mae per man per week:
+Week 9 of 2024 and 2025, 174 checkpoints, 60 runs a checkpoint. Each
+cell is the mean absolute error in points and then the bias, so a
+negative number means the variant said less than the man scored.
 
 ```
-  candidate                         QB tgt/car      RB tgt/car      WR tgt/car      TE tgt/car
-  (a) component                      0.02/1.86       1.22/3.32       1.89/0.21       1.56/0.07
-  (b) walk usage                     0.03/2.13       1.29/3.61       2.20/0.22       1.89/0.08
-  sim, component shares              0.03/1.95       1.29/3.61       2.09/0.22       1.85/0.09
-  sim, component shares: half        0.03/1.83       1.27/3.46       2.06/0.22       1.82/0.08
+                  time scaled    copula posterior  remainder sim
+endQ1    QB       5.44 / -0.92   6.24 / -2.51      6.53 / -2.91
+         RB       4.60 /  0.36   4.67 /  0.50      4.64 / -0.42
+         WR       4.71 / -0.87   5.21 / -2.24      5.19 / -1.79
+         TE       4.78 / -1.11   5.68 / -1.88      4.88 / -1.89
+thirdQ2  QB       5.47 / -1.01   6.39 / -2.51      6.58 / -2.86
+         RB       4.67 /  0.20   4.80 /  0.23      4.79 / -0.61
+         WR       4.64 / -0.80   5.21 / -2.00      5.00 / -1.73
+         TE       4.79 / -0.96   5.61 / -1.57      4.68 / -1.32
+midQ2    QB       5.45 / -1.36   6.93 / -2.67      6.54 / -2.58
+         RB       4.46 / -0.03   4.63 / -0.19      4.53 / -0.45
+         WR       4.37 / -0.76   5.21 / -1.64      4.45 / -1.32
+         TE       4.43 / -1.07   5.25 / -1.52      4.63 / -1.38
+half     QB       5.04 / -0.00   6.03 / -0.11      5.23 / -1.28
+         RB       3.74 /  0.29   3.79 /  0.28      3.58 / -0.36
+         WR       3.80 /  0.16   4.55 /  0.16      3.82 / -0.41
+         TE       3.85 / -0.46   4.37 / -0.12      3.72 / -0.84
+redQ3    QB       4.75 / -0.84   5.53 / -1.29      4.93 / -1.23
+         RB       3.56 / -0.11   3.71 / -0.24      3.48 / -0.27
+         WR       3.46 / -0.18   4.14 / -0.30      3.48 / -0.55
+         TE       3.62 / -0.46   4.08 / -0.29      3.77 / -0.65
+endQ3    QB       4.09 / -0.67   4.48 / -0.90      3.57 / -0.98
+         RB       2.80 / -0.30   2.78 / -0.48      2.76 / -0.32
+         WR       2.85 / -0.38   3.13 / -0.48      2.71 / -0.52
+         TE       2.58 / -0.29   2.83 / -0.07      2.53 / -0.48
 ```
 
-Points, over the weeks the walk has played:
+The two sides' remaining points, which is the sim answering for the game
+rather than for anybody's fantasy team:
 
 ```
-  candidate                          QB wk1-4       RB wk1-4       WR wk1-4       TE wk1-4      QB wk5-17      RB wk5-17      WR wk5-17      TE wk5-17
-  (a) component                    5.52/+0.70     4.66/-0.07     4.97/-0.19     4.10/-0.12     6.79/-0.85     4.63/+0.12     5.06/+0.18     4.52/-0.81
-  (b) walk usage                   5.73/-0.50     4.64/-0.73     4.94/-0.29     3.86/-0.43     6.96/-1.53     4.52/-0.71     5.12/-0.17     4.46/-1.16
-  sim, component shares            5.65/+0.16     4.70/-1.06     5.26/-0.45     3.78/-0.37     6.89/-1.31     4.70/-1.18     5.16/-0.39     4.72/-1.13
-  sim, component shares: half      5.56/+0.43     4.71/-0.55     5.19/-0.33     3.93/-0.17     6.81/-1.08     4.66/-0.49     5.14/-0.07     4.67/-0.97
-  sim, component shares: points    5.90/+1.65     4.60/-1.06     5.28/-1.32     3.75/-0.81     7.28/+0.17     4.70/-1.05     5.31/-0.99     4.74/-1.63
+endQ1    MAE 6.15  bias -1.96
+thirdQ2  MAE 6.31  bias -2.11
+midQ2    MAE 6.28  bias -1.80
+half     MAE 5.92  bias -0.54
+redQ3    MAE 5.45  bias -0.59
+endQ3    MAE 4.34  bias -0.53
 ```
 
-Trailing shares move the touches the way they were meant to and not far
-enough to win. A receiver's targets are missed by 2.09 a game instead of 2.20, a
-tight end's from 1.89 to 1.85, and a quarterback's carries from 2.13 to
-1.95, while a back's carries do not move at all: 3.61 either way,
-against the component line's 3.32. So the simulator still loses the
-touches bench at every position, and the gate for shipping it as the
-pre-game line is not met.
-
-The points say the same and add a warning. Quarterback comes down a
-little in both splits, but the low bias at back and tight end gets
-worse, from -0.73 to -1.06 early at back and from -0.71 to -1.18 from
-week 5. Sharper shares hand more of the work to the busiest men, and
-because a targeted play is short everywhere (the bands at the top of
-this file), giving a busy man more of it puts more work through a rate
-that gains too little. Nothing here reconciles a man's per-touch yards
-and touchdown rate against what his own history says, which is the next
-thing to do and is where that bias should come off.
-
-What the trailing shares do win outright is the width of the runs:
+And the paired lineups, about 150 pairs a checkpoint. The two spread
+columns are the width the draws implied against the width that came
+out, first for one side's total and then for the margin between two:
 
 ```
-                shipped walk                     component walk
-            run sd  week sd  covered  1.2   run sd  week sd  covered  1.2
-  QB          6.83     8.91    66.3%  72.0%   7.45     8.90    67.2%  77.1%
-  RB          5.09     6.40    70.7%  81.1%   5.59     6.42    75.5%  84.3%
-  WR          5.65     7.26    73.4%  79.6%   6.05     7.12    77.6%  83.2%
-  TE          4.51     6.45    74.8%  79.6%   4.94     6.28    79.1%  83.9%
+                  brier    side          margin
+endQ1    time     0.2207   14.1 vs 16.8  19.3 vs 24.4
+         copula   0.2306   11.4 vs 20.5  16.1 vs 26.0
+         sim      0.2334   14.7 vs 20.3  20.6 vs 25.7
+thirdQ2  time     0.2029   13.7 vs 15.7  18.6 vs 21.5
+         copula   0.2021   10.8 vs 19.6  15.2 vs 22.8
+         sim      0.2345   14.3 vs 19.9  20.2 vs 23.9
+midQ2    time     0.2056   11.2 vs 16.3  15.3 vs 23.4
+         copula   0.2475    8.0 vs 20.4  11.3 vs 26.7
+         sim      0.2041   13.3 vs 18.2  18.6 vs 24.2
+half     time     0.1429    9.4 vs 13.7  12.8 vs 19.7
+         copula   0.1594    6.3 vs 15.6   8.8 vs 22.3
+         sim      0.1501   12.0 vs 13.9  17.0 vs 20.0
+redQ3    time     0.1367    7.7 vs 12.9  10.5 vs 18.4
+         copula   0.1629    4.7 vs 14.9   6.6 vs 20.9
+         sim      0.1329   11.1 vs 13.3  15.8 vs 18.6
+endQ3    time     0.0968    4.7 vs 10.5   6.4 vs 14.7
+         copula   0.1204    2.3 vs 11.6   3.2 vs 16.2
+         sim      0.0980    8.8 vs 10.7  12.3 vs 14.4
 ```
 
-"run sd" is how far the forty runs of a fixture sit from their own
-middle, "week sd" how far a man's actual sat from that middle, and the
-last two columns how much of his eighty per cent band the runs cover,
-first as they come and then with the 1.2 stretch the site ships. The
-runs come out wider on trailing shares, because who gets the ball now
-varies more from run to run, and they cover 79.1% at tight end and
-77.6% at receiver on their own. The stretch is no longer needed at those
-two and now overshoots everywhere, 84.3% at back and 83.9% at tight end
-against a target of 80%. If this setting ships, `DEALT_WIDER` wants
-refitting to about 1.05 rather than keeping 1.2, and at quarterback it
-is still doing work: the runs cover 67.2% where his weeks are 8.9 wide
-against the runs' 7.45.
+## Reading the remainder
 
-Two things this pass did not do. The per-man rate reconciliation above
-is unmeasured, and so is the pass-catcher fallback, which the top of
-this file says has to land with the sacks in the same change. And
-`scripts/matchupCalibration.ts` was left alone: a lineup there needs all
-seven men drawn, the walk has only played the odd weeks, and a Brier
-over the subset of lineups where every seat has simulator runs cannot be
-read against the 0.2112 the shipped bench reports.
+The sim clears the bar. It beats the copula posterior at all four
+positions at half time (6.03 to 5.23 at quarterback, 3.79 to 3.58 at
+back, 4.55 to 3.82 at receiver, 4.37 to 3.72 at tight end) and at all
+four again at the end of the third quarter, where the quarterback gap is
+4.48 to 3.57. It also beats it on the Brier score at both (0.1594 to
+0.1501, and 0.1204 to 0.0980), so the matchup odds do not pay for the
+per-man win.
+
+The spread is where the copula is worst and the sim helps most. At half
+time the copula's draws imply a side scores within 6.3 points of its
+projection when sides actually land 15.6 away, and it implies an 8.8
+point margin where the played one is 22.3. That is draws far too tight,
+which is what makes a live matchup page too sure of the favourite. The
+sim implies 12.0 against 13.9 and 17.0 against 20.0. It is still narrow,
+but it is close enough to argue about rather than out by a factor of
+two.
+
+Early in a game the sim is the worst of the three, and the reason is
+plain in the bias column: it is short 2.9 points on a quarterback at the
+end of the first quarter and short 1.96 on a whole side's remaining
+points. A game with three quarters left is nearly a whole game, so the
+engine's own low scoring has three quarters to accumulate, where the
+week line scaled by the clock inherits a projection that was fitted to
+be unbiased. By half time the remaining bias is down to half a point a
+side and the ordering flips. So the shipped answer should be the clock
+scaling early and the sim from half time on, and the engine's scoring
+bias is the thing to fix before it is trusted before half.
+
+Two cautions. This is one week of each season, so a position cell is 59
+to 159 men and a Brier cell about 150 pairs; the half time and third
+quarter wins are consistent across all four positions, which is harder
+to get by luck than any single one of them, but the size of each win is
+not settled. And the time scaled variant uses the component line rebuilt
+in process rather than the shipped slate, since only two slates were
+ever written to `docs/data`.
