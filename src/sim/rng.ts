@@ -11,6 +11,24 @@ export function seededRng(seed: number): () => number {
   };
 }
 
+/** how many of a rare thing happened, by Knuth's product of uniforms */
+export function poisson(mean: number, uniform: () => number): number {
+  if (mean <= 0) {
+    return 0;
+  }
+
+  const limit = Math.exp(-mean);
+  let count = 0;
+  let product = uniform();
+
+  while (product > limit) {
+    count++;
+    product *= uniform();
+  }
+
+  return count;
+}
+
 /** one draw from a bell centred on zero, off Box and Muller's pair */
 export const standardNormal = (uniform: () => number): number =>
   Math.sqrt(-2 * Math.log(Math.max(1e-12, uniform()))) *
