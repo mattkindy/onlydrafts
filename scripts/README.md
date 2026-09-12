@@ -494,7 +494,7 @@ writes the answers to `docs/data/sim-<season>.json` as base64 bytes:
 each side's run rate by down, distance, field position, score and
 clock; who the ball goes to; each man's catch rate and sixteen gain
 quantiles; and the league's kicks, punts, fourth downs, turnovers,
-penalties and seconds a snap. A season is 173 KB on disk and 73 KB
+penalties and seconds a snap. A season is 201 KB on disk and 85 KB
 gzipped. `app/lib/remainder.ts` is the same drive and game loop reading
 those bytes, and it runs in a worker at 2000 replays of a half in about
 180 ms, against 8 seconds for 60 replays in Node.
@@ -505,7 +505,14 @@ nearest week they played.
 
 `scripts/simAgreement.ts` asks both engines about the same checkpoints.
 Over 20 checkpoints of 2025 week 10 at 60 runs each, the browser engine
-is 0.75 points a man away from Node with no bias, and 1.52 points a side
-away. The side gap was 0.88 too high before the fourth down table
-learned the score and the clock, because a side behind late goes for it
-where the frozen table sent the kicker out.
+is 0.73 points a man away from Node with no bias, and 1.47 points a
+side away, of which 0.65 is scoring sides high.
+
+That side bias was 0.88 until the fourth down table learned the score
+and the clock. The fitted model keys the choice on the score band and
+the time band as well as the spot, and the table was sampled once at
+nil apiece with twenty minutes left, so a side behind in the fourth got
+the kicker where the staff would have gone for it. The remaining 0.65
+is worth another look: with the per-man bias at -0.05, whatever is
+still generous is not reaching anybody's fantasy line, which points at
+the kicks rather than the gains.
