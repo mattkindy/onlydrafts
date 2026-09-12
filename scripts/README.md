@@ -485,3 +485,27 @@ to get by luck than any single one of them, but the size of each win is
 not settled. And the time scaled variant uses the component line rebuilt
 in process rather than the shipped slate, since only two slates were
 ever written to `docs/data`.
+
+## Getting the sim into a static site
+
+The site has no server, so the browser cannot ask the fitted model
+anything. `scripts/buildSimTables.ts` asks it instead, on a grid, and
+writes the answers to `docs/data/sim-<season>.json` as base64 bytes:
+each side's run rate by down, distance, field position, score and
+clock; who the ball goes to; each man's catch rate and sixteen gain
+quantiles; and the league's kicks, punts, fourth downs, turnovers,
+penalties and seconds a snap. A season is 173 KB on disk and 73 KB
+gzipped. `app/lib/remainder.ts` is the same drive and game loop reading
+those bytes, and it runs in a worker at 2000 replays of a half in about
+180 ms, against 8 seconds for 60 replays in Node.
+
+`scripts/buildSimTables.ts` reads the roster of one week, and a side on
+its bye has none that week, so the four teams on bye are built from the
+nearest week they played.
+
+`scripts/simAgreement.ts` asks both engines about the same checkpoints.
+Over 20 checkpoints of 2025 week 10 at 60 runs each, the browser engine
+is 0.75 points a man away from Node with no bias, and 1.52 points a side
+away. The side gap was 0.88 too high before the fourth down table
+learned the score and the clock, because a side behind late goes for it
+where the frozen table sent the kicker out.
