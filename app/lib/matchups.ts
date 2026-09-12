@@ -17,6 +17,9 @@ import {
   factorFor, factorsOf, mixFor, PASS_CATCHERS, posteriorDraws, posteriorFor,
   type From, type Mix,
 } from "./copula.ts";
+import {
+  explainSwap, worthExplaining, type Explanation,
+} from "./explain.ts";
 import type { Matchup, Side } from "./providers.ts";
 import {
   FLEX_POSITIONS, knownSlot, lineupOf, slotTakes, type Player,
@@ -912,6 +915,11 @@ export interface Alternative {
   gains: number;
   /** his game has kicked off, so the league will not take the change */
   locked: boolean;
+  /**
+   * Where the change in win chance comes from, for the swaps a reader
+   * cannot work out from the two projections.
+   */
+  why?: Explanation;
 }
 
 /** a seat, who is in it, and who else could be */
@@ -960,17 +968,25 @@ export function alternativesFor(
 
   return side.starters.map((starter) => {
     const shut = locked(starter, rows, states, lines);
+    const seated = Array.from({ length: draws }, (_, i) => scoredBy(starter, i));
+    const others = totals.map((total, i) => total - seated[i]!);
     const options = benched
       .filter((his) => takes(starter.slot, his.line!.position, slots))
       .map((his) => {
-        const swapped = totals.map((total, i) =>
-          total - scoredBy(starter, i) + scoredBy(his.man, i));
+        const instead = Array.from(
+          { length: draws }, (_, i) => scoredBy(his.man, i));
+        const swapped = others.map((rest, i) => rest + instead[i]!);
+        const gains = winChance(swapped, theirs) - odds;
+        const pointsGap = mean(instead) - mean(seated);
 
         return {
           key: his.man.key,
           position: his.line!.position,
-          gains: winChance(swapped, theirs) - odds,
+          gains,
           locked: shut || locked(his.man, rows, states, lines),
+          why: worthExplaining(gains, pointsGap)
+            ? explainSwap({ others, starter: seated, candidate: instead, theirs })
+            : undefined,
         };
       })
       .sort((a, b) => b.gains - a.gains);

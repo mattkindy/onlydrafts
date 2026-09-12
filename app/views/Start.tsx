@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 
+import { leadFor, type Explanation } from "../lib/explain.ts";
 import {
   alternativesFor, gameStates, lineFor, starterState,
   type GameState, type Lines, type SlotChoice,
@@ -67,6 +68,37 @@ function Numbers(
   );
 }
 
+/**
+ * Where the swap's win chance comes from, shown only on the seats a
+ * reader cannot settle from the two projections.
+ */
+function Why({ why }: { why: Explanation }) {
+  const gap = why.projected.candidate - why.projected.starter;
+  const pieces: [string, number][] = [
+    ["points", why.points],
+    ["spread", why.spread],
+    ["their game", why.opponent],
+    ["your lineup", why.ownLineup],
+  ];
+
+  return (
+    <p class="why">
+      <span class="said">
+        {(gap > 0 ? "+" : "") + gap.toFixed(1)} projected points, and{" "}
+        {leadFor(why)}
+      </span>
+      {pieces.map(([said, worth]) => (
+        <span key={said} class="piece">
+          {said} <b>{signed(worth)}</b>
+        </span>
+      ))}
+      <span class="piece">
+        net <b>{signed(why.gains)}</b>
+      </span>
+    </p>
+  );
+}
+
 function Seat(
   { choice, rows, states, lines }: {
     choice: SlotChoice;
@@ -114,6 +146,7 @@ function Seat(
                     {signed(option.gains)}
                   </span>
                   {option.locked && <span class="badge even">locked</span>}
+                  {option.why && <Why why={option.why} />}
                 </li>
               );
             })}

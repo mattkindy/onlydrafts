@@ -21,6 +21,7 @@
     "scripts/betterDraft.ts",
     "scripts/draftWalk.ts",
     "scripts/matchupCalibration.ts",
+    "scripts/explainSweep.ts",
     "scripts/liveRemainderEval.ts"
   ]
 }
