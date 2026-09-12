@@ -17,6 +17,11 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { buildWorld } from "../src/features/playedWorld.js";
 import { loadPlayerStats, loadWeeklyRosters } from "../src/data/nflverse.js";
+import {
+  componentUsage, emptyBox, historiesForWeek,
+} from "../src/features/componentWeek.js";
+import { SHARING_POSITIONS } from "../src/features/projectedShares.js";
+import { presets } from "../src/scoring/fantasyPoints.js";
 import { DEFAULT_AFTER_TOUCHDOWN } from "../src/features/afterTouchdown.js";
 import type { Call, PlayState } from "../src/model/playFactors.js";
 import { seededRng } from "../src/sim/rng.js";
@@ -78,17 +83,21 @@ function quantilesOf(drawn: number[]): number[] {
 async function main(): Promise<void> {
   const positions = new Map<string, string>();
   const nameOf = new Map<string, string>();
+  const lastYear = await loadPlayerStats(SEASON - 1);
+  const thisYear = await loadPlayerStats(SEASON).catch(() => []);
 
-  for (const row of await loadPlayerStats(SEASON - 1)) {
+  for (const row of [...lastYear, ...thisYear]) {
     positions.set(row.playerId, row.position);
     nameOf.set(row.playerId, row.playerName);
   }
 
-  for (const row of await loadPlayerStats(SEASON)) {
-    positions.set(row.playerId, row.position);
-    nameOf.set(row.playerId, row.playerName);
-  }
-
+  /**
+   * A season nobody has played yet has no games to fit anything on, so
+   * the play behaviour comes from last season and only the casts are
+   * this season's. The sides are the same franchises either way.
+   */
+  const preseason = !thisYear.length;
+  const fitSeason = preseason ? SEASON - 1 : SEASON;
   const rosters = await loadWeeklyRosters(SEASON);
   const byWeek = new Map<number, Set<string>>();
 
@@ -105,8 +114,17 @@ async function main(): Promise<void> {
     weeks.filter((week) => week !== from)
       .sort((a, b) => Math.abs(a - from) - Math.abs(b - from) || b - a);
 
+  /**
+   * Last season's last week, for a preseason build. Its rosters are the
+   * ones the fitted world will read, and a week nobody was on a bye
+   * gives every side a cast to fit against.
+   */
+  const fitWeek = preseason
+    ? Math.max(...[...new Set((await loadWeeklyRosters(SEASON - 1))
+        .map((row) => row.week))])
+    : WEEK;
   const world = await buildWorld(
-    SEASON, WEEK, true, positions, { componentShares: true });
+    fitSeason, fitWeek, true, positions, { componentShares: true });
   const positionOf = new Map<string, string>(positions);
 
   for (const men of world.onTeam.values()) {
@@ -286,10 +304,14 @@ async function main(): Promise<void> {
 
   const tablesForTeam = (
     from: Awaited<ReturnType<typeof buildWorld>>, team: string,
+    cast?: { among: string[]; passer: string },
   ) => {
-    const side = from.sideFor(team);
+    const fitted = from.sideFor(team);
+    const side = fitted && cast
+      ? { ...fitted, among: cast.among, passer: cast.passer }
+      : fitted;
 
-    if (!side) {
+    if (!side || !side.among.length) {
       return null;
     }
 
@@ -374,8 +396,60 @@ async function main(): Promise<void> {
     };
   };
 
-  for (const team of teams) {
-    const built = tablesForTeam(world, team);
+  // the roster says who is there, last season says how much of the
+  // work each of them saw
+  const castsForNewSeason = (castWeek: number) => {
+    const histories = historiesForWeek(thisYear, lastYear, WEEK, presets.ppr);
+    const usageOfMan = (playerId: string) => componentUsage(
+      histories.get(playerId) ??
+      { trailing: emptyBox(), trailingGames: 0, prev: emptyBox(), prevGames: 0 });
+    const out = new Map<string, { among: string[]; passer: string }>();
+
+    for (const team of everyTeam) {
+      const onIt = rosters
+        .filter((row) => row.teamId === team && row.week === castWeek)
+        .map((row) => ({
+          playerId: row.playerId,
+          position: positions.get(row.playerId) ?? row.rawPosition,
+          usage: usageOfMan(row.playerId),
+        }))
+        .filter((man) => man.position === "QB" ||
+          SHARING_POSITIONS.includes(man.position));
+      const throwers = onIt
+        .filter((man) => man.position === "QB")
+        .sort((a, b) => b.usage.passAtt - a.usage.passAtt);
+      const cast = onIt
+        .filter((man) => man.position !== "QB" &&
+          man.usage.carries + man.usage.targets > 0)
+        .sort((a, b) =>
+          (b.usage.carries + b.usage.targets) -
+          (a.usage.carries + a.usage.targets))
+        .slice(0, 12);
+      const passer = throwers[0]?.playerId ?? "";
+
+      out.set(team, {
+        among: [...cast.map((man) => man.playerId), ...(passer ? [passer] : [])],
+        passer,
+      });
+    }
+
+    return out;
+  };
+
+  // a week the rosters do not cover would leave every side with nobody
+  const castWeek = playedIn(WEEK).size ? WEEK : (weeks[0] ?? WEEK);
+  const casts = preseason ? castsForNewSeason(castWeek) : null;
+  const empty = [...(casts?.entries() ?? [])]
+    .filter(([, cast]) => !cast.among.length)
+    .map(([team]) => team);
+
+  if (empty.length) {
+    console.log(`no cast for ${empty.join(", ")}`);
+  }
+
+
+  for (const team of everyTeam) {
+    const built = tablesForTeam(world, team, casts?.get(team));
 
     if (built) {
       tables.teams[team] = built;
@@ -387,7 +461,7 @@ async function main(): Promise<void> {
    * sees it and the live page would have nothing to play its next game
    * with. It is built from the nearest week it did play instead.
    */
-  for (const week of nearestWeeks(WEEK)) {
+  for (const week of preseason ? [] : nearestWeeks(WEEK)) {
     const short = everyTeam.filter((team) => !tables.teams[team]);
 
     if (!short.length) {
