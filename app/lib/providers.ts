@@ -27,6 +27,8 @@ export interface League {
   leagueId: string;
   /** which season this is, since watching the draft has to ask again */
   season: number;
+  /** when it was read, so a roster that has moved on can be read again */
+  readAt?: number;
   name: string;
   size: number;
   pays: Pays;
@@ -180,6 +182,8 @@ const ESPN_PTS_ALLOWED: [string, number[]][] = [
 const ESPN_SLOTS: Record<number, string> = {
   0: "QB", 2: "RB", 4: "WR", 6: "TE", 16: "DEF", 17: "K",
   23: "FLEX", 7: "FLEX",
+  // the bench and the injured list count toward the roster, not the lineup
+  20: "BN", 21: "IR",
 };
 
 /**
@@ -436,6 +440,7 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       provider: "sleeper",
       leagueId: String(lg["league_id"]),
       season: Number(lg["season"] ?? state.season),
+      readAt: Date.now(),
       name: String(lg["name"]),
       size: Number(lg["total_rosters"]),
       pays: (lg["scoring_settings"] ?? {}) as Pays,
@@ -802,6 +807,7 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     provider: "espn" as const,
     leagueId: String(leagueId),
     season,
+    readAt: Date.now(),
     name: (settings.name ?? "ESPN league").trim() + " (" + nameOf(team) + ")",
     size: teams.length,
     pays,

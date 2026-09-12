@@ -8,7 +8,7 @@
  */
 
 import { Component, render, type ComponentChildren } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import "./style.css";
 
@@ -135,6 +135,31 @@ const sameSeat = (a: League | null, b: League | null) =>
 /** where the team you picked in a league is remembered */
 const seatKey = (lg: League) => "seat." + lg.provider + "." + lg.leagueId;
 
+/**
+ * The views where your own roster is part of the answer, so a man added
+ * off waivers since the league was read would show as missing.
+ */
+const ROSTER_VIEWS: View[] = ["start", "matchups", "waivers", "draft"];
+
+/** how old a read can be before one of those views asks the provider again */
+const STALE_AFTER = 2 * 60 * 1000;
+
+/** how fresh the roster on screen is, in one line */
+function rosterRead(league: League, again: boolean): string {
+  if (again) {
+    return "reading your roster again...";
+  }
+
+  if (!league.readAt) {
+    return "roster read before the page started noting when";
+  }
+
+  const at = new Date(league.readAt)
+    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  return "roster read at " + at;
+}
+
 function App() {
   const [season, setSeason] = useState<number | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
@@ -175,6 +200,10 @@ function App() {
   const [weekStatus, setWeekStatus] = useState("");
   const [games, setGames] = useState<Matchup[]>([]);
   const [gamesStatus, setGamesStatus] = useState("");
+  const [rereading, setRereading] = useState(false);
+  // the guard has to be the same object every render, since two reads
+  // started from different effects would otherwise not see each other
+  const reading = useRef(false);
 
   useEffect(() => {
     loadMeta()
@@ -371,6 +400,65 @@ function App() {
   };
 
   /**
+   * The league you are on, read again.
+   *
+   * Nothing else notices a roster that moved on: the league is a
+   * snapshot taken when you looked it up, so a man added off waivers is
+   * missing from the lineup pages until somebody asks the provider
+   * again. This asks quietly, leaves the page as it is while it waits,
+   * and a read that fails changes nothing, ESPN wanting cookies
+   * included.
+   */
+  const reread = async (force: boolean) => {
+    if (!active || reading.current) {
+      return;
+    }
+
+    if (!force && Date.now() - (active.readAt ?? 0) < STALE_AFTER) {
+      return;
+    }
+
+    reading.current = true;
+    setRereading(true);
+
+    const found = await PROVIDERS[active.provider]!
+      .leaguesFor(who.trim(), season ?? active.season)
+      .catch(() => null);
+    const again = found?.find((lg) => sameSeat(lg, active));
+
+    if (found) {
+      setLeagues(found);
+      keep("leagues", found);
+    }
+
+    if (again) {
+      setActive(again);
+      keep("active", again);
+    }
+
+    reading.current = false;
+    setRereading(false);
+  };
+
+  useEffect(() => {
+    if (!active || !ROSTER_VIEWS.includes(view)) {
+      return;
+    }
+
+    void reread(false);
+
+    const back = () => {
+      if (document.visibilityState === "visible") {
+        void reread(false);
+      }
+    };
+
+    document.addEventListener("visibilitychange", back);
+
+    return () => document.removeEventListener("visibilitychange", back);
+  }, [active, view, who, season]);
+
+  /**
    * Every team in a league where only one of them is yours. Once you
    * have said which, the others are put away until you ask for them.
    */
@@ -428,6 +516,9 @@ function App() {
           <span id="crumb">
             <button onClick={() => setView("leagues")}>all leagues</button>
             <b>{active.name}</b>
+            <button disabled={rereading} onClick={() => void reread(true)}>
+              refresh roster
+            </button>
             <span>you: {active.team}</span>
             {/* what the numbers are scored by, since standard and a
                 board with no league connected look the same on screen */}
@@ -584,6 +675,10 @@ function App() {
             }}
           />
         </div>
+      )}
+
+      {active && ROSTER_VIEWS.includes(view) && (
+        <p class="hint">{rosterRead(active, rereading)}</p>
       )}
 
       <div id="out">
