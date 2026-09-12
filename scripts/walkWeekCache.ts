@@ -31,6 +31,13 @@ import {
 const RUNS = Number(process.env["RUNS"] ?? 40);
 
 /**
+ * How many shares to cut the weeks into. Each keeps the whole play store
+ * in memory, so ten of them on twelve cores had not finished a week in
+ * fifty minutes, where one share plays a week in under two.
+ */
+const SHARES = Number(process.env["SHARES"] ?? 6);
+
+/**
  * Which walk to play. `component` takes each man's cut of the work from
  * his trailing usage instead of August's projection, and writes its own
  * file so the bench can read both at once.
@@ -136,6 +143,7 @@ if (asShare) {
 } else {
   const printed = await acrossCores({
     script: import.meta.filename,
+    shares: SHARES,
     env: {
       RUNS: String(RUNS),
       SEASONS: seasons.join(","),
