@@ -19,7 +19,8 @@ import { parseCsv } from "../data/csv.js";
 import { loadPlayerStats, loadWeeklyRosters } from "../data/nflverse.js";
 import { presets } from "../scoring/fantasyPoints.js";
 import {
-  componentUsage, emptyBox, historiesForWeek, type History,
+  componentRates, componentUsage, emptyBox, historiesForWeek,
+  positionRatePriors, type History,
 } from "./componentWeek.js";
 import { fitDriveRules, fitTeamDriveRules } from "./driveRules.js";
 import { fitPasserQuality } from "./passerQuality.js";
@@ -27,7 +28,8 @@ import { loadAdp, type AdpEntry } from "../data/adp.js";
 import { normalizeName } from "../data/names.js";
 import { fitEndings } from "./fitEndings.js";
 import {
-  fitPlayFactors, countPlays, storePlays, FACTOR_DEFAULTS, type PlayRow,
+  fitPlayFactors, countPlays, storePlays, FACTOR_DEFAULTS,
+  type PerManLevel, type PlayRow,
 } from "./fitPlayFactors.js";
 import { fitFourthDown, climbTo, type FourthRow } from "./fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "./fitPlayClock.js";
@@ -80,36 +82,92 @@ const noHistory = (): History => ({
  * sharper number, and it is what the weekly bench's best line already
  * predicts a man's touches from.
  */
-async function componentSplit(
+async function componentPieces(
   season: number,
   week: number,
   onTeam: Map<string, { playerId: string; position: string }[]>,
-): Promise<Map<string, { carries: number; targets: number }>> {
+  positions: Map<string, string>,
+): Promise<{
+  split: Map<string, { carries: number; targets: number }>;
+  perMan: Map<string, PerManLevel>;
+  standIn: Map<string, string[]>;
+}> {
   const histories = historiesForWeek(
     await loadPlayerStats(season),
     await loadPlayerStats(season - 1),
     week,
     presets.ppr,
   );
-  const out = new Map<string, { carries: number; targets: number }>();
+  /**
+   * The shrink target, over the two seasons before this one. This
+   * season is left out because a week of it is what the walk is being
+   * asked about, and a league average that includes the answer is a
+   * leak, however small a man's own part of it is.
+   */
+  const priors = positionRatePriors(
+    [
+      ...(await loadPlayerStats(season - 2).catch(() => [])),
+      ...(await loadPlayerStats(season - 1)),
+    ],
+    presets.ppr,
+  );
+  const split = new Map<string, { carries: number; targets: number }>();
+  const standIn = new Map<string, string[]>();
 
   for (const men of onTeam.values()) {
     const his = men.map((p) => ({
       playerId: p.playerId,
+      position: p.position,
       usage: componentUsage(histories.get(p.playerId) ?? noHistory()),
     }));
     const carries = his.reduce((sum, p) => sum + p.usage.carries, 0);
     const targets = his.reduce((sum, p) => sum + p.usage.targets, 0);
 
     for (const p of his) {
-      out.set(p.playerId, {
+      split.set(p.playerId, {
         carries: carries > 0 ? p.usage.carries / carries : 0,
         targets: targets > 0 ? p.usage.targets / targets : 0,
       });
     }
+
+    const busiest = [...his]
+      .filter((p) => p.usage.carries + p.usage.targets > 0)
+      .sort(
+        (a, b) =>
+          b.usage.carries + b.usage.targets - a.usage.carries - a.usage.targets,
+      );
+
+    for (const p of his) {
+      const others = busiest.filter((q) => q.playerId !== p.playerId);
+      standIn.set(p.playerId, [
+        ...others.filter((q) => q.position === p.position),
+        ...others.filter((q) => q.position !== p.position),
+      ].slice(0, 6).map((q) => q.playerId));
+    }
   }
 
-  return out;
+  const perMan = new Map<string, PerManLevel>();
+  const over = (mine: number, base: number) => (base > 0 ? mine / base : 1);
+
+  for (const [playerId, history] of histories) {
+    const prior = priors.get(positions.get(playerId) ?? "");
+
+    if (!prior) {
+      continue;
+    }
+
+    const rates = componentRates(history, prior);
+    perMan.set(playerId, {
+      runYards: over(rates.ypc, prior.ypc),
+      runScore: over(rates.rushTdRate, prior.rushTdRate),
+      passYards: over(rates.ypt, prior.ypt),
+      passScore: over(rates.recTdRate, prior.recTdRate),
+      throwYards: over(rates.ypa, prior.ypa),
+      throwScore: over(rates.passTdRate, prior.passTdRate),
+    });
+  }
+
+  return { split, perMan, standIn };
 }
 
 export interface WorldOptions {
@@ -118,6 +176,17 @@ export interface WorldOptions {
    * from August's projection pulled toward the season.
    */
   componentShares?: boolean;
+  /**
+   * Pull each man's drawn yards and drawn scores toward the per-touch
+   * rates his own recent history says, shrunk to his position, instead
+   * of leaving them where three seasons of his plays put them.
+   */
+  componentRates?: boolean;
+  /**
+   * Let a man too thin to sample borrow the plays of the busy men on
+   * his own side before he falls back to the crowd.
+   */
+  standIn?: boolean;
 }
 
 export async function buildWorld(
@@ -414,11 +483,22 @@ export async function buildWorld(
     })),
     SCORE_ON,
   );
+  /**
+   * The trailing usage and the trailing rates, worked out once. The
+   * shares go in below the fitting and the rates go into it, so both
+   * have to be in hand before the play behaviour is built.
+   */
+  const component = live &&
+      (options.componentShares || options.componentRates || options.standIn)
+    ? await componentPieces(SCORE_ON, onlyWeek, onTeam, positions)
+    : undefined;
   const factors = fitPlayFactors([], {
     ...FACTOR_DEFAULTS,
     readsTheScript: !process.env["NO_SCRIPT"],
   }, {
     split, lately, pairing: pairing.bend, counted, positions,
+    perMan: options.componentRates ? component?.perMan : undefined,
+    standIn: options.standIn ? component?.standIn : undefined,
     /**
      * Where a side stands before the snap. It says nothing about the
      * call that the pools do not already know, and a great deal about
@@ -678,10 +758,8 @@ export async function buildWorld(
    * of its plays are two different scales and mixing them would hand
    * him the wrong slice of the running.
    */
-  if (live && options.componentShares) {
-    for (const [playerId, his] of await componentSplit(
-      SCORE_ON, onlyWeek, onTeam,
-    )) {
+  if (component && options.componentShares) {
+    for (const [playerId, his] of component.split) {
       split.set(playerId, his);
     }
   }
