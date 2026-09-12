@@ -20,6 +20,7 @@
     "scripts/myPicksEval.ts",
     "scripts/betterDraft.ts",
     "scripts/draftWalk.ts",
-    "scripts/matchupCalibration.ts"
+    "scripts/matchupCalibration.ts",
+    "scripts/liveRemainderEval.ts"
   ]
 }

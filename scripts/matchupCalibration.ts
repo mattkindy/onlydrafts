@@ -34,6 +34,9 @@ import {
 import { mixFor, normalAt, PASS_CATCHERS } from "../app/lib/copula.ts";
 import { normalCdf, weekAt } from "../app/lib/spread.ts";
 import { winChance } from "../app/lib/winShare.ts";
+import {
+  BUCKETS, EDGES, emptyTally, lineupFrom, record, type Tally,
+} from "../src/backtest/lineups.js";
 
 const TRAIN = [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023];
 const TEST = [2024, 2025];
@@ -190,136 +193,7 @@ function weeksFor(man: Man, variant: Variant, uniforms: number[]): number[] {
   return uniforms.map((u) => at(points, u));
 }
 
-interface Tally {
-  buckets: { won: number; count: number; predicted: number }[];
-  brier: number;
-  logLoss: number;
-  pairs: number;
-  impliedSide: number;
-  realizedSide: number;
-  sides: number;
-  impliedDiff: number;
-  realizedDiff: number;
-  /** how far a side's projected total sat from what it scored */
-  sideError: number;
-  /** predicted and realized win rate by how big the projected edge is */
-  edges: { predicted: number; won: number; count: number }[];
-}
-
-const BUCKETS = 10;
-const EDGES = [0, 5, 10, 15, 20, 25];
-
-const emptyTally = (): Tally => ({
-  buckets: Array.from({ length: BUCKETS }, () =>
-    ({ won: 0, count: 0, predicted: 0 })),
-  brier: 0,
-  logLoss: 0,
-  pairs: 0,
-  impliedSide: 0,
-  realizedSide: 0,
-  sides: 0,
-  impliedDiff: 0,
-  realizedDiff: 0,
-  sideError: 0,
-  edges: EDGES.map(() => ({ predicted: 0, won: 0, count: 0 })),
-});
-
 const mean = (its: number[]) => its.reduce((s, n) => s + n, 0) / its.length;
-
-function variance(its: number[]): number {
-  const middle = mean(its);
-
-  return mean(its.map((n) => (n - middle) * (n - middle)));
-}
-
-const edgeOf = (margin: number) => {
-  let at = 0;
-
-  while (at < EDGES.length - 1 && margin >= EDGES[at + 1]!) {
-    at++;
-  }
-
-  return at;
-};
-
-function record(
-  tally: Tally,
-  mine: number[],
-  theirs: number[],
-  myActual: number,
-  theirActual: number,
-): void {
-  const raw = winChance(mine, theirs);
-  const iWin = myActual > theirActual;
-  const favoured = raw >= 0.5;
-  const p = favoured ? raw : 1 - raw;
-  const won = favoured === iWin ? 1 : 0;
-  const at = Math.min(BUCKETS - 1, Math.max(0, Math.floor((p - 0.5) / 0.05)));
-
-  tally.buckets[at]!.count++;
-  tally.buckets[at]!.won += won;
-  tally.buckets[at]!.predicted += p;
-  tally.brier += (p - won) * (p - won);
-  tally.logLoss -= Math.log(Math.max(1e-9, won ? p : 1 - p));
-  tally.pairs++;
-
-  const myMean = mean(mine);
-  const theirMean = mean(theirs);
-
-  tally.impliedSide += variance(mine) + variance(theirs);
-  tally.realizedSide += (myActual - myMean) * (myActual - myMean) +
-    (theirActual - theirMean) * (theirActual - theirMean);
-  tally.sides += 2;
-  tally.sideError += Math.abs(myActual - myMean) + Math.abs(theirActual - theirMean);
-
-  const diff = mine.map((n, i) => n - theirs[i]!);
-  const actualDiff = myActual - theirActual;
-  const meanDiff = myMean - theirMean;
-
-  tally.impliedDiff += variance(diff);
-  tally.realizedDiff += (actualDiff - meanDiff) * (actualDiff - meanDiff);
-
-  const edge = tally.edges[edgeOf(Math.abs(meanDiff))]!;
-  edge.predicted += p;
-  edge.won += won;
-  edge.count++;
-}
-
-const SEATS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"];
-const FLEX = ["RB", "WR", "TE"];
-
-function lineupFrom(
-  pools: Map<string, Man[]>, rand: () => number,
-): Man[] | null {
-  const taken = new Set<string>();
-  const out: Man[] = [];
-
-  for (const seat of SEATS) {
-    const want = seat === "FLEX" ? FLEX[Math.floor(rand() * 3)]! : seat;
-    const pool = pools.get(want) ?? [];
-
-    if (!pool.length) {
-      return null;
-    }
-
-    let tries = 0;
-    let man = pool[Math.floor(rand() * pool.length)]!;
-
-    while (taken.has(man.key) && tries < 20) {
-      man = pool[Math.floor(rand() * pool.length)]!;
-      tries++;
-    }
-
-    if (taken.has(man.key)) {
-      return null;
-    }
-
-    taken.add(man.key);
-    out.push(man);
-  }
-
-  return out;
-}
 
 function menOfWeek(
   examples: WeeklyExample[],
@@ -564,6 +438,7 @@ async function main(): Promise<void> {
             total(theirs, variant),
             myActual,
             theirActual,
+            winChance,
           );
         }
       }
