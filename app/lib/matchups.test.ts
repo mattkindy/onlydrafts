@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   alternativesFor, bestLineupFor, fractionLeft, initialForm, liveDraws, oddsFor,
-  sideTotals, spreadOf, starterState, statesFrom, stockLine,
+  sideTotals, situationsFrom, spreadOf, starterState, statesFrom, stockLine,
 } from "./matchups.ts";
 import type { GameState } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
@@ -412,5 +412,128 @@ describe("statesFrom", () => {
     expect(got.get("LA")?.where).toBe("in");
     expect(got.get("JAX")).toEqual({ where: "pre", left: 1 });
     expect(got.has("WSH")).toBe(false);
+  });
+});
+
+describe("situationsFrom", () => {
+  it("reads the ball, the clock and the timeouts off a game in the third", () => {
+    const got = situationsFrom({
+      events: [{
+        competitions: [{
+          status: {
+            period: 3, clock: 420, displayClock: "7:00", type: { state: "in" },
+          },
+          situation: {
+            possession: "12",
+            yardLine: 28,
+            down: 2,
+            distance: 7,
+            homeTimeouts: 2,
+            awayTimeouts: 3,
+            isRedZone: false,
+          },
+          competitors: [
+            {
+              homeAway: "home", score: "17",
+              team: { id: "12", abbreviation: "KC" },
+            },
+            {
+              homeAway: "away", score: "10",
+              team: { id: "2", abbreviation: "BUF" },
+            },
+          ],
+        }],
+      }],
+    });
+
+    const live = got.get("KC");
+
+    expect(got.get("BUF")).toBe(live);
+    expect(live?.home).toBe("KC");
+    expect(live?.away).toBe("BUF");
+    expect(live?.points).toEqual({ KC: 17, BUF: 10 });
+    expect(live?.secondsLeft).toBe(1320);
+    expect(live?.withBall).toBe("KC");
+    expect(live?.yardline).toBe(72);
+    expect(live?.down).toBe(2);
+    expect(live?.toGo).toBe(7);
+    expect(live?.timeouts).toEqual({ KC: 2, BUF: 3 });
+    expect(live?.redZone).toBe(false);
+    expect(live?.secondHalf).toBe(true);
+    expect(live?.warningLeft).toBe(true);
+  });
+
+  it("still gives the score and the clock between plays, with no ball", () => {
+    const got = situationsFrom({
+      events: [{
+        competitions: [{
+          status: {
+            period: 4, clock: 45, displayClock: "0:45", type: { state: "in" },
+          },
+          competitors: [
+            {
+              homeAway: "home", score: "24",
+              team: { id: "28", abbreviation: "WSH" },
+            },
+            {
+              homeAway: "away", score: "31",
+              team: { id: "14", abbreviation: "LAR" },
+            },
+          ],
+        }],
+      }, {
+        status: { type: { state: "post" } },
+        competitions: [{
+          competitors: [
+            {
+              homeAway: "home", score: "3",
+              team: { id: "17", abbreviation: "NE" },
+            },
+            {
+              homeAway: "away", score: "9",
+              team: { id: "20", abbreviation: "NYJ" },
+            },
+          ],
+        }],
+      }],
+    });
+
+    const live = got.get("WAS");
+
+    expect(got.get("LA")).toBe(live);
+    expect(live?.points).toEqual({ WAS: 24, LA: 31 });
+    expect(live?.secondsLeft).toBe(45);
+    expect(live?.timeouts).toEqual({ WAS: 3, LA: 3 });
+    expect(live?.withBall).toBeUndefined();
+    expect(live?.yardline).toBeUndefined();
+    expect(live?.down).toBeUndefined();
+    expect(live?.toGo).toBeUndefined();
+    expect(live?.redZone).toBe(false);
+    expect(live?.secondHalf).toBe(true);
+    expect(live?.warningLeft).toBe(false);
+    expect(got.has("NE")).toBe(false);
+  });
+
+  it("counts no time left once a game goes to overtime", () => {
+    const got = situationsFrom({
+      events: [{
+        competitions: [{
+          status: { period: 5, clock: 300, type: { state: "in" } },
+          competitors: [
+            {
+              homeAway: "home", score: "20",
+              team: { id: "6", abbreviation: "DAL" },
+            },
+            {
+              homeAway: "away", score: "20",
+              team: { id: "21", abbreviation: "PHI" },
+            },
+          ],
+        }],
+      }],
+    });
+
+    expect(got.get("DAL")?.secondsLeft).toBe(0);
+    expect(got.get("DAL")?.warningLeft).toBe(false);
   });
 });

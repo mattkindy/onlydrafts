@@ -182,7 +182,7 @@ export function Matchups(
     gameStates(season, week)
       .then((got) => {
         if (!stale) {
-          setStates(got);
+          setStates(got.states);
           setRead(new Date());
           setTrouble("");
         }
