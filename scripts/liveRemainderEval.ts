@@ -20,7 +20,7 @@ import { buildWorld } from "../src/features/playedWorld.js";
 import {
   linesFrom, playGame, type GameStart, type Side,
 } from "../src/model/gameFromDrives.js";
-import { loadGames, loadPlayerStats } from "../src/data/nflverse.js";
+import { loadPlayerStats } from "../src/data/nflverse.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { seededRng } from "../src/sim/rng.js";
 import { acrossCores, myShare } from "../src/sim/acrossCores.js";
@@ -28,19 +28,7 @@ import { fromCache, type Checkpoint } from "../src/backtest/checkpoints.js";
 import {
   addTally, emptyTally, lineupFrom, record, type Tally,
 } from "../src/backtest/lineups.js";
-import { weeklyExamplesForSeason } from "../src/features/weeklyModel.js";
-import {
-  fitWeeklyByPosition, predictWeeklyByPosition,
-} from "../src/features/fitWeeklyByPosition.js";
-import {
-  buildResidualModel, outcomeQuantile,
-} from "../src/backtest/intervals.js";
-import {
-  loadSleeperWeekly, projectionKey,
-} from "../src/data/sleeperProjections.js";
-import {
-  blendPoints, SHIPPED_BLEND_WEIGHT,
-} from "../src/features/sleeperBlend.js";
+import { linesFromCache, type LiveLine } from "../src/backtest/liveLines.js";
 import { fractionLeft, liveDraws } from "../app/lib/matchups.ts";
 import type { SlateRow } from "../app/lib/slate.ts";
 import { mixFor, normalAt, PASS_CATCHERS } from "../app/lib/copula.ts";
@@ -49,12 +37,9 @@ import { winChance } from "../app/lib/winShare.ts";
 
 const SEASONS = (process.env["SEASONS_ARG"] ?? process.argv[2] ?? "2024,2025")
   .split(",").map(Number);
-const WEEKS = (process.env["WEEKS_ARG"] ?? "3,6,9,12,15").split(",").map(Number);
-const RUNS = Number(process.env["RUNS"] ?? 250);
+const WEEKS = (process.env["WEEKS_ARG"] ?? "6,9,12,15").split(",").map(Number);
+const RUNS = Number(process.env["RUNS"] ?? 150);
 const LINEUPS = Number(process.env["LINEUPS"] ?? 120);
-const TRAIN = [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023];
-/** a man under this is nobody's starter, so lineups are drawn above it */
-const LOW_BAR = 5;
 const SEATED = ["QB", "RB", "WR", "TE"];
 
 const VARIANTS = ["time scaled", "copula posterior", "remainder sim"] as const;
@@ -398,54 +383,25 @@ function report(pooled: Pooled): void {
   }
 }
 
-/** the week's men, as the site would have priced them before kickoff */
+/** the week's men, in the two shapes the variants want them */
 function menOfWeek(
-  season: number, week: number,
-  examples: Awaited<ReturnType<typeof weeklyExamplesForSeason>>,
-  weekly: ReturnType<typeof fitWeeklyByPosition>,
-  residuals: ReturnType<typeof buildResidualModel>,
-  projections: Awaited<ReturnType<typeof loadSleeperWeekly>>,
+  lines: LiveLine[],
 ): { rows: Map<string, SlateRow>; lineFor: Map<string, Man> } {
   const rows = new Map<string, SlateRow>();
   const lineFor = new Map<string, Man>();
 
-  for (const e of examples) {
-    if (e.week !== week || !e.teamId || !e.opponent ||
-        !SEATED.includes(e.position)) {
-      continue;
-    }
+  for (const line of lines) {
+    const { playerId, position, team, opponent, blend, five } = line;
 
-    const ours = predictWeeklyByPosition(weekly, e);
-    const sleeper = projections.get(
-      projectionKey(season, week, e.playerId))?.points;
-    const blend = sleeper === undefined
-      ? ours
-      : blendPoints(ours, sleeper, SHIPPED_BLEND_WEIGHT);
-
-    if (blend < LOW_BAR) {
-      continue;
-    }
-
-    const quantile = (p: number) =>
-      outcomeQuantile(residuals, e.position, blend, p);
-    const floor = quantile(0.1);
-    const ceiling = quantile(0.9);
-    const five = [
-      floor, (floor + blend) / 2, blend, (blend + ceiling) / 2, ceiling,
-    ];
-    const team = e.teamId.toUpperCase();
-    const opponent = e.opponent.toUpperCase();
-
-    rows.set(e.playerId, {
-      playerId: e.playerId, name: e.playerId, position: e.position,
-      team, opponent, home: true, ours, sleeper: sleeper ?? null, blend,
-      floor, q1: five[1]!, q3: five[3]!, ceiling,
+    rows.set(playerId, {
+      playerId, name: playerId, position, team, opponent, home: true,
+      ours: line.ours, sleeper: line.sleeper, blend,
+      floor: five[0]!, q1: five[1]!, q3: five[3]!, ceiling: five[4]!,
       questionable: false, gamesMissedRecent: 0, absenceShare: 0,
     });
-    lineFor.set(e.playerId, {
-      key: e.playerId, playerId: e.playerId, position: e.position,
-      team, opponent, five, blend, soFar: 0, was: 0,
-      said: noNumbers(), draws: noDraws(),
+    lineFor.set(playerId, {
+      key: playerId, playerId, position, team, opponent, five, blend,
+      soFar: 0, was: 0, said: noNumbers(), draws: noDraws(),
     });
   }
 
@@ -481,37 +437,19 @@ async function main(): Promise<void> {
     return;
   }
 
-  const games = await loadGames();
-  const train = [];
-
-  for (const season of TRAIN) {
-    train.push(...(await weeklyExamplesForSeason(season, games)));
-  }
-
-  const weekly = fitWeeklyByPosition(train);
-  const residuals = buildResidualModel(
-    train.map((e) => ({
-      position: e.position,
-      predicted: predictWeeklyByPosition(weekly, e),
-      actual: e.target,
-    })),
-    5,
-  );
-  const projections = await loadSleeperWeekly();
-  console.error(`fitted on ${train.length} examples`);
   const out = empty();
   const mine = new Set(myShare(jobs.map((_, at) => at)));
   let at = -1;
 
   for (const season of SEASONS) {
-    const path = join(
-      import.meta.dirname, "..", "data", "curated",
-      `checkpoints-${season}.csv`,
-    );
+    const curated = (name: string) =>
+      join(import.meta.dirname, "..", "data", "curated", name);
+    const path = curated(`checkpoints-${season}.csv`);
+    const linesPath = curated(`liveLines-${season}.csv`);
     const anyOfMine = jobs.some((job, index) =>
       job.season === season && mine.has(index));
 
-    if (!anyOfMine || !existsSync(path)) {
+    if (!anyOfMine || !existsSync(path) || !existsSync(linesPath)) {
       at += WEEKS.length;
       continue;
     }
@@ -522,7 +460,7 @@ async function main(): Promise<void> {
       positions.set(s.playerId, s.position);
     }
 
-    const examples = await weeklyExamplesForSeason(season, games);
+    const lines = linesFromCache(await readFile(linesPath, "utf8"));
     const stops = fromCache(await readFile(path, "utf8"));
 
     for (const week of WEEKS) {
@@ -541,7 +479,7 @@ async function main(): Promise<void> {
       const world = await buildWorld(season, week, true, positions);
       console.error(`${season} week ${week}: ${thisWeek.length} checkpoints`);
       const { rows, lineFor } =
-        menOfWeek(season, week, examples, weekly, residuals, projections);
+        menOfWeek(lines.filter((line) => line.week === week));
       const pools = new Map<string, Map<string, Man[]>>();
 
       for (const stop of thisWeek) {
