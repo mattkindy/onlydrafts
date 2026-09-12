@@ -503,6 +503,16 @@ those bytes, and it runs in a worker at 2000 replays of a half in about
 its bye has none that week, so the four teams on bye are built from the
 nearest week they played.
 
+A season nobody has played yet has no games to fit anything on, so the
+play behaviour, the team tendencies and the league rules all come from
+last season and only the casts are this season's: who is on the roster
+now, ordered by the carries and targets he saw last year, with the
+quarterback being whoever threw most. The sides are the same franchises
+either way, so a team's run rate is reused unchanged. The live page
+also falls back to last season's file when this season has none, and a
+man who has moved or arrived since is absent from it, which puts him
+back on the copula rather than on nothing.
+
 `scripts/simAgreement.ts` asks both engines about the same checkpoints.
 Over 20 checkpoints of 2025 week 10 at 60 runs each, the browser engine
 is 0.73 points a man away from Node with no bias, and 1.47 points a
