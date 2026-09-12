@@ -9,6 +9,7 @@
   "include": [
     "app/**/*.ts",
     "app/**/*.tsx",
+    "scripts/boxScoreWeekEval.ts",
     "scripts/rateDraft.ts",
     "scripts/draftReportData.ts",
     "scripts/rateMyDraft.ts",
