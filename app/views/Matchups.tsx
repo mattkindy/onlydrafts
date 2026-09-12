@@ -17,10 +17,13 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 
 import {
   gameStates, lineFor, standingFor, starterState,
-  type GameState, type Lines,
+  type GameState, type Lines, type LiveSituation,
 } from "../lib/matchups.ts";
+import {
+  gamesToPlay, remainderInWorker, simTablesFor,
+} from "../lib/remainderDraws.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
-import type { Player } from "../lib/scoring.ts";
+import type { Pays, Player } from "../lib/scoring.ts";
 import type { SlateRow } from "../lib/slate.ts";
 import { Advice, nameOf, pct } from "./Advice.tsx";
 import { ManName } from "./ManName.tsx";
@@ -37,6 +40,8 @@ interface Props {
   mine: string;
   /** the seats the league starts, for the lineup it says you could put out */
   slots: string[] | null;
+  /** what this league pays, since the remainder engine scores its own plays */
+  pays: Pays;
   season: number;
   week: number;
   status?: string;
@@ -44,12 +49,13 @@ interface Props {
 
 /** one man on one side of a row, mirrored when he is the away side */
 function Man(
-  { starter, rows, states, lines, at }: {
+  { starter, rows, states, lines, at, remainder }: {
     starter: Side["starters"][number] | undefined;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
     at: 0 | 1;
+    remainder: Map<string, number[]> | null;
   },
 ) {
   if (!starter) {
@@ -60,7 +66,10 @@ function Man(
   const state = starterState(starter, rows, states, lines);
   const playing = state?.where === "in";
   const done = !state || state.left <= 0;
-  const toCome = line && !done ? line.blend * (state?.left ?? 1) : null;
+  const simmed = done ? undefined : remainder?.get(starter.key);
+  const toCome = simmed
+    ? simmed.reduce((sum, points) => sum + points, 0) / simmed.length
+    : line && !done ? line.blend * (state?.left ?? 1) : null;
 
   return (
     <div
@@ -72,7 +81,7 @@ function Man(
         <b>{starter.points.toFixed(1)}</b>
         <i>
           {toCome === null ? "" : toCome.toFixed(1)}
-          {line?.stock && toCome !== null ? " stock" : ""}
+          {simmed ? " sim" : line?.stock && toCome !== null ? " stock" : ""}
         </i>
       </span>
     </div>
@@ -85,11 +94,12 @@ function Man(
  * leaves its half of the row empty.
  */
 function Lineups(
-  { game, rows, states, lines }: {
+  { game, rows, states, lines, remainder }: {
     game: Matchup;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
+    remainder: Map<string, number[]> | null;
   },
 ) {
   const deep = Math.max(
@@ -103,9 +113,15 @@ function Lineups(
 
         return (
           <div class="seat" key={i}>
-            <Man starter={home} rows={rows} states={states} lines={lines} at={0} />
+            <Man
+              starter={home} rows={rows} states={states} lines={lines} at={0}
+              remainder={remainder}
+            />
             <span class="chip">{home?.slot ?? away?.slot ?? ""}</span>
-            <Man starter={away} rows={rows} states={states} lines={lines} at={1} />
+            <Man
+              starter={away} rows={rows} states={states} lines={lines} at={1}
+              remainder={remainder}
+            />
           </div>
         );
       })}
@@ -114,18 +130,20 @@ function Lineups(
 }
 
 function Game(
-  { game, rows, states, slots, lines, mine }: {
+  { game, rows, states, slots, lines, mine, remainder }: {
     game: Matchup;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     slots: string[] | null;
     lines: Lines;
     mine: number;
+    remainder: Map<string, number[]> | null;
   },
 ) {
   const { odds, projected } = useMemo(
-    () => standingFor(game, rows, states, lines),
-    [game, rows, states, lines],
+    () => standingFor(
+      game, rows, states, lines, undefined, remainder ?? undefined),
+    [game, rows, states, lines, remainder],
   );
 
   return (
@@ -154,19 +172,27 @@ function Game(
           states={states}
           lines={lines}
           odds={odds[mine]!}
+          remainder={remainder}
         />
       )}
-      <Lineups game={game} rows={rows} states={states} lines={lines} />
+      <Lineups
+        game={game} rows={rows} states={states} lines={lines}
+        remainder={remainder}
+      />
     </div>
   );
 }
 
 export function Matchups(
-  { games, rows, men, mine, slots, season, week, status }: Props,
+  { games, rows, men, mine, slots, pays, season, week, status }: Props,
 ) {
   const lines = useMemo(
     () => new Map(men.map((p) => [p.key, p])), [men]);
   const [states, setStates] = useState<Map<string, GameState> | null>(null);
+  const [situations, setSituations] =
+    useState<Map<string, LiveSituation> | null>(null);
+  const [remainder, setRemainder] =
+    useState<Map<string, number[]> | null>(null);
   const [read, setRead] = useState<Date | null>(null);
   const [trouble, setTrouble] = useState("");
   /**
@@ -183,6 +209,7 @@ export function Matchups(
       .then((got) => {
         if (!stale) {
           setStates(got.states);
+          setSituations(got.situations);
           setRead(new Date());
           setTrouble("");
         }
@@ -209,6 +236,34 @@ export function Matchups(
 
     return () => clearTimeout(timer);
   }, [live, reads]);
+
+  /**
+   * From half time on, playing the rest of a game out beats pulling a
+   * man's week line toward what he has done, so those games go to the
+   * engine and everything earlier stays on the clock scaling.
+   */
+  useEffect(() => {
+    if (!situations || !gamesToPlay(situations).length) {
+      setRemainder(null);
+
+      return;
+    }
+
+    let stale = false;
+
+    simTablesFor(season)
+      .then((tables) => tables
+        ? remainderInWorker(tables, situations, pays)
+        : new Map<string, number[]>())
+      .then((played) => {
+        if (!stale) {
+          setRemainder(played.size ? played : null);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => { stale = true; };
+  }, [situations, season, pays]);
 
   const ordered = useMemo(
     () => [...games].sort((a, b) =>
@@ -241,6 +296,7 @@ export function Matchups(
             slots={slots}
             lines={lines}
             mine={game.sides.findIndex((s) => s.owner === mine)}
+            remainder={remainder}
           />
         ))}
       </div>

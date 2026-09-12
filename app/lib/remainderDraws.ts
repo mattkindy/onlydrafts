@@ -88,6 +88,39 @@ export function remainderDraws(
   return out;
 }
 
+/**
+ * The same thing off the main thread. Two thousand replays of a game
+ * take long enough to drop frames, so the worker does the loop and the
+ * page gets back one array of points a man.
+ */
+export function remainderInWorker(
+  tables: SimTables, situations: Map<string, LiveSituation>, pays: Pays,
+  draws = REMAINDER_DRAWS,
+): Promise<Map<string, number[]>> {
+  const games = gamesToPlay(situations);
+
+  if (!games.length) {
+    return Promise.resolve(new Map());
+  }
+
+  return new Promise((settle) => {
+    const worker = new Worker(
+      new URL("./remainderWorker.ts", import.meta.url), { type: "module" });
+
+    worker.onmessage = (event: MessageEvent<{ men: Record<string, number[]> }>) => {
+      settle(new Map(Object.entries(event.data.men)));
+      worker.terminate();
+    };
+
+    worker.onerror = () => {
+      settle(new Map());
+      worker.terminate();
+    };
+
+    worker.postMessage({ tables, games, draws, pays });
+  });
+}
+
 /** the tables for a season, fetched once and kept */
 const loaded = new Map<number, Promise<SimTables | null>>();
 
