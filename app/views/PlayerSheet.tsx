@@ -1,5 +1,7 @@
 /** Everything the board says about one man, on top of whatever view you were in. */
 
+import { useEffect } from "preact/hooks";
+
 import type { Player } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
 import { lineOver, movedBy } from "../lib/statLine.ts";
@@ -9,8 +11,6 @@ interface Props {
   plus: string[];
   minus: string[];
   teams: number;
-  kept: boolean;
-  onKeep: () => void;
   onClose: () => void;
 }
 
@@ -85,9 +85,24 @@ export function PlayerSheet(props: Props) {
   const g = p.game;
   const sim = p.sim;
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        props.onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+
+    return () => window.removeEventListener("keydown", onKey);
+  }, [props.onClose]);
+
   return (
     <div id="overlay" class="open" onClick={props.onClose}>
       <div class="sheet" onClick={(e) => e.stopPropagation()}>
+        <button class="shut" aria-label="close" onClick={props.onClose}>
+          ×
+        </button>
         <h3>{p.name}</h3>
         <div class="sub">
           {p.position} &middot; {p.team ?? ""}
@@ -140,19 +155,6 @@ export function PlayerSheet(props: Props) {
         )}
 
         <WeekByWeek p={p} />
-
-        <div class="row">
-          <button class="act" onClick={props.onKeep}>
-            {props.kept ? "unmark keeper" : "mark as keeper"}
-          </button>
-          <button
-            class="act"
-            style={{ background: "var(--chip)", color: "var(--ink)" }}
-            onClick={props.onClose}
-          >
-            close
-          </button>
-        </div>
       </div>
     </div>
   );

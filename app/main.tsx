@@ -213,7 +213,8 @@ function App() {
   const [view, setView] = useState<View>("leagues");
   const [who, setWho] = useState(() => stored("username", ""));
   const [provider, setProvider] = useState(() => stored("provider", "sleeper"));
-  const [perTeam, setPerTeam] = useState(() => stored("keepn", 3));
+  const [perTeamSaid, setPerTeam] = useState(() => stored("keepn", 3));
+  const perTeam = active?.keepersPerTeam ?? perTeamSaid;
   const [posFilter, setPosFilter] = useState("ALL");
   const [theme, setTheme] = useState<Theme>(() => stored<Theme>("theme", "system"));
   const [query, setQuery] = useState("");
@@ -706,8 +707,7 @@ function App() {
           empty one still draws as a white strip across the page */}
       <div
         class="controls"
-        hidden={!["leagues", "draft"].includes(view) &&
-          !(view === "team" && keeperLeague)}
+        hidden={!["leagues", "draft"].includes(view)}
       >
         {view === "leagues" && (
           <>
@@ -735,12 +735,12 @@ function App() {
           </>
         )}
 
-        {(view === "draft" || (view === "team" && keeperLeague)) && (
+        {view === "draft" && keeperLeague && !active?.keepersPerTeam && (
           <label>
             keepers per team{" "}
             <input
               type="number" min="0" max="6" style={{ width: "3.2rem" }}
-              value={perTeam}
+              value={perTeamSaid}
               onInput={(e) => {
                 setPerTeam(Number(e.currentTarget.value));
                 keep("keepn", Number(e.currentTarget.value));
@@ -915,16 +915,24 @@ function App() {
               )
               : null}
 
-            <h2>your draft, pick by pick</h2>
-            {/* opened rather than collapsed, since replaying the draft is
-                a second of work nobody asked for on the way to a roster */}
+            {/* closed until asked, since replaying the draft is a second
+                of work nobody wants on the way to a roster */}
             <button
-              class="disclose"
+              class="fold"
               aria-expanded={myDraft}
               onClick={() => setMyDraft((on) => !on)}
             >
-              <span class="chev">{myDraft ? "⌄" : "›"}</span>
-              how each of your picks read at the time
+              <h2>your draft, pick by pick</h2>
+              <svg
+                class={"chev" + (myDraft ? " open" : "")}
+                viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"
+              >
+                <path
+                  d="M4 6l4 4 4-4" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
             </button>
             {myDraft && (
               <AfterPaint saying="replaying your draft">
@@ -1032,8 +1040,6 @@ function App() {
           plus={board?.plusMinus.get(showing.key)?.plus ?? []}
           minus={board?.plusMinus.get(showing.key)?.minus ?? []}
           teams={active?.size ?? 12}
-          kept={Boolean(marked[showing.key])}
-          onKeep={() => { markKeeper(showing); setShowing(null); }}
           onClose={() => setShowing(null)}
         />
       )}
