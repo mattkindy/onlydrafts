@@ -16,6 +16,14 @@ import type { SlateRow } from "../lib/slate.ts";
 
 export const pct = (share: number) => (100 * share).toFixed(0) + "%";
 
+/**
+ * A gain, in whole points of win probability. Every percentage on the
+ * page is whole, so a swap worth a third of a point says so in words
+ * rather than rounding away to nothing.
+ */
+export const gainPct = (share: number) =>
+  100 * share < 0.5 ? "<1%" : "+" + pct(share);
+
 /** whatever anybody calls this man: the week, the board, or his key */
 export const nameOf = (
   key: string, rows: Map<string, SlateRow>, lines: Lines,
@@ -55,20 +63,22 @@ export function Advice(
   if (!best.swaps.length) {
     return (
       <div class="advice">
-        <b>Lineup wins {pct(standing)}.</b> This is the best lineup you can set.
+        <b>Your lineup wins {pct(standing)}.</b> It is already the optimal
+        lineup.
       </div>
     );
   }
 
   return (
     <div class="advice">
-      <b>Lineup wins {pct(standing)}.</b> Best lineup {pct(best.odds)}.
+      <b>Your lineup wins {pct(standing)}.</b> Optimal lineup{" "}
+      {pct(best.odds)}.
       <ul>
         {best.swaps.map((swap) => (
           <li key={swap.starts + swap.benches}>
             Start {nameOf(swap.starts, rows, lines)} over{" "}
             {nameOf(swap.benches, rows, lines)} at {swap.slot}{" "}
-            <span class="gain">(+{(100 * swap.gains).toFixed(1)}%)</span>
+            <span class="gain">({gainPct(swap.gains)})</span>
           </li>
         ))}
       </ul>

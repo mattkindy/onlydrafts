@@ -88,7 +88,7 @@ function OnTheBoard(
 
   return (
     <div class="board">
-      <div class="track" title={`the room takes him between ${asRound(early, teams)} and ${asRound(late, teams)}`}>
+      <div class="track" title={`he usually goes between ${asRound(early, teams)} and ${asRound(late, teams)}`}>
         <span
           class="room"
           style={{
@@ -249,7 +249,7 @@ function Facts({ p, teams, costs, aside }: {
       {p.par && (
         <span
           class="f"
-          title="what he beats the last man your league starts by over a season, from the tenth to the ninetieth of the seasons played out for him. The middle figure is the median, which he beats half the time."
+          title="what he beats a replacement-level player by over a season, from the tenth to the ninetieth of the seasons simulated for him. The middle figure is the median, which he beats half the time."
         >
           <i>over a season</i>
           {p.par.low.toFixed(0)} to {p.par.high.toFixed(0)}
@@ -267,9 +267,9 @@ function Facts({ p, teams, costs, aside }: {
       {p.games !== undefined && (
         <span
           class="f"
-          title="games we expect him to play, from his injury history, his age and his workload"
+          title="projected games, from his injury history, his age and his workload"
         >
-          <i>games</i>{p.games.toFixed(1)}
+          <i>proj games</i>{p.games.toFixed(1)}
         </span>
       )}
       {/* The big value is what a pick at his place on the board is
@@ -283,7 +283,7 @@ function Facts({ p, teams, costs, aside }: {
         Math.abs(p.ownVor - p.vor) >= 10 && (
         <span
           class="f"
-          title="what his own projection says he is worth over a season, before the room and the touches and the walk are mixed in. The bigger number is what a pick at his place on the board is worth."
+          title="what his own projection says he is worth over a season, before ADP and the touches and the walk are mixed in. The bigger number is what a pick at his place in our ranking is worth."
         >
           <i>ours alone</i>{p.ownVor.toFixed(0)}
         </span>

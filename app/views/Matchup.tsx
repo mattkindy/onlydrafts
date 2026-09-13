@@ -1,15 +1,17 @@
 /**
- * Your own lineup, seat by seat, with who else could take each one.
+ * Your week: the lineup you would set, and the game you are setting it
+ * for.
  *
- * Every alternative is priced the way the matchup card prices a swap:
- * how often you beat this week's opponent if he starts there instead of
- * the man who is in the seat. The two tabs run the same machinery on the
- * same draws, so the numbers on them agree.
+ * Every bench player is priced the way the matchup card prices a swap:
+ * your win probability against this week's opponent if he starts instead
+ * of whoever is in the slot. Only swaps that gain you something are
+ * listed, since a slot with five losing options under it says nothing.
  *
- * A man whose game has kicked off is still shown, marked locked, because
- * knowing you missed him is worth more than hiding him.
+ * A player whose game has kicked off is still shown, marked locked,
+ * because knowing you missed him is worth more than hiding him.
  */
 
+import type { ComponentChildren } from "preact";
 import { useMemo, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
@@ -19,13 +21,14 @@ import {
   type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
-import type { Player } from "../lib/scoring.ts";
+import type { Pays, Player } from "../lib/scoring.ts";
 import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
-import { Advice, nameOf } from "./Advice.tsx";
+import { Advice, gainPct, nameOf } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
 import { ManName } from "./ManName.tsx";
+import { Game } from "./Matchups.tsx";
 import { Reading } from "./Reading.tsx";
-import { useScoreboard } from "./scoreboard.ts";
+import { useLiveWeek } from "./scoreboard.ts";
 import { WeekRanks } from "./WeekRanks.tsx";
 
 interface Props {
@@ -33,50 +36,60 @@ interface Props {
   picked: WeekRef | null;
   onWeek: (w: WeekRef) => void;
   slate: Slate | null;
-  /** the men on your team, or nothing when no league is connected */
+  /** the players on your team, or nothing when no league is connected */
   roster: Set<string> | null;
   /** this week's games in your league, for the one you are in */
   games: Matchup[];
   rows: Map<string, SlateRow>;
-  /** the board in this league's terms, for the men the slate leaves out */
+  /** the board in this league's terms, for the players the slate leaves out */
   men: Player[];
-  /** who the office has listed, so a man reading nought says why */
+  /** who the injury report has listed, so a nought projection says why */
   listed: Map<string, Listed>;
   /** your own team's name in the league */
   mine: string | null;
   slots: string[] | null;
+  /** what this league pays, for playing out the rest of a live game */
+  pays?: Pays;
   status?: string;
 }
 
 const signed = (gains: number) =>
-  (gains > 0 ? "+" : "") + (100 * gains).toFixed(1) + "%";
+  gains > 0 ? gainPct(gains) : (100 * gains).toFixed(0) + "%";
 
-/** what a man is worth this week, as the seat headings and options read it */
+/** one figure with what it measures over it, so no number is bare */
+function Fig(
+  { label, children }: { label: string; children: ComponentChildren },
+) {
+  return (
+    <span class="fig">
+      <i>{label}</i>
+      {children}
+    </span>
+  );
+}
+
+/** what a player is worth this week, on his own row or under his slot */
 function Numbers(
-  { line, left, named }: {
+  { line, left }: {
     line: ReturnType<typeof lineFor>;
     /** how much of his game is still to play */
     left: number;
-    /**
-     * Whether to say the number is a projection. The seat's own heading
-     * has his points beside it and needs telling apart; a bench man's
-     * row has nothing to confuse it with.
-     */
-    named?: boolean;
   },
 ) {
   if (!line) {
-    return <span class="seat-fig">no line</span>;
+    return <span class="seat-fig">no projection</span>;
   }
 
   return (
-    <span class="seat-fig">
-      <b>{(line.blend * left).toFixed(1)}</b>{named ? " proj" : ""}{" "}
-      <i>
+    <>
+      <Fig label="proj">
+        {(line.blend * left).toFixed(1)}
+        {line.stock ? <small> stock</small> : null}
+      </Fig>
+      <Fig label="floor to ceiling">
         {line.spread.low.toFixed(1)} to {line.spread.high.toFixed(1)}
-      </i>
-      {line.stock && <i> stock</i>}
-    </span>
+      </Fig>
+    </>
   );
 }
 
@@ -99,14 +112,19 @@ function Office({ his }: { his: Listed | undefined }) {
 }
 
 /**
- * Where the swap's win chance comes from, shown only on the seats a
- * reader cannot settle from the two projections.
+ * Where the swap's win probability comes from, shown only on the slots
+ * a reader cannot settle from the two projections.
+ *
+ * These four add up to the swap, and most of them are a fraction of a
+ * point, so this is the one place a tenth is worth printing.
  */
 function Why({ why }: { why: Explanation }) {
+  const part = (share: number) =>
+    (share > 0 ? "+" : "") + (100 * share).toFixed(1) + "%";
   const gap = why.projected.candidate - why.projected.starter;
   const pieces: [string, number][] = [
     ["points", why.points],
-    ["spread", why.spread],
+    ["range", why.spread],
     ["their game", why.opponent],
     ["your lineup", why.ownLineup],
   ];
@@ -119,11 +137,11 @@ function Why({ why }: { why: Explanation }) {
       </span>
       {pieces.map(([said, worth]) => (
         <span key={said} class="piece">
-          {said} <b>{signed(worth)}</b>
+          {said} <b>{part(worth)}</b>
         </span>
       ))}
       <span class="piece">
-        net <b>{signed(why.gains)}</b>
+        net <b>{part(why.gains)}</b>
       </span>
     </p>
   );
@@ -145,6 +163,12 @@ function Seat(
     return { line, left: state?.left ?? 1 };
   };
   const his = at(choice.starter.key, choice.slot);
+  /**
+   * Only the swaps that gain you something. Listing the losing ones put
+   * the same five bench players under every running back slot, which is
+   * five screens of rows telling you to do nothing.
+   */
+  const better = choice.options.filter((option) => option.gains > 0);
 
   return (
     <section class="seat-card">
@@ -154,15 +178,20 @@ function Seat(
           name={nameOf(choice.starter.key, rows, lines)}
           team={his.line?.team}
         />
-        <span class="now">{choice.starter.points.toFixed(1)}</span>
-        <Numbers line={his.line} left={his.left} named />
         <Office his={listed.get(choice.starter.key)} />
         {choice.locked && <span class="badge even">locked</span>}
       </h3>
 
-      {choice.options.length > 0 && (
+      <div class="seat-figs">
+        <Fig label="scored">{choice.starter.points.toFixed(1)}</Fig>
+        <Numbers line={his.line} left={his.left} />
+      </div>
+
+      {better.length > 0 && (
+        <>
+          <div class="over">bench</div>
           <ul class="options">
-            {choice.options.map((option) => {
+            {better.map((option) => {
               const other = at(option.key);
 
               return (
@@ -173,8 +202,8 @@ function Seat(
                   />
                   <Numbers line={other.line} left={other.left} />
                   <Office his={listed.get(option.key)} />
-                  <span class={"delta" + (option.gains > 0 ? " up" : "")}>
-                    {signed(option.gains)}
+                  <span class="fig delta up">
+                    <i>win %</i>{signed(option.gains)}
                   </span>
                   {option.locked && <span class="badge even">locked</span>}
                   {option.why && <Why why={option.why} />}
@@ -182,7 +211,8 @@ function Seat(
               );
             })}
           </ul>
-        )}
+        </>
+      )}
     </section>
   );
 }
@@ -219,11 +249,11 @@ function Lineup(
   );
 }
 
-export function Start(props: Props) {
+export function MyMatchup(props: Props) {
   const { games, mine, rows, slots, slate, roster } = props;
   const [wholeWeek, setWholeWeek] = useState(false);
-  const { states, trouble } = useScoreboard(
-    props.picked?.season, props.picked?.week);
+  const { states, remainder, trouble } = useLiveWeek(
+    props.picked?.season, props.picked?.week, props.pays ?? {});
 
   const lines = useMemo(
     () => new Map(props.men.map((p) => [p.key, p])), [props.men]);
@@ -234,7 +264,7 @@ export function Start(props: Props) {
       <div class="empty">
         <b>No week has been built yet.</b> Weekly projections need a few
         games of this year's snaps and targets, so they turn on about a
-        month in. Until then use <b>draft help</b> and <b>my roster</b>.
+        month in. Until then use <b>draft</b> and <b>team</b>.
       </div>
     );
   }
@@ -286,8 +316,8 @@ export function Start(props: Props) {
             lines={lines}
           />
           <p class="hint">
-            Against {ours.against.owner} this week. Each man is priced by
-            what starting him does to your chance of winning it.
+            Against {ours.against.owner} this week. Each player is priced by
+            what starting him does to your win probability.
           </p>
           <Lineup
             side={ours.side}
@@ -298,6 +328,18 @@ export function Start(props: Props) {
             lines={lines}
             listed={props.listed}
           />
+
+          <h2>your game</h2>
+          <Game
+            game={ours.game}
+            rows={rows}
+            states={states}
+            slots={slots}
+            lines={lines}
+            mine={ours.at}
+            remainder={remainder}
+            withAdvice={false}
+          />
         </>
       )}
 
@@ -305,7 +347,7 @@ export function Start(props: Props) {
 
       {!ours && (
         <p class="hint">
-          You have no game to set a lineup against this week, so here is
+          You have no game this week, so there is no lineup to set. Here is
           the whole week ranked instead.
         </p>
       )}

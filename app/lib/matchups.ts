@@ -708,12 +708,14 @@ export interface Live {
 /** your own side of this week's game, and the side across from it */
 export function myGameIn(
   games: Matchup[], mine: string | null,
-): { side: Side; against: Side } | null {
+): { side: Side; against: Side; game: Matchup; at: number } | null {
   for (const game of games) {
     const at = game.sides.findIndex((s) => s.owner === mine);
 
     if (at >= 0) {
-      return { side: game.sides[at]!, against: game.sides[1 - at]! };
+      return {
+        side: game.sides[at]!, against: game.sides[1 - at]!, game, at,
+      };
     }
   }
 

@@ -68,7 +68,7 @@ function NowTeamRow(
       <td>{team.owner}</td>
       <td>{grade}</td>
       <td>{pct(team.wins)}</td>
-      <td>{signed(sinceDraft)}</td>
+      <td>{signed(sinceDraft, 0)}</td>
       <td>{team.picks}</td>
       <td>{starters.slice(0, 3).map((s) => s.p.name).join(", ")}</td>
     </tr>
@@ -196,8 +196,8 @@ export function DraftRating(props: Props) {
   return (
     <>
       <p class="hint">
-        {rated.length} teams in {league.name}, each against the roster the
-        room would have handed its own slots.
+        {rated.length} teams in {league.name}, each against the roster an
+        average draft would have handed its own picks.
         {drafted.size > 0 ? "" : " Read off the rosters, since this league" +
           " cannot say what happened pick by pick."}
       </p>
@@ -205,8 +205,8 @@ export function DraftRating(props: Props) {
       <table class="rating">
         <thead>
           <tr>
-            <th>#</th><th>team</th><th>grade</th><th>over</th>
-            <th>wins a week</th><th>slots would</th><th>picks</th>
+            <th>#</th><th>team</th><th>grade</th><th>per pick</th>
+            <th>win %</th><th>expected</th><th>picks</th>
             <th>best three</th>
           </tr>
         </thead>
@@ -227,7 +227,7 @@ export function DraftRating(props: Props) {
       {unmatched.length > 0 && (
         <div class="empty">
           <b>{unmatched.length} {unmatched.length === 1 ? "pick" : "picks"}</b>
-          {" "}the board has no man for, so {unmatched.length === 1
+          {" "}our board has no player for, so {unmatched.length === 1
             ? "that team is"
             : "those teams are"} rated on the rest:{" "}
           {unmatched.map((pick) =>
@@ -247,8 +247,8 @@ export function DraftRating(props: Props) {
             <thead>
               <tr>
                 <th>#</th><th>team</th><th>grade</th>
-                <th>wins a week now</th><th>since the draft</th>
-                <th>men</th><th>best three</th>
+                <th>win % now</th><th>since the draft</th>
+                <th>players</th><th>best three</th>
               </tr>
             </thead>
             <tbody>
@@ -272,14 +272,14 @@ export function DraftRating(props: Props) {
         <>
           <h2>{league.team}, pick by pick</h2>
           <p class="hint">
-            Each pick as the board would have read it at the time, with the
-            room's picks up to then already gone.
+            Each pick as our board would have read it at the time, with
+            everything taken up to then already gone.
           </p>
           <table class="rating">
             <thead>
               <tr>
-                <th>pick</th><th>player</th><th>room had him</th>
-                <th>waited</th><th>added</th><th>the board wanted</th>
+                <th>pick</th><th>player</th><th>adp</th>
+                <th>vs adp</th><th>added</th><th>we would have taken</th>
               </tr>
             </thead>
             <tbody>

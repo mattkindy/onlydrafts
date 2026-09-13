@@ -359,20 +359,20 @@ function FullRankings(
                        * he beats the man off waivers by is the whole
                        * decision, and it is a different number.
                        */
-                      ? { label: "over the wire", value: (p.ownVor ?? 0).toFixed(1) }
+                      ? { label: "over waivers", value: (p.ownVor ?? 0).toFixed(1) }
                       : { label: "value here", value: score.toFixed(1) }}
                   tag={byNeed && need
                     ? need.starts < 0.05
                       ? "you would never start him over what you have"
                       : need.starts < 0.9
                         ? `you would start him ${Math.round(need.starts * 100)}% of weeks`
-                        : "he starts every week you have him"
+                        : "he starts every week"
                     : i < 3
-                      ? "best left at " + p.position
+                      ? "best " + p.position + " left"
                       : state.rosteredBy[p.key]
                         ? "was on " + state.rosteredBy[p.key] + " last season"
                         : drop > 8
-                          ? `waiting a turn costs ${drop.toFixed(0)} at ${p.position}`
+                          ? `waiting a round costs ${drop.toFixed(0)} at ${p.position}`
                           : ""}
                   warn={i >= 3 && Boolean(state.rosteredBy[p.key])}
                   onMore={() => onMore(p)}
@@ -396,8 +396,8 @@ function FullRankings(
           <thead>
             <tr>
               <th>ours</th><th>player</th><th>pts</th>
-              <th title="games we expect him to play">gms</th>
-              <th title="what he is worth over a season, above the last man this league starts at his position">value</th>
+              <th title="projected games">gms</th>
+              <th title="VOR (value over replacement): what he is worth over a season above a replacement-level player at his position">vor</th>
               <th>adp</th><th>bye</th><th></th>
             </tr>
           </thead>
@@ -643,8 +643,8 @@ export function DraftView(props: Props) {
       {drafted.length === 0
         ? (
           <div class="empty">
-            Nothing yet. Mark keepers from <b>my roster</b> or from the
-            cards here, and your picks land here as the draft runs.
+            Nothing yet. Mark keepers from <b>team</b> or from the cards
+            here, and your picks land here as the draft runs.
           </div>
         )
         : (

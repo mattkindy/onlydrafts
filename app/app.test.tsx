@@ -17,12 +17,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { rescore } from "./lib/board.ts";
 import type { Player } from "./lib/scoring.ts";
-import type { League } from "./lib/providers.ts";
+import type { League, Matchup } from "./lib/providers.ts";
 import { Roster } from "./views/Roster.tsx";
 import { Keepers } from "./views/Keepers.tsx";
 import { DraftView } from "./views/Draft.tsx";
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
 import { Waivers } from "./views/Waivers.tsx";
+import { pairedRows } from "./views/Matchups.tsx";
 
 const DATA = join(import.meta.dirname, "..", "docs", "data");
 const file = JSON.parse(readFileSync(join(DATA, "board-2026.json"), "utf8")) as {
@@ -1006,11 +1007,11 @@ describe("a slot you cannot leave empty", () => {
     return at.querySelector(".card")!;
   };
 
-  it("leads a kicker and a defence with what he beats the wire by", () => {
+  it("leads a kicker and a defence with what he beats waivers by", () => {
     for (const position of ["K", "DEF"]) {
       const card = cardFor(position);
 
-      expect(card.textContent, position).toContain("over the wire");
+      expect(card.textContent, position).toContain("over waivers");
       expect(card.textContent, position).not.toContain("value here");
     }
   });
@@ -1026,7 +1027,7 @@ describe("a slot you cannot leave empty", () => {
     const card = cardFor("RB");
 
     expect(card.textContent).toContain("value here");
-    expect(card.textContent).not.toContain("over the wire");
+    expect(card.textContent).not.toContain("over waivers");
   });
 });
 
@@ -1181,5 +1182,45 @@ describe("the card leads with the order it is in", () => {
     for (let i = 1; i < shown.length; i++) {
       expect(shown[i]!).toBeLessThanOrEqual(shown[i - 1]!);
     }
+  });
+});
+
+/**
+ * Two teams can set the same lineup in different orders. Pairing the
+ * two lists by position then put one side's kicker opposite the other
+ * side's defence, with a chip between them naming neither.
+ */
+describe("a matchup card pairs the two lineups by slot", () => {
+  const sideWith = (slots: [string, string][]) => ({
+    owner: slots[0]![1],
+    points: 0,
+    starters: slots.map(([slot, key]) => ({ slot, key, points: 0 })),
+    bench: [],
+  });
+
+  const paired = (home: [string, string][], away: [string, string][]) =>
+    pairedRows({ sides: [sideWith(home), sideWith(away)] } as Matchup)
+      .map((row) => [row.slot, row.home?.key, row.away?.key]);
+
+  it("puts the same slot on both halves of a row", () => {
+    expect(paired(
+      [["RB", "a"], ["K", "b"], ["DEF", "c"]],
+      [["RB", "x"], ["DEF", "y"], ["K", "z"]],
+    )).toEqual([
+      ["RB", "a", "x"],
+      ["K", "b", "z"],
+      ["DEF", "c", "y"],
+    ]);
+  });
+
+  it("leaves half a row empty when one side starts more of a slot", () => {
+    expect(paired(
+      [["WR", "a"], ["WR", "b"]],
+      [["WR", "x"], ["TE", "y"]],
+    )).toEqual([
+      ["WR", "a", "x"],
+      ["WR", "b", undefined],
+      ["TE", undefined, "y"],
+    ]);
   });
 });
