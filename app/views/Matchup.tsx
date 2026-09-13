@@ -11,6 +11,7 @@
  * because knowing you missed him is worth more than hiding him.
  */
 
+import type { ComponentChildren } from "preact";
 import { useMemo, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
@@ -22,7 +23,7 @@ import {
 import type { Matchup, Side } from "../lib/providers.ts";
 import type { Pays, Player } from "../lib/scoring.ts";
 import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
-import { Advice, nameOf } from "./Advice.tsx";
+import { Advice, gainPct, nameOf } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
 import { ManName } from "./ManName.tsx";
 import { Game } from "./Matchups.tsx";
@@ -53,20 +54,26 @@ interface Props {
 }
 
 const signed = (gains: number) =>
-  (gains > 0 ? "+" : "") + (100 * gains).toFixed(1) + "%";
+  gains > 0 ? gainPct(gains) : (100 * gains).toFixed(0) + "%";
 
-/** what a man is worth this week, as the seat headings and options read it */
+/** one figure with what it measures over it, so no number is bare */
+function Fig(
+  { label, children }: { label: string; children: ComponentChildren },
+) {
+  return (
+    <span class="fig">
+      <i>{label}</i>
+      {children}
+    </span>
+  );
+}
+
+/** what a player is worth this week, on his own row or under his slot */
 function Numbers(
-  { line, left, named }: {
+  { line, left }: {
     line: ReturnType<typeof lineFor>;
     /** how much of his game is still to play */
     left: number;
-    /**
-     * Whether to say the number is a projection. The seat's own heading
-     * has his points beside it and needs telling apart; a bench man's
-     * row has nothing to confuse it with.
-     */
-    named?: boolean;
   },
 ) {
   if (!line) {
@@ -74,13 +81,15 @@ function Numbers(
   }
 
   return (
-    <span class="seat-fig">
-      <b>{(line.blend * left).toFixed(1)}</b>{named ? " proj" : ""}{" "}
-      <i>
+    <>
+      <Fig label="proj">
+        {(line.blend * left).toFixed(1)}
+        {line.stock ? <small> stock</small> : null}
+      </Fig>
+      <Fig label="floor to ceiling">
         {line.spread.low.toFixed(1)} to {line.spread.high.toFixed(1)}
-      </i>
-      {line.stock && <i> stock</i>}
-    </span>
+      </Fig>
+    </>
   );
 }
 
@@ -103,10 +112,15 @@ function Office({ his }: { his: Listed | undefined }) {
 }
 
 /**
- * Where the swap's win chance comes from, shown only on the seats a
- * reader cannot settle from the two projections.
+ * Where the swap's win probability comes from, shown only on the slots
+ * a reader cannot settle from the two projections.
+ *
+ * These four add up to the swap, and most of them are a fraction of a
+ * point, so this is the one place a tenth is worth printing.
  */
 function Why({ why }: { why: Explanation }) {
+  const part = (share: number) =>
+    (share > 0 ? "+" : "") + (100 * share).toFixed(1) + "%";
   const gap = why.projected.candidate - why.projected.starter;
   const pieces: [string, number][] = [
     ["points", why.points],
@@ -123,11 +137,11 @@ function Why({ why }: { why: Explanation }) {
       </span>
       {pieces.map(([said, worth]) => (
         <span key={said} class="piece">
-          {said} <b>{signed(worth)}</b>
+          {said} <b>{part(worth)}</b>
         </span>
       ))}
       <span class="piece">
-        net <b>{signed(why.gains)}</b>
+        net <b>{part(why.gains)}</b>
       </span>
     </p>
   );
@@ -164,11 +178,14 @@ function Seat(
           name={nameOf(choice.starter.key, rows, lines)}
           team={his.line?.team}
         />
-        <span class="now">{choice.starter.points.toFixed(1)}</span>
-        <Numbers line={his.line} left={his.left} named />
         <Office his={listed.get(choice.starter.key)} />
         {choice.locked && <span class="badge even">locked</span>}
       </h3>
+
+      <div class="seat-figs">
+        <Fig label="scored">{choice.starter.points.toFixed(1)}</Fig>
+        <Numbers line={his.line} left={his.left} />
+      </div>
 
       {better.length > 0 && (
         <>
@@ -185,8 +202,8 @@ function Seat(
                   />
                   <Numbers line={other.line} left={other.left} />
                   <Office his={listed.get(option.key)} />
-                  <span class={"delta" + (option.gains > 0 ? " up" : "")}>
-                    {signed(option.gains)}
+                  <span class="fig delta up">
+                    <i>win %</i>{signed(option.gains)}
                   </span>
                   {option.locked && <span class="badge even">locked</span>}
                   {option.why && <Why why={option.why} />}
