@@ -98,7 +98,7 @@ export async function buildPreseasonWorld(
   }
 
   const rookieWeights = fitRookieModel(rookieTrain);
-  const rookieClass = await rookiesFor(season, data, games);
+  const rookieClass = await rookiesFor(season, data, games, { alsoUnread: true });
 
   const bucketOf = (gamesPrev: number) =>
     gamesPrev >= 14 ? "durable" : gamesPrev >= 9 ? "spotty" : "thin";
@@ -284,7 +284,7 @@ export async function buildPreseasonWorld(
 
     players.push({
       playerId: e.playerId,
-      name: summaries.get(e.playerId)?.playerName ?? e.playerId,
+      name: summaries.get(e.playerId)?.playerName ?? e.playerName ?? e.playerId,
       position: e.position,
       teamId: team,
       projectedPpg: predictSeasonBlend(fit, e),
@@ -329,7 +329,8 @@ export async function buildPreseasonWorld(
         return out;
       }, blankParts()),
       gamesPool: gamesPools.get(rookieBucket(r.overall))!,
-      rookie: true,
+      rookie: r.rookie,
+      expectedGames: expectedGames.get(r.playerId),
     });
   }
 
