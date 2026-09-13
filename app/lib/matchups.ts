@@ -764,6 +764,11 @@ export interface Standing {
   odds: [number, number];
   /** and what each side finishes on, on average */
   projected: [number, number];
+  /**
+   * what each starter still adds on average, from the same draws, so
+   * the rows of a card add up to the total over them
+   */
+  toCome: Map<string, number>;
 }
 
 /** a matchup from here, both sides drawn against each other once */
@@ -779,8 +784,12 @@ export function standingFor(
   const home = sideTotals(matchup.sides[0], rows, states, draws, live);
   const away = sideTotals(matchup.sides[1], rows, states, draws, live);
   const p = winChance(home, away);
+  const toCome = new Map(
+    matchup.sides.flatMap((side) => side.starters)
+      .map((starter) => [starter.key, mean(live.toCome(starter.key))]),
+  );
 
-  return { odds: [p, 1 - p], projected: [mean(home), mean(away)] };
+  return { odds: [p, 1 - p], projected: [mean(home), mean(away)], toCome };
 }
 
 /** how often each side of a matchup wins it from here */
