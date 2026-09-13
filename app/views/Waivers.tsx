@@ -15,6 +15,7 @@
 
 import { useMemo, useState } from "preact/hooks";
 
+import { normalizeName } from "../lib/store.ts";
 import type { Player } from "../lib/scoring.ts";
 import type { League, Matchup } from "../lib/providers.ts";
 import { myGameIn, type Lines } from "../lib/matchups.ts";
@@ -38,6 +39,8 @@ interface Props {
   men: Player[];
   league: League;
   posFilter: string;
+  /** where the page keeps the filter, when it wants the buttons drawn here */
+  onPosFilter?: (where: string) => void;
   /** the week's projections, by the key a lineup uses for a man */
   rows: Map<string, SlateRow>;
   /** this week's games in your league, for the one you are in */
@@ -275,8 +278,12 @@ function missingWeek(
   return null;
 }
 
+/** the positions a reader filters by, the way the draft board lists them */
+const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
+
 export function Waivers(props: Props) {
   const { men, league, posFilter, rows, games } = props;
+  const [query, setQuery] = useState("");
   // before any week has been built there is nothing for the week to say,
   // so the page opens on the season instead of on a table of blanks
   const [span, setSpan] = useState<Span>(
@@ -324,6 +331,34 @@ export function Waivers(props: Props) {
   const rest = listed.slice(PRICED).filter((row) => row.added >= WORTH_ADDING);
   const hidden = listed.length - worth.length - rest.length;
   const best = worth[0] ?? null;
+  const wanted = normalizeName(query.trim());
+  const paidFor = new Map(priced.map(({ row, paid }) => [row.p.key, paid]));
+
+  /**
+   * The adds worth showing, in the order the span asks for. This week
+   * leads with what a move does to your win probability and drops
+   * everybody it does nothing for, since a list led by five tight ends
+   * worth nought is a list nobody reads.
+   */
+  const adds = useMemo(() => {
+    const every = [...worth.map(({ row }) => row), ...rest]
+      .filter((row) => !wanted || normalizeName(row.p.name).includes(wanted))
+      .map((row) => ({ row, paid: paidFor.get(row.p.key) ?? null }));
+
+    if (span === "season") {
+      return every;
+    }
+
+    return every
+      .map((one) => ({
+        ...one, by: week?.adds.get(one.row.p.key)?.added ?? 0,
+      }))
+      .filter((one) => one.by !== 0)
+      .sort((a, b) => b.by - a.by);
+  }, [worth, rest, wanted, span, week]);
+
+  const yours = drops
+    .filter((row) => !wanted || normalizeName(row.p.name).includes(wanted));
   const missing = missingWeek(props.week, rows, states, ours);
   const dropSeat = span === "week" ? "takes his slot" : "when he starts";
 
@@ -402,6 +437,28 @@ export function Waivers(props: Props) {
             rest of season
           </button>
         </span>
+
+        {props.onPosFilter && (
+          <span id="posfilter">
+            {POSITIONS.map((where) => (
+              <button
+                key={where}
+                class={where === posFilter ? "on" : ""}
+                onClick={() => props.onPosFilter!(where)}
+              >
+                {where.toLowerCase()}
+              </button>
+            ))}
+          </span>
+        )}
+
+        <label>
+          find{" "}
+          <input
+            size={12} placeholder="a name" value={query}
+            onInput={(e) => setQuery(e.currentTarget.value)}
+          />
+        </label>
         <span class="says">
           {span === "season"
             ? "a full season of simulated weeks against an average opponent"
@@ -434,7 +491,7 @@ export function Waivers(props: Props) {
           </tr>
         </thead>
         <tbody>
-          {worth.map(({ row, paid }) => (
+          {adds.map(({ row, paid }) => (
             <AddRow
               key={row.p.key}
               row={row}
@@ -442,16 +499,17 @@ export function Waivers(props: Props) {
               onMore={() => props.onMore(row.p)}
             />
           ))}
-          {rest.map((row) => (
-            <AddRow
-              key={row.p.key}
-              row={row}
-              {...addSeen(row, null)}
-              onMore={() => props.onMore(row.p)}
-            />
-          ))}
         </tbody>
       </table>
+
+      {adds.length === 0 && (
+        <p class="hint">
+          {span === "week"
+            ? "Nobody on the waiver wire changes your win probability this " +
+              "week. Try rest of season."
+            : "Nobody here matches that."}
+        </p>
+      )}
 
       {hidden > 0 && (
         <p class="hint">
@@ -474,7 +532,7 @@ export function Waivers(props: Props) {
           </tr>
         </thead>
         <tbody>
-          {drops.map((row) => (
+          {yours.map((row) => (
             <DropRow
               key={row.p.key}
               row={row}
@@ -485,6 +543,13 @@ export function Waivers(props: Props) {
           ))}
         </tbody>
       </table>
+
+      {!best && (
+        <p class="hint">
+          No add is worth it right now: every move on the board costs you
+          more than it brings.
+        </p>
+      )}
 
       {best && (
         <p class="hint">

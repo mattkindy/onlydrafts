@@ -1,13 +1,14 @@
 /**
- * Your own lineup, seat by seat, with who else could take each one.
+ * Your week: the lineup you would set, and the game you are setting it
+ * for.
  *
- * Every alternative is priced the way the matchup card prices a swap:
- * how often you beat this week's opponent if he starts there instead of
- * the man who is in the seat. The two tabs run the same machinery on the
- * same draws, so the numbers on them agree.
+ * Every bench player is priced the way the matchup card prices a swap:
+ * your win probability against this week's opponent if he starts instead
+ * of whoever is in the slot. Only swaps that gain you something are
+ * listed, since a slot with five losing options under it says nothing.
  *
- * A man whose game has kicked off is still shown, marked locked, because
- * knowing you missed him is worth more than hiding him.
+ * A player whose game has kicked off is still shown, marked locked,
+ * because knowing you missed him is worth more than hiding him.
  */
 
 import { useMemo, useState } from "preact/hooks";
@@ -19,13 +20,14 @@ import {
   type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
-import type { Player } from "../lib/scoring.ts";
+import type { Pays, Player } from "../lib/scoring.ts";
 import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
 import { Advice, nameOf } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
 import { ManName } from "./ManName.tsx";
+import { Game } from "./Matchups.tsx";
 import { Reading } from "./Reading.tsx";
-import { useScoreboard } from "./scoreboard.ts";
+import { useLiveWeek } from "./scoreboard.ts";
 import { WeekRanks } from "./WeekRanks.tsx";
 
 interface Props {
@@ -33,18 +35,20 @@ interface Props {
   picked: WeekRef | null;
   onWeek: (w: WeekRef) => void;
   slate: Slate | null;
-  /** the men on your team, or nothing when no league is connected */
+  /** the players on your team, or nothing when no league is connected */
   roster: Set<string> | null;
   /** this week's games in your league, for the one you are in */
   games: Matchup[];
   rows: Map<string, SlateRow>;
-  /** the board in this league's terms, for the men the slate leaves out */
+  /** the board in this league's terms, for the players the slate leaves out */
   men: Player[];
-  /** who the office has listed, so a man reading nought says why */
+  /** who the injury report has listed, so a nought projection says why */
   listed: Map<string, Listed>;
   /** your own team's name in the league */
   mine: string | null;
   slots: string[] | null;
+  /** what this league pays, for playing out the rest of a live game */
+  pays?: Pays;
   status?: string;
 }
 
@@ -145,6 +149,12 @@ function Seat(
     return { line, left: state?.left ?? 1 };
   };
   const his = at(choice.starter.key, choice.slot);
+  /**
+   * Only the swaps that gain you something. Listing the losing ones put
+   * the same five bench players under every running back slot, which is
+   * five screens of rows telling you to do nothing.
+   */
+  const better = choice.options.filter((option) => option.gains > 0);
 
   return (
     <section class="seat-card">
@@ -160,11 +170,11 @@ function Seat(
         {choice.locked && <span class="badge even">locked</span>}
       </h3>
 
-      {choice.options.length === 0
-        ? <p class="hint">Nobody on your bench can take this slot.</p>
-        : (
+      {better.length > 0 && (
+        <>
+          <div class="over">bench</div>
           <ul class="options">
-            {choice.options.map((option) => {
+            {better.map((option) => {
               const other = at(option.key);
 
               return (
@@ -184,7 +194,8 @@ function Seat(
               );
             })}
           </ul>
-        )}
+        </>
+      )}
     </section>
   );
 }
@@ -221,11 +232,11 @@ function Lineup(
   );
 }
 
-export function Start(props: Props) {
+export function MyMatchup(props: Props) {
   const { games, mine, rows, slots, slate, roster } = props;
   const [wholeWeek, setWholeWeek] = useState(false);
-  const { states, trouble } = useScoreboard(
-    props.picked?.season, props.picked?.week);
+  const { states, remainder, trouble } = useLiveWeek(
+    props.picked?.season, props.picked?.week, props.pays ?? {});
 
   const lines = useMemo(
     () => new Map(props.men.map((p) => [p.key, p])), [props.men]);
@@ -299,6 +310,18 @@ export function Start(props: Props) {
             states={states}
             lines={lines}
             listed={props.listed}
+          />
+
+          <h2>your game</h2>
+          <Game
+            game={ours.game}
+            rows={rows}
+            states={states}
+            slots={slots}
+            lines={lines}
+            mine={ours.at}
+            remainder={remainder}
+            withAdvice={false}
           />
         </>
       )}

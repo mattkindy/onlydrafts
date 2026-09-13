@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { render } from "preact";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { Start } from "./views/Start.tsx";
+import { MyMatchup } from "./views/Matchup.tsx";
 import { WeekRanks } from "./views/WeekRanks.tsx";
 import {
   isSplit, readSlate, rosterKeys, verdict, weekRefs, withOutMenZeroed,
@@ -189,7 +189,7 @@ describe("who to start", () => {
 
   it("says no week is built yet when none is", () => {
     render(
-      <Start
+      <MyMatchup
         weeks={[]} picked={null} onWeek={() => {}} slate={null} roster={null}
         games={[]} rows={new Map()} men={[]} mine={null} slots={null}
         listed={new Map()}
