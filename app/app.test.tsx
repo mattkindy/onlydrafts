@@ -24,6 +24,7 @@ import { DraftView } from "./views/Draft.tsx";
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import { pairedRows } from "./views/Matchups.tsx";
+import { nameOf } from "./views/Advice.tsx";
 
 const DATA = join(import.meta.dirname, "..", "docs", "data");
 const file = JSON.parse(readFileSync(join(DATA, "board-2026.json"), "utf8")) as {
@@ -113,7 +114,7 @@ describe("the views", () => {
   it("draws your roster", () => {
     render(
       <Roster
-        byKey={byKey} league={league} season={2026} perTeam={3}
+        byKey={byKey} men={men} league={league} season={2026} perTeam={3}
         marked={{}} onMark={() => {}} onMore={() => {}}
       />,
       where,
@@ -131,6 +132,7 @@ describe("the views", () => {
       <Waivers
         men={men} league={league} posFilter="ALL" rows={new Map()}
         games={[]} schedule={null} season={2026} week={null}
+        slate={null} roster={null} listed={new Map()}
         onMore={() => {}}
       />,
       where,
@@ -260,7 +262,7 @@ describe("a name somebody else chose", () => {
 
     render(
       <Roster
-        byKey={new Map(men.map((p) => [p.key, p]))}
+        byKey={new Map(men.map((p) => [p.key, p]))} men={men}
         league={league} season={2026} perTeam={3}
         marked={{}} onMark={() => {}} onMore={() => {}}
       />,
@@ -1222,5 +1224,66 @@ describe("a matchup card pairs the two lineups by slot", () => {
       ["WR", "b", undefined],
       ["TE", undefined, "y"],
     ]);
+  });
+});
+
+/**
+ * My team used to draw the roster twice: once as cards by position, and
+ * again underneath as keeper cards over the same twelve men. What each
+ * one is worth keeping for now opens on his own card.
+ */
+describe("my team lists each player once", () => {
+  const league = { ...aLeague(), keepers: true };
+  const men = boardFor(league);
+  const byKey = new Map(men.map((p) => [p.key, p]));
+
+  const namesOnScreen = () =>
+    Array.from(where.querySelectorAll(".card .nm .who"))
+      .map((el) => el.textContent!.trim());
+
+  it("draws no player card twice in a keeper league", () => {
+    render(
+      <Roster
+        byKey={byKey} men={men} league={league} season={2026} perTeam={3}
+        marked={{}} keeperLeague onMark={() => {}} onMore={() => {}}
+      />,
+      where,
+    );
+
+    const shown = namesOnScreen();
+
+    expect(shown.length).toBeGreaterThan(5);
+    expect(shown.length).toBe(new Set(shown).size);
+  });
+
+  it("still offers what keeping each of them costs", () => {
+    render(
+      <Roster
+        byKey={byKey} men={men} league={league} season={2026} perTeam={3}
+        marked={{}} keeperLeague onMark={() => {}} onMore={() => {}}
+      />,
+      where,
+    );
+
+    expect(where.querySelectorAll(".disclose").length)
+      .toBe(namesOnScreen().length);
+  });
+});
+
+/**
+ * A man neither the board nor the week has a line on used to be drawn as
+ * his key, which is his name with the spaces taken out. A kicker's row
+ * read "treysmack", which anybody would take for a username.
+ */
+describe("a man nobody has a projection for", () => {
+  it("is called what the provider calls him", () => {
+    const rows = new Map();
+    const lines = new Map();
+
+    expect(nameOf("treysmack", rows, lines, "Trey Smack")).toBe("Trey Smack");
+  });
+
+  it("falls back to his key only when nobody said a name", () => {
+    expect(nameOf("treysmack", new Map(), new Map())).toBe("treysmack");
   });
 });
