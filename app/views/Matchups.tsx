@@ -92,14 +92,15 @@ function StarterCell(
       />
       <span class="num">
         <b>{starter.points.toFixed(1)}</b>
-        <i title={toCome === null ? undefined : `${toCome.toFixed(1)} still to come`}>
-          {onCourse === null ? "" : onCourse.toFixed(1) + " proj"}
+        <i title={toCome === null ? undefined : `projected ${onCourse!.toFixed(1)}, ` +
+          `${toCome.toFixed(1)} still to come` +
+          (simmed ? ", from the simulation" : line?.stock ? ", a stock week" : "")}>
+          {onCourse === null ? "" : onCourse.toFixed(1)}
           {swing !== null && (
             <span class={swing > 0 ? "up" : swing < 0 ? "down" : ""}>
               {" " + (swing >= 0 ? "+" : "") + swing.toFixed(1)}
             </span>
           )}
-          {simmed ? " sim" : line?.stock && toCome !== null ? " stock" : ""}
         </i>
       </span>
     </div>
