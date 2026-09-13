@@ -14,7 +14,23 @@ import {
 import type { Side } from "../lib/providers.ts";
 import type { SlateRow } from "../lib/slate.ts";
 
-export const pct = (share: number) => (100 * share).toFixed(0) + "%";
+/**
+ * A share as a whole percentage, except at the ends. Rounded to 100% or
+ * 0% a game that is nearly settled reads as over, and the tenth is what
+ * says it is not.
+ */
+export function pct(share: number): string {
+  const percent = 100 * share;
+  const nearEnd = percent > 99 || percent < 1;
+  const tenths = percent.toFixed(1);
+
+  // 99.97 would print as 100.0, and then the tenth says nothing
+  if (!nearEnd || tenths === "100.0" || tenths === "0.0") {
+    return percent.toFixed(0) + "%";
+  }
+
+  return tenths + "%";
+}
 
 /**
  * A gain, in whole points of win probability. Every percentage on the
