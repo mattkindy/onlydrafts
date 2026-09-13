@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { addsFor, capacityOf, dropsFor, netFor, openSpotsFor } from "./waivers.ts";
-import { baselineFor, weeksOf } from "./winShare.ts";
+import { baselineFor, weeksOf, winChance } from "./winShare.ts";
 import type { Player } from "./scoring.ts";
 
 const SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF"];
@@ -131,6 +131,43 @@ describe("dropping a man", () => {
     expect(seatOf("aK")).toBe("K");
     // three receivers and two receiver seats, so the cheapest plays the flex
     expect(seatOf("flex")).toBe("FLEX");
+  });
+
+  /**
+   * Every man used to be priced by drawing the season again without
+   * him. Now his seat is handed down from the seating that is already
+   * filled, and the two have to agree on every man, flex and all.
+   */
+  it("agrees with filling the season again without him", () => {
+    const roster = [
+      ...aRoster(), aMan("wr3", "WR", 10.5), aMan("rb3", "RB", 9),
+      aMan("rb5", "RB", 4), aMan("te2", "TE", 7), aMan("aK", "K", 9),
+      aMan("aDef", "DEF", 8, 14),
+    ];
+    const room = { ...aRoom(), wire: { RB: 5, WR: 5, TE: 3, K: 4 } };
+    const held = baselineFor(roster, SLOTS, DRAWN, room.wire);
+    const with_ = winChance(held.total, room.opponent);
+
+    for (const his of dropsFor(roster, SLOTS, room)) {
+      const rest = roster.filter((p) => p.key !== his.p.key);
+      const again = baselineFor(rest, SLOTS, DRAWN, room.wire);
+      const after = winChance(again.total, room.opponent);
+      let heir: Player | null = null;
+      let most = 0;
+
+      for (const q of rest) {
+        const gained = (again.started[q.key] ?? 0) - (held.started[q.key] ?? 0);
+
+        if (gained > most) {
+          most = gained;
+          heir = q;
+        }
+      }
+
+      expect(his.after).toBeCloseTo(after, 10);
+      expect(his.costs).toBeCloseTo(with_ - after, 10);
+      expect(his.heir?.key ?? null).toBe(heir?.key ?? null);
+    }
   });
 
   /**

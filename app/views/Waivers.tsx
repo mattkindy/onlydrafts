@@ -22,7 +22,7 @@ import { myGameIn, type Lines } from "../lib/matchups.ts";
 import { rostersOf } from "../lib/replacementPool.ts";
 import type { SlateRow } from "../lib/slate.ts";
 import {
-  addsFor, dropsFor, netFor, openSpotsFor, RARELY_STARTS, WORTH_ADDING,
+  addsFor, dropsFor, netsFor, openSpotsFor, RARELY_STARTS, WORTH_ADDING,
   type Add, type Drop, type Net,
 } from "../lib/waivers.ts";
 import {
@@ -303,12 +303,14 @@ export function Waivers(props: Props) {
 
   /** the top of the list, each with the man he would cost you */
   const priced = useMemo(
-    () => listed
-      .slice(0, PRICED)
-      .map((row) => ({
-        row, paid: netFor(mine, row, league.slots, room, openSpots),
-      }))
-      .sort((a, b) => b.paid.net - a.paid.net),
+    () => {
+      const top = listed.slice(0, PRICED);
+      const nets = netsFor(mine, top, league.slots, room, openSpots);
+
+      return top
+        .map((row) => ({ row, paid: nets.get(row.p.key)! }))
+        .sort((a, b) => b.paid.net - a.paid.net);
+    },
     [listed, mine, room, league, openSpots],
   );
 

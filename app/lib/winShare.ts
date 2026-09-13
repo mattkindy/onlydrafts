@@ -57,8 +57,10 @@ export interface Baseline {
 }
 
 /** the seat he was in most of the weeks he started, if he started at all */
-export function seatOf(baseline: Baseline, key: string): string | null {
-  const his = baseline.seated[key];
+export function seatOf(
+  filled: Pick<Baseline, "seated">, key: string,
+): string | null {
+  const his = filled.seated[key];
 
   if (!his) {
     return null;
@@ -278,29 +280,114 @@ function seatsOf(slots: string[] | null | undefined): Seat[] {
   return seats;
 }
 
+/** one man of a roster, in the order the fill takes them */
+interface Sat {
+  p: Player;
+  its: number[];
+  expect: number;
+}
+
 /**
- * A seat your roster cannot fill this week is not worth nothing. You
- * start whoever the wire gives you there, so that man goes in it and a
- * newcomer has to beat him.
+ * Your lineup drawn week by week, kept as who sat in which seat.
  *
- * He scores his average every week, because he is not one player. He is
- * whoever you pick up on Wednesday, and a spread there would hand the
- * baseline weeks he happened to go big without anybody having chosen
- * him for it. A flex takes the best of the positions it accepts.
+ * A baseline reads its totals and its displaced seats off this. The
+ * waiver page reads something else off it: with the seating in hand,
+ * what dropping one man costs is the men below him shuffling up a
+ * seat, which is a short walk rather than the whole season filled
+ * again.
  */
-function fillFromTheWire(seated: Seat[], wire: Record<string, number>): void {
-  for (const seat of seated) {
-    if (seat.taken) {
-      continue;
-    }
+export interface Seating {
+  seats: Seat[];
+  /**
+   * What each seat is worth off the wire in a week nobody on the roster
+   * fills it. A seat your roster cannot fill is not worth nothing: you
+   * start whoever the wire gives you there, and a newcomer has to beat
+   * him.
+   *
+   * He scores his average every week, because he is not one player. He
+   * is whoever you pick up on Wednesday, and a spread there would hand
+   * the baseline weeks he happened to go big without anybody having
+   * chosen him for it. A flex takes the best of the positions it takes.
+   */
+  offWire: number[];
+  /** the roster best expected first, since that is how a lineup is set */
+  order: Sat[];
+  /** the seats each position can go in, as a bit per seat */
+  fits: Record<string, number>;
+  /** which seat each man took, by draw and then by his place in the order */
+  at: Int8Array;
+  /** the first drawn week this covers, since a caller can ask for a run */
+  from: number;
+  total: number[];
+  started: Record<string, number>;
+  seated: Record<string, Record<string, number>>;
+}
 
-    const off = seat.where.reduce(
-      (best, where) => Math.max(best, wire[where] ?? 0), 0);
+export function seatingFor(
+  roster: Player[], slots: string[] | null | undefined, draws = DRAWS,
+  wire: Record<string, number> = {}, only: [number, number] = [0, draws],
+): Seating {
+  const seats = seatsOf(slots);
+  const order = roster
+    .map((p) => ({ p, its: weeksOf(p, draws), expect: p.ppg ?? 0 }))
+    .sort((a, b) => b.expect - a.expect);
+  const fits: Record<string, number> = {};
 
-    if (off > 0) {
-      seat.taken = { expect: off, score: off, wire: true };
-    }
+  for (const where of WHERE) {
+    fits[where] = seats.reduce(
+      (mask, seat, s) => seat.where.includes(where) ? mask | (1 << s) : mask, 0);
   }
+
+  const offWire = seats.map((seat) => seat.where.reduce(
+    (best, where) => Math.max(best, wire[where] ?? 0), 0));
+  const men = order.length;
+  const full = (1 << seats.length) - 1;
+  const at = new Int8Array((only[1] - only[0]) * men).fill(-1);
+  const total: number[] = [];
+  const started: Record<string, number> = {};
+  const seated: Record<string, Record<string, number>> = {};
+
+  for (let i = only[0]; i < only[1]; i++) {
+    const row = (i - only[0]) * men;
+    let open = full;
+    let sum = 0;
+
+    for (let m = 0; m < men; m++) {
+      const man = order[m]!;
+      const score = man.its[i]!;
+
+      // only among the men who are playing at all
+      if (score <= 0) {
+        continue;
+      }
+
+      const could = open & (fits[man.p.position] ?? 0);
+
+      if (!could) {
+        continue;
+      }
+
+      // the first seat he fits, which is the lowest bit still set
+      const s = 31 - Math.clz32(could & -could);
+      open &= ~(1 << s);
+      at[row + m] = s;
+      sum += score;
+      started[man.p.key] = (started[man.p.key] ?? 0) + 1;
+      const his = seated[man.p.key] ??= {};
+      const slot = seats[s]!.slot;
+      his[slot] = (his[slot] ?? 0) + 1;
+    }
+
+    for (let s = 0; s < seats.length; s++) {
+      if (open & (1 << s)) {
+        sum += offWire[s]!;
+      }
+    }
+
+    total.push(sum);
+  }
+
+  return { seats, offWire, order, fits, at, from: only[0], total, started, seated };
 }
 
 /**
@@ -315,60 +402,164 @@ export function baselineFor(
   roster: Player[], slots: string[] | null | undefined, draws = DRAWS,
   wire: Record<string, number> = {}, only: [number, number] = [0, draws],
 ): Baseline {
-  const seats = seatsOf(slots);
-  // by what you expect of him, since that is what a lineup is set on
-  const weeks = roster
-    .map((p) => ({ p, its: weeksOf(p, draws), expect: p.ppg ?? 0 }))
-    .sort((a, b) => b.expect - a.expect);
-  const total: number[] = [];
+  const seating = seatingFor(roster, slots, draws, wire, only);
+
+  return {
+    total: seating.total,
+    displaced: displacedIn(seating),
+    started: seating.started,
+    seated: seating.seated,
+  };
+}
+
+/** who is in each seat in one drawn week, by his place in the order */
+function inSeats(seating: Seating, i: number, into: Int8Array): void {
+  const men = seating.order.length;
+  const row = i * men;
+  into.fill(-1);
+
+  for (let m = 0; m < men; m++) {
+    const s = seating.at[row + m]!;
+
+    if (s >= 0) {
+      into[s] = m;
+    }
+  }
+}
+
+/** what a newcomer at each position would have to beat, week by week */
+function displacedIn(seating: Seating): Record<string, Held[]> {
   const displaced: Record<string, Held[]> = {};
-  const started: Record<string, number> = {};
-  const seated: Record<string, Record<string, number>> = {};
 
   for (const where of WHERE) {
     displaced[where] = [];
   }
 
-  for (let i = only[0]; i < only[1]; i++) {
-    const filled = seats.map((seat) => ({ ...seat }));
+  const nSeats = seating.seats.length;
+  const who = new Int8Array(nSeats);
 
-    for (const man of weeks) {
-      const score = man.its[i]!;
+  for (let i = 0; i < seating.total.length; i++) {
+    inSeats(seating, i, who);
 
-      // only among the men who are playing at all
+    for (const where of WHERE) {
+      const mask = seating.fits[where] ?? 0;
+      let worst: Held | null = null;
+      let open = mask === 0;
+
+      for (let s = 0; s < nSeats && !open; s++) {
+        if (!(mask & (1 << s))) {
+          continue;
+        }
+
+        const held = heldIn(seating, who[s]!, s, i);
+
+        if (!held) {
+          open = true;
+        } else if (!worst || held.expect < worst.expect) {
+          worst = held;
+        }
+      }
+
+      displaced[where]!.push(
+        open || !worst ? { expect: 0, score: 0 } : worst);
+    }
+  }
+
+  return displaced;
+}
+
+/** whoever is in a seat that week: a man of yours, the wire, or nobody */
+function heldIn(
+  seating: Seating, m: number, s: number, i: number,
+): Held | null {
+  if (m >= 0) {
+    const man = seating.order[m]!;
+
+    return {
+      expect: man.expect, score: man.its[i + seating.from]!, who: man.p.key,
+    };
+  }
+
+  const off = seating.offWire[s]!;
+
+  return off > 0 ? { expect: off, score: off, wire: true } : null;
+}
+
+/** what your lineup scores each week once one man is gone, and who steps up */
+export interface Without {
+  total: number[];
+  /** how many more weeks each man is in the lineup, by his key */
+  gained: Record<string, number>;
+}
+
+/**
+ * The same season with one man off the roster, worked out from the
+ * seating rather than filled again.
+ *
+ * A man you never started costs you nothing. In a week he did start,
+ * his leaving opens his seat, and the fill below him is the same one it
+ * was except that the first man who fits that seat and was in a later
+ * one moves up into it, which opens the one he came from. The walk ends
+ * when a man who was not starting takes it, or the wire fills it.
+ */
+export function withoutFor(seating: Seating, key: string): Without {
+  const gone = seating.order.findIndex((man) => man.p.key === key);
+  const total = [...seating.total];
+  const gained: Record<string, number> = {};
+
+  if (gone < 0) {
+    return { total, gained };
+  }
+
+  const men = seating.order.length;
+
+  for (let i = 0; i < total.length; i++) {
+    const row = i * men;
+    let hole = seating.at[row + gone]!;
+
+    if (hole < 0) {
+      continue;
+    }
+
+    let sum = total[i]! - seating.order[gone]!.its[i + seating.from]!;
+
+    for (let m = gone + 1; m < men && hole >= 0; m++) {
+      const man = seating.order[m]!;
+
+      if (!((seating.fits[man.p.position] ?? 0) & (1 << hole))) {
+        continue;
+      }
+
+      const his = seating.at[row + m]!;
+
+      if (his > hole) {
+        hole = his;
+        continue;
+      }
+
+      if (his >= 0) {
+        continue;
+      }
+
+      const score = man.its[i + seating.from]!;
+
       if (score <= 0) {
         continue;
       }
 
-      const seat = filled.find((s) =>
-        !s.taken && s.where.includes(man.p.position));
-
-      if (seat) {
-        seat.taken = { expect: man.expect, score, who: man.p.key };
-        started[man.p.key] = (started[man.p.key] ?? 0) + 1;
-        const his = seated[man.p.key] ??= {};
-        his[seat.slot] = (his[seat.slot] ?? 0) + 1;
-      }
+      sum += score;
+      gained[man.p.key] = (gained[man.p.key] ?? 0) + 1;
+      hole = -1;
     }
 
-    fillFromTheWire(filled, wire);
-    total.push(filled.reduce((sum, s) => sum + (s.taken?.score ?? 0), 0));
-
-    for (const where of WHERE) {
-      const his = filled.filter((s) => s.where.includes(where));
-      const open = his.length === 0 || his.some((s) => !s.taken);
-      const worst = open
-        ? null
-        : his.reduce((low, s) =>
-          s.taken!.expect < low.taken!.expect ? s : low);
-
-      displaced[where]!.push(
-        worst ? { ...worst.taken! } : { expect: 0, score: 0 },
-      );
+    if (hole >= 0) {
+      sum += seating.offWire[hole]!;
     }
+
+    total[i] = sum;
   }
 
-  return { total, displaced, started, seated };
+  return { total, gained };
 }
 
 /**
