@@ -16,8 +16,8 @@
 import type { Player } from "./scoring.ts";
 import type { Room } from "./draftShare.ts";
 import {
-  baselineFor, seatOf, winChance, winShareFor,
-  type Baseline, type Priced,
+  baselineFor, seatingFor, seatOf, winChance, winShareFor, withoutFor,
+  type Priced, type Seating,
 } from "./winShare.ts";
 
 /**
@@ -99,25 +99,32 @@ export function addsFor(
 export function dropsFor(
   mine: Player[], slots: string[] | null | undefined, room: Room,
 ): Drop[] {
-  const held = baselineFor(mine, slots, room.draws, room.wire);
+  return dropsIn(seatingFor(mine, slots, room.draws, room.wire), mine, room);
+}
+
+/**
+ * The same, off a seating somebody has already filled. Every man is
+ * priced by the shuffle his leaving causes rather than by drawing the
+ * season again without him, which is fifteen baselines saved.
+ */
+function dropsIn(held: Seating, mine: Player[], room: Room): Drop[] {
   const with_ = winChance(held.total, room.opponent);
   const weeks = Math.max(1, held.total.length);
   const scores = mean(held.total);
 
   return mine
     .map((p) => {
-      const rest = mine.filter((q) => q.key !== p.key);
-      const base = baselineFor(rest, slots, room.draws, room.wire);
-      const after = winChance(base.total, room.opponent);
+      const { total, gained } = withoutFor(held, p.key);
+      const after = winChance(total, room.opponent);
 
       return {
         p,
         costs: with_ - after,
         starts: (held.started[p.key] ?? 0) / weeks,
-        takes: scores - mean(base.total),
+        takes: scores - mean(total),
         before: with_,
         after,
-        heir: heirTo(rest, held, base),
+        heir: heirTo(mine, p, gained),
         seat: seatOf(held, p.key),
       };
     })
@@ -132,15 +139,19 @@ const mean = (xs: number[]) =>
  * the lineup once he is gone. Nobody, when every week he started is
  * filled off the wire instead.
  */
-function heirTo(rest: Player[], held: Baseline, base: Baseline): Player | null {
+function heirTo(
+  mine: Player[], gone: Player, gained: Record<string, number>,
+): Player | null {
   let heir: Player | null = null;
   let most = 0;
 
-  for (const q of rest) {
-    const gained = (base.started[q.key] ?? 0) - (held.started[q.key] ?? 0);
+  for (const q of mine) {
+    if (q.key === gone.key) {
+      continue;
+    }
 
-    if (gained > most) {
-      most = gained;
+    if ((gained[q.key] ?? 0) > most) {
+      most = gained[q.key]!;
       heir = q;
     }
   }
@@ -190,35 +201,54 @@ export function netFor(
   mine: Player[], add: Add, slots: string[] | null | undefined, room: Room,
   openSpots: number | null,
 ): Net {
+  return netsFor(mine, [add], slots, room, openSpots).get(add.p.key)!;
+}
+
+/**
+ * The same for a run of adds, with your own season filled once for the
+ * lot of them rather than once each.
+ */
+export function netsFor(
+  mine: Player[], adds: Add[], slots: string[] | null | undefined, room: Room,
+  openSpots: number | null,
+): Map<string, Net> {
+  const nets = new Map<string, Net>();
+  const alone = (add: Add): Net => ({
+    net: add.added, drop: null, before: add.before, after: add.after,
+  });
+
   if (openSpots !== null && openSpots > 0) {
-    return {
-      net: add.added, drop: null, before: add.before, after: add.after,
-    };
+    for (const add of adds) {
+      nets.set(add.p.key, alone(add));
+    }
+
+    return nets;
   }
 
-  const now = baselineFor(mine, slots, room.draws, room.wire);
-  const held = winChance(now.total, room.opponent);
-  const withHim = [...mine, add.p];
-  const cheapest = dropsFor(withHim, slots, room)
-    .filter((d) => d.p.key !== add.p.key)
-    .pop();
+  const held = winChance(
+    seatingFor(mine, slots, room.draws, room.wire).total, room.opponent);
 
-  if (!cheapest) {
-    return {
-      net: add.added, drop: null, before: add.before, after: add.after,
-    };
+  for (const add of adds) {
+    const withHim = [...mine, add.p];
+    const cheapest = dropsIn(
+      seatingFor(withHim, slots, room.draws, room.wire), withHim, room)
+      .filter((d) => d.p.key !== add.p.key)
+      .pop();
+
+    /**
+     * The cheapest man's own after is the season with him gone and the
+     * newcomer there, which is the swap, so nothing has to be filled
+     * again to price it.
+     */
+    nets.set(add.p.key, cheapest
+      ? {
+        net: cheapest.after - held,
+        drop: cheapest.p,
+        before: held,
+        after: cheapest.after,
+      }
+      : alone(add));
   }
 
-  const swapped = baselineFor(
-    withHim.filter((p) => p.key !== cheapest.p.key),
-    slots, room.draws, room.wire,
-  );
-  const after = winChance(swapped.total, room.opponent);
-
-  return {
-    net: after - held,
-    drop: cheapest.p,
-    before: held,
-    after,
-  };
+  return nets;
 }

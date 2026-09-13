@@ -22,6 +22,7 @@ import { Roster } from "./views/Roster.tsx";
 import { Keepers } from "./views/Keepers.tsx";
 import { DraftView } from "./views/Draft.tsx";
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
+import { Waivers } from "./views/Waivers.tsx";
 
 const DATA = join(import.meta.dirname, "..", "docs", "data");
 const file = JSON.parse(readFileSync(join(DATA, "board-2026.json"), "utf8")) as {
@@ -117,6 +118,31 @@ describe("the views", () => {
       where,
     );
     expect(where.querySelectorAll(".card").length).toBeGreaterThan(5);
+  });
+
+  /**
+   * The pricing goes to a worker, and jsdom has none, so this walks the
+   * fallback that works on whatever thread it is called from. Either way
+   * the page only draws once the rows have arrived.
+   */
+  it("draws the waiver page once the season has been priced", async () => {
+    render(
+      <Waivers
+        men={men} league={league} posFilter="ALL" rows={new Map()}
+        games={[]} schedule={null} season={2026} week={null}
+        onMore={() => {}}
+      />,
+      where,
+    );
+    expect(where.querySelector(".loading")).toBeTruthy();
+
+    for (let i = 0; i < 40 && !where.querySelector("h2"); i++) {
+      await new Promise((settle) => setTimeout(settle, 25));
+    }
+
+    expect(where.querySelectorAll("h2").length).toBe(2);
+    expect(where.querySelectorAll("table.line tbody tr").length)
+      .toBeGreaterThan(5);
   });
 
   it("draws the keeper sheet", () => {

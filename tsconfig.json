@@ -31,6 +31,7 @@
     "scripts/explainSweep.ts",
     "scripts/liveRemainderEval.ts",
     "scripts/buildSimTables.ts",
-    "scripts/simAgreement.ts"
+    "scripts/simAgreement.ts",
+    "scripts/timeWaivers.ts"
   ]
 }

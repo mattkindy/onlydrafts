@@ -17,37 +17,19 @@ import { useMemo, useState } from "preact/hooks";
 
 import type { Player } from "../lib/scoring.ts";
 import type { League, Matchup } from "../lib/providers.ts";
-import { roomFor } from "../lib/draftShare.ts";
 import { myGameIn, type Lines } from "../lib/matchups.ts";
-import { rostersOf } from "../lib/replacementPool.ts";
 import type { SlateRow } from "../lib/slate.ts";
 import {
-  addsFor, dropsFor, netFor, openSpotsFor, RARELY_STARTS, WORTH_ADDING,
-  type Add, type Drop, type Net,
+  RARELY_STARTS, WORTH_ADDING, type Add, type Drop, type Net,
 } from "../lib/waivers.ts";
+import type { Schedule } from "../lib/waiversSeason.ts";
 import {
   weekPricesFor, type WeekAdd, type WeekDrop, type WeekPrices,
 } from "../lib/waiversWeek.ts";
 import { nameOf } from "./Advice.tsx";
-import { matchesFilter } from "./Draft.tsx";
 import { Reading } from "./Reading.tsx";
+import { PRICED, useWaiverPrices } from "./waiverPrices.ts";
 import { useScoreboard } from "./scoreboard.ts";
-
-/**
- * Fewer draws than the draft board takes, because the wire is the whole
- * board and every add is one subtraction a week against one baseline.
- */
-const WEEKS_DRAWN = 2000;
-
-/**
- * How many adds get a drop worked out. Pricing one is a baseline for
- * every man on the roster, so the top of the list is as far as this can
- * go and stay quick.
- */
-const PRICED = 12;
-
-/** how far down the wire the page goes before it stops listing anybody */
-const LISTED = 60;
 
 /** which of the two questions the reader is asking */
 type Span = "week" | "season";
@@ -60,6 +42,8 @@ interface Props {
   rows: Map<string, SlateRow>;
   /** this week's games in your league, for the one you are in */
   games: Matchup[];
+  /** who each side plays each week, which the drawn weeks need */
+  schedule: Schedule | null;
   season: number | null;
   week: number | null;
   onMore: (p: Player) => void;
@@ -300,47 +284,8 @@ export function Waivers(props: Props) {
   const { states, trouble } = useScoreboard(
     props.season ?? undefined, props.week ?? undefined);
 
-  const { adds, drops, mine, room, openSpots } = useMemo(() => {
-    const rostered = new Set(
-      league.allRosters.flatMap((r) => r.keys.map((m) => m.key)),
-    );
-    const mine = league.myRoster
-      .map((m) => men.find((p) => p.key === m.key))
-      .filter((p): p is Player => Boolean(p));
-    const pool = men.filter((p) => !rostered.has(p.key));
-    const room = roomFor(
-      men, league.slots, league.size || 12, WEEKS_DRAWN, rostersOf(league),
-    );
-
-    return {
-      adds: addsFor(mine, pool, league.slots, room),
-      drops: dropsFor(mine, league.slots, room),
-      mine,
-      room,
-      // the roster can have men the board has never heard of, and they
-      // take up a spot all the same, so the league's own count is the
-      // one to subtract
-      openSpots: openSpotsFor(league.slots, league.myRoster.length),
-    };
-  }, [men, league]);
-
-  const shown = useMemo(
-    () => adds.filter((row) => matchesFilter(row.p, posFilter)),
-    [adds, posFilter],
-  );
-
-  const listed = useMemo(() => shown.slice(0, LISTED), [shown]);
-
-  /** the top of the list, each with the man he would cost you */
-  const priced = useMemo(
-    () => listed
-      .slice(0, PRICED)
-      .map((row) => ({
-        row, paid: netFor(mine, row, league.slots, room, openSpots),
-      }))
-      .sort((a, b) => b.paid.net - a.paid.net),
-    [listed, mine, room, league, openSpots],
-  );
+  const { drops, listed, priced, working } = useWaiverPrices(
+    men, league, props.schedule, posFilter);
 
   const lines: Lines = useMemo(
     () => new Map(men.map((p) => [p.key, p])), [men]);
@@ -423,6 +368,10 @@ export function Waivers(props: Props) {
 
     return { at: his, absent, figures: his ? weekDrop(his, nameFor) : null };
   };
+
+  if (working) {
+    return <Reading>pricing the wire against your season</Reading>;
+  }
 
   if (!drops.length) {
     return (

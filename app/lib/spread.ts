@@ -93,17 +93,54 @@ export function streamFor(name: string, draws = DRAWS): number[] {
  */
 export function weekAt(points: number[], u: number): number {
   if (u <= AT[0]!) {
-    const slope = (points[1]! - points[0]!) / (AT_Z[1]! - AT_Z[0]!);
-
-    return points[0]! + (normalQuantile(u) - AT_Z[0]!) * slope;
+    return belowAt(points, normalQuantile(u));
   }
 
   if (u >= AT[4]!) {
-    const slope = (points[4]! - points[3]!) / (AT_Z[4]! - AT_Z[3]!);
-
-    return points[4]! + (normalQuantile(u) - AT_Z[4]!) * slope;
+    return aboveAt(points, normalQuantile(u));
   }
 
+  return betweenAt(points, u);
+}
+
+/**
+ * The same week off the normal behind the quantile rather than the
+ * quantile itself.
+ *
+ * The tails are already read as a normal, so handing weekAt a quantile
+ * means inverting the CDF to get the normal back, and inverting it is
+ * forty halvings. A copula has the normal in hand before it works out
+ * the quantile, so this hands it straight over and the round trip goes
+ * away. Inside the tenth and the ninetieth the two agree exactly.
+ */
+export function weekAtNormal(points: number[], z: number): number {
+  if (z <= AT_Z[0]!) {
+    return belowAt(points, z);
+  }
+
+  if (z >= AT_Z[4]!) {
+    return aboveAt(points, z);
+  }
+
+  return betweenAt(points, normalCdf(z));
+}
+
+/** below the tenth, where the last segment inside sets the normal tail */
+function belowAt(points: number[], z: number): number {
+  const slope = (points[1]! - points[0]!) / (AT_Z[1]! - AT_Z[0]!);
+
+  return points[0]! + (z - AT_Z[0]!) * slope;
+}
+
+/** above the ninetieth, the same way up */
+function aboveAt(points: number[], z: number): number {
+  const slope = (points[4]! - points[3]!) / (AT_Z[4]! - AT_Z[3]!);
+
+  return points[4]! + (z - AT_Z[4]!) * slope;
+}
+
+/** between the two, straight from one shipped figure to the next */
+function betweenAt(points: number[], u: number): number {
   let at = 1;
 
   while (at < AT.length - 1 && u > AT[at]!) {
@@ -145,6 +182,16 @@ export function weeksFromSpread(
 
   return Array.from({ length: draws }, (_, i) =>
     weekAt(points, uniforms ? uniforms[i]! : rand()));
+}
+
+/**
+ * Weeks drawn from a shipped spread, off the normals a copula has
+ * already added up rather than off the quantiles they turn into.
+ */
+export function weeksFromNormals(spread: Spread, normals: number[]): number[] {
+  const points = pointsOf(spread);
+
+  return normals.map((z) => weekAtNormal(points, z));
 }
 
 /**
