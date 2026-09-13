@@ -10,7 +10,7 @@
  * bright points and no projection, one playing gets a green edge on his
  * side of the row, and one yet to kick off shows a faint one.
  *
- * Your own game lives on the matchup tab, so this view can leave it out.
+ * Your own game comes first, so the shared picture of the week has it.
  */
 
 import { useMemo } from "preact/hooks";
@@ -45,8 +45,6 @@ interface Props {
   /** the league's own name, which the shared picture is headed with */
   league?: string;
   status?: string;
-  /** leave your own game out, since the matchup tab has it */
-  withoutMine?: boolean;
   /** opens a man's sheet, since every name on the page opens one */
   onMore?: (key: string) => void;
 }
@@ -270,7 +268,7 @@ export function Game(
 export function Matchups(
   {
     games, rows, men, mine, slots, pays, season, week, league, status,
-    withoutMine, onMore,
+    onMore,
   }: Props,
 ) {
   const lines = useMemo(
@@ -278,18 +276,13 @@ export function Matchups(
   const { states, remainder, read, trouble } =
     useLiveWeek(season, week, pays);
 
-  /**
-   * Your own game first, or left out entirely when the matchup tab is
-   * already showing it.
-   */
+  /** your own game first */
   const ordered = useMemo(() => {
     const isMine = (game: Matchup) =>
       game.sides.some((s) => s.owner === mine);
 
-    return withoutMine
-      ? games.filter((game) => !isMine(game))
-      : [...games].sort((a, b) => Number(isMine(b)) - Number(isMine(a)));
-  }, [games, mine, withoutMine]);
+    return [...games].sort((a, b) => Number(isMine(b)) - Number(isMine(a)));
+  }, [games, mine]);
 
   const shareWeek = () => {
     if (!states || !league) {

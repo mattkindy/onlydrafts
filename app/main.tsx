@@ -1000,7 +1000,6 @@ function App() {
                   league={active.name}
                   status={gamesStatus || weekStatus}
                   onMore={openKey}
-                  withoutMine
                 />
               )
               : <p class="hint">No week has been built yet.</p>}
