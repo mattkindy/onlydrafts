@@ -15,9 +15,11 @@ export const fitted = (name: string) =>
   name.length > FITS ? initialForm(name) : name;
 
 export function PlayerName(
-  { name, team, onOpen }: {
+  { name, team, stats, onOpen }: {
     name: string;
     team?: string | null;
+    /** his box score so far, once his game has kicked off */
+    stats?: string | undefined;
     /** opens his sheet, which every name on the page does */
     onOpen?: (() => void) | undefined;
   },
@@ -35,6 +37,7 @@ export function PlayerName(
         )
         : <b>{fitted(name)}</b>}
       {team && <i>{team}</i>}
+      {stats && <small class="line">{stats}</small>}
     </span>
   );
 }

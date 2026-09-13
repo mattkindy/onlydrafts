@@ -446,6 +446,31 @@ describe("statesFrom", () => {
     expect(got.get("JAX")).toEqual({ where: "pre", left: 1 });
     expect(got.has("WSH")).toBe(false);
   });
+
+  it("hands a finished game's box score to both of its teams", () => {
+    const stats = new Map([["derrickhenry", {
+      passCmp: 0, passAtt: 0, passYds: 0, passTd: 0, interceptions: 0,
+      carries: 18, rushYds: 117, rushTd: 3,
+      receptions: 0, targets: 0, recYds: 0, recTd: 0,
+      fgm: 0, fga: 0, xpm: 0, xpa: 0, fumblesLost: 0,
+    }]]);
+    const got = statesFrom({
+      events: [{
+        id: "401872659",
+        status: { type: { state: "post" } },
+        competitions: [{
+          competitors: [
+            { team: { abbreviation: "BAL" } },
+            { team: { abbreviation: "IND" } },
+          ],
+        }],
+      }],
+    }, new Map([["401872659", { hurt: new Map(), stats }]]));
+
+    expect(got.get("BAL")?.stats?.get("derrickhenry")?.rushYds).toBe(117);
+    expect(got.get("IND")?.stats).toBe(stats);
+    expect(got.get("BAL")).not.toHaveProperty("hurt");
+  });
 });
 
 describe("situationsFrom", () => {
