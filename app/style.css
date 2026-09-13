@@ -464,11 +464,11 @@
     width: 100%; position: relative; }
   .sheet h3 { margin: 0; font-size: var(--t5); text-wrap: balance;
     padding-right: var(--tap); }
-  .shut { position: absolute; top: var(--s2); right: var(--s2);
+  .close { position: absolute; top: var(--s2); right: var(--s2);
     min-width: var(--tap); min-height: var(--tap); border: none;
     background: none; color: var(--muted); font-size: var(--t5);
     line-height: 1; cursor: pointer; border-radius: 50%; }
-  .shut:hover, .shut:focus-visible { color: var(--ink); background: var(--chip); }
+  .close:hover, .close:focus-visible { color: var(--ink); background: var(--chip); }
   .sheet .sub { color: var(--faint); font-size: var(--t2);
     margin-bottom: var(--s3); }
   .wk { display: grid; grid-template-columns: 2.2rem 3.2rem 1fr 3.6rem;
