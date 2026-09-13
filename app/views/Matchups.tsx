@@ -73,6 +73,9 @@ function StarterCell(
   const toCome = simmed
     ? simmed.reduce((sum, points) => sum + points, 0) / simmed.length
     : line && !done ? line.blend * (state?.left ?? 1) : null;
+  // what he is on course to finish with, since the bare remainder
+  // read like a second projection nobody could place
+  const onCourse = toCome === null ? null : starter.points + toCome;
 
   return (
     <div
@@ -86,8 +89,8 @@ function StarterCell(
       />
       <span class="num">
         <b>{starter.points.toFixed(1)}</b>
-        <i>
-          {toCome === null ? "" : toCome.toFixed(1)}
+        <i title={toCome === null ? undefined : `${toCome.toFixed(1)} still to come`}>
+          {onCourse === null ? "" : onCourse.toFixed(1) + " proj"}
           {simmed ? " sim" : line?.stock && toCome !== null ? " stock" : ""}
         </i>
       </span>
@@ -220,9 +223,12 @@ export function Game(
   );
 
   return (
-    <div class={"card plain matchup" + (mine >= 0 ? " on" : "")}>
+    <div
+      class={"card plain matchup" + (mine >= 0 ? " on" : "") +
+        (withAdvice ? "" : " alone")}
+    >
       {game.sides.map((side, at) => (
-        <div class="team" key={side.owner + at}>
+        <div class={"team" + (at ? " away" : "")} key={side.owner + at}>
           <span class="nm">{side.owner}</span>
           <span class="big">{side.points.toFixed(1)}</span>
           <span class="val">{projected[at]!.toFixed(1)} proj</span>
