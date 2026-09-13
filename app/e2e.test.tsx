@@ -14,32 +14,32 @@ it("the shipped files load and score end to end", async () => {
 
   const meta = await loadMeta();
   const board = await loadBoard(meta.boardSeason);
-  const men = rescore(board.players, {
+  const players = rescore(board.players, {
     teams: 12,
     slots: ["QB","RB","RB","WR","WR","TE","FLEX"],
     pays: { pass_yd:0.04, pass_td:4, int:-2, rush_yd:0.1, rush_td:6, rec_yd:0.1, rec_td:6, fum_lost:-2 },
   });
 
-  console.log("season", meta.boardSeason, "players", men.length);
-  for (const p of men.slice(0, 3)) {
+  console.log("season", meta.boardSeason, "players", players.length);
+  for (const p of players.slice(0, 3)) {
     console.log(p.name, p.ppg, "x", p.games, "=", p.vor, "| weeks", p.weeks?.length);
   }
 
-  // every man carries what the views read off him
-  for (const p of men) {
+  // every player carries what the views read off him
+  for (const p of players) {
     expect(Number.isFinite(p.ppg!), p.name).toBe(true);
     expect(Number.isFinite(p.vor!), p.name).toBe(true);
     expect(p.games! > 0 && p.games! <= 17, `${p.name} games ${p.games}`).toBe(true);
   }
 
-  const withWeeks = men.filter((p) => (p.weeks?.length ?? 0) > 0);
+  const withWeeks = players.filter((p) => (p.weeks?.length ?? 0) > 0);
   expect(withWeeks.length).toBeGreaterThan(300);
 
   /**
-   * A week is a multiple of his own average, so it sits near 1. Men
+   * A week is a multiple of his own average, so it sits near 1. Players
    * projected at a tenth of a point a game are the exception: their
    * weeks round to nothing and the ratio collapses. Nobody reads a
-   * week chart for a man that far down, so the bound is only that the
+   * week chart for a player that far down, so the bound is only that the
    * number is usable.
    */
   for (const p of withWeeks) {
@@ -63,8 +63,8 @@ it("the shipped files load and score end to end", async () => {
     }
   }
 
-  expect(men.filter((p) => p.position === "K").length).toBeGreaterThan(20);
-  expect(men.filter((p) => p.position === "DEF").length).toBeGreaterThan(20);
+  expect(players.filter((p) => p.position === "K").length).toBeGreaterThan(20);
+  expect(players.filter((p) => p.position === "DEF").length).toBeGreaterThan(20);
 });
 
 /**
@@ -87,7 +87,7 @@ it("prices dropping a first back the way the margin says it should", async () =>
   const file = JSON.parse(
     readFileSync(join(DATA, "board-2026.json"), "utf8"),
   ) as { players: Parameters<typeof rescore>[0] };
-  const men = rescore(file.players, {
+  const players = rescore(file.players, {
     teams: 12,
     slots,
     pays: {
@@ -96,16 +96,16 @@ it("prices dropping a first back the way the margin says it should", async () =>
     },
   });
 
-  notePassCatchers(men, null);
+  notePassCatchers(players, null);
 
-  const named = (name: string) => men.find((p) => p.name.includes(name))!;
+  const named = (name: string) => players.find((p) => p.name.includes(name))!;
   const mine = [
     "Jahmyr Gibbs", "Saquon Barkley", "Quinshon Judkins", "Rico Dowdle",
     "Nico Collins", "Chris Godwin", "Xavier Worthy", "Omar Cooper",
     "Harold Fannin", "Lamar Jackson", "Matthew Stafford", "Cam Little",
   ].map(named).filter(Boolean);
   const draws = 1000;
-  const room = roomFor(men, slots, 12, draws, null);
+  const room = roomFor(players, slots, 12, draws, null);
   const gibbs = named("Jahmyr Gibbs");
   const his = dropsFor(mine, slots, room).find((d) => d.p.key === gibbs.key)!;
 
@@ -163,7 +163,7 @@ it("puts a defence in the slate the views can find", async () => {
 /**
  * The big number on a card is the middle of his spread, and his value
  * is worked out from what he scores. If those are not the same number
- * the card argues with itself, which is how one man read 19.8 a game
+ * the card argues with itself, which is how one player read 19.8 a game
  * above another at 20.1 while being worth less.
  */
 it("says the same points per game everywhere it says it", async () => {
@@ -171,13 +171,13 @@ it("says the same points per game everywhere it says it", async () => {
   const file = JSON.parse(
     readFileSync(join(DATA, "board-2026.json"), "utf8"),
   ) as { players: Parameters<typeof rescore>[0] };
-  const men = rescore(file.players, {
+  const players = rescore(file.players, {
     teams: 12,
     slots: ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"],
     pays: { rec: 1, rec_yd: 0.1, rec_td: 6, rush_yd: 0.1, rush_td: 6, pass_yd: 0.04, pass_td: 4 },
   });
 
-  for (const p of men) {
+  for (const p of players) {
     if (!p.game) {
       continue;
     }

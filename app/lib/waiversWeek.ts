@@ -4,19 +4,19 @@
  * The season side of the waiver page draws a whole year of weeks against a
  * typical opponent. This asks the narrower question the lineup page asks:
  * with this week's projections, the lineup you would set, and the team you
- * actually play, does the man start, who takes his seat if he goes, and how
+ * actually play, does the player start, who takes his slot if he goes, and how
  * often do you win the week either way.
  *
- * One set of draws serves both sides and every row. Where both men in a
- * seat had their week drawn off a ladder, the win chance is the conditional
+ * One set of draws serves both sides and every row. Where both players in a
+ * slot had their week drawn off a ladder, the win chance is the conditional
  * estimator the lineup page uses; where either has no ladder both are
  * counted off the draws, so the two figures on a row are read the same way.
  */
 
 import { factorsOf, type Mix } from "./copula.ts";
-import { chanceWith, type Seat } from "./explain.ts";
+import { chanceWith, type Opening } from "./explain.ts";
 import {
-  bestLineupFor, CHOICE_DRAWS, lineFor, liveDraws, seatTakes, sideTotals,
+  bestLineupFor, CHOICE_DRAWS, lineFor, liveDraws, slotTakesIn, sideTotals,
   starterState, type Drawing, type GameState, type Lines, type Starter,
 } from "./matchups.ts";
 import type { Side } from "./providers.ts";
@@ -25,9 +25,9 @@ import type { SlateRow } from "./slate.ts";
 import { winChance } from "./winShare.ts";
 
 export interface WeekDrop {
-  /** the seat he is in this week, and nothing when he is on the bench */
+  /** the slot he is in this week, and nothing when he is on the bench */
   slot: string | null;
-  /** who takes that seat once he is gone, and nobody when nobody can */
+  /** who takes that slot once he is gone, and nobody when nobody can */
   heir: string | null;
   /** the points your lineup loses this week without him */
   takes: number;
@@ -38,9 +38,9 @@ export interface WeekDrop {
 }
 
 export interface WeekAdd {
-  /** the seat he would take this week, and nothing when he would not start */
+  /** the slot he would take this week, and nothing when he would not start */
   slot: string | null;
-  /** the man he would push out of it */
+  /** the player he would push out of it */
   displaced: string | null;
   /** the points your lineup gains this week with him */
   brings: number;
@@ -50,14 +50,14 @@ export interface WeekAdd {
 }
 
 export interface WeekNet {
-  /** the man who goes, and nobody when there is a spot open for him */
+  /** the player who goes, and nobody when there is a spot open for him */
   drop: string | null;
   before: number;
   after: number;
   net: number;
 }
 
-/** one man the page is pricing, and the man a spot for him would cost */
+/** one player the page is pricing, and the player a spot for him would cost */
 export interface WeekCandidate {
   p: Player;
   drop: Player | null;
@@ -68,10 +68,10 @@ export interface WeekRoom {
   side: Side;
   against: Side;
   slots: string[] | null | undefined;
-  /** the week's projections, by the key a lineup uses for a man */
+  /** the week's projections, by the key a lineup uses for a player */
   rows: Map<string, SlateRow>;
   states: Map<string, GameState>;
-  /** the board in this league's terms, for the men the week leaves out */
+  /** the board in this league's terms, for the players the week leaves out */
   lines: Lines;
   draws?: number;
 }
@@ -86,8 +86,8 @@ export interface WeekPrices {
   nets: Map<string, WeekNet>;
 }
 
-/** what the week knows about one man, drawn once and read many times */
-interface Manned {
+/** what the week knows about one player, drawn once and read many times */
+interface DrawnPlayer {
   key: string;
   position: string;
   /** what he puts up this week, draw by draw, what he has scored included */
@@ -100,11 +100,11 @@ interface Manned {
 
 interface Filled {
   slot: string;
-  man: Manned | null;
+  player: DrawnPlayer | null;
   /**
-   * What the seat puts up, draw by draw. A starter nobody has a line on
-   * still has points on the board, so the seat keeps a column of its own
-   * rather than reading one off the man in it.
+   * What the slot puts up, draw by draw. A starter nobody has a line on
+   * still has points on the board, so the slot keeps a column of its own
+   * rather than reading one off the player in it.
    */
   column: number[];
 }
@@ -116,9 +116,10 @@ const mean = (its: number[]) =>
 export function weekPricesFor(
   room: WeekRoom, candidates: WeekCandidate[],
 ): WeekPrices {
-  const { side, against, slots, rows, states, lines } = room;
+  const { side, against, slots: slotNames, rows, states, lines } = room;
   const draws = room.draws ?? CHOICE_DRAWS;
-  const best = bestLineupFor(side, against, slots, rows, states, draws, lines);
+  const best = bestLineupFor(
+    side, against, slotNames, rows, states, draws, lines);
   const live = liveDraws(
     [
       ...side.starters, ...side.bench,
@@ -129,122 +130,125 @@ export function weekPricesFor(
   );
   const theirs = sideTotals(against, rows, states, draws, live);
 
-  const mannedOf = (man: Starter): Manned | null => {
-    const line = lineFor(man, rows, lines);
+  const drawnPlayerOf = (player: Starter): DrawnPlayer | null => {
+    const line = lineFor(player, rows, lines);
 
     if (!line) {
       return null;
     }
 
     return {
-      key: man.key,
+      key: player.key,
       position: line.position,
-      column: live.toCome(man.key).map((points) => points + (man.points ?? 0)),
-      drawn: live.drawingOf(man.key),
+      column: live.toCome(player.key).map((points) => points + (player.points ?? 0)),
+      drawn: live.drawingOf(player.key),
       locked:
-        (starterState(man, rows, states, lines)?.where ?? "pre") !== "pre",
+        (starterState(player, rows, states, lines)?.where ?? "pre") !== "pre",
     };
   };
 
   const mine = [...side.starters, ...side.bench]
-    .map(mannedOf)
-    .filter((man): man is Manned => man !== null);
-  const byKey = new Map(mine.map((man) => [man.key, man]));
+    .map(drawnPlayerOf)
+    .filter((player): player is DrawnPlayer => player !== null);
+  const byKey = new Map(mine.map((player) => [player.key, player]));
   const flat = () => new Array(draws).fill(0) as number[];
-  const seats: Filled[] = best.starters.map((starter) => {
-    const man = byKey.get(starter.key) ?? null;
+  const lineup: Filled[] = best.starters.map((starter) => {
+    const player = byKey.get(starter.key) ?? null;
 
     return {
       slot: starter.slot,
-      man,
-      column: man?.column ?? new Array(draws).fill(starter.points) as number[],
+      player,
+      column: player?.column ?? new Array(draws).fill(starter.points) as number[],
     };
   });
-  const seated = new Set(
-    seats.map((seat) => seat.man?.key).filter((key) => key !== undefined));
+  const inLineup = new Set(
+    lineup.map((slot) => slot.player?.key).filter((key) => key !== undefined));
 
   const totalOf = (filled: Filled[]) =>
     Array.from({ length: draws }, (_, i) =>
-      filled.reduce((sum, seat) => sum + seat.column[i]!, 0));
-  const odds = winChance(totalOf(seats), theirs);
+      filled.reduce((sum, slot) => sum + slot.column[i]!, 0));
+  const odds = winChance(totalOf(lineup), theirs);
 
-  const mixesOf = (men: (Manned | null)[]) => factorsOf(
-    men.map((man) => man?.drawn?.mix)
+  const mixesOf = (players: (DrawnPlayer | null)[]) => factorsOf(
+    players.map((player) => player?.drawn?.mix)
       .filter((mix): mix is Mix => mix != null));
   const theirFactors = factorsOf(
     against.starters
-      .map((man) => live.drawingOf(man.key)?.mix)
+      .map((player) => live.drawingOf(player.key)?.mix)
       .filter((mix): mix is Mix => mix != null));
 
-  /** everything about the week except whoever is in one seat */
-  const seatAt = (filled: Filled[], at: number): Seat => ({
+  /** everything about the week except whoever is in one slot */
+  const openingAt = (filled: Filled[], at: number): Opening => ({
     others: Array.from({ length: draws }, (_, i) =>
       filled.reduce(
-        (sum, seat, k) => k === at ? sum : sum + seat.column[i]!, 0)),
+        (sum, slot, k) => k === at ? sum : sum + slot.column[i]!, 0)),
     theirs,
     factors: live.factorAt,
     against: theirFactors,
-    alongside: mixesOf(filled.filter((_, k) => k !== at).map((s) => s.man)),
+    alongside: mixesOf(filled.filter((_, k) => k !== at).map((s) => s.player)),
   });
 
-  const plainIn = (seat: Seat, man: Manned | null) =>
+  const plainIn = (opening: Opening, player: DrawnPlayer | null) =>
     winChance(
-      seat.others.map((rest, i) => rest + (man?.column[i] ?? 0)), theirs);
+      opening.others.map((rest, i) => rest + (player?.column[i] ?? 0)), theirs);
 
   const pairIn = (
-    seat: Seat, out: Manned | null, into: Manned | null,
+    opening: Opening, out: DrawnPlayer | null, into: DrawnPlayer | null,
   ): [number, number] => {
     if (out?.drawn && into?.drawn) {
-      return [chanceWith(seat, out.drawn), chanceWith(seat, into.drawn)];
+      return [chanceWith(opening, out.drawn), chanceWith(opening, into.drawn)];
     }
 
-    return [plainIn(seat, out), plainIn(seat, into)];
+    return [plainIn(opening, out), plainIn(opening, into)];
   };
 
   /**
-   * Who you would put in a seat that has come open. The choice is made off
+   * Who you would put in a slot that has come open. The choice is made off
    * the drawn totals so every candidate for it is compared the same way,
    * even when the week has no ladder for one of them.
    */
-  const heirFor = (filled: Filled[], at: number, bench: Manned[]) => {
-    const seat = seatAt(filled, at);
+  const heirFor = (filled: Filled[], at: number, bench: DrawnPlayer[]) => {
+    const opening = openingAt(filled, at);
     const slot = filled[at]!.slot;
-    let heir: Manned | null = null;
-    let most = plainIn(seat, null);
+    let heir: DrawnPlayer | null = null;
+    let most = plainIn(opening, null);
 
-    for (const man of bench) {
-      if (man.locked || !seatTakes(slot, man.position, slots)) {
+    for (const player of bench) {
+      if (player.locked || !slotTakesIn(slot, player.position, slotNames)) {
         continue;
       }
 
-      const chance = plainIn(seat, man);
+      const chance = plainIn(opening, player);
 
       if (chance > most) {
         most = chance;
-        heir = man;
+        heir = player;
       }
     }
 
-    return { heir, seat };
+    return { heir, opening };
   };
 
-  /** the seat a newcomer does most good in, and what he is worth there */
-  const bestSeatFor = (filled: Filled[], his: Manned) => {
+  /** the slot a newcomer does most good in, and what he is worth there */
+  const bestSlotFor = (filled: Filled[], his: DrawnPlayer) => {
     let found: {
-      at: number; before: number; after: number; displaced: Manned | null;
+      at: number; before: number; after: number; displaced: DrawnPlayer | null;
     } | null = null;
 
     for (let at = 0; at < filled.length; at++) {
-      const seat = filled[at]!;
+      const slot = filled[at]!;
 
-      if (seat.man?.locked || !seatTakes(seat.slot, his.position, slots)) {
+      if (
+        slot.player?.locked ||
+        !slotTakesIn(slot.slot, his.position, slotNames)
+      ) {
         continue;
       }
 
-      const [before, after] = pairIn(seatAt(filled, at), seat.man, his);
+      const [before, after] = pairIn(openingAt(filled, at), slot.player, his);
 
       if (after - before > (found ? found.after - found.before : 0)) {
-        found = { at, before, after, displaced: seat.man };
+        found = { at, before, after, displaced: slot.player };
       }
     }
 
@@ -252,15 +256,15 @@ export function weekPricesFor(
   };
 
   const benchWithout = (key: string) =>
-    mine.filter((man) => man.key !== key && !seated.has(man.key));
+    mine.filter((player) => player.key !== key && !inLineup.has(player.key));
 
   const drops = new Map<string, WeekDrop>();
 
-  for (const man of mine) {
-    const at = seats.findIndex((seat) => seat.man?.key === man.key);
+  for (const player of mine) {
+    const at = lineup.findIndex((slot) => slot.player?.key === player.key);
 
     if (at < 0) {
-      drops.set(man.key, {
+      drops.set(player.key, {
         slot: null, heir: null, takes: 0,
         before: odds, after: odds, costs: 0,
       });
@@ -268,13 +272,13 @@ export function weekPricesFor(
       continue;
     }
 
-    const { heir, seat } = heirFor(seats, at, benchWithout(man.key));
-    const [before, after] = pairIn(seat, man, heir);
+    const { heir, opening } = heirFor(lineup, at, benchWithout(player.key));
+    const [before, after] = pairIn(opening, player, heir);
 
-    drops.set(man.key, {
-      slot: seats[at]!.slot,
+    drops.set(player.key, {
+      slot: lineup[at]!.slot,
       heir: heir?.key ?? null,
-      takes: mean(man.column) - mean(heir?.column ?? []),
+      takes: mean(player.column) - mean(heir?.column ?? []),
       before,
       after,
       costs: before - after,
@@ -282,17 +286,17 @@ export function weekPricesFor(
   }
 
   const adds = new Map<string, WeekAdd>();
-  const newcomers = new Map<string, Manned>();
+  const newcomers = new Map<string, DrawnPlayer>();
 
   for (const { p } of candidates) {
-    const his = mannedOf({ key: p.key, slot: p.position });
+    const his = drawnPlayerOf({ key: p.key, slot: p.position });
 
     if (!his) {
       continue;
     }
 
     newcomers.set(p.key, his);
-    const found = bestSeatFor(seats, his);
+    const found = bestSlotFor(lineup, his);
 
     if (!found) {
       adds.set(p.key, {
@@ -304,7 +308,7 @@ export function weekPricesFor(
     }
 
     adds.set(p.key, {
-      slot: seats[found.at]!.slot,
+      slot: lineup[found.at]!.slot,
       displaced: found.displaced?.key ?? null,
       brings: mean(his.column) - mean(found.displaced?.column ?? []),
       before: found.before,
@@ -314,31 +318,31 @@ export function weekPricesFor(
   }
 
   /**
-   * The whole move in this week's game: the man who goes comes out of the
-   * lineup, the seat he leaves goes to whoever fills it best, and the
-   * newcomer takes the seat he does most good in. Two seats change hands,
-   * so the conditional estimator, which moves one man, has nothing to say
+   * The whole move in this week's game: the player who goes comes out of the
+   * lineup, the slot he leaves goes to whoever fills it best, and the
+   * newcomer takes the slot he does most good in. Two slots change hands,
+   * so the conditional estimator, which moves one player, has nothing to say
    * about it and the week is counted off the draws.
    */
-  const wholeMove = (his: Manned, dropKey: string): WeekNet => {
-    const filled = seats.map((seat) => ({ ...seat }));
+  const wholeMove = (his: DrawnPlayer, dropKey: string): WeekNet => {
+    const filled = lineup.map((slot) => ({ ...slot }));
     const bench = [...benchWithout(dropKey), his];
-    const at = filled.findIndex((seat) => seat.man?.key === dropKey);
+    const at = filled.findIndex((slot) => slot.player?.key === dropKey);
 
     if (at >= 0) {
       const { heir } = heirFor(filled, at, bench);
       filled[at] = {
-        slot: filled[at]!.slot, man: heir, column: heir?.column ?? flat(),
+        slot: filled[at]!.slot, player: heir, column: heir?.column ?? flat(),
       };
     }
 
-    const found = filled.some((seat) => seat.man?.key === his.key)
+    const found = filled.some((slot) => slot.player?.key === his.key)
       ? null
-      : bestSeatFor(filled, his);
+      : bestSlotFor(filled, his);
 
     if (found) {
       filled[found.at] = {
-        slot: filled[found.at]!.slot, man: his, column: his.column,
+        slot: filled[found.at]!.slot, player: his, column: his.column,
       };
     }
 

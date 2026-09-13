@@ -32,7 +32,7 @@ export interface Pick {
 export interface DraftNow {
   taken: Set<string>;
   mine: Set<string>;
-  /** who took each man */
+  /** who took each player */
   teams: Record<string, string>;
   /** and who had him last season */
   rosteredBy: Record<string, string>;
@@ -44,12 +44,12 @@ export interface DraftNow {
   filled?: number[];
   status?: string;
   clock?: { who: string; mine: boolean; overall: number; untilMine: number | null };
-  /** who the league office has listed, by the board's own key */
+  /** who the injury report has listed, by the board's own key */
   hurt?: Record<string, { status: string; part?: string }>;
 }
 
 /**
- * What the league office says about him, short enough for a card.
+ * What the injury report says about him, short enough for a card.
  *
  * Sleeper writes these as Questionable, Doubtful, Out, IR, PUP, Sus and
  * a few others. The word alone is the news; the body part goes on the
@@ -73,7 +73,7 @@ export function injuryBadge(
 }
 
 interface Props {
-  men: Player[];
+  players: Player[];
   state: DraftNow;
   teams: number;
   snake: boolean;
@@ -85,7 +85,7 @@ interface Props {
   staleAt?: string;
   /** the lineup this league starts, for working out what you still need */
   slots?: string[] | null;
-  /** hide men who cannot start for you yet */
+  /** hide players who cannot start for you yet */
   needOnly?: boolean;
 }
 
@@ -150,12 +150,12 @@ function myUpcomingPicks(
  * What taking him now is worth over waiting a turn.
  *
  * Value over replacement does not move as a draft runs: the last back
- * this league starts is the same man whether or not the ten above him
+ * this league starts is the same player whether or not the ten above him
  * have gone. What moves is how far the position falls before your next
  * turn. When backs are flying off, the best one left when you pick
  * again is much worse, and taking one now is worth that gap.
  */
-function dropOffBy(men: Player[], draft: DraftPicks, nextTurn: number | null) {
+function dropOffBy(players: Player[], draft: DraftPicks, nextTurn: number | null) {
   if (!nextTurn) {
     return () => 0;
   }
@@ -166,7 +166,7 @@ function dropOffBy(men: Player[], draft: DraftPicks, nextTurn: number | null) {
     if (!atPosition.has(p.position)) {
       atPosition.set(
         p.position,
-        expectedBestAt(men, nextTurn, draft, null, p.position),
+        expectedBestAt(players, nextTurn, draft, null, p.position),
       );
     }
 
@@ -276,10 +276,10 @@ interface Scored {
  * One list, best first, however far down you care to read.
  *
  * There used to be a shortlist of the next two dozen above this, from
- * when the whole board was a table and cards were the only place a man
+ * when the whole board was a table and cards were the only place a player
  * was drawn properly. Both said the same thing in the same order, so
  * the shortlist went and what was worth keeping came here: your turns
- * drawn where they fall, and the note on why a man is worth taking now.
+ * drawn where they fall, and the note on why a player is worth taking now.
  */
 function FullRankings(
   {
@@ -294,13 +294,13 @@ function FullRankings(
   },
 ) {
   // cards by default, a page at a time, since seven hundred at once is
-  // slow and the table stays for looking a man up
+  // slow and the table stays for looking a player up
   const [how, setHow] = useState<"cards" | "table">("cards");
   const [shown, setShown] = useState(A_PAGE);
 
-  // the ones already drafted keep their place, after the men you can have
-  const men = scored.map(({ p }) => p);
-  const all = [...men, ...gone];
+  // the ones already drafted keep their place, after the players you can have
+  const players = scored.map(({ p }) => p);
+  const all = [...players, ...gone];
   const left = all.filter((p) => !state.taken.has(p.key)).length;
   const page = scored.slice(0, shown);
   const max = seasonScale(page.map(({ p }) => p));
@@ -356,7 +356,7 @@ function FullRankings(
                        * You have to start a kicker and a defence, so
                        * what a pick here is worth is the wrong question
                        * for them: there is no lineup without one. What
-                       * he beats the man off waivers by is the whole
+                       * he beats the player off waivers by is the whole
                        * decision, and it is a different number.
                        */
                       ? { label: "over waivers", value: (p.ownVor ?? 0).toFixed(1) }
@@ -514,7 +514,7 @@ function PickGrid({ grid }: { grid: NonNullable<DraftNow["grid"]> }) {
 }
 
 export function DraftView(props: Props) {
-  const { men, state, teams, posFilter, query } = props;
+  const { players, state, teams, posFilter, query } = props;
   const draft: DraftPicks = {
     teams,
     slot: state.grid?.mySlot ?? null,
@@ -523,19 +523,19 @@ export function DraftView(props: Props) {
   };
   /**
    * Your turn after this one. Everything at a position can be had until
-   * then, so what a man is worth taking now is the gap between him and
+   * then, so what a player is worth taking now is the gap between him and
    * whoever is left when you come back.
    */
   const upcoming = myUpcomingPicks(
     state.grid, state.clock?.overall ?? 1, new Set(state.filled ?? []),
   );
-  const dropOff = dropOffBy(men, draft, upcoming[1]?.overall ?? null);
+  const dropOff = dropOffBy(players, draft, upcoming[1]?.overall ?? null);
   const wanted = (p: Player) =>
     matchesFilter(p, posFilter) && (!query || p.key.includes(query));
 
-  const drafted = men.filter((p) => state.mine.has(p.key));
+  const drafted = players.filter((p) => state.mine.has(p.key));
   const open = openingsAfter(props.slots, drafted);
-  const left = men.filter((p) => !state.taken.has(p.key));
+  const left = players.filter((p) => !state.taken.has(p.key));
   /**
    * What taking him now would add to how often you win a week, with the
    * rest of your draft filled in around him. It replaces a points
@@ -544,8 +544,8 @@ export function DraftView(props: Props) {
    */
   /**
    * Your turns still to come. Before the commissioner starts the draft
-   * there is no grid and so no turns, and with none of them the seats
-   * never get filled: every man on the board then reads a fraction of a
+   * there is no grid and so no turns, and with none of them the slots
+   * never get filled: every player on the board then reads a fraction of a
    * percent and the order is noise. So a plain schedule fills in, one
    * turn a round from the middle of the room.
    */
@@ -557,15 +557,15 @@ export function DraftView(props: Props) {
       (_, r) => r * teams + Math.ceil(teams / 2),
     );
 
-  // pricing every man draws thousands of weeks, so it waits on a change
+  // pricing every player draws thousands of weeks, so it waits on a change
   // to what it prices rather than running again on every keystroke
   const worth = useMemo(() => props.order === "war"
     ? takeNowFor(
       drafted, props.slots, left, turns,
-      typicalWeek(men, props.slots, teams, WEEKS_DRAWN), WEEKS_DRAWN,
-      waiverBar(men, props.slots, teams, null),
+      typicalWeek(players, props.slots, teams, WEEKS_DRAWN), WEEKS_DRAWN,
+      waiverBar(players, props.slots, teams, null),
     )
-    : null, [props.order, men, props.slots, teams, state, upcoming.length]);
+    : null, [props.order, players, props.slots, teams, state, upcoming.length]);
 
   const scored = left
     .filter(wanted)
@@ -575,7 +575,7 @@ export function DraftView(props: Props) {
     }))
     /**
      * By the board, or by what he adds to your lineup once the slots
-     * you have left are counted. A man the need score cannot speak for,
+     * you have left are counted. A player the need score cannot speak for,
      * because too few at his slot are priced, keeps his place on the
      * board rather than being dropped to the bottom of the list.
      */
@@ -618,11 +618,11 @@ export function DraftView(props: Props) {
 
       <FullRankings
         scored={scored}
-        board={men}
+        board={players}
         order={props.order}
         byNeed={props.order === "war"}
         lineAfter={lineAfter}
-        gone={men.filter((p) => state.taken.has(p.key)).filter(wanted)}
+        gone={players.filter((p) => state.taken.has(p.key)).filter(wanted)}
         state={state}
         teams={teams}
         posFilter={posFilter}

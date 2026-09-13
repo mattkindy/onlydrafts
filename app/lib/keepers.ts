@@ -9,8 +9,7 @@ import { stored, keep } from "./store.ts";
 import type { Player } from "./scoring.ts";
 import type { League } from "./providers.ts";
 import {
-  CLOSE_SEASON, bestLeftAt, marginAt, stillThereAt, worthUpTo,
-  type Draft,
+  CLOSE_SEASON, stillThereAt, worthUpTo, type Draft,
 } from "./picks.ts";
 
 const forLeague = (what: string, leagueId: string) => what + "." + leagueId;
@@ -36,27 +35,7 @@ export const markedKeepers = (leagueId: string) =>
 export const saveMarkedKeepers = (leagueId: string, map: Record<string, string>) =>
   keep(forLeague("keepers.v2", leagueId), map);
 
-/**
- * Where the room takes a man kept a second year running, which you can
- * correct. His price is wherever he goes, so it is worth typing in for
- * those few rather than chasing the whole board.
- */
-export const adpOverrides = (leagueId: string) =>
-  stored<Record<string, number>>(forLeague("adpAt", leagueId), {});
-
-export function saveAdpAt(leagueId: string, key: string, pick: number) {
-  const all = adpOverrides(leagueId);
-
-  if (pick) {
-    all[key] = pick;
-  } else {
-    delete all[key];
-  }
-
-  keep(forLeague("adpAt", leagueId), all);
-}
-
-/** the men every other team is likely to keep, so a pick cannot buy them */
+/** the players every other team is likely to keep, so a pick cannot buy them */
 export function likelyKept(
   league: League,
   byKey: Map<string, Player>,
@@ -69,7 +48,7 @@ export function likelyKept(
       continue;
     }
 
-    // it cannot keep more men than it has picks left to pay with
+    // it cannot keep more players than it has picks left to pay with
     const canAfford = Math.min(perTeam, roster.picks.length);
 
     roster.keys
@@ -90,14 +69,14 @@ export interface Beaten {
   gain: number;
 }
 
-/** men at his position who are better and likely still there anyway */
+/** players at his position who are better and likely still there anyway */
 export function betterLater(
-  men: Player[],
+  players: Player[],
   p: Player,
   costPick: number,
   taken: Set<string>,
 ): Beaten[] {
-  return men
+  return players
     .filter((o) =>
       o.key !== p.key && !taken.has(o.key) && o.adp &&
       o.position === p.position &&
@@ -113,56 +92,8 @@ export function betterLater(
     .slice(0, 3);
 }
 
-/**
- * Which of them you actually keep.
- *
- * Each man is judged against the best player at his position still on
- * the board at the pick he costs, so what you do with one does not
- * change what another is worth. That leaves ranking them by how far
- * they beat their price: two men who cost the same round cannot both
- * be kept, and neither can anyone whose round you traded away.
- */
-export function whoToKeep(
-  men: Player[],
-  onRoster: Player[],
-  costs: Record<string, number>,
-  draft: Draft,
-  slots: number,
-  myRounds: number[] | null,
-): string[] {
-  const spent = new Set<number>();
-  const keeping: string[] = [];
-
-  const ranked = onRoster
-    .map((p) => {
-      const cost = Number(costs[p.key]) || 0;
-
-      return { p, cost, at: cost ? marginAt(men, p, cost, draft) : null };
-    })
-    .filter((m) => m.at && m.at.margin > 0)
-    .filter((m) => !myRounds || myRounds.includes(m.cost))
-    .sort((a, b) => b.at!.margin - a.at!.margin);
-
-  for (const { p, cost } of ranked) {
-    if (keeping.length >= slots) {
-      break;
-    }
-
-    if (spent.has(cost)) {
-      continue;
-    }
-
-    spent.add(cost);
-    keeping.push(p.key);
-  }
-
-  return keeping;
-}
-
-/** the earliest round each of your men still beats */
-export const worthUpToEach = (men: Player[], onRoster: Player[], draft: Draft) =>
+/** the earliest round each of your players still beats */
+export const worthUpToEach = (players: Player[], onRoster: Player[], draft: Draft) =>
   onRoster
-    .map((p) => ({ p, ...worthUpTo(men, p, draft) }))
+    .map((p) => ({ p, ...worthUpTo(players, p, draft) }))
     .sort((a, b) => a.round - b.round);
-
-export { bestLeftAt };

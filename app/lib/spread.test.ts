@@ -55,7 +55,7 @@ describe("quantileOf", () => {
 });
 
 describe("weeksFromSpread", () => {
-  it("puts about a fifth of a man's weeks outside his shipped band", () => {
+  it("puts about a fifth of a player's weeks outside his shipped band", () => {
     const weeks = weeksFromSpread(spread, "somebody", 4000);
     const outside = weeks.filter((w) => w < 5 || w > 25).length;
 

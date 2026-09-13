@@ -34,21 +34,22 @@ export const timeBand = (secondsLeft: number) =>
 export const gainBand = (yards: number) =>
   yards < -1 ? 0 : yards < 1 ? 1 : yards <= 5 ? 2 : yards <= 12 ? 3 : 4;
 
-export interface SimMan {
+export interface SimPlayer {
   id: string;
-  /** his name normalized the way the slate keys men */
+  /** his name normalized the way the slate keys players */
   key: string;
   position: string;
 }
 
 export interface SimTeam {
   passer: string;
-  men: SimMan[];
+  /** the field is spelled "men" in the file the build writes */
+  men: SimPlayer[];
   /** down, distance, field, margin, time */
   runRate: string;
-  /** call, early or late down, field, then one byte a man */
+  /** call, early or late down, field, then one byte a player */
   shares: string;
-  /** a man and a call, in the order the men are listed */
+  /** a player and a call, in the order the players are listed */
   caught: string;
   gains: Record<string, string>;
 }

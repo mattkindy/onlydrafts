@@ -1,5 +1,5 @@
 /**
- * A team that drafted better men from the same slots rates higher, and
+ * A team that drafted better players from the same slots rates higher, and
  * a pick the board would have made reads as its own best choice.
  */
 
@@ -22,18 +22,18 @@ const aMan = (
 
 /** two of everything, the first better than the second, priced in order */
 const board = (): Player[] => {
-  const men: Player[] = [];
+  const players: Player[] = [];
   let adp = 1;
 
   for (const [position, ppg] of [
     ["RB", 18], ["WR", 16], ["QB", 22], ["TE", 10], ["K", 8], ["DEF", 7],
   ] as const) {
     for (let i = 0; i < 4; i++) {
-      men.push(aMan(`${position}${i}`, position, ppg - 2 * i, adp++));
+      players.push(aMan(`${position}${i}`, position, ppg - 2 * i, adp++));
     }
   }
 
-  return men;
+  return players;
 };
 
 const aRoom = (): Room => ({
@@ -43,9 +43,9 @@ const aRoom = (): Room => ({
 });
 
 describe("shareTeams", () => {
-  it("rates the side that got the better men higher from the same slots", () => {
-    const men = board();
-    const byKey = new Map(men.map((p) => [p.key, p]));
+  it("rates the side that got the better players higher from the same slots", () => {
+    const players = board();
+    const byKey = new Map(players.map((p) => [p.key, p]));
     const picks = [1, 4, 5, 8, 9, 12, 13, 16, 17];
     const roster = (i: number) =>
       ["QB", "RB", "RB", "WR", "WR", "TE", "K", "DEF"].map((where, k) => ({
@@ -53,7 +53,7 @@ describe("shareTeams", () => {
       }));
     const rated = shareTeams(
       [{ owner: "good", took: roster(0) }, { owner: "poor", took: roster(2) }],
-      men, SLOTS, aRoom(),
+      players, SLOTS, aRoom(),
     );
 
     expect(rated[0]!.owner).toBe("good");
@@ -63,11 +63,11 @@ describe("shareTeams", () => {
 });
 
 describe("sharePicks", () => {
-  it("reads the man the board would have taken as its own best choice", () => {
-    const men = board();
+  it("reads the player the board would have taken as its own best choice", () => {
+    const players = board();
     const room = aRoom();
-    const took = [{ at: 1, p: men[0]!, kept: false }];
-    const [first] = sharePicks(took, took, men, SLOTS, room);
+    const took = [{ at: 1, p: players[0]!, kept: false }];
+    const [first] = sharePicks(took, took, players, SLOTS, room);
 
     expect(first!.best === null || first!.best.share.added > first!.share.added).toBe(true);
     expect(first!.share.added).toBeGreaterThan(0);

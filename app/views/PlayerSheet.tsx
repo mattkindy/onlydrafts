@@ -1,4 +1,4 @@
-/** Everything the board says about one man, on top of whatever view you were in. */
+/** Everything the board says about one player, on top of whatever view you were in. */
 
 import { useEffect } from "preact/hooks";
 

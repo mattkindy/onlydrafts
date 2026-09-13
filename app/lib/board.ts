@@ -1,7 +1,7 @@
 /**
  * The board in one league's terms.
  *
- * The file ships what each man does in a game and where rooms draft
+ * The file ships what each player does in a game and where rooms draft
  * him. Everything a league changes, what it pays, how many it starts,
  * how many teams there are, is applied here, so one board serves every
  * league and nothing has to be rebuilt when you connect a new one.
@@ -32,8 +32,8 @@ export interface League {
 }
 
 /** the same weights the board is built with, quarterbacks apart */
-const LEAN = { model: 0.1, share: 0.3, adp: 0.4, walk: 0.2 };
-const QB_LEAN = { model: 0.03, share: 0, adp: 0.12, walk: 0.85 };
+const LEAN = { model: 0.1, share: 0.3, adp: 0.4, sim: 0.2 };
+const QB_LEAN = { model: 0.03, share: 0, adp: 0.12, sim: 0.85 };
 
 /** ordered among themselves, placed where the room drafts them */
 const OWN_ORDER = new Set(["K", "DEF"]);
@@ -50,10 +50,10 @@ export function roomFor(pays: Pays | null | undefined): "ppr" | "half" | "standa
   return perCatch >= 0.75 ? "ppr" : perCatch >= 0.25 ? "half" : "standard";
 }
 
-function placesBy<T>(men: T[], by: (p: T) => number | null | undefined) {
+function placesBy<T>(players: T[], by: (p: T) => number | null | undefined) {
   const at = new Map<number, number>();
 
-  men
+  players
     .map((p, i) => ({ i, v: by(p) }))
     .filter((r): r is { i: number; v: number } => r.v !== null && r.v !== undefined)
     .sort((a, b) => b.v - a.v)
@@ -63,19 +63,19 @@ function placesBy<T>(men: T[], by: (p: T) => number | null | undefined) {
 }
 
 /**
- * What the last man the league would start at each position scores.
+ * What the last player the league would start at each position scores.
  * A league starting two quarterbacks has a better one left over, so
  * the gap to him is smaller and every quarterback is worth less.
  */
 function lastStarter(
-  men: Player[],
+  players: Player[],
   started: Record<string, number>,
   of: (p: Player) => number | null | undefined,
 ) {
   const bar: Record<string, number> = {};
 
   for (const where of WHERE) {
-    const ranked = men
+    const ranked = players
       .filter((p) => p.position === where)
       .map(of)
       .filter((v): v is number => v !== null && v !== undefined)
@@ -91,7 +91,7 @@ const scaled = (of: Record<string, number>, by: number, places: number) =>
     .map(([at, n]) => [at, Number((n * by).toFixed(places))]));
 
 /**
- * How many times his middle week a man's high week can run before we
+ * How many times his middle week a player's high week can run before we
  * stop believing the spread. Everyone the projection is sure of comes in
  * between two and four, and nine is the widest on the whole board.
  */
@@ -101,7 +101,7 @@ const WIDEST_WEEK = 10;
  * A spread too wide to believe. Asked in multiples so the answer is the
  * same whatever the build scored: half a point a catch gives a fringe
  * receiver half the middle week a full point does, and his high week
- * barely moves, so the multiple doubles on a man whose role never changed.
+ * barely moves, so the multiple doubles on a player whose role never changed.
  */
 function runsAway(band: Record<string, number>): boolean {
   const middle = band["ev"] ?? 0;
@@ -123,190 +123,190 @@ function forgetSpread(p: Player): void {
  */
 export type Schedule = Record<string, (string | null)[]>;
 
+/**
+ * His spread moved into this league's terms.
+ *
+ * The spreads were worked out under whatever the build scored, so they
+ * move with him rather than being recomputed, and against the file's own
+ * middle. Scaling from the scored number left the card showing 19.8 a
+ * game beside a value worked out from 20.1.
+ *
+ * Where the middle week is half a point or less, or the spread already
+ * runs away, he gets no spread at all rather than one that disagrees
+ * with the number beside it.
+ */
+function rescaleSpread(p: Player, pays: Pays): void {
+  // a defence ships the rates behind a spread rather than a spread, so
+  // its weeks are drawn here
+  const drawn = p.position === "DEF" && p.simulated
+    ? spreadOf(defenceWeeks(p.simulated, pays, p.key))
+    : null;
+
+  if (drawn) {
+    if (drawn.ev <= 0.5 || runsAway({ ...drawn })) {
+      p.game = null;
+      p.sim = null;
+
+      return;
+    }
+
+    const moved = (p.ppg ?? 0) / drawn.ev;
+    p.game = scaled({ ...drawn }, moved, 1);
+    p.sim = { ...scaled({ ...drawn }, moved * 17, 0), games: 17 };
+
+    return;
+  }
+
+  const built = p.game?.["ev"] ?? 0;
+
+  if (built <= 0.5 || runsAway(p.game!)) {
+    forgetSpread(p);
+
+    return;
+  }
+
+  const moved = (p.ppg ?? 0) / built;
+  p.game = scaled(p.game!, moved, 1);
+
+  if (p.sim) {
+    p.sim = { ...scaled(p.sim, moved, 0), games: p.sim.games };
+  }
+}
+
+/**
+ * What he beats the last starter at his position by, over a season.
+ *
+ * A player who misses four weeks gives you thirteen weeks of the gap and
+ * nothing for the other four, so a fragile player and a durable one with
+ * the same average are priced apart.
+ *
+ * This is what his own projection says he is worth, which is one of the
+ * four opinions the board blends. What a card shows comes later and is a
+ * different thing: what a pick where the board has him is worth.
+ */
+function priceAgainstReplacement(p: Player, bar: Record<string, number>): void {
+  const plays = p.games!;
+  const against = (bar[p.position] ?? 0) * plays;
+  p.perGameVor = Number(((p.ppg ?? 0) - (bar[p.position] ?? 0)).toFixed(1));
+  p.vor = Number((plays * ((p.ppg ?? 0) - (bar[p.position] ?? 0))).toFixed(1));
+  // kept aside, because the curve later replaces vor with what a pick at
+  // his place is worth and a reader deserves to see both
+  p.ownVor = p.vor;
+
+  if (!p.sim?.["ev"]) {
+    return;
+  }
+
+  /**
+   * The same over the middle ninety of his seasons, since two players on
+   * the same number are not the same bet. The low end is harsher than it
+   * should be, because each quantile is charged the same expected games.
+   */
+  p.par = {
+    low: Number((p.sim["low"]! - against).toFixed(1)),
+    mid: Number((p.sim["mid"]! - against).toFixed(1)),
+    high: Number((p.sim["high"]! - against).toFixed(1)),
+  };
+}
+
+/**
+ * What a pick here is worth, which is the number a card shows.
+ *
+ * The board orders by four opinions together and his own projected value
+ * is one of them, so the two disagree about half the time. A card showing
+ * his projection while the list is ordered by the blend reads as a broken
+ * sort. So the values are sorted and read back at each player's place,
+ * over a season and over a game both, and what he scores is untouched.
+ *
+ * A kicker or a defence is read at the place the room puts him, off the
+ * same curve. Leaving them out was what let a defence show a bigger
+ * number than every skill player around it: twelve teams start twelve
+ * defences, so twelve clear the last starter every year whatever happens.
+ */
+function readValuesOffTheCurve(players: Player[]): void {
+  const inOrder = players.filter((p) => !OWN_ORDER.has(p.position));
+  const curve = inOrder.map((p) => p.vor ?? 0).sort((a, b) => b - a);
+  const readAt = (p: Player, at: number) => {
+    p.vor = Number((curve[at] ?? 0).toFixed(1));
+    p.perGameVor = Number((p.vor / Math.max(1, p.games ?? 17)).toFixed(1));
+  };
+
+  inOrder.forEach(readAt);
+
+  let skillAhead = 0;
+
+  for (const p of players) {
+    if (!OWN_ORDER.has(p.position)) {
+      skillAhead++;
+      continue;
+    }
+
+    readAt(p, Math.min(skillAhead, curve.length - 1));
+  }
+}
+
 export function rescore(
-  players: Player[], league: League, schedule?: Schedule | null,
+  asShipped: Player[], league: League, schedule?: Schedule | null,
 ): Player[] {
   const { pays } = league;
   const room = roomFor(pays);
   const started = startedHere(league.slots, league.teams);
 
-  const men = players.map((p): Player => {
+  const players = asShipped.map((p): Player => {
     const market = p.adpBy?.[room];
     const ppg = Number(scoredHere(p, pays).toFixed(1));
 
     return {
       ...p,
       // what the simulation expects him to play, which is what prices a
-      // fragile man against a durable one on the same average
+      // fragile player against a durable one on the same average
       games: p.games ?? p.sim?.games ?? 17,
       ...(market ? { adp: market.adp, adpLow: market.low, adpHigh: market.high } : {}),
       ppg,
       ownPpg: ppg,
-      // the regression's own game, kept apart so its seat in the blend
-      // stays its own voice now that ppg leads with the walk
+      // the regression's own game, kept apart so its slot in the blend
+      // stays its own voice now that ppg leads with the simulation
       regressionPpg: p.projected
         ? Number(payFor(p.projected, pays).toFixed(1))
         : ppg,
     };
   });
 
-  /**
-   * The spreads were worked out under whatever the build scored, so
-   * they move with him rather than being recomputed.
-   *
-   * Measured against the file's own middle, not against what he scores
-   * here. Scaling from the scored number instead left the card showing
-   * 19.8 a game beside a value worked out from 20.1.
-   *
-   * It happens before anything is measured, because what a streamed
-   * position is worth comes off the spreads of the men left on waivers,
-   * and those have to be in this league's terms first.
-   */
-  for (const p of men) {
-    /**
-     * A defence ships the rates behind a spread rather than a spread,
-     * so its weeks are drawn here. Having no distribution at all was
-     * what left a defence with no range on its card and no way to say
-     * what the best one on waivers gives you.
-     */
-    const drawn = p.position === "DEF" && p.simulated
-      ? spreadOf(defenceWeeks(p.simulated, pays, p.key))
-      : null;
-
-    if (drawn) {
-      /**
-       * A league paying almost nothing for a defence draws it a middle
-       * week of about nothing, and scaling from that runs away the same
-       * way it does for a man at a tenth of a point, so the guards below
-       * apply here too.
-       */
-      if (drawn.ev <= 0.5 || runsAway({ ...drawn })) {
-        p.game = null;
-        p.sim = null;
-        continue;
-      }
-
-      const moved = (p.ppg ?? 0) / drawn.ev;
-      p.game = scaled({ ...drawn }, moved, 1);
-      p.sim = { ...scaled({ ...drawn }, moved * 17, 0), games: 17 };
-      continue;
-    }
-
-    const built = p.game?.["ev"] ?? 0;
-
-    /**
-     * Nothing to scale from, so there is no spread to show rather than
-     * one that disagrees with the number beside it.
-     *
-     * A tenth of a point counts as nothing here. The spread is moved by
-     * the ratio of what he scores to what the file had, and off a
-     * number that small the ratio runs away: Travis Homer is a tenth a
-     * game in the file and 1.2 in a league paying for catches, so his
-     * spread was multiplied by twelve and the card gave a man with two
-     * carries a sixty seven point week and a chance of finishing second
-     * among all backs.
-     */
-    if (built <= 0.5) {
-      forgetSpread(p);
-      continue;
-    }
-
-    /**
-     * The file can also give us a spread that already runs away, and
-     * scaling cannot fix that: every figure moves by the same ratio, so
-     * the shape comes through unchanged. Kyle Williams came in at three
-     * a game with a fifty seven point high week.
-     */
-    if (runsAway(p.game!)) {
-      forgetSpread(p);
-      continue;
-    }
-
-    const moved = (p.ppg ?? 0) / built;
-    p.game = scaled(p.game!, moved, 1);
-
-    if (p.sim) {
-      p.sim = { ...scaled(p.sim, moved, 0), games: p.sim.games };
-    }
+  for (const p of players) {
+    rescaleSpread(p, pays);
   }
 
   const bar = replacementBar({
-    men,
+    players,
     teams: league.teams,
     rosters: league.rosters ?? null,
-    lastStarter: lastStarter(men, started, (p) => p.ppg),
+    lastStarter: lastStarter(players, started, (p) => p.ppg),
   });
 
-  /**
-   * A man who misses four weeks gives you thirteen weeks of the gap to
-   * a replacement and nothing for the other four, so a fragile player
-   * and a durable one with the same average are priced apart.
-   *
-   * This is what his own projection says he is worth, which is one of
-   * the four opinions the board blends. The number a card shows comes
-   * later and is a different thing: what a pick where the board has
-   * him is worth.
-   */
-  for (const p of men) {
-    const plays = p.games!;
-    const against = (bar[p.position] ?? 0) * plays;
-    p.perGameVor = Number(((p.ppg ?? 0) - (bar[p.position] ?? 0)).toFixed(1));
-    p.vor = Number((plays * ((p.ppg ?? 0) - (bar[p.position] ?? 0))).toFixed(1));
-    // kept aside, because the curve below replaces vor with what a pick
-    // at his place is worth and a reader deserves to see both
-    p.ownVor = p.vor;
-
-    /**
-     * The same over the middle ninety of his seasons, since two men on
-     * the same number are not the same bet: Bijan Robinson's band never
-     * goes below nothing and every quarterback's does.
-     *
-     * The low end is harsher than it should be, because each quantile
-     * is charged the same expected games of replacement where a short
-     * season would owe fewer. One man's width against another's is the
-     * part worth reading.
-     */
-    if (p.sim?.["ev"]) {
-      p.par = {
-        low: Number((p.sim["low"]! - against).toFixed(1)),
-        mid: Number((p.sim["mid"]! - against).toFixed(1)),
-        high: Number((p.sim["high"]! - against).toFixed(1)),
-      };
-    }
+  for (const p of players) {
+    priceAgainstReplacement(p, bar);
   }
 
-  const onTheCurve = men.filter((p) => !OWN_ORDER.has(p.position));
-  const regressionBar = lastStarter(men, started, (p) => p.regressionPpg);
+  const onTheCurve = players.filter((p) => !OWN_ORDER.has(p.position));
+  const regressionBar = lastStarter(players, started, (p) => p.regressionPpg);
   const modelAt = placesBy(onTheCurve, (p) =>
     (p.games ?? 17) *
       ((p.regressionPpg ?? 0) - (regressionBar[p.position] ?? 0)));
   const shareAt = placesBy(onTheCurve, (p) => p.touches);
   const adpAt = placesBy(onTheCurve, (p) => (p.adp == null ? null : -p.adp));
-  /**
-   * The walk speaks about rookies too. It used to keep quiet on them,
-   * from a time when it had nothing to draw for one and gave every
-   * rookie a third of a point a game. It draws them from the pools
-   * now, at the share their draft slot buys, and gives the first back
-   * of this class fifteen and a half a game. The bench has scored
-   * them that way all along, so leaving them out here meant the board
-   * a drafter reads was not the board that was measured.
-   */
-  const walkAt = placesBy(onTheCurve, (p) =>
+  // the simulation speaks about rookies too, drawing them from the pools
+  // at the share their draft slot buys
+  const simAt = placesBy(onTheCurve, (p) =>
     p.simulated
       ? payFor(p.simulated, pays) - (bar[p.position] ?? 0)
       : null);
 
-  /**
-   * Kickers and defences are ours to order and the room's to place.
-   * Giving a kicker the attempts his side's drives produce beats his
-   * draft position .38 to .20, but where the group belongs is another
-   * question that value over replacement answers badly, since both are
-   * replaced off the waiver wire in a week.
-   */
+  // kickers and defences are ours to order and the room's to place,
+  // since value over replacement answers the second question badly
   const placeIn = new Map<string, number>();
 
   for (const where of OWN_ORDER) {
-    const its = men.filter((p) => p.position === where);
+    const its = players.filter((p) => p.position === where);
     const picks = its
       .map((p) => p.adp)
       .filter((adp): adp is number => Boolean(adp))
@@ -320,7 +320,7 @@ export function rescore(
 
   const atIndex = new Map(onTheCurve.map((p, i) => [p.key, i]));
 
-  for (const p of men) {
+  for (const p of players) {
     if (OWN_ORDER.has(p.position)) {
       p.blend = placeIn.get(p.key) ?? 400;
       continue;
@@ -332,95 +332,35 @@ export function rescore(
       [lean.model, modelAt.get(i)],
       [lean.share, shareAt.get(i)],
       [lean.adp, adpAt.get(i)],
-      [lean.walk, walkAt.get(i)],
+      [lean.sim, simAt.get(i)],
     ];
     const counted = votes.filter(([w, place]) => w > 0 && place !== undefined);
     const weight = counted.reduce((sum, [w]) => sum + w, 0);
     p.blend = weight > 0
       ? counted.reduce((sum, [w, place]) => sum + w * place!, 0) / weight
-      : men.length;
+      : players.length;
   }
 
-  men.sort((a, b) => (a.blend ?? 0) - (b.blend ?? 0));
-  men.forEach((p, i) => { p.rank = i + 1; });
+  players.sort((a, b) => (a.blend ?? 0) - (b.blend ?? 0));
+  players.forEach((p, i) => { p.rank = i + 1; });
 
-  /**
-   * What a pick here is worth, which is the number a card shows.
-   *
-   * The board orders by four opinions together and his own projected
-   * value is one of them, so the two disagree about half the time. A
-   * card showing his projection while the list is ordered by the blend
-   * reads as a broken sort: 1.02 above 1.01, and a man with more points
-   * below a man with fewer.
-   *
-   * So the values are sorted and read back at each man's place. The
-   * first pick on the board is worth what the best value is, whoever
-   * turns out to hold it. What he scores is untouched by this and stays
-   * his own, so the line on his card still adds up to the points beside
-   * it. That is the part the old curve got wrong: it moved his points
-   * as well, and a card read 18 a game for a man his league scores at
-   * 22.9.
-   */
-  const inOrder = men.filter((p) => !OWN_ORDER.has(p.position));
-  const curve = inOrder.map((p) => p.vor ?? 0).sort((a, b) => b - a);
+  readValuesOffTheCurve(players);
 
-  inOrder.forEach((p, i) => {
-    p.vor = Number((curve[i] ?? 0).toFixed(1));
-    /**
-     * And the same over one game, because the keeper sheet works in
-     * both. What a pick buys and what a man is worth against it are
-     * read from the season figure, and which alternative to show is
-     * read from the game one, so leaving one his own and the other
-     * the board's let the two disagree about the same player.
-     */
-    p.perGameVor = Number((p.vor / Math.max(1, p.games ?? 17)).toFixed(1));
-  });
-
-  /**
-   * A kicker or a defence read at the place the room puts him, off the
-   * same curve.
-   *
-   * Leaving them out of it was what let a defence show a bigger number
-   * than every skill player around it. Twelve teams start twelve
-   * defences, so twelve of them clear the last starter every year
-   * whatever happens, and the card was showing that arithmetic next to
-   * a number that meant something else. What his own projection says he
-   * is worth is still worth seeing, so it stays as his own value.
-   */
-  let skillAhead = 0;
-
-  for (const p of men) {
-    if (!OWN_ORDER.has(p.position)) {
-      skillAhead++;
-      continue;
-    }
-
-    const at = Math.min(skillAhead, curve.length - 1);
-    p.vor = Number((curve[at] ?? 0).toFixed(1));
-    p.perGameVor = Number((p.vor / Math.max(1, p.games ?? 17)).toFixed(1));
-  }
-
-  /**
-   * Where the room takes him, as a place rather than an average.
-   * Writing an average as a round and a pick left 1.02 empty and put
-   * two men on 1.05, since nobody averages between 1.5 and 2.4.
-   */
-  [...men]
+  // where the room takes him, as a place rather than an average: writing
+  // an average as a round and a pick left 1.02 empty and two players on 1.05
+  [...players]
     .filter((p) => p.adp)
     .sort((a, b) => a.adp! - b.adp!)
     .forEach((p, i) => { p.adpRank = i + 1; });
 
-  /**
-   * The drawn weeks need to know who each team's first pass catcher is
-   * and who it plays, and both of those are the board's to say rather
-   * than one player's.
-   */
+  // who each team's first pass catcher is and who it plays are the
+  // board's to say rather than one player's
   notePassCatchers(
-    men,
+    players,
     schedule
       ? (team, week) => schedule[team]?.[week - 1] ?? null
       : null,
   );
 
-  return men;
+  return players;
 }

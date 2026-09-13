@@ -3,12 +3,12 @@
  *
  * The provider says what everybody has scored so far. What is left to
  * come is drawn from the week's projections, and how much is left
- * depends on where each man's game is: nothing more for a game that has
+ * depends on where each player's game is: nothing more for a game that has
  * finished, a whole week for one that has not kicked off, and a share of
  * one for a game in progress. The public ESPN scoreboard is what says
  * which of the three a game is in, and it needs no sign in.
  *
- * Men in the same game share the factors the season draws share, and
+ * Players in the same game share the factors the season draws share, and
  * what they have scored is evidence about those factors, so a
  * quarterback hot at half time lifts his receivers.
  */
@@ -19,7 +19,7 @@ import {
 } from "./copula.ts";
 import {
   chanceWith, explainSwap, worthExplaining,
-  type Explanation, type Seat,
+  type Explanation, type Opening,
 } from "./explain.ts";
 import type { Matchup, Side } from "./providers.ts";
 import {
@@ -36,7 +36,7 @@ export const SCOREBOARD =
 
 export interface GameState {
   where: "pre" | "in" | "post";
-  /** how much of the game is still to play, nought to one */
+  /** how much of the game is still to play, zero to one */
   left: number;
 }
 
@@ -54,7 +54,7 @@ export interface LiveSituation {
   home: string;
   away: string;
   points: Record<string, number>;
-  /** seconds left in the whole game, nought once overtime starts */
+  /** seconds left in the whole game, zero once overtime starts */
   secondsLeft: number;
   withBall?: string;
   /** yards from the other team's goal line, one to ninety nine */
@@ -314,7 +314,7 @@ export async function gameStates(
 }
 
 /**
- * A man's week read as a spread. An older slate ships only the floor,
+ * A player's week read as a spread. An older slate ships only the floor,
  * the middle and the ceiling, and then each quartile is put halfway
  * between the two figures either side of it. Halfway is narrower than
  * the quartile really is, because the residuals are skewed, so a slate
@@ -329,10 +329,10 @@ export const spreadOf = (row: SlateRow) => ({
   q3: row.q3 ?? (row.blend + row.ceiling) / 2,
 });
 
-/** the board in this league's terms, by the key a lineup uses for a man */
+/** the board in this league's terms, by the key a lineup uses for a player */
 export type Lines = Map<string, Player>;
 
-/** what anybody knows about a man's week */
+/** what anybody knows about a player's week */
 export interface Line {
   spread: Spread;
   position: string;
@@ -342,16 +342,16 @@ export interface Line {
   /** the middle of it, which is what a projected total adds up */
   blend: number;
   /**
-   * True when nobody has a number for this man and the position's stock
+   * True when nobody has a number for this player and the position's stock
    * week is standing in, so a page can say the figure is a guess.
    */
   stock: boolean;
 }
 
 /**
- * A plain week for a position, for a man neither the slate nor the board
+ * A plain week for a position, for a player neither the slate nor the board
  * knows. Kickers and defences are the ones this happens to, and either
- * scores about a touchdown most weeks, so counting nought was worse than
+ * scores about a touchdown most weeks, so counting zero was worse than
  * counting the position's usual.
  */
 const STOCK: Record<string, Spread> = {
@@ -378,9 +378,9 @@ export const stockLine = (position: string): Line | null => {
 };
 
 /**
- * What the week says about a man, and failing that what the board does.
+ * What the week says about a player, and failing that what the board does.
  *
- * A slate covers the men a weekly model is run for, which leaves out
+ * A slate covers the players a weekly model is run for, which leaves out
  * kickers and defences. Those two have a season long game of their own on
  * the board, in this league's scoring, and a game of that is a better
  * guess at the rest of his Sunday than nothing at all. The fixture does
@@ -402,10 +402,10 @@ export function lineOf(
     };
   }
 
-  const man = lines?.get(key);
-  const game = man?.game;
+  const player = lines?.get(key);
+  const game = player?.game;
 
-  if (!man || !game?.["ev"]) {
+  if (!player || !game?.["ev"]) {
     return position ? stockLine(position) : null;
   }
 
@@ -420,38 +420,38 @@ export function lineOf(
       q1: game["q1"] ?? ev,
       q3: game["q3"] ?? ev,
     },
-    position: man.position,
-    team: man.team?.toUpperCase() ?? null,
+    position: player.position,
+    team: player.team?.toUpperCase() ?? null,
     opponent: null,
     blend: ev,
     stock: false,
   };
 }
 
-/** a man on the field, as the pages that draw him need him */
+/** a player on the field, as the pages that draw him need him */
 export interface Starter {
   key: string;
   points?: number;
-  /** the seat he is in, which says what position to fall back on */
+  /** the slot he is in, which says what position to fall back on */
   slot?: string;
-  /** what the provider calls him, for a man nobody else has a name for */
+  /** what the provider calls him, for a player nobody else has a name for */
   name?: string;
 }
 
-/** the position a seat implies, for a man nobody has a line on */
+/** the position a slot implies, for a player nobody has a line on */
 const hintOf = (slot: string | undefined) =>
   slot && slot in STOCK ? slot : undefined;
 
-/** what the week, the board, or the position says about a man in a seat */
+/** what the week, the board, or the position says about a player in a slot */
 export const lineFor = (
-  man: Starter, rows: Map<string, SlateRow>, lines?: Lines,
-) => lineOf(man.key, rows, lines, hintOf(man.slot));
+  player: Starter, rows: Map<string, SlateRow>, lines?: Lines,
+) => lineOf(player.key, rows, lines, hintOf(player.slot));
 
 /** where his game has got to, off whichever team the line gives him */
 const stateAt = (line: Line, states: Map<string, GameState>): GameState =>
   (line.team ? states.get(line.team) : null) ?? { where: "pre", left: 1 };
 
-/** the two teams in a man's game, so both sides reach the same name */
+/** the two teams in a player's game, so both sides reach the same name */
 const gameOf = (line: Line) =>
   [line.team ?? "", line.opponent ?? ""].sort().join("|");
 
@@ -497,7 +497,7 @@ function topCatchers(rows: Map<string, SlateRow>): Set<string> {
 }
 
 /**
- * How much of his game a man has played before his pace is believed.
+ * How much of his game a player has played before his pace is believed.
  *
  * Reading a whole game off a fraction q of one has about 1/q the
  * variance a whole game has, so (1 - q) / q of invented spread goes into
@@ -511,7 +511,7 @@ const BARELY_PLAYED = 0.1;
 const noiseAt = (played: number) =>
   (1 - played) / Math.max(BARELY_PLAYED, played);
 
-/** how far out a pace is read, since a quantile of nought has no normal */
+/** how far out a pace is read, since a quantile of zero has no normal */
 const FURTHEST = 0.002;
 
 interface Watching {
@@ -527,7 +527,7 @@ interface Watching {
 }
 
 /**
- * How a man's week was drawn, for a caller who would rather ask what his
+ * How a player's week was drawn, for a caller who would rather ask what his
  * own noise alone does than count the draws.
  */
 export interface Drawing {
@@ -543,13 +543,13 @@ export interface Drawing {
 }
 
 /**
- * This week's draws for a run of men, sharing the factors their games
+ * This week's draws for a run of players, sharing the factors their games
  * share and conditioned on what has been scored already.
  *
- * A man yet to kick off draws off the prior factors. A man in a game
+ * A player yet to kick off draws off the prior factors. A player in a game
  * under way is evidence: what he is on pace for over a full game goes on
  * his own distribution, that quantile becomes a normal, and the factors
- * his game shares are drawn from their posterior given every such man in
+ * his game shares are drawn from their posterior given every such player in
  * that game. Two games share no factor, so each is solved on its own.
  *
  * His own noise is partly observed too, so the rest of his own week is
@@ -557,7 +557,7 @@ export interface Drawing {
  * the simple treatment, and it leaves him unit variance.
  */
 export function liveDraws(
-  men: Starter[],
+  players: Starter[],
   rows: Map<string, SlateRow>,
   states: Map<string, GameState>,
   draws: number,
@@ -567,10 +567,10 @@ export function liveDraws(
   const top = topCatchers(rows);
   const watched = new Map<string, Watching>();
 
-  for (const man of men) {
-    const line = lineFor(man, rows, lines);
+  for (const player of players) {
+    const line = lineFor(player, rows, lines);
 
-    if (!line || watched.has(man.key)) {
+    if (!line || watched.has(player.key)) {
       continue;
     }
 
@@ -579,19 +579,19 @@ export function liveDraws(
       ? Math.min(1, Math.max(0, 1 - state.left))
       : 0;
     const at = played > 0
-      ? quantileOf(line.spread, (man.points ?? 0) / played)
+      ? quantileOf(line.spread, (player.points ?? 0) / played)
       : 0.5;
 
-    watched.set(man.key, {
+    watched.set(player.key, {
       mix: mixFor(
-        { key: man.key, position: line.position, team: line.team },
+        { key: player.key, position: line.position, team: line.team },
         line.opponent,
         THIS_WEEK,
-        top.has(man.key),
+        top.has(player.key),
       ),
       line,
       state,
-      scored: man.points ?? 0,
+      scored: player.points ?? 0,
       played,
       z: normalQuantile(
         Math.min(1 - FURTHEST, Math.max(FURTHEST, at))),
@@ -696,14 +696,14 @@ export function liveDraws(
   };
 }
 
-/** this week's draws, with every man's answered once and kept */
+/** this week's draws, with every player's answered once and kept */
 export interface Live {
   draws: number;
-  /** what a man might still add to a side, draw by draw */
+  /** what a player might still add to a side, draw by draw */
   toCome: (key: string) => number[];
   /** what each shared factor came out at, draw by draw */
   factorAt: From;
-  /** how a man's week was drawn, for a caller pricing a swap out of it */
+  /** how a player's week was drawn, for a caller pricing a swap out of it */
   drawingOf: (key: string) => Drawing | null;
 }
 
@@ -725,7 +725,7 @@ export function myGameIn(
 }
 
 /** everybody a matchup puts on the field or on the bench */
-export const menOf = (matchup: Matchup) =>
+export const playersOf = (matchup: Matchup) =>
   matchup.sides.flatMap((side) => [...side.starters, ...side.bench]);
 
 /** what a side ends the week on, draw by draw */
@@ -775,7 +775,7 @@ export function standingFor(
   draws = LIVE_DRAWS,
   remainder?: Map<string, number[]>,
 ): Standing {
-  const live = liveDraws(menOf(matchup), rows, states, draws, lines, remainder);
+  const live = liveDraws(playersOf(matchup), rows, states, draws, lines, remainder);
   const home = sideTotals(matchup.sides[0], rows, states, draws, live);
   const away = sideTotals(matchup.sides[1], rows, states, draws, live);
   const p = winChance(home, away);
@@ -796,7 +796,7 @@ export function oddsFor(
 }
 
 export interface Swap {
-  /** the bench man who goes in */
+  /** the bench player who goes in */
   starts: string;
   /** the starter who comes out */
   benches: string;
@@ -811,18 +811,18 @@ export interface Best {
   swaps: Swap[];
 }
 
-/** a man nobody can move: his game has kicked off */
+/** a player nobody can move: his game has kicked off */
 const locked = (
-  man: Starter, rows: Map<string, SlateRow>, states: Map<string, GameState>,
+  player: Starter, rows: Map<string, SlateRow>, states: Map<string, GameState>,
   lines?: Lines,
-) => starterState(man, rows, states, lines)?.where !== "pre";
+) => starterState(player, rows, states, lines)?.where !== "pre";
 
 /**
- * Whether this slot takes a man of that position. A slot nobody here
+ * Whether this slot takes a player of that position. A slot nobody here
  * recognises is treated as a flex where the league has any, since that is
  * what an unusual slot name nearly always is.
  */
-export function seatTakes(
+export function slotTakesIn(
   slot: string, position: string, slots: string[] | null | undefined,
 ): boolean {
   if (knownSlot(slot)) {
@@ -858,23 +858,23 @@ export function bestLineupFor(
   );
   const theirs = sideTotals(against, rows, states, draws, live);
   const benched = side.bench
-    .map((man) => ({ man, line: lineOf(man.key, rows, lines) }))
-    .filter((his) => his.line && !locked(his.man, rows, states, lines));
-  const scoredBy = (man: { key: string; points: number }, i: number) =>
-    man.points + live.toCome(man.key)[i]!;
+    .map((player) => ({ player, line: lineOf(player.key, rows, lines) }))
+    .filter((his) => his.line && !locked(his.player, rows, states, lines));
+  const scoredBy = (player: { key: string; points: number }, i: number) =>
+    player.points + live.toCome(player.key)[i]!;
   let starters = [...side.starters];
-  let bench = benched.map((his) => his.man);
+  let bench = benched.map((his) => his.player);
   const positionOf = (key: string) => lineOf(key, rows, lines)?.position;
   let totals = Array.from({ length: draws }, (_, i) =>
-    starters.reduce((sum, man) => sum + scoredBy(man, i), 0));
+    starters.reduce((sum, player) => sum + scoredBy(player, i), 0));
   let odds = winChance(totals, theirs);
   const swaps: Swap[] = [];
 
   for (;;) {
     let found: { swap: Swap; totals: number[] } | null = null;
 
-    for (const man of bench) {
-      const position = positionOf(man.key);
+    for (const player of bench) {
+      const position = positionOf(player.key);
 
       if (!position) {
         continue;
@@ -883,18 +883,18 @@ export function bestLineupFor(
       for (const starter of starters) {
         if (
           locked(starter, rows, states, lines) ||
-          !seatTakes(starter.slot, position, slots)
+          !slotTakesIn(starter.slot, position, slots)
         ) {
           continue;
         }
 
         const swapped = totals.map((total, i) =>
-          total - scoredBy(starter, i) + scoredBy(man, i));
+          total - scoredBy(starter, i) + scoredBy(player, i));
         const gains = winChance(swapped, theirs) - odds;
 
         if (gains > (found?.swap.gains ?? 0)) {
           found = {
-            swap: { starts: man.key, benches: starter.key, slot: starter.slot, gains },
+            swap: { starts: player.key, benches: starter.key, slot: starter.slot, gains },
             totals: swapped,
           };
         }
@@ -912,7 +912,7 @@ export function bestLineupFor(
         ? { key: swap.starts, slot: s.slot, points: bencher(bench, swap.starts) }
         : s);
     bench = [
-      ...bench.filter((man) => man.key !== swap.starts),
+      ...bench.filter((player) => player.key !== swap.starts),
       { key: out.key, points: out.points },
     ];
     totals = found.totals;
@@ -922,12 +922,12 @@ export function bestLineupFor(
 }
 
 const bencher = (bench: Side["bench"], key: string) =>
-  bench.find((man) => man.key === key)?.points ?? 0;
+  bench.find((player) => player.key === key)?.points ?? 0;
 
 /**
  * Where a starter's own game has got to, or null when nobody has a line
  * on him at all. Those two were the same answer once, and a kicker the
- * slate leaves out read as done with nought.
+ * slate leaves out read as done with zero.
  */
 export function starterState(
   starter: Starter,
@@ -940,7 +940,7 @@ export function starterState(
   return line ? stateAt(line, states) : null;
 }
 
-/** what a man is projected to add from here, on top of what he has */
+/** what a player is projected to add from here, on top of what he has */
 export const projectedFor = (
   key: string, rows: Map<string, SlateRow>, lines?: Lines, slot?: string,
 ) => lineFor({ key, slot }, rows, lines)?.blend ?? null;
@@ -960,10 +960,10 @@ export function initialForm(name: string): string {
   return `${first[0]}. ${words.slice(1).join(" ")}`;
 }
 
-/** one bench man measured against the starter in a seat */
+/** one bench player measured against the starter in a slot */
 export interface Alternative {
   key: string;
-  /** what the provider calls him, for a man nobody else has a name for */
+  /** what the provider calls him, for a player nobody else has a name for */
   name?: string | undefined;
   position: string;
   /** what starting him instead would do to the win chance */
@@ -977,7 +977,7 @@ export interface Alternative {
   why?: Explanation;
 }
 
-/** a seat, who is in it, and who else could be */
+/** a slot, who is in it, and who else could be */
 export interface SlotChoice {
   slot: string;
   starter: Side["starters"][number];
@@ -986,15 +986,15 @@ export interface SlotChoice {
   options: Alternative[];
 }
 
-/** how many draws the alternatives are read off, per seat and per man */
+/** how many draws the alternatives are read off, per slot and per player */
 export const CHOICE_DRAWS = 2000;
 
 /**
- * Every seat in your lineup with the bench men who could take it, each
+ * Every slot in your lineup with the bench players who could take it, each
  * with what starting him would do to your chance of winning this week.
  *
  * One set of draws serves the whole board, so every answer is measured
- * against the same opponent and the differences between them are the men
+ * against the same opponent and the differences between them are the players
  * rather than the drawing.
  */
 export function alternativesFor(
@@ -1012,53 +1012,54 @@ export function alternativesFor(
     rows, states, draws, lines, remainder,
   );
   const theirs = sideTotals(against, rows, states, draws, live);
-  const scoredBy = (man: Starter, i: number) =>
-    (man.points ?? 0) + live.toCome(man.key)[i]!;
+  const scoredBy = (player: Starter, i: number) =>
+    (player.points ?? 0) + live.toCome(player.key)[i]!;
   const totals = Array.from({ length: draws }, (_, i) =>
-    side.starters.reduce((sum, man) => sum + scoredBy(man, i), 0));
+    side.starters.reduce((sum, player) => sum + scoredBy(player, i), 0));
   const benched = side.bench
-    .map((man) => ({ man, line: lineOf(man.key, rows, lines) }))
+    .map((player) => ({ player, line: lineOf(player.key, rows, lines) }))
     .filter((his) => his.line !== null);
-  const factorsFor = (men: Starter[]) => factorsOf(
-    men.map((man) => live.drawingOf(man.key)?.mix)
+  const factorsFor = (players: Starter[]) => factorsOf(
+    players.map((player) => live.drawingOf(player.key)?.mix)
       .filter((mix): mix is Mix => mix != null));
   const theirFactors = factorsFor(against.starters);
 
   return side.starters.map((starter) => {
     const shut = locked(starter, rows, states, lines);
-    const seated = Array.from({ length: draws }, (_, i) => scoredBy(starter, i));
-    const others = totals.map((total, i) => total - seated[i]!);
-    const seat: Seat = {
+    const hisPoints = Array.from(
+      { length: draws }, (_, i) => scoredBy(starter, i));
+    const others = totals.map((total, i) => total - hisPoints[i]!);
+    const opening: Opening = {
       others,
       theirs,
       factors: live.factorAt,
       against: theirFactors,
       alongside: factorsFor(
-        side.starters.filter((man) => man.key !== starter.key)),
+        side.starters.filter((player) => player.key !== starter.key)),
     };
     const his = live.drawingOf(starter.key);
-    const odds = his ? chanceWith(seat, his) : winChance(totals, theirs);
+    const odds = his ? chanceWith(opening, his) : winChance(totals, theirs);
     const options = benched
-      .filter((one) => seatTakes(starter.slot, one.line!.position, slots))
+      .filter((one) => slotTakesIn(starter.slot, one.line!.position, slots))
       .map((one) => {
         const instead = Array.from(
-          { length: draws }, (_, i) => scoredBy(one.man, i));
-        const drawn = live.drawingOf(one.man.key);
+          { length: draws }, (_, i) => scoredBy(one.player, i));
+        const drawn = live.drawingOf(one.player.key);
         const chance = his && drawn
-          ? chanceWith(seat, drawn)
+          ? chanceWith(opening, drawn)
           : winChance(others.map((rest, i) => rest + instead[i]!), theirs);
         const gains = chance - odds;
-        const pointsGap = mean(instead) - mean(seated);
+        const pointsGap = mean(instead) - mean(hisPoints);
         const why = his && drawn && worthExplaining(gains, pointsGap)
-          ? explainSwap(seat, his, drawn)
+          ? explainSwap(opening, his, drawn)
           : undefined;
 
         return {
-          key: one.man.key,
-          name: one.man.name,
+          key: one.player.key,
+          name: one.player.name,
           position: one.line!.position,
           gains,
-          locked: shut || locked(one.man, rows, states, lines),
+          locked: shut || locked(one.player, rows, states, lines),
           why,
         };
       })

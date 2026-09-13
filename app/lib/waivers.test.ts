@@ -1,6 +1,6 @@
 /**
- * The two things a waiver page has to get right: a better man at an
- * open seat is worth more than a worse one, and dropping somebody who
+ * The two things a waiver page has to get right: a better player at an
+ * open slot is worth more than a worse one, and dropping somebody who
  * starts every week costs more than dropping somebody who never does.
  */
 
@@ -14,7 +14,7 @@ const SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF"];
 
 const DRAWN = 400;
 
-/** a man who scores about this much a week, with an ordinary spread */
+/** a player who scores about this much a week, with an ordinary spread */
 const aMan = (
   name: string, position: string, ppg: number, games = 17,
 ): Player => ({
@@ -33,13 +33,13 @@ const aRoster = () => [
 
 /** a side that scores about what ours does, so the comparison is live */
 const anOpponent = (draws = DRAWN) => {
-  const men = [
+  const players = [
     aMan("theirQb", "QB", 18), aMan("theirRb1", "RB", 15),
     aMan("theirRb2", "RB", 12), aMan("theirWr1", "WR", 14),
     aMan("theirWr2", "WR", 11), aMan("theirTe", "TE", 9),
     aMan("theirFlex", "WR", 10), aMan("theirK", "K", 9),
   ];
-  const weeks = men.map((p) => weeksOf(p, draws));
+  const weeks = players.map((p) => weeksOf(p, draws));
 
   return Array.from({ length: draws }, (_, i) =>
     weeks.reduce((sum, its) => sum + its[i]!, 0));
@@ -49,8 +49,8 @@ const aRoom = () => ({
   opponent: anOpponent(), wire: {}, draws: DRAWN,
 });
 
-describe("adding a man off the wire", () => {
-  it("pays more for a better one at an open seat", () => {
+describe("adding a player off the wire", () => {
+  it("pays more for a better one at an open slot", () => {
     const pool = [aMan("goodK", "K", 11), aMan("poorK", "K", 6)];
     const adds = addsFor(aRoster(), pool, SLOTS, aRoom());
     const good = adds.find((a) => a.p.key === "goodK")!;
@@ -62,7 +62,7 @@ describe("adding a man off the wire", () => {
   });
 });
 
-describe("how many men a roster can carry", () => {
+describe("how many players a roster can carry", () => {
   it("counts the bench and leaves out injured reserve and taxi", () => {
     const full = [...SLOTS, "BN", "BN", "BN", "IR", "TAXI"];
 
@@ -85,7 +85,7 @@ describe("what a pickup is worth once it is paid for", () => {
     expect(paid.net).toBe(add!.added);
   });
 
-  it("drops the man who costs least, never the man being added", () => {
+  it("drops the player who costs least, never the player being added", () => {
     const roster = [...aRoster(), aMan("rb5", "RB", 4)];
     const room = aRoom();
     const [add] = addsFor(roster, [aMan("goodK", "K", 11)], SLOTS, room);
@@ -97,8 +97,8 @@ describe("what a pickup is worth once it is paid for", () => {
   });
 });
 
-describe("dropping a man", () => {
-  it("costs more for a starter than for a bench man", () => {
+describe("dropping a player", () => {
+  it("costs more for a starter than for a bench player", () => {
     const roster = [...aRoster(), aMan("rb5", "RB", 4)];
     const drops = dropsFor(roster, SLOTS, aRoom());
     const starter = drops.find((d) => d.p.key === "rb1")!;
@@ -108,12 +108,12 @@ describe("dropping a man", () => {
     expect(starter.starts).toBeGreaterThan(bench.starts);
   });
 
-  it("says the points he takes, who takes his seat, and both win chances", () => {
+  it("says the points he takes, who takes his slot, and both win chances", () => {
     const roster = [...aRoster(), aMan("rb5", "RB", 4)];
     const his = dropsFor(roster, SLOTS, aRoom())
       .find((d) => d.p.key === "rb1")!;
 
-    // he scores 15 and the man behind him on the bench scores 4
+    // he scores 15 and the player behind him on the bench scores 4
     expect(his.takes).toBeGreaterThan(4);
     expect(his.takes).toBeLessThan(15);
     expect(his.heir?.key).toBe("rb5");
@@ -121,22 +121,22 @@ describe("dropping a man", () => {
     expect(his.before).toBeGreaterThan(his.after);
   });
 
-  it("names the seat each man spends most of his starts in", () => {
+  it("names the slot each player spends most of his starts in", () => {
     const roster = [...aRoster(), aMan("aK", "K", 9)];
     const drops = dropsFor(roster, SLOTS, aRoom());
-    const seatOf = (key: string) =>
-      drops.find((d) => d.p.key === key)!.seat;
+    const slotOf = (key: string) =>
+      drops.find((d) => d.p.key === key)!.slot;
 
-    expect(seatOf("rb1")).toBe("RB");
-    expect(seatOf("aK")).toBe("K");
-    // three receivers and two receiver seats, so the cheapest plays the flex
-    expect(seatOf("flex")).toBe("FLEX");
+    expect(slotOf("rb1")).toBe("RB");
+    expect(slotOf("aK")).toBe("K");
+    // three receivers and two receiver slots, so the cheapest plays the flex
+    expect(slotOf("flex")).toBe("FLEX");
   });
 
   /**
-   * Every man used to be priced by drawing the season again without
-   * him. Now his seat is handed down from the seating that is already
-   * filled, and the two have to agree on every man, flex and all.
+   * Every player used to be priced by drawing the season again without
+   * him. Now his slot is handed down from the lineup that is already
+   * filled, and the two have to agree on every player, flex and all.
    */
   it("agrees with filling the season again without him", () => {
     const roster = [
@@ -197,7 +197,7 @@ describe("dropping a man", () => {
 });
 
 describe("what an add row says beyond the number", () => {
-  it("names the man he pushes out and the points he brings", () => {
+  it("names the player he pushes out and the points he brings", () => {
     const roster = aRoster();
     const [add] = addsFor(roster, [aMan("bigWr", "WR", 20)], SLOTS, aRoom());
 
@@ -207,7 +207,7 @@ describe("what an add row says beyond the number", () => {
     expect(add!.after - add!.before).toBeCloseTo(add!.added, 10);
   });
 
-  it("has nobody to push out at a seat the roster cannot fill", () => {
+  it("has nobody to push out at a slot the roster cannot fill", () => {
     const [add] = addsFor(aRoster(), [aMan("aK", "K", 9)], SLOTS, aRoom());
 
     expect(add!.displaced).toBe(null);

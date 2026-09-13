@@ -1,5 +1,5 @@
 /**
- * A man's stat line, said the way a box score says it.
+ * A player's stat line, said the way a box score says it.
  *
  * The board ships what he does in a game and how each week stands
  * against his own average. A season is the game line times the games he
@@ -9,7 +9,7 @@
  * itself from one season to the next, so a week in August cannot be told from the
  * week after it, and printing 115 yards for one and 117 for another
  * would be inventing a difference. A kicker is the exception, and his
- * weeks come from the walk playing each ground.
+ * weeks come from the simulation playing each ground.
  */
 
 import type { Parts } from "./scoring.ts";

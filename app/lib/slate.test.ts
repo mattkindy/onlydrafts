@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Listed } from "./availability.ts";
 import { lineOf, liveDraws, spreadOf } from "./matchups.ts";
-import { isSplit, readSlate, slateUnder, withOutMenZeroed } from "./slate.ts";
+import { isSplit, readSlate, slateUnder, withOutPlayersZeroed } from "./slate.ts";
 import { normalizeName } from "./store.ts";
 
 const built = readSlate({
@@ -36,11 +36,11 @@ describe("isSplit", () => {
     expect(isSplit({ ...backup, ours: 12, sleeper: 11 })).toBe(false);
   });
 
-  it("leaves a man Sleeper projects nothing for unflagged", () => {
+  it("leaves a player Sleeper projects nothing for unflagged", () => {
     expect(isSplit(backup)).toBe(false);
   });
 
-  it("leaves a man Sleeper has no row for unflagged", () => {
+  it("leaves a player Sleeper has no row for unflagged", () => {
     expect(isSplit({ ...backup, sleeper: null })).toBe(false);
   });
 });
@@ -66,7 +66,7 @@ describe("slateUnder", () => {
     expect(standard.rows[0]!.blend).toBe(14);
   });
 
-  it("leaves a man with no catches, and a missing figure, alone", () => {
+  it("leaves a player with no catches, and a missing figure, alone", () => {
     const burrow = slateUnder(built, 1).rows[1]!;
 
     expect(burrow.ours).toBe(18);
@@ -88,14 +88,14 @@ describe("slateUnder", () => {
 const rowsOf = (slate: ReturnType<typeof readSlate>) =>
   new Map(slate.rows.map((r) => [normalizeName(r.name), r]));
 
-const office = (men: Record<string, Listed>) =>
-  new Map(Object.entries(men).map(([name, his]) => [normalizeName(name), his]));
+const listedBy = (players: Record<string, Listed>) =>
+  new Map(Object.entries(players).map(([name, his]) => [normalizeName(name), his]));
 
-describe("a man the league office says is not playing", () => {
+describe("a player the injury report says is not playing", () => {
   const chase = normalizeName("Ja'Marr Chase");
 
-  it("reads nought on every figure", () => {
-    const rows = withOutMenZeroed(rowsOf(built), office({
+  it("reads zero on every figure", () => {
+    const rows = withOutPlayersZeroed(rowsOf(built), listedBy({
       "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Out", part: "hip" },
     }));
     const row = rows.get(chase)!;
@@ -110,7 +110,7 @@ describe("a man the league office says is not playing", () => {
   });
 
   it("keeps his name, his side and his fixture, so a page can still draw him", () => {
-    const rows = withOutMenZeroed(rowsOf(built), office({
+    const rows = withOutPlayersZeroed(rowsOf(built), listedBy({
       "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "IR" },
     }));
     const row = rows.get(chase)!;
@@ -121,17 +121,17 @@ describe("a man the league office says is not playing", () => {
   });
 
   it("leaves everybody else where he was", () => {
-    const rows = withOutMenZeroed(rowsOf(built), office({
+    const rows = withOutPlayersZeroed(rowsOf(built), listedBy({
       "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Out" },
     }));
 
     expect(rows.get(normalizeName("Joe Burrow"))!.blend).toBe(18);
   });
 
-  it("leaves a questionable man alone", () => {
+  it("leaves a questionable player alone", () => {
     const rows = rowsOf(built);
 
-    expect(withOutMenZeroed(rows, office({
+    expect(withOutPlayersZeroed(rows, listedBy({
       "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Questionable" },
     }))).toBe(rows);
   });
@@ -139,15 +139,15 @@ describe("a man the league office says is not playing", () => {
   it("hands back the same map when nobody is out", () => {
     const rows = rowsOf(built);
 
-    expect(withOutMenZeroed(rows, new Map())).toBe(rows);
+    expect(withOutPlayersZeroed(rows, new Map())).toBe(rows);
   });
 
   /**
    * Kickers and defences are not in a slate at all, and without a row of
-   * noughts a kicker on the injury report drew the position's stock week.
+   * zeros a kicker on the injury report drew the position's stock week.
    */
-  it("writes a nought row for a man the slate never had", () => {
-    const rows = withOutMenZeroed(rowsOf(built), office({
+  it("writes a zero row for a player the slate never had", () => {
+    const rows = withOutPlayersZeroed(rowsOf(built), listedBy({
       "Harrison Butker": {
         name: "Harrison Butker", status: "Out", position: "K", team: "KC",
       },
@@ -159,16 +159,16 @@ describe("a man the league office says is not playing", () => {
     expect(line!.stock).toBe(false);
   });
 
-  it("leaves a man out with no position said for him to the board", () => {
-    const rows = withOutMenZeroed(rowsOf(built), office({
+  it("leaves a player out with no position said for him to the board", () => {
+    const rows = withOutPlayersZeroed(rowsOf(built), listedBy({
       "Somebody Nobody Knows": { name: "Somebody Nobody Knows", status: "Out" },
     }));
 
     expect(rows.has(normalizeName("Somebody Nobody Knows"))).toBe(false);
   });
 
-  it("draws a flat nought week rather than his ladder", () => {
-    const rows = withOutMenZeroed(rowsOf(built), office({
+  it("draws a flat zero week rather than his ladder", () => {
+    const rows = withOutPlayersZeroed(rowsOf(built), listedBy({
       "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Out" },
     }));
     const live = liveDraws(
@@ -181,7 +181,7 @@ describe("a man the league office says is not playing", () => {
 
   /** he limped off at halftime, and the half he played still counts */
   it("keeps what he has already scored", () => {
-    const rows = withOutMenZeroed(rowsOf(built), office({
+    const rows = withOutPlayersZeroed(rowsOf(built), listedBy({
       "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Out" },
     }));
     const live = liveDraws(

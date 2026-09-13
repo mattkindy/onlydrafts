@@ -1,5 +1,5 @@
 /**
- * A man's name in the space a phone has for it.
+ * A player's name in the space a phone has for it.
  *
  * About two fifths of a matchup row goes to each side, which is room for
  * roughly fourteen characters over two lines. A longer name drops its
@@ -14,7 +14,7 @@ const FITS = 14;
 export const fitted = (name: string) =>
   name.length > FITS ? initialForm(name) : name;
 
-export function ManName(
+export function PlayerName(
   { name, team, onOpen }: {
     name: string;
     team?: string | null;
@@ -23,7 +23,7 @@ export function ManName(
   },
 ) {
   return (
-    <span class="manname" title={name}>
+    <span class="playername" title={name}>
       {onOpen
         ? (
           <button

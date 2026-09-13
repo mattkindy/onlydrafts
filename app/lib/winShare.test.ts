@@ -1,7 +1,7 @@
 /**
  * The cases value over replacement gets wrong, which is why this exists.
  *
- * An empty seat, a fifth back nobody would start, and a kicker you
+ * An empty slot, a fifth back nobody would start, and a kicker you
  * already have. Points over a baseline says the same thing about the
  * second and the third of those; how often you win a week does not.
  */
@@ -16,7 +16,7 @@ import type { Player } from "./scoring.ts";
 
 const SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF"];
 
-/** a man who scores about this much a week, with an ordinary spread */
+/** a player who scores about this much a week, with an ordinary spread */
 const aMan = (
   name: string, position: string, ppg: number, games = 17,
 ): Player => ({
@@ -35,13 +35,13 @@ const aRoster = () => [
 
 /** a side that scores about what ours does, so the comparison is live */
 const anOpponent = (draws = 400) => {
-  const men = [
+  const players = [
     aMan("theirQb", "QB", 18), aMan("theirRb1", "RB", 15),
     aMan("theirRb2", "RB", 12), aMan("theirWr1", "WR", 14),
     aMan("theirWr2", "WR", 11), aMan("theirTe", "TE", 9),
     aMan("theirFlex", "WR", 10), aMan("theirK", "K", 9),
   ];
-  const weeks = men.map((p) => weeksOf(p, draws));
+  const weeks = players.map((p) => weeksOf(p, draws));
 
   return Array.from({ length: draws }, (_, i) =>
     weeks.reduce((sum, its) => sum + its[i]!, 0));
@@ -49,25 +49,25 @@ const anOpponent = (draws = 400) => {
 
 const DRAWN = 400;
 
-describe("a seat you have not filled", () => {
-  it("is worth the whole of the first man who fills it", () => {
+describe("a slot you have not filled", () => {
+  it("is worth the whole of the first player who fills it", () => {
     const roster = aRoster();
     const baseline = baselineFor(roster, SLOTS, DRAWN);
     const worth = winShareFor(baseline, anOpponent(DRAWN), DRAWN);
 
-    // nobody on this roster kicks, so the seat scores nothing
+    // nobody on this roster kicks, so the slot scores nothing
     expect(worth(aMan("k1", "K", 9)).starts).toBeGreaterThan(0.9);
     expect(worth(aMan("k1", "K", 9)).added).toBeGreaterThan(0.1);
   });
 
   /**
-   * You do not field eight men. Whatever your roster cannot cover, you
+   * You do not field eight players. Whatever your roster cannot cover, you
    * cover off waivers, so the first kicker is worth what he beats the
    * kicker anybody can have by, and a backup quarterback covers the
-   * weeks your starter is out against that same man rather than
+   * weeks your starter is out against that same player rather than
    * against nothing.
    */
-  it("costs the man off waivers once the wire is given", () => {
+  it("costs the player off waivers once the wire is given", () => {
     const roster = aRoster();
     const opponent = anOpponent(DRAWN);
     const wire = { K: 8.5, QB: 16 };
@@ -85,7 +85,7 @@ describe("a seat you have not filled", () => {
   it("pays a second quarterback for the weeks the first is out, no more", () => {
     const opponent = anOpponent(DRAWN);
     const roster = aRoster().concat(aMan("k1", "K", 9));
-    // his own man plays two thirds of the weeks
+    // his own player plays two thirds of the weeks
     const starter = aMan("qb1", "QB", 24, 11);
     const wire = { QB: 22.5 };
     const backup = aMan("qb2", "QB", 24);
@@ -99,7 +99,7 @@ describe("a seat you have not filled", () => {
 
     expect(onNothing.added).toBeGreaterThan(0.01);
     expect(onTheWire.added).toBeLessThan(onNothing.added / 2);
-    // and the seat is no longer worth nothing in the weeks it is empty
+    // and the slot is no longer worth nothing in the weeks it is empty
     expect(onTheWire.starts).toBeCloseTo(onNothing.starts, 10);
   });
 
@@ -119,26 +119,26 @@ describe("a seat you have not filled", () => {
  * the drawn week rather than by any pencil assignment. On a roster with
  * three good backs and two poor receivers the flex goes to a back, so
  * a new back has to beat far more than a new receiver does. That gap is
- * what the roster says, not an artifact: putting either man on and
- * drawing the whole lineup again drops exactly the man the bar named.
+ * what the roster says, not an artifact: putting either player on and
+ * drawing the whole lineup again drops exactly the player the bar named.
  */
-describe("the bar at a shared seat", () => {
+describe("the bar at a shared slot", () => {
   const shared = () => [
     aMan("rb1", "RB", 19.8), aMan("rb2", "RB", 17.6), aMan("rb3", "RB", 14.8),
     aMan("wr1", "WR", 10.5), aMan("wr2", "WR", 9.5), aMan("te1", "TE", 10.5),
     aMan("qb1", "QB", 24.6), aMan("k1", "K", 9), aMan("d1", "DEF", 8),
   ];
 
-  it("is the man the week put in the flex, not the one a pencil put there", () => {
+  it("is the player the week put in the flex, not the one a pencil put there", () => {
     const base = baselineFor(shared(), SLOTS, DRAWN);
 
-    // nobody here misses a week, so every week seats the same men
+    // nobody here misses a week, so every week slots the same players
     expect(base.displaced["RB"]![0]!.expect).toBe(14.8);
     expect(base.displaced["WR"]![0]!.expect).toBe(9.5);
     expect(base.displaced["TE"]![0]!.expect).toBe(10.5);
   });
 
-  it("names the man the lineup actually drops, at every position", () => {
+  it("names the player the lineup actually drops, at every position", () => {
     const opponent = anOpponent(DRAWN);
     const roster = shared();
     const worth = winShareFor(
@@ -164,14 +164,14 @@ describe("the bar at a shared seat", () => {
 describe("depth", () => {
   /**
    * A back who cannot crack the lineup this Sunday still plays, because
-   * the men ahead of him have byes and get hurt. On the weeks they are
+   * the players ahead of him have byes and get hurt. On the weeks they are
    * out he is the best flex left, and that is what depth is worth.
    *
    * He has to be good enough to be next in line. A fifth back nobody
    * would ever start over the fourth is worth nothing, and the model
    * saying so is correct rather than a hole in it.
    */
-  it("is worth something to a man who would not start today", () => {
+  it("is worth something to a player who would not start today", () => {
     const deep = aRoster().concat(
       aMan("rb3", "RB", 12, 11), aMan("rb4", "RB", 9),
     );
@@ -184,7 +184,7 @@ describe("depth", () => {
     expect(next.starts).toBeLessThan(1);
   });
 
-  it("is worth less than the same man on a thin roster", () => {
+  it("is worth less than the same player on a thin roster", () => {
     const thin = [aMan("qb", "QB", 18), aMan("rb1", "RB", 15)];
     const deep = aRoster().concat(
       aMan("rb3", "RB", 12, 11), aMan("rb4", "RB", 9),
@@ -198,12 +198,12 @@ describe("depth", () => {
       baselineFor(deep, SLOTS, DRAWN), anOpponent(DRAWN), DRAWN,
     )(him);
 
-    // how often he plays, and not what that is worth: a two man roster
+    // how often he plays, and not what that is worth: a two player roster
     // loses every week whoever you add to it
     expect(onThin.starts).toBeGreaterThan(onDeep.starts);
   });
 
-  it("gives nothing to a man who would never be started", () => {
+  it("gives nothing to a player who would never be started", () => {
     const deep = aRoster().concat(
       aMan("rb3", "RB", 12), aMan("rb4", "RB", 11),
     );
@@ -215,8 +215,8 @@ describe("depth", () => {
   });
 });
 
-describe("a man who misses weeks", () => {
-  it("starts fewer of them than the same man who does not", () => {
+describe("a player who misses weeks", () => {
+  it("starts fewer of them than the same player who does not", () => {
     const baseline = baselineFor(aRoster(), SLOTS, DRAWN);
     const worth = winShareFor(baseline, anOpponent(DRAWN), DRAWN);
 
@@ -282,22 +282,22 @@ describe("against the side you would have finished with", () => {
 
   const turns = [1, 5, 9, 13, 16];
 
-  it("fills the seats you have not drafted yet", () => {
+  it("fills the slots you have not drafted yet", () => {
     const projected = projectedRoster([], SLOTS, board, turns);
 
     expect(projected.length).toBe(turns.length);
-    // and only with men you could still expect to be there
+    // and only with players you could still expect to be there
     for (const p of projected) {
       expect(p.adp).toBeGreaterThanOrEqual(1);
     }
   });
 
   /**
-   * A seat a late round fills nearly as well is worth little now. Every
+   * A slot a late round fills nearly as well is worth little now. Every
    * kicker is much the same, so taking one early buys almost nothing;
    * the backs run out, so the best one is worth a great deal.
    */
-  it("prices a seat by what you would get there later", () => {
+  it("prices a slot by what you would get there later", () => {
     const projected = projectedRoster([], SLOTS, board, turns);
     const worth = winShareFor(
       baselineFor(projected, SLOTS, DRAWN), anOpponent(DRAWN), DRAWN,
@@ -318,14 +318,14 @@ describe("against the side you would have finished with", () => {
     );
     const him = board.find((p) => p.name === "elite")!;
 
-    // one man against a whole side loses every week, so the bare
-    // version reads nought for the best player in the draft
+    // one player against a whole side loses every week, so the bare
+    // version reads zero for the best player in the draft
     expect(onNothing(him).added).toBe(0);
     expect(onProjected(him).added).toBeGreaterThan(0);
   });
 });
 
-describe("taking a man now, with the rest of the draft filled around him", () => {
+describe("taking a player now, with the rest of the draft filled around him", () => {
   const board = [
     aMan("elite", "RB", 22), aMan("good", "RB", 16), aMan("okay", "RB", 12),
     aMan("thin", "RB", 8), aMan("wr1", "WR", 20), aMan("wr2", "WR", 15),
@@ -338,11 +338,11 @@ describe("taking a man now, with the rest of the draft filled around him", () =>
   const him = (name: string) => board.find((p) => p.name === name)!;
 
   /**
-   * The old way assumed the best man left at every empty seat and then
-   * measured him against a roster he was already on, so he read nought
+   * The old way assumed the best player left at every empty slot and then
+   * measured him against a roster he was already on, so he read zero
    * and the second best at his position beat him.
    */
-  it("does not read nought for the man the projection assumed", () => {
+  it("does not read zero for the player the projection assumed", () => {
     const assumed = projectedRoster([], SLOTS, board, turns);
     const worth = takeNowFor([], SLOTS, board, turns, anOpponent(DRAWN), DRAWN);
 
@@ -352,7 +352,7 @@ describe("taking a man now, with the rest of the draft filled around him", () =>
     expect(worth(him("qb1")).added).toBeGreaterThan(worth(him("qb2")).added);
   });
 
-  it("pays nothing now for a man a later turn would get anyway", () => {
+  it("pays nothing now for a player a later turn would get anyway", () => {
     const assumed = projectedRoster([], SLOTS, board, turns.slice(1));
     const worth = takeNowFor([], SLOTS, board, turns, anOpponent(DRAWN), DRAWN);
 
@@ -390,7 +390,7 @@ describe("taking a man now, with the rest of the draft filled around him", () =>
     }
   });
 
-  it("still agrees once the wire covers the seats nobody filled", () => {
+  it("still agrees once the wire covers the slots nobody filled", () => {
     const opponent = anOpponent(DRAWN);
     const wire = { QB: 16, RB: 8, WR: 8, TE: 6, K: 8.5, DEF: 7 };
     const worth = takeNowFor([], SLOTS, board, turns, opponent, DRAWN, wire);
@@ -433,7 +433,7 @@ function corr(a: number[], b: number[]): number {
 
 const onTeam = (p: Player, team: string): Player => ({ ...p, team });
 
-describe("men in the same game", () => {
+describe("players in the same game", () => {
   const DRAWN = 4000;
 
   it("moves a quarterback and his own receiver together", () => {
@@ -444,7 +444,7 @@ describe("men in the same game", () => {
     expect(corr(weeksOf(qb, DRAWN), weeksOf(wr, DRAWN))).toBeGreaterThan(0.3);
   });
 
-  it("leaves two men on different teams alone", () => {
+  it("leaves two players on different teams alone", () => {
     const qb = onTeam(aMan("oneQb", "QB", 18), "AAA");
     const wr = onTeam(aMan("otherWr", "WR", 14), "BBB");
     notePassCatchers([qb, wr]);
@@ -453,7 +453,7 @@ describe("men in the same game", () => {
       .toBeLessThan(0.05);
   });
 
-  it("keeps a man's own spread whether or not he has a team", () => {
+  it("keeps a player's own spread whether or not he has a team", () => {
     const alone = aMan("loner", "WR", 14);
     const teamed = onTeam(aMan("loner", "WR", 14), "AAA");
     notePassCatchers([teamed]);
