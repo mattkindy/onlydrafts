@@ -78,7 +78,8 @@ function StarterCell(
   const onCourse = toCome === null ? null : starter.points + toCome;
   // against his pregame number, once his game has started
   const swing = onCourse !== null && line && playing
-    ? onCourse - line.blend : null;
+    ? onCourse - line.blend : 0;
+  const tone = swing > 0 ? " up" : swing < 0 ? " below" : "";
 
   return (
     <div
@@ -92,15 +93,14 @@ function StarterCell(
       />
       <span class="num">
         <b>{starter.points.toFixed(1)}</b>
-        <i title={toCome === null ? undefined : `projected ${onCourse!.toFixed(1)}, ` +
-          `${toCome.toFixed(1)} still to come` +
-          (simmed ? ", from the simulation" : line?.stock ? ", a stock week" : "")}>
+        <i
+          class={tone}
+          title={toCome === null ? undefined : `projected ${onCourse!.toFixed(1)}` +
+            (line && playing ? ` against ${line.blend.toFixed(1)} pregame` : "") +
+            `, ${toCome.toFixed(1)} still to come` +
+            (simmed ? ", from the simulation" : line?.stock ? ", a stock week" : "")}
+        >
           {onCourse === null ? "" : onCourse.toFixed(1)}
-          {swing !== null && (
-            <span class={swing > 0 ? "up" : swing < 0 ? "down" : ""}>
-              {" " + (swing >= 0 ? "+" : "") + swing.toFixed(1)}
-            </span>
-          )}
         </i>
       </span>
     </div>

@@ -16,3 +16,4 @@ docs/data/league-*
 # these had been committed by the time anyone looked, at 699 megabytes.
 data/kept/counts*.json
 .claude/worktrees/
+.harness/
