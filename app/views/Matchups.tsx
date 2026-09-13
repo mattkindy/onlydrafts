@@ -91,7 +91,7 @@ function StarterCell(
   const hurtSays = hurt ? HURT_SAYS[hurt] : "";
   const reading = toCome === null
     ? hurtSays || undefined
-    : `projected ${onCourse!.toFixed(1)}` +
+    : `projected ${scoredSays(onCourse!)}` +
       (line && playing ? ` against ${line.blend.toFixed(1)} pregame` : "") +
       `, ${toCome.toFixed(1)} still to come` +
       (simmed ? ", from the simulation" : line?.stock ? ", a stock week" : "") +
@@ -110,7 +110,7 @@ function StarterCell(
       <span class="num">
         <b>{scoredSays(starter.points)}</b>
         <i class={tone} title={reading}>
-          {onCourse === null ? "" : onCourse.toFixed(1)}
+          {onCourse === null ? "" : scoredSays(onCourse)}
         </i>
       </span>
     </div>
@@ -252,7 +252,7 @@ export function Game(
         <div class={"team" + (at ? " away" : "")} key={side.owner + at}>
           <span class="nm">{side.owner}</span>
           <span class="big">{scoredSays(side.points)}</span>
-          <span class="val">{projected[at]!.toFixed(1)} proj</span>
+          <span class="val" title="projected">{scoredSays(projected[at]!)}</span>
           <span class="val win">{pct(odds[at]!)}</span>
         </div>
       ))}
