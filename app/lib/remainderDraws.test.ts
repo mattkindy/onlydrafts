@@ -6,7 +6,9 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { gamesToPlay, pastHalfTime, simTablesFor } from "./remainderDraws.ts";
+import {
+  gamesToPlay, pastHalfTime, simTablesFor, stateOf,
+} from "./remainderDraws.ts";
 import type { LiveSituation } from "./matchups.ts";
 
 const at = (secondsLeft: number): LiveSituation => ({
@@ -42,6 +44,23 @@ describe("which games are played out", () => {
     expect(games).toHaveLength(1);
     expect(games[0]!.state.withBall).toBe("NE");
     expect(games[0]!.state.secondHalf).toBe(true);
+  });
+
+  it("plays a game that has gone to overtime", () => {
+    const overtime = { ...at(0), points: { NE: 17, NYJ: 17 }, overtimeLeft: 240 };
+
+    expect(pastHalfTime(overtime)).toBe(true);
+    expect(stateOf(overtime).overtimeLeft).toBe(240);
+    expect(gamesToPlay(new Map([["NE", overtime]]))).toHaveLength(1);
+  });
+
+  it("seeds an overtime game apart from the whistle before it", () => {
+    const whistle = { ...at(0), points: { NE: 17, NYJ: 17 } };
+    const overtime = { ...whistle, overtimeLeft: 600 };
+    const games = gamesToPlay(new Map([["NE", overtime]]));
+    const later = gamesToPlay(new Map([["NE", { ...overtime, overtimeLeft: 240 }]]));
+
+    expect(games[0]!.seed).not.toBe(later[0]!.seed);
   });
 
   it("seeds two games apart", () => {

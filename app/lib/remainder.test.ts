@@ -204,6 +204,82 @@ describe.skipIf(!existsSync(PATH))("the rest of a game, played in the browser", 
     expect(share).toBeLessThan(0.95);
   });
 
+  /** level with the clock out, so every draw plays an overtime period */
+  const atTheWhistle: RemainderState = {
+    ...atHalf,
+    points: { [home]: 20, [away]: 20 },
+    secondsLeft: 0,
+    withBall: undefined,
+    yardline: undefined,
+    down: undefined,
+    toGo: undefined,
+    week: 8,
+  };
+
+  const sides = (state: RemainderState, draws: number, seed: number) => {
+    const played = remainderFor(tables, league, state, draws, PPR, seed)!;
+
+    return { played, home: played.teamPoints[home]!, away: played.teamPoints[away]! };
+  };
+
+  it("puts overtime points on the players who scored them", () => {
+    const { played, home: mine, away: theirs } = sides(atTheWhistle, 600, 41);
+    const scored = [...played.players.values()]
+      .reduce((sum, its) => sum + mean(its), 0);
+
+    expect(mean(mine) + mean(theirs)).toBeGreaterThan(2);
+    expect(scored).toBeGreaterThan(mean(mine) + mean(theirs));
+  });
+
+  it("draws more than nothing for a game already in overtime", () => {
+    const live: RemainderState = {
+      ...atTheWhistle,
+      overtimeLeft: 240,
+      withBall: home, yardline: 70, down: 1, toGo: 10,
+    };
+    const { played } = sides(live, 400, 43);
+    const scored = [...played.players.values()]
+      .reduce((sum, its) => sum + mean(its), 0);
+
+    expect(scored).toBeGreaterThan(1);
+  });
+
+  /**
+   * Both sides get the ball and then the next score ends it, so the most
+   * one side can lead by is a touchdown and the kick after it.
+   */
+  it("stops overtime at the first score once both sides have had the ball", () => {
+    const { home: mine, away: theirs } = sides(atTheWhistle, 1200, 47);
+
+    for (let draw = 0; draw < mine.length; draw++) {
+      expect(Math.abs(mine[draw]! - theirs[draw]!)).toBeLessThanOrEqual(7);
+    }
+  });
+
+  const tieRate = (state: RemainderState, draws: number, seed: number) => {
+    const { home: mine, away: theirs } = sides(state, draws, seed);
+    let tied = 0;
+
+    for (let draw = 0; draw < draws; draw++) {
+      if (mine[draw] === theirs[draw]) {
+        tied++;
+      }
+    }
+
+    return tied / draws;
+  };
+
+  it("can still end a regular season game tied", () => {
+    const rate = tieRate(atTheWhistle, 1200, 53);
+
+    expect(rate).toBeGreaterThan(0.01);
+    expect(rate).toBeLessThan(0.3);
+  });
+
+  it("plays on until somebody leads in a playoff game", () => {
+    expect(tieRate({ ...atTheWhistle, week: 20 }, 600, 53)).toBe(0);
+  });
+
   it("has nothing left for a game that is over", () => {
     const played = remainderFor(
       tables, league, { ...atHalf, secondsLeft: 0 }, 20, PPR, 5)!;

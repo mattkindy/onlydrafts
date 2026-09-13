@@ -15,9 +15,12 @@ import type { Pays } from "./scoring.ts";
 /** how many replays a live game gets */
 export const REMAINDER_DRAWS = 2000;
 
+const overtimeOf = (situation: LiveSituation) => situation.overtimeLeft ?? 0;
+
 /** the halves are 1800 seconds, so this is the second half and later */
 export const pastHalfTime = (situation: LiveSituation) =>
-  situation.secondHalf && situation.secondsLeft > 0;
+  overtimeOf(situation) > 0 ||
+  (situation.secondHalf && situation.secondsLeft > 0);
 
 const seedOf = (situation: LiveSituation) => {
   let seed = 2166136261;
@@ -26,7 +29,7 @@ const seedOf = (situation: LiveSituation) => {
     seed = Math.imul(seed ^ letter.charCodeAt(0), 16777619);
   }
 
-  return (seed ^ (situation.secondsLeft * 31)) >>> 0;
+  return (seed ^ ((situation.secondsLeft + overtimeOf(situation)) * 31)) >>> 0;
 };
 
 const scalesOf = (hurt: Record<string, InGameStatus>) =>
@@ -47,6 +50,9 @@ export const stateOf = (
   timeouts: situation.timeouts,
   warningLeft: situation.warningLeft,
   secondHalf: situation.secondHalf,
+  ...(overtimeOf(situation) > 0
+    ? { overtimeLeft: overtimeOf(situation) }
+    : {}),
   ...(week === undefined ? {} : { week }),
   ...(situation.hurt ? { shareScale: scalesOf(situation.hurt) } : {}),
 });

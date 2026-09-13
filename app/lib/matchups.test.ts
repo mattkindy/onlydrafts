@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  alternativesFor, bestLineupFor, fractionLeft, hurtFrom, initialForm, liveDraws,
+  alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, hurtFrom,
+  initialForm, liveDraws,
   oddsFor, standingFor, sideTotals, situationsFrom, spreadOf, starterState,
   statesFrom, stockLine,
 } from "./matchups.ts";
@@ -414,6 +415,18 @@ describe("fractionLeft", () => {
     expect(fractionLeft(3, "15:00")).toBeCloseTo(0.5, 5);
     expect(fractionLeft(4, "0:00")).toBeCloseTo(0, 5);
     expect(fractionLeft(5, "10:00")).toBeCloseTo(10 / 60, 5);
+  });
+});
+
+describe("clockLeftOf", () => {
+  it("counts the quarters still to come", () => {
+    expect(clockLeftOf({ period: 3, clock: 600 }))
+      .toEqual({ secondsLeft: 1500, overtimeLeft: 0 });
+  });
+
+  it("puts an overtime clock somewhere other than zero", () => {
+    expect(clockLeftOf({ period: 5, clock: 240 }))
+      .toEqual({ secondsLeft: 0, overtimeLeft: 240 });
   });
 });
 

@@ -84,8 +84,10 @@ export interface LiveSituation {
   home: string;
   away: string;
   points: Record<string, number>;
-  /** seconds left in the whole game, zero once overtime starts */
+  /** seconds left in regulation, zero once overtime starts */
   secondsLeft: number;
+  /** and seconds left in the overtime period, where the game is in one */
+  overtimeLeft?: number;
   withBall?: string;
   /** yards from the other team's goal line, one to ninety nine */
   yardline?: number;
@@ -134,9 +136,12 @@ function clockMinutes(displayClock: string | undefined): number {
 }
 
 /**
- * How much of a game in progress is left. Overtime counts as a little
- * more rather than as nothing, since a tie at the whistle still has
- * points to come.
+ * How much of a game in progress is left, as a share of a whole game.
+ *
+ * Overtime counts as the minutes of the period still on the clock, since
+ * a game level at the whistle has a period of scoring to come and not a
+ * sliver. Callers scale a player's week by this, so a period the length
+ * of a sixth of a game is worth about a sixth of one.
  */
 export function fractionLeft(
   period: number | undefined, displayClock: string | undefined,
@@ -145,7 +150,7 @@ export function fractionLeft(
   const onTheClock = clockMinutes(displayClock);
 
   if (at > 4) {
-    return Math.min(1, onTheClock / REGULATION);
+    return Math.min(OVERTIME, onTheClock) / REGULATION;
   }
 
   const quartersToCome = Math.max(0, 4 - at) * 15;
@@ -287,17 +292,26 @@ export function statesFrom(said: {
   return out;
 }
 
-/** seconds left in the whole game, counting overtime as none */
-export function secondsLeftOf(status: ScoreboardStatus | undefined): number {
+/** what the clock has left, told apart so overtime does not read as over */
+export interface ClockLeft {
+  /** seconds left in regulation, zero once overtime has started */
+  secondsLeft: number;
+  /** seconds left in the overtime period, zero while regulation is on */
+  overtimeLeft: number;
+}
+
+export function clockLeftOf(status: ScoreboardStatus | undefined): ClockLeft {
   const at = status?.period ?? 1;
+  const onTheClock = Math.max(0, status?.clock ?? 0);
 
   if (at > 4) {
-    return 0;
+    return { secondsLeft: 0, overtimeLeft: onTheClock };
   }
 
-  const onTheClock = status?.clock ?? 0;
-
-  return Math.max(0, (4 - at) * SECONDS_IN_QUARTER + onTheClock);
+  return {
+    secondsLeft: Math.max(0, (4 - at) * SECONDS_IN_QUARTER + onTheClock),
+    overtimeLeft: 0,
+  };
 }
 
 const sideOf = (
@@ -324,7 +338,7 @@ function situationOf(
   const at = game.situation;
   const withBall = competitors.find((c) => c.team?.id === at?.possession);
   const ballCode = withBall?.team?.abbreviation;
-  const secondsLeft = secondsLeftOf(status);
+  const { secondsLeft, overtimeLeft } = clockLeftOf(status);
   const leftInHalf = secondsLeft > SECONDS_IN_HALF
     ? secondsLeft - SECONDS_IN_HALF
     : secondsLeft;
@@ -337,6 +351,7 @@ function situationOf(
       [boardTeam(awayCode)]: Number(away?.score ?? 0),
     },
     secondsLeft,
+    ...(overtimeLeft > 0 ? { overtimeLeft } : {}),
     withBall: ballCode ? boardTeam(ballCode) : undefined,
     yardline: ballCode !== undefined && at?.yardLine !== undefined
       ? Math.min(99, Math.max(1, 100 - at.yardLine))
@@ -349,7 +364,7 @@ function situationOf(
     },
     redZone: at?.isRedZone === true,
     secondHalf: secondsLeft <= SECONDS_IN_HALF,
-    warningLeft: leftInHalf > 120,
+    warningLeft: overtimeLeft === 0 && leftInHalf > 120,
     ...(hurt?.size ? { hurt: Object.fromEntries(hurt) } : {}),
   };
 }

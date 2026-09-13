@@ -5,6 +5,8 @@
  * reduced tables instead of the fitted model. The loop is the same one:
  * two sides alternate, a drive is a run of snaps that ends in a score,
  * a punt, a turnover or the downs, and the clock decides when to stop.
+ * A game that finishes level plays an overtime period through the same
+ * drives, so whoever wins it wins it on somebody's fantasy line.
  *
  * A draw is one replay of the rest of the game. Every player in a game
  * shares a draw index, so two players on the same side rise and fall
@@ -26,8 +28,24 @@ const ENDS_A_DRIVE = 20;
 const LAST_GASP = 10;
 const IN_RANGE = 45;
 
-/** the fourth quarter, and overtime, where the clock is already zero */
+/** the fourth quarter, which is where starters start coming off */
 const FOURTH_QUARTER = 900;
+
+/** an overtime period in the regular season, and the longer playoff one */
+const OVERTIME_SECONDS = 600;
+const PLAYOFF_OVERTIME_SECONDS = 900;
+
+/** the last week of the regular season, where a game may still end tied */
+const LAST_REGULAR_WEEK = 18;
+
+/** what each side gets back for an overtime period */
+const OVERTIME_TIMEOUTS = 2;
+
+/** possessions one overtime period is allowed before the loop gives up */
+const OVERTIME_POSSESSIONS = 12;
+
+/** and periods a playoff game is allowed before it is called a draw */
+const OVERTIME_PERIODS = 4;
 
 /** inside five minutes, where a side in front starts killing the clock */
 const CLOCK_KILLING = 300;
@@ -141,6 +159,12 @@ export interface RemainderState {
    * standings have settled, so the engine needs to know.
    */
   week?: number;
+  /**
+   * Seconds left in an overtime period already under way. Regulation is
+   * over when this is set, so the engine plays out the overtime period
+   * and leaves `secondsLeft` alone.
+   */
+  overtimeLeft?: number;
 }
 
 /** what one draw gave a player, in whatever the league pays */
@@ -374,6 +398,13 @@ const startersOf = (side: Loaded, band: Band): [number, Pull][] => [
   [side.topReceiver, band.receiver],
 ];
 
+/** every starter still on keeps all of his share, which overtime does too */
+function keepsWhoIsLeft(side: Loaded): void {
+  for (let i = 0; i < side.keeps.length; i++) {
+    side.keeps[i] = side.pulled[i] ? 0 : 1;
+  }
+}
+
 /**
  * Roll this snap's pulls and say what each starter keeps of his share.
  *
@@ -388,9 +419,7 @@ function pullStarters(
   const band = bandOf(margin, clock);
 
   if (!band) {
-    for (let i = 0; i < side.keeps.length; i++) {
-      side.keeps[i] = side.pulled[i] ? 0 : 1;
-    }
+    keepsWhoIsLeft(side);
 
     return;
   }
@@ -527,11 +556,15 @@ interface DriveOutcome {
 /**
  * One drive. The caller keeps the score and the clock, so this only
  * says where the ball ends up, how long it took, and what each player did.
+ *
+ * In overtime nobody comes off, and no drive is cut short for being the
+ * last of a half, since the caller ends one on the clock or on a score.
  */
 function playDrive(
   side: Loaded, league: LeagueTables, lines: Line[], uniform: () => number,
   startAt: number, margin: number, secondsLeft: number,
   openDown: number | undefined, openToGo: number | undefined, week: number,
+  overtime: boolean,
 ): DriveOutcome {
   let down = openDown ?? 1;
   let toGo = openToGo === undefined ? 10 : Math.min(openToGo, startAt);
@@ -542,7 +575,7 @@ function playDrive(
   let plays = 0;
   let thrownAway = false;
   const passerAt = side.passerAt;
-  const budget = uniform() < league.isLast
+  const budget = !overtime && uniform() < league.isLast
     ? 1 + Math.floor(uniform() * 12)
     : Infinity;
   const ended = (ending: number, handsOverAt: number): DriveOutcome => ({
@@ -607,7 +640,11 @@ function playDrive(
       continue;
     }
 
-    pullStarters(side, margin, clock, week, uniform);
+    if (overtime) {
+      keepsWhoIsLeft(side);
+    } else {
+      pullStarters(side, margin, clock, week, uniform);
+    }
 
     const call = uniform() <
       runRateAt(side, down, toGo, yardline, margin, clock) ? 0 : 1;
@@ -687,6 +724,172 @@ const goesForTwo = (
   return (league.goesForTwo[at] ?? 24) / 255;
 };
 
+/** an interception goes on the passer's line, where he is still on */
+function chargeThrownAway(side: Loaded, lines: Line[]): void {
+  if (passerOn(side)) {
+    lines[side.passerAt]!.interceptions++;
+  }
+}
+
+/**
+ * What a drive put on the board, the try after a touchdown included.
+ *
+ * In overtime the try is always a kick. A side there is playing for the
+ * next score rather than for a two point margin, and the fitted two
+ * point table knows nothing about a period where one score ends it.
+ */
+function scoredOn(
+  drive: DriveOutcome, side: Loaded, league: LeagueTables, lines: Line[],
+  margin: number, leftAfter: number, overtime: boolean, uniform: () => number,
+): number {
+  if (drive.ending === 1) {
+    return 3;
+  }
+
+  if (drive.ending !== 0) {
+    return 0;
+  }
+
+  const afterMargin = margin + 6;
+
+  if (!overtime && uniform() < goesForTwo(league, afterMargin, leftAfter)) {
+    const call = uniform() <
+      runRateAt(side, 1, 2, 2, afterMargin, leftAfter) ? 0 : 1;
+    const who = goesTo(side, call, 1, 2, uniform);
+
+    if (uniform() >= league.twoPointRate) {
+      return 6;
+    }
+
+    lines[who]!.twoPointConversions++;
+
+    if (call === 1 && side.passerAt !== who && passerOn(side)) {
+      lines[side.passerAt]!.twoPointConversions++;
+    }
+
+    return 8;
+  }
+
+  return 6 + (uniform() < league.extraPointRate ? 1 : 0);
+}
+
+/** the two sides and the tables, which every period of one game shares */
+interface Playing {
+  home: Loaded;
+  away: Loaded;
+  league: LeagueTables;
+  into: Map<Loaded, Line[]>;
+  week: number;
+}
+
+/** where an overtime period picks up */
+interface Kickoff {
+  withBall: Loaded;
+  startAt: number;
+  secondsLeft: number;
+  down?: number;
+  toGo?: number;
+  /** how many sides have already had the ball in this period */
+  had: number;
+}
+
+const overtimeSecondsFor = (week: number) =>
+  week > LAST_REGULAR_WEEK ? PLAYOFF_OVERTIME_SECONDS : OVERTIME_SECONDS;
+
+/** a fresh period, with the coin flip deciding who receives */
+const firstKickoff = (
+  game: Playing, uniform: () => number,
+): Kickoff => ({
+  withBall: uniform() < 0.5 ? game.home : game.away,
+  startAt: kickedTo(uniform),
+  secondsLeft: overtimeSecondsFor(game.week),
+  had: 0,
+});
+
+/**
+ * One overtime period, played drive by drive like the rest of the game,
+ * so whatever is scored lands on the players who scored it.
+ *
+ * Both sides get the ball. After that any score ends it, which covers
+ * the trailing side answering a field goal with a touchdown. A defensive
+ * score on the first possession would end it there, but a drive here
+ * never gives the defence points, so that case does not come up. A
+ * regular season period that ends level leaves the game tied.
+ */
+function playOvertime(
+  game: Playing, points: Record<string, number>, uniform: () => number,
+  opening: Kickoff,
+): void {
+  const { home, away, league } = game;
+  let withBall = opening.withBall;
+  let against = withBall === home ? away : home;
+  let startAt = opening.startAt;
+  let secondsLeft = opening.secondsLeft;
+  let down = opening.down;
+  let toGo = opening.toGo;
+  let had = opening.had;
+
+  for (let gone = 0; secondsLeft > 0 && gone < OVERTIME_POSSESSIONS; gone++) {
+    const lines = game.into.get(withBall)!;
+    const margin = points[withBall.team]! - points[against.team]!;
+    const drive = playDrive(
+      withBall, league, lines, uniform, startAt, margin, secondsLeft, down,
+      toGo, game.week, true);
+    down = undefined;
+    toGo = undefined;
+    const took = Math.max(20, drive.took);
+    const leftAfter = Math.max(0, secondsLeft - took);
+    points[withBall.team] = points[withBall.team]! +
+      scoredOn(drive, withBall, league, lines, margin, leftAfter, true, uniform);
+
+    if (drive.ending === 4 && drive.thrownAway) {
+      chargeThrownAway(withBall, lines);
+    }
+
+    secondsLeft = leftAfter;
+    had++;
+
+    if (had >= 2 && points[home.team] !== points[away.team]) {
+      return;
+    }
+
+    startAt = drive.ending === 0 || drive.ending === 1
+      ? kickedTo(uniform)
+      : Math.max(1, Math.min(99, Math.round(drive.handsOverAt)));
+    const wasOn = withBall;
+    withBall = against;
+    against = wasOn;
+  }
+}
+
+/**
+ * Overtime until somebody leads, which is one period in the regular
+ * season and as many as it takes in the playoffs.
+ *
+ * `resuming` is the period a live game is already in. Without it the
+ * game has only now finished level and a coin flip starts a fresh one.
+ */
+function playExtraTime(
+  game: Playing, points: Record<string, number>,
+  timeouts: Record<string, number>, uniform: () => number,
+  resuming?: Kickoff,
+): void {
+  let opening = resuming ?? firstKickoff(game, uniform);
+
+  for (let period = 0; period < OVERTIME_PERIODS; period++) {
+    timeouts[game.home.team] = OVERTIME_TIMEOUTS;
+    timeouts[game.away.team] = OVERTIME_TIMEOUTS;
+    playOvertime(game, points, uniform, opening);
+
+    if (points[game.home.team] !== points[game.away.team] ||
+        game.week <= LAST_REGULAR_WEEK) {
+      return;
+    }
+
+    opening = firstKickoff(game, uniform);
+  }
+}
+
 /** one replay of the rest of a game, adding each player's line into `into` */
 function playOut(
   home: Loaded, away: Loaded, league: LeagueTables, state: RemainderState,
@@ -716,6 +919,23 @@ function playOut(
   let warningLeft = state.warningLeft;
   let secondHalf = state.secondHalf;
   let drives = 0;
+  const game: Playing = {
+    home, away, league, into, week: state.week ?? MID_SEASON_WEEK,
+  };
+  const overtimeLeft = state.overtimeLeft ?? 0;
+
+  if (overtimeLeft > 0) {
+    // a live period with the sides level may still owe somebody a
+    // possession; level is the only way to tell, since a lead in
+    // overtime ends the game unless the trailing side is answering
+    const had = points[home.team] === points[away.team] ? 0 : 2;
+    playExtraTime(game, points, timeouts, uniform, {
+      withBall, startAt, secondsLeft: overtimeLeft, down: firstDown,
+      toGo: firstToGo, had,
+    });
+
+    return points;
+  }
 
   while (secondsLeft > 0 && drives < 40) {
     if (!secondHalf && secondsLeft <= 1800) {
@@ -739,39 +959,19 @@ function playOut(
       break;
     }
 
+    const lines = into.get(withBall)!;
     const drive = playDrive(
-      withBall, league, into.get(withBall)!, uniform, startAt, margin,
-      secondsLeft, firstDown, firstToGo, state.week ?? MID_SEASON_WEEK);
+      withBall, league, lines, uniform, startAt, margin,
+      secondsLeft, firstDown, firstToGo, game.week, false);
     firstDown = undefined;
     firstToGo = undefined;
     const took = Math.max(20, drive.took);
     const leftAfter = Math.max(0, secondsLeft - took);
-    let scored = drive.ending === 0 ? 6 : drive.ending === 1 ? 3 : 0;
+    const scored = scoredOn(
+      drive, withBall, league, lines, margin, leftAfter, false, uniform);
 
-    if (drive.ending === 0) {
-      const afterMargin = margin + 6;
-
-      if (uniform() < goesForTwo(league, afterMargin, leftAfter)) {
-        const call = uniform() <
-          runRateAt(withBall, 1, 2, 2, afterMargin, leftAfter) ? 0 : 1;
-        const who = goesTo(withBall, call, 1, 2, uniform);
-
-        if (uniform() < league.twoPointRate) {
-          scored = 8;
-          into.get(withBall)![who]!.twoPointConversions++;
-
-          if (call === 1 && withBall.passerAt !== who &&
-              passerOn(withBall)) {
-            into.get(withBall)![withBall.passerAt]!.twoPointConversions++;
-          }
-        }
-      } else {
-        scored = 6 + (uniform() < league.extraPointRate ? 1 : 0);
-      }
-    }
-
-    if (drive.ending === 4 && drive.thrownAway && passerOn(withBall)) {
-      into.get(withBall)![withBall.passerAt]!.interceptions++;
+    if (drive.ending === 4 && drive.thrownAway) {
+      chargeThrownAway(withBall, lines);
     }
 
     points[withBall.team] = points[withBall.team]! + scored;
@@ -797,13 +997,7 @@ function playOut(
   }
 
   if (points[home.team] === points[away.team]) {
-    const roll = uniform();
-
-    if (roll >= 0.057) {
-      const homeShare = home.lift / (home.lift + away.lift);
-      const winner = uniform() < homeShare ? home.team : away.team;
-      points[winner] = points[winner]! + (uniform() < 0.6 ? 3 : 6);
-    }
+    playExtraTime(game, points, timeouts, uniform);
   }
 
   return points;
