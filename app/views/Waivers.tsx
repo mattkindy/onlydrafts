@@ -19,7 +19,8 @@ import { normalizeName } from "../lib/store.ts";
 import type { Player } from "../lib/scoring.ts";
 import type { League, Matchup } from "../lib/providers.ts";
 import { myGameIn, type Lines } from "../lib/matchups.ts";
-import type { SlateRow } from "../lib/slate.ts";
+import type { Slate, SlateRow } from "../lib/slate.ts";
+import type { Listed } from "../lib/availability.ts";
 import {
   RARELY_STARTS, WORTH_ADDING, type Add, type Drop, type Net,
 } from "../lib/waivers.ts";
@@ -31,9 +32,17 @@ import { nameOf } from "./Advice.tsx";
 import { Reading } from "./Reading.tsx";
 import { PRICED, useWaiverPrices } from "./waiverPrices.ts";
 import { useScoreboard } from "./scoreboard.ts";
+import { WeekRanks } from "./WeekRanks.tsx";
 
-/** which of the two questions the reader is asking */
-type Span = "week" | "season";
+/** which of the three questions the reader is asking */
+type Span = "week" | "season" | "ranks";
+
+/** what each of them is called, and the line under the controls */
+const SPANS: [Span, string][] = [
+  ["week", "this week"],
+  ["season", "rest of season"],
+  ["ranks", "rankings"],
+];
 
 interface Props {
   men: Player[];
@@ -49,6 +58,12 @@ interface Props {
   schedule: Schedule | null;
   season: number | null;
   week: number | null;
+  /** the week as it was built, which the rankings table lists off */
+  slate: Slate | null;
+  /** the players on your team, so the rankings can mark them */
+  roster: Set<string> | null;
+  /** who the office has listed, for the rankings table's badges */
+  listed: Map<string, Listed>;
   onMore: (p: Player) => void;
 }
 
@@ -68,6 +83,9 @@ function points(n: number): string {
 
   return n > 0 ? `+${text}` : text;
 }
+
+/** what the drop column says when there is a roster spot going spare */
+const OPEN_SPOT = "nobody, spot open";
 
 /** a lineup slot by the name a reader would use for it */
 const seatName = (slot: string) => slot === "FLEX" ? "FLEX" : slot;
@@ -101,13 +119,16 @@ interface Figures {
 }
 
 /**
- * The seat a drop hands over, across the drawn season. A man in the lineup
- * once in three weeks is a bench man, and naming the seat he takes in the
- * odd week he starts says less than saying he hardly starts.
+ * Who takes the seat a drop hands over, across the drawn season.
+ *
+ * This column used to be headed "when he starts", with another player's
+ * name under it, and two men in one phrase with no "he" attached to
+ * either is a sentence nobody can read. Both the heading and the value
+ * now name whoever inherits the slot.
  */
 function seasonSeat(row: Drop): string {
   if (row.starts < RARELY_STARTS) {
-    return "rarely starts";
+    return "he rarely starts, so nobody";
   }
 
   const seat = row.seat ? seatName(row.seat) : "the lineup";
@@ -128,8 +149,8 @@ const weekDrop = (
 ): Figures => ({
   points: -his.takes,
   seat: his.slot
-    ? `${his.heir ? nameFor(his.heir) : "nobody"} takes his ${seatName(his.slot)} slot`
-    : "not starting",
+    ? `${his.heir ? nameFor(his.heir) : "nobody"} at ${seatName(his.slot)}`
+    : "he is not starting",
   before: his.before,
   after: his.after,
   delta: -his.costs,
@@ -197,6 +218,15 @@ function Figured(
   );
 }
 
+/** what the add costs you, as the second half of the card's headline */
+function addCost(paid: { drop: string } | null): string {
+  if (!paid) {
+    return "";
+  }
+
+  return paid.drop === OPEN_SPOT ? ", no drop needed" : ", drop " + paid.drop;
+}
+
 function AddRow(
   { row, at, figures, absent, paid, span, onMore }: {
     row: Add;
@@ -212,7 +242,12 @@ function AddRow(
 ) {
   return (
     <tr onClick={onMore}>
-      <td data-label="player">{row.p.name}</td>
+      {/* the move as you would say it, which a phone leads the card with
+          and a wide screen has in its own columns already */}
+      <td data-label="move" class="move">
+        Add {row.p.name} ({row.p.position}){addCost(paid)}
+      </td>
+      <td data-label="player"><span class="who link">{row.p.name}</span></td>
       <td data-label="pos">{row.p.position}</td>
       {/* a season of him says nothing about one week, and the week's own
           figures are already the three cells after it */}
@@ -243,7 +278,10 @@ function DropRow(
 ) {
   return (
     <tr onClick={onMore}>
-      <td data-label="player">{row.p.name}</td>
+      <td data-label="move" class="move">
+        Drop {row.p.name} ({row.p.position})
+      </td>
+      <td data-label="player"><span class="who link">{row.p.name}</span></td>
       <td data-label="pos">{row.p.position}</td>
       {span === "season" && (
         <>
@@ -372,7 +410,7 @@ export function Waivers(props: Props) {
   const yours = drops
     .filter((row) => !wanted || normalizeName(row.p.name).includes(wanted));
   const missing = missingWeek(props.week, rows, states, ours);
-  const dropSeat = span === "week" ? "takes his slot" : "when he starts";
+  const dropSeat = "who takes his slot";
 
   /**
    * A row with no week figures says which of the two reasons it is: the
@@ -391,7 +429,7 @@ export function Waivers(props: Props) {
         absent,
         figures: seasonAdd(row),
         paid: paid
-          ? { drop: paid.drop?.name ?? "nobody, spot open", net: paid.net }
+          ? { drop: paid.drop?.name ?? OPEN_SPOT, net: paid.net }
           : null,
       };
     }
@@ -402,7 +440,7 @@ export function Waivers(props: Props) {
       figures: his ? weekAdd(his, nameFor) : null,
       paid: net
         ? {
-            drop: net.drop ? nameFor(net.drop) : "nobody, spot open",
+            drop: net.drop ? nameFor(net.drop) : OPEN_SPOT,
             net: net.net,
           }
         : null,
@@ -419,67 +457,100 @@ export function Waivers(props: Props) {
     return { at: his, absent, figures: his ? weekDrop(his, nameFor) : null };
   };
 
+  /**
+   * The controls stay put whatever the page is doing underneath, so the
+   * span you picked does not vanish while the season is being priced.
+   */
+  const controls = (
+    <div class="controls">
+      <span class="seg" role="tablist">
+        {SPANS.map(([which, said]) => (
+          <button
+            key={which}
+            role="tab"
+            aria-selected={span === which}
+            class={span === which ? "on" : ""}
+            onClick={() => setSpan(which)}
+          >
+            {said}
+          </button>
+        ))}
+      </span>
+
+      {span !== "ranks" && props.onPosFilter && (
+        <span class="chips">
+          {POSITIONS.map((where) => (
+            <button
+              key={where}
+              class={where === posFilter ? "on" : ""}
+              onClick={() => props.onPosFilter!(where)}
+            >
+              {where.toLowerCase()}
+            </button>
+          ))}
+        </span>
+      )}
+
+      {span !== "ranks" && (
+        <>
+          <input
+            class="find"
+            type="search"
+            placeholder="find a name"
+            value={query}
+            onInput={(e) => setQuery(e.currentTarget.value)}
+          />
+          <span class="says">
+            {span === "season"
+              ? "a full season of simulated weeks against an average opponent"
+              : week
+                ? "the lineup you would set against " + week.opponent +
+                  ", and your win probability either way"
+                : "this week's game, once the week has loaded"}
+          </span>
+        </>
+      )}
+    </div>
+  );
+
+  if (span === "ranks") {
+    return (
+      <>
+        {controls}
+        <WeekRanks
+          slate={props.slate}
+          rows={rows}
+          roster={props.roster}
+          listed={props.listed}
+        />
+      </>
+    );
+  }
+
   if (working) {
-    return <Reading>pricing the waiver wire against your season</Reading>;
+    return (
+      <>
+        {controls}
+        <Reading>pricing the waiver wire against your season</Reading>
+      </>
+    );
   }
 
   if (!drops.length) {
     return (
-      <div class="empty">
-        <b>Nobody on your roster yet.</b> Once your league has a team for
-        you, this says what each free agent would add.
-      </div>
+      <>
+        {controls}
+        <div class="empty">
+          <b>Nobody on your roster yet.</b> Once your league has a team for
+          you, this says what each free agent would add.
+        </div>
+      </>
     );
   }
 
   return (
     <>
-      <div class="controls">
-        <span class="pills">
-          <button
-            class={span === "week" ? "on" : ""}
-            onClick={() => setSpan("week")}
-          >
-            this week
-          </button>
-          <button
-            class={span === "season" ? "on" : ""}
-            onClick={() => setSpan("season")}
-          >
-            rest of season
-          </button>
-        </span>
-
-        {props.onPosFilter && (
-          <span id="posfilter">
-            {POSITIONS.map((where) => (
-              <button
-                key={where}
-                class={where === posFilter ? "on" : ""}
-                onClick={() => props.onPosFilter!(where)}
-              >
-                {where.toLowerCase()}
-              </button>
-            ))}
-          </span>
-        )}
-
-        <label>
-          find{" "}
-          <input
-            size={12} placeholder="a name" value={query}
-            onInput={(e) => setQuery(e.currentTarget.value)}
-          />
-        </label>
-        <span class="says">
-          {span === "season"
-            ? "a full season of simulated weeks against an average opponent"
-            : week
-              ? "the lineup you would set against " + week.opponent +
-                ", and your win probability either way"
-              : "this week's game, once the week has loaded"}
-        </span>
-      </div>
+      {controls}
 
       {span === "week" && missing && (missing.reading
         ? <Reading>{missing.says}</Reading>
@@ -523,9 +594,9 @@ export function Waivers(props: Props) {
       )}
 
       {hidden > 0 && (
-        <p class="hint">
-          {hidden} more came out under half a point of win probability a
-          week, which is inside the noise, so they are left off.
+        <p class="hint" title={"they came out under half a point of win " +
+          "probability a week, which is inside the noise"}>
+          {hidden} hidden
         </p>
       )}
 
@@ -572,7 +643,7 @@ export function Waivers(props: Props) {
                 <b>{best.paid.drop.name}</b>: your weekly win probability
                 goes from <b>{pct(best.paid.before)}</b> to{" "}
                 <b>{pct(best.paid.after)}</b>, so{" "}
-                <b>{signed(best.paid.net)}</b> points a week.
+                <b>{signed(best.paid.net)}</b> a week.
               </>
             )
             : (
@@ -581,7 +652,7 @@ export function Waivers(props: Props) {
                 be added without dropping anybody. Your weekly win probability
                 goes from <b>{pct(best.paid.before)}</b> to{" "}
                 <b>{pct(best.paid.after)}</b>, so{" "}
-                <b>{signed(best.paid.net)}</b> points a week.
+                <b>{signed(best.paid.net)}</b> a week.
               </>
             )}
         </p>
