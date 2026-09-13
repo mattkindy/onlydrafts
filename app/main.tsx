@@ -97,8 +97,7 @@ const COPY: Record<View, [string, string, string]> = {
 };
 
 /** what the keeper section is called, since it has its own heading */
-const KEEPERS_SAY =
-  "A keeper costs you that pick. Keep him if he beats what you would draft there.";
+const KEEPERS_SAY = "Enter what each keeper costs. Green means keep.";
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF", "ROOKIES"];
 
