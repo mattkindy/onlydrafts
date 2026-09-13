@@ -648,6 +648,13 @@
   .card.matchup .odds u { display: block; height: 100%;
     background: var(--go); }
   .card.matchup .team .win { font-weight: 800; color: var(--ink); }
+  /* the scores line and the button that turns the week into a picture */
+  .sharebar { display: flex; align-items: center; justify-content: space-between;
+    gap: var(--s2); flex-wrap: wrap; }
+  button.quiet.share { display: inline-flex; align-items: center; gap: var(--s1);
+    min-height: var(--tap); flex: 0 0 auto; }
+  button.quiet.share.icon { grid-column: 1 / -1; justify-self: end;
+    width: var(--tap); padding: 0; justify-content: center; }
   /* each side gets two fifths of the row and the seat's chip the rest,
      so a long name wraps to two lines instead of pushing the far side
      off a phone screen */

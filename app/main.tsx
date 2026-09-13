@@ -974,6 +974,7 @@ function App() {
             listed={listed}
             mine={active?.team ?? null}
             slots={active?.slots ?? null}
+            league={active?.name}
             pays={active?.pays ?? {}}
             status={gamesStatus || weekStatus}
             onMore={openKey}
@@ -996,6 +997,7 @@ function App() {
                   pays={active.pays ?? {}}
                   season={week.season}
                   week={week.week}
+                  league={active.name}
                   status={gamesStatus || weekStatus}
                   onMore={openKey}
                   withoutMine

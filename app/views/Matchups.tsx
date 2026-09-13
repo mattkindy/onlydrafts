@@ -21,6 +21,8 @@ import {
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
 import type { Pays, Player } from "../lib/scoring.ts";
+import { layoutGame, layoutWeek, shareLayout } from "../lib/shareImage.ts";
+import type { ShareGame } from "../lib/shareImage.ts";
 import type { SlateRow } from "../lib/slate.ts";
 import { Advice, nameOf, pct } from "./Advice.tsx";
 import { ManName } from "./ManName.tsx";
@@ -40,6 +42,8 @@ interface Props {
   pays: Pays;
   season: number;
   week: number;
+  /** the league's own name, which the shared picture is headed with */
+  league?: string;
   status?: string;
   /** leave your own game out, since the matchup tab has it */
   withoutMine?: boolean;
@@ -94,6 +98,44 @@ function Man(
 }
 
 type Starter = Side["starters"][number];
+
+/** where the league name and week come from, for a picture to share */
+export interface ShareOf {
+  league: string;
+  week: number;
+}
+
+/** one card's worth of the picture: the two sides as the card reads them */
+export function shareGameOf(
+  game: Matchup, odds: [number, number], projected: [number, number],
+): ShareGame {
+  return {
+    sides: [0, 1].map((at) => ({
+      name: game.sides[at]!.owner,
+      points: game.sides[at]!.points,
+      projected: projected[at]!,
+      odds: odds[at]!,
+    })) as ShareGame["sides"],
+  };
+}
+
+function ShareButton(
+  { onShare, label, only }: {
+    onShare: () => void; label: string; only?: boolean;
+  },
+) {
+  return (
+    <button
+      class={"quiet share" + (only ? " icon" : "")}
+      title="save this as a picture for the group chat"
+      aria-label={label}
+      onClick={onShare}
+    >
+      <span aria-hidden="true">&#x2934;</span>
+      {!only && label}
+    </button>
+  );
+}
 
 /**
  * The rows of one card: a slot, and the player each side has in it.
@@ -156,7 +198,7 @@ function Lineups(
 
 export function Game(
   {
-    game, rows, states, slots, lines, mine, remainder, onMore,
+    game, rows, states, slots, lines, mine, remainder, onMore, share,
     withAdvice = true,
   }: {
     game: Matchup;
@@ -167,6 +209,8 @@ export function Game(
     mine: number;
     remainder: Map<string, number[]> | null;
     onMore?: ((key: string) => void) | undefined;
+    /** with a league and a week, the card can be shared as a picture */
+    share?: ShareOf | undefined;
     /** the matchup tab says this above the lineup, so its card leaves it out */
     withAdvice?: boolean;
   },
@@ -194,6 +238,14 @@ export function Game(
       >
         <u style={{ width: pct(odds[0]) }} />
       </div>
+      {share && (
+        <ShareButton
+          only
+          label="share"
+          onShare={() => shareLayout(layoutGame(
+            share.league, share.week, shareGameOf(game, odds, projected)))}
+        />
+      )}
       {mine >= 0 && withAdvice && (
         <Advice
           side={game.sides[mine]!}
@@ -217,8 +269,8 @@ export function Game(
 
 export function Matchups(
   {
-    games, rows, men, mine, slots, pays, season, week, status, withoutMine,
-    onMore,
+    games, rows, men, mine, slots, pays, season, week, league, status,
+    withoutMine, onMore,
   }: Props,
 ) {
   const lines = useMemo(
@@ -239,15 +291,38 @@ export function Matchups(
       : [...games].sort((a, b) => Number(isMine(b)) - Number(isMine(a)));
   }, [games, mine, withoutMine]);
 
+  const shareWeek = () => {
+    if (!states || !league) {
+      return;
+    }
+
+    shareLayout(layoutWeek({
+      league,
+      week,
+      games: ordered.map((game) => {
+        const { odds, projected } = standingFor(
+          game, rows, states, lines, undefined, remainder ?? undefined);
+
+        return shareGameOf(game, odds, projected);
+      }),
+    }));
+  };
+
   return (
     <>
-      {read
-        ? (
-          <p class="hint">
-            Week {week}, scores as of {read.toLocaleTimeString()}
-          </p>
-        )
-        : <Reading>reading week {week}'s scoreboard...</Reading>}
+      <div class="sharebar">
+        {read
+          ? (
+            <p class="hint">
+              Week {week}, scores as of {read.toLocaleTimeString()}
+            </p>
+          )
+          : <Reading>reading week {week}'s scoreboard...</Reading>}
+
+        {league && states && ordered.length > 0 && (
+          <ShareButton label="share week" onShare={shareWeek} />
+        )}
+      </div>
 
       {(status || trouble) && <p class="hint">{status || trouble}</p>}
 
@@ -265,6 +340,7 @@ export function Matchups(
             mine={game.sides.findIndex((s) => s.owner === mine)}
             remainder={remainder}
             onMore={onMore}
+            share={league ? { league, week } : undefined}
           />
         ))}
       </div>
