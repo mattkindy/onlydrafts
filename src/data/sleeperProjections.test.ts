@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   joinProjectionsToGsis,
+  parseQuiet,
   projectionKey,
+  quietToCsv,
   sleeperPointsUnder,
   type SleeperProjectionRow,
 } from "./sleeperProjections.js";
@@ -28,7 +30,7 @@ describe("joinProjectionsToGsis", () => {
       crosswalk,
     );
 
-    expect(joined).toEqual([
+    expect(joined.projected).toEqual([
       {
         season: 2024,
         week: 3,
@@ -50,10 +52,11 @@ describe("joinProjectionsToGsis", () => {
       crosswalk,
     );
 
-    expect(joined).toEqual([]);
+    expect(joined.projected).toEqual([]);
+    expect(joined.quiet).toEqual([]);
   });
 
-  it("drops a row with no ppr projection rather than calling it zero", () => {
+  it("sets a matched row with no ppr projection aside as quiet", () => {
     const joined = joinProjectionsToGsis(
       2024,
       3,
@@ -61,7 +64,22 @@ describe("joinProjectionsToGsis", () => {
       crosswalk,
     );
 
-    expect(joined).toEqual([]);
+    expect(joined.projected).toEqual([]);
+    expect(joined.quiet).toEqual([
+      { season: 2024, week: 3, gsisId: "00-0030279" },
+    ]);
+  });
+
+  it("splits a week into the projected men and the quiet ones", () => {
+    const joined = joinProjectionsToGsis(
+      2024,
+      3,
+      [row("1479", { pts_ppr: 14 }), row("11576", {}), row("99999", {})],
+      crosswalk,
+    );
+
+    expect(joined.projected.map((p) => p.gsisId)).toEqual(["00-0030279"]);
+    expect(joined.quiet.map((q) => q.gsisId)).toEqual(["00-0039794"]);
   });
 
   it("treats a missing target or carry count as none", () => {
@@ -72,8 +90,8 @@ describe("joinProjectionsToGsis", () => {
       crosswalk,
     );
 
-    expect(joined[0]!.targets).toBe(0);
-    expect(joined[0]!.carries).toBe(0);
+    expect(joined.projected[0]!.targets).toBe(0);
+    expect(joined.projected[0]!.carries).toBe(0);
   });
 
   it("builds the same key from a season, week and player", () => {
@@ -81,10 +99,37 @@ describe("joinProjectionsToGsis", () => {
   });
 });
 
+describe("the quiet file", () => {
+  const rows = [
+    { season: 2026, week: 2, gsisId: "00-0039794" },
+    { season: 2026, week: 1, gsisId: "00-0030279" },
+  ];
+
+  it("writes a header and sorts by season, week and player", () => {
+    expect(quietToCsv(rows)).toBe(
+      "season,week,gsisId\n" +
+      "2026,1,00-0030279\n" +
+      "2026,2,00-0039794\n",
+    );
+  });
+
+  it("reads back the keys the projections are looked up under", () => {
+    const keys = parseQuiet(quietToCsv(rows));
+
+    expect(keys.has(projectionKey(2026, 1, "00-0030279"))).toBe(true);
+    expect(keys.has(projectionKey(2026, 2, "00-0039794"))).toBe(true);
+    expect(keys.size).toBe(2);
+  });
+
+  it("is empty where the file has never been written", () => {
+    expect(parseQuiet("").size).toBe(0);
+  });
+});
+
 describe("sleeperPointsUnder", () => {
   const chase = joinProjectionsToGsis(
     2026, 1, [row("1479", { pts_ppr: 20, rec: 6 }, "WR")], crosswalk,
-  )[0]!;
+  ).projected[0]!;
 
   it("takes the difference a catch pays off the full PPR number", () => {
     expect(sleeperPointsUnder(chase, 0.5)).toBe(17);

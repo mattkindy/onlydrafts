@@ -2,7 +2,9 @@
  * Downloads Sleeper's weekly projections and writes them to
  * data/curated/sleeperWeekly.csv, one row per player-week, keyed by gsis id.
  * The defences come down in the same call and go to
- * data/curated/sleeperDefenceWeekly.csv, keyed by team abbreviation.
+ * data/curated/sleeperDefenceWeekly.csv, keyed by team abbreviation. A
+ * player who matches a gsis id but has no points goes to
+ * data/curated/sleeperQuiet.csv.
  *
  * The endpoint needs no auth, so the only politeness is going one week at a
  * time with a pause between calls. A week nobody has projected yet comes
@@ -19,13 +21,17 @@ import {
   joinDefenceProjections,
   joinProjectionsToGsis,
   loadSleeperDefences,
+  loadSleeperQuiet,
   loadSleeperWeekly,
   projectionKey,
+  quietToCsv,
   SLEEPER_DEFENCE_PATH,
+  SLEEPER_QUIET_PATH,
   SLEEPER_WEEKLY_PATH,
   type SleeperDefence,
   type SleeperProjection,
   type SleeperProjectionRow,
+  type SleeperQuiet,
 } from "../src/data/sleeperProjections.js";
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "DEF"];
@@ -82,6 +88,7 @@ async function main(): Promise<void> {
   console.log(`${gsisBySleeperId.size} sleeper players have a gsis id`);
 
   const all: SleeperProjection[] = [];
+  const quiet: SleeperQuiet[] = [];
   const defences: SleeperDefence[] = [];
 
   for (const season of seasons) {
@@ -110,12 +117,14 @@ async function main(): Promise<void> {
         season, week, raw.filter((r) => r.player?.position !== "DEF"),
         gsisBySleeperId,
       );
-      all.push(...joined);
+      all.push(...joined.projected);
+      quiet.push(...joined.quiet);
       defences.push(...joinDefenceProjections(season, week, defenceRaw));
-      seasonRows += joined.length;
+      seasonRows += joined.projected.length;
       console.log(
-        `${season} week ${week}: ${joined.length} of ${raw.length} rows ` +
-        `joined, ${defenceRaw.length} defences`,
+        `${season} week ${week}: ${joined.projected.length} of ${raw.length} ` +
+        `rows joined, ${joined.quiet.length} matched with no points, ` +
+        `${defenceRaw.length} defences`,
       );
     }
 
@@ -142,6 +151,26 @@ async function main(): Promise<void> {
   );
   await writeFile(SLEEPER_WEEKLY_PATH, toCsv(merged));
   console.log(`fetched ${all.length} rows, wrote ${merged.length}`);
+
+  /**
+   * A man who was quiet last run and has a number now must leave the
+   * file, so the weeks fetched this run are rewritten whole rather than
+   * merged key by key. Other weeks stay for the same reason as above.
+   */
+  const fetchedWeeks = new Set(
+    [...all, ...quiet].map((row) => `${row.season}|${row.week}`),
+  );
+  const keptQuiet = [...await loadSleeperQuiet()]
+    .map((key) => key.split("|"))
+    .filter(([season, week]) => !fetchedWeeks.has(`${season}|${week}`))
+    .map(([season, week, gsisId]): SleeperQuiet => ({
+      season: Number(season), week: Number(week), gsisId: gsisId ?? "",
+    }));
+  const allQuiet = [...keptQuiet, ...quiet];
+  await writeFile(SLEEPER_QUIET_PATH, quietToCsv(allQuiet));
+  console.log(
+    `fetched ${quiet.length} rows with no points, wrote ${allQuiet.length}`,
+  );
 
   const keptDefences = new Map(await loadSleeperDefences());
 
