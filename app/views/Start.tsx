@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 
+import type { Listed } from "../lib/availability.ts";
 import { leadFor, type Explanation } from "../lib/explain.ts";
 import {
   alternativesFor, gameStates, lineFor, starterState,
@@ -21,6 +22,7 @@ import type { Matchup, Side } from "../lib/providers.ts";
 import type { Player } from "../lib/scoring.ts";
 import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
 import { Advice, nameOf } from "./Advice.tsx";
+import { injuryBadge } from "./Draft.tsx";
 import { ManName } from "./ManName.tsx";
 import { WeekRanks } from "./WeekRanks.tsx";
 
@@ -36,6 +38,8 @@ interface Props {
   rows: Map<string, SlateRow>;
   /** the board in this league's terms, for the men the slate leaves out */
   men: Player[];
+  /** who the office has listed, so a man reading nought says why */
+  listed: Map<string, Listed>;
   /** your own team's name in the league */
   mine: string | null;
   slots: string[] | null;
@@ -64,6 +68,24 @@ function Numbers(
         {line.spread.low.toFixed(1)} to {line.spread.high.toFixed(1)}
       </i>
       {line.stock && <i> stock</i>}
+    </span>
+  );
+}
+
+/**
+ * What the office says about him, next to his name, so a man projected at
+ * nought is not a mystery.
+ */
+function Office({ his }: { his: Listed | undefined }) {
+  const badge = injuryBadge(his);
+
+  if (!badge) {
+    return null;
+  }
+
+  return (
+    <span class={"badge " + badge.badgeHow} title={badge.badgeTitle}>
+      {badge.badge}
     </span>
   );
 }
@@ -100,11 +122,12 @@ function Why({ why }: { why: Explanation }) {
 }
 
 function Seat(
-  { choice, rows, states, lines }: {
+  { choice, rows, states, lines, listed }: {
     choice: SlotChoice;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
+    listed: Map<string, Listed>;
   },
 ) {
   const at = (key: string, slot?: string) => {
@@ -125,6 +148,7 @@ function Seat(
         />
         <span class="now">{choice.starter.points.toFixed(1)}</span>
         <Numbers line={his.line} left={his.left} />
+        <Office his={listed.get(choice.starter.key)} />
         {choice.locked && <span class="badge even">locked</span>}
       </h3>
 
@@ -142,6 +166,7 @@ function Seat(
                     team={other.line?.team}
                   />
                   <Numbers line={other.line} left={other.left} />
+                  <Office his={listed.get(option.key)} />
                   <span class={"delta" + (option.gains > 0 ? " up" : "")}>
                     {signed(option.gains)}
                   </span>
@@ -170,13 +195,14 @@ function myGame(games: Matchup[], mine: string | null) {
 }
 
 function Lineup(
-  { side, against, slots, rows, states, lines }: {
+  { side, against, slots, rows, states, lines, listed }: {
     side: Side;
     against: Side;
     slots: string[] | null;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
+    listed: Map<string, Listed>;
   },
 ) {
   const choices = useMemo(
@@ -193,6 +219,7 @@ function Lineup(
           rows={rows}
           states={states}
           lines={lines}
+          listed={listed}
         />
       ))}
     </>
@@ -296,6 +323,7 @@ export function Start(props: Props) {
             rows={rows}
             states={states}
             lines={lines}
+            listed={props.listed}
           />
         </>
       )}
@@ -317,7 +345,14 @@ export function Start(props: Props) {
         </p>
       )}
 
-      {(!ours || wholeWeek) && <WeekRanks slate={slate} roster={roster} />}
+      {(!ours || wholeWeek) && (
+        <WeekRanks
+          slate={slate}
+          rows={rows}
+          roster={roster}
+          listed={props.listed}
+        />
+      )}
     </>
   );
 }

@@ -6,6 +6,7 @@
  * site it came from.
  */
 
+import type { Listed } from "./availability.ts";
 import { normalizeName, stored, keep } from "./store.ts";
 import type { Pays } from "./scoring.ts";
 
@@ -13,6 +14,8 @@ export interface Man {
   name: string;
   key: string;
   pos?: string;
+  /** what the league office says, in Sleeper's words whoever said it */
+  hurt?: string;
 }
 
 export interface Roster {
@@ -281,6 +284,57 @@ export async function sleeperPlayers() {
   sleeperMen = trimmed;
 
   return trimmed;
+}
+
+/**
+ * Everybody the league office has listed, by the key the board gives a
+ * man rather than by whatever id a provider uses. A man with nothing
+ * against his name is left out.
+ */
+export function officeList(all: SleeperMen): Map<string, Listed> {
+  const listed = new Map<string, Listed>();
+
+  for (const man of Object.values(all)) {
+    if (!man.hurt) {
+      continue;
+    }
+
+    listed.set(normalizeName(man.n), {
+      name: man.n,
+      status: man.hurt,
+      ...(man.part ? { part: man.part } : {}),
+      ...(man.p ? { position: man.p } : {}),
+      ...(man.t ? { team: man.t } : {}),
+    });
+  }
+
+  return listed;
+}
+
+/**
+ * The same list with a league's own rosters folded in, so an ESPN league
+ * gets the office's word too. Sleeper's file covers every man in the
+ * game, so where both have something to say the file wins and a roster
+ * only fills gaps.
+ */
+export function officeListWith(
+  listed: Map<string, Listed>, rosters: Man[][],
+): Map<string, Listed> {
+  const both = new Map(listed);
+
+  for (const man of rosters.flat()) {
+    if (!man.hurt || both.has(man.key)) {
+      continue;
+    }
+
+    both.set(man.key, {
+      name: man.name,
+      status: man.hurt,
+      ...(man.pos ? { position: man.pos } : {}),
+    });
+  }
+
+  return both;
 }
 
 export interface EspnMan {
@@ -646,9 +700,31 @@ interface EspnEntry {
   playerPoolEntry?: {
     /** what he has scored in the week that was asked for */
     appliedStatTotal?: number;
-    player?: { id?: number; fullName?: string; defaultPositionId?: number };
+    player?: {
+      id?: number;
+      fullName?: string;
+      defaultPositionId?: number;
+      /** ESPN's own word for it, which is not Sleeper's word */
+      injuryStatus?: string;
+    };
   };
 }
+
+/**
+ * ESPN's injury words, in Sleeper's. The two providers say the same
+ * things differently, and everything downstream reads Sleeper's set, so
+ * this is where the difference stops. A word not listed here, ACTIVE
+ * among them, means nothing worth passing on.
+ */
+const ESPN_INJURIES: Record<string, string> = {
+  OUT: "Out",
+  INJURY_RESERVE: "IR",
+  PHYSICALLY_UNABLE_TO_PERFORM: "PUP",
+  SUSPENSION: "Sus",
+  DOUBTFUL: "Doubtful",
+  QUESTIONABLE: "Questionable",
+  DAY_TO_DAY: "Questionable",
+};
 
 interface EspnTeam {
   id: number;
@@ -668,16 +744,22 @@ function espnManOf(men: EspnMen, entry: EspnEntry): Man | null {
   const man = entry.playerPoolEntry?.player;
   const id = man?.id ?? entry.playerId;
   const listed = id ? men[id] : undefined;
+  const hurt = ESPN_INJURIES[man?.injuryStatus ?? ""];
 
   if (man?.fullName) {
     const pos = ESPN_POSITIONS[man.defaultPositionId ?? -1] ?? listed?.p ?? "";
     const name = espnNameOf(id!, man.fullName, pos);
 
-    return { name, key: normalizeName(name), pos };
+    return { name, key: normalizeName(name), pos, ...(hurt ? { hurt } : {}) };
   }
 
   return listed
-    ? { name: listed.n, key: normalizeName(listed.n), pos: listed.p }
+    ? {
+      name: listed.n,
+      key: normalizeName(listed.n),
+      pos: listed.p,
+      ...(hurt ? { hurt } : {}),
+    }
     : null;
 }
 

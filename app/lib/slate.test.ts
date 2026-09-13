@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { readSlate, slateUnder } from "./slate.ts";
+import type { Listed } from "./availability.ts";
+import { lineOf, liveDraws, spreadOf } from "./matchups.ts";
+import { readSlate, slateUnder, withOutMenZeroed } from "./slate.ts";
+import { normalizeName } from "./store.ts";
 
 const built = readSlate({
   season: 2026,
@@ -54,5 +57,117 @@ describe("slateUnder", () => {
     const older = readSlate({ season: 2025, week: 10, players: [] });
 
     expect(older.perCatch).toBe(0.5);
+  });
+});
+
+const rowsOf = (slate: ReturnType<typeof readSlate>) =>
+  new Map(slate.rows.map((r) => [normalizeName(r.name), r]));
+
+const office = (men: Record<string, Listed>) =>
+  new Map(Object.entries(men).map(([name, his]) => [normalizeName(name), his]));
+
+describe("a man the league office says is not playing", () => {
+  const chase = normalizeName("Ja'Marr Chase");
+
+  it("reads nought on every figure", () => {
+    const rows = withOutMenZeroed(rowsOf(built), office({
+      "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Out", part: "hip" },
+    }));
+    const row = rows.get(chase)!;
+
+    expect(row.ours).toBe(0);
+    expect(row.sleeper).toBe(0);
+    expect(row.blend).toBe(0);
+    expect(row.floor).toBe(0);
+    expect(row.q1).toBe(0);
+    expect(row.q3).toBe(0);
+    expect(row.ceiling).toBe(0);
+  });
+
+  it("keeps his name, his side and his fixture, so a page can still draw him", () => {
+    const rows = withOutMenZeroed(rowsOf(built), office({
+      "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "IR" },
+    }));
+    const row = rows.get(chase)!;
+
+    expect(row.name).toBe("Ja'Marr Chase");
+    expect(row.team).toBe("CIN");
+    expect(row.opponent).toBe("TB");
+  });
+
+  it("leaves everybody else where he was", () => {
+    const rows = withOutMenZeroed(rowsOf(built), office({
+      "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Out" },
+    }));
+
+    expect(rows.get(normalizeName("Joe Burrow"))!.blend).toBe(18);
+  });
+
+  it("leaves a questionable man alone", () => {
+    const rows = rowsOf(built);
+
+    expect(withOutMenZeroed(rows, office({
+      "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Questionable" },
+    }))).toBe(rows);
+  });
+
+  it("hands back the same map when nobody is out", () => {
+    const rows = rowsOf(built);
+
+    expect(withOutMenZeroed(rows, new Map())).toBe(rows);
+  });
+
+  /**
+   * Kickers and defences are not in a slate at all, and without a row of
+   * noughts a kicker on the injury report drew the position's stock week.
+   */
+  it("writes a nought row for a man the slate never had", () => {
+    const rows = withOutMenZeroed(rowsOf(built), office({
+      "Harrison Butker": {
+        name: "Harrison Butker", status: "Out", position: "K", team: "KC",
+      },
+    }));
+    const line = lineOf(normalizeName("Harrison Butker"), rows, undefined, "K");
+
+    expect(line!.blend).toBe(0);
+    expect(line!.spread.high).toBe(0);
+    expect(line!.stock).toBe(false);
+  });
+
+  it("leaves a man out with no position said for him to the board", () => {
+    const rows = withOutMenZeroed(rowsOf(built), office({
+      "Somebody Nobody Knows": { name: "Somebody Nobody Knows", status: "Out" },
+    }));
+
+    expect(rows.has(normalizeName("Somebody Nobody Knows"))).toBe(false);
+  });
+
+  it("draws a flat nought week rather than his ladder", () => {
+    const rows = withOutMenZeroed(rowsOf(built), office({
+      "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Out" },
+    }));
+    const live = liveDraws(
+      [{ key: chase }], rows, new Map(), 50,
+    );
+
+    expect(spreadOf(rows.get(chase)!).high).toBe(0);
+    expect(live.toCome(chase).every((week) => week === 0)).toBe(true);
+  });
+
+  /** he limped off at halftime, and the half he played still counts */
+  it("keeps what he has already scored", () => {
+    const rows = withOutMenZeroed(rowsOf(built), office({
+      "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Out" },
+    }));
+    const live = liveDraws(
+      [{ key: chase, points: 6.4 }],
+      rows,
+      new Map([["CIN", { where: "in" as const, left: 0.5 }]]),
+      50,
+    );
+    const drawn = live.drawingOf(chase)!;
+
+    expect(drawn.scored).toBe(6.4);
+    expect(drawn.week.every((week) => week === 0)).toBe(true);
   });
 });

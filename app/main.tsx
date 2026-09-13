@@ -16,8 +16,10 @@ import { loadBoard, loadMeta, type Board } from "./lib/data.ts";
 import { rescore, roomFor } from "./lib/board.ts";
 import { keep, stored, normalizeName } from "./lib/store.ts";
 import {
-  NeedsEspnCookies, PROVIDERS, sleeperPlayers, type League, type Matchup,
+  NeedsEspnCookies, officeList, officeListWith, PROVIDERS, sleeperPlayers,
+  type League, type Matchup,
 } from "./lib/providers.ts";
+import type { Listed } from "./lib/availability.ts";
 import { markedKeepers, saveMarkedKeepers } from "./lib/keepers.ts";
 import { draftNow } from "./lib/draftWatch.ts";
 import type { Player } from "./lib/scoring.ts";
@@ -32,7 +34,8 @@ import { Start } from "./views/Start.tsx";
 import { Matchups } from "./views/Matchups.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import {
-  loadSlate, rosterKeys, slateUnder, weekRefs, type Slate, type WeekRef,
+  loadSlate, rosterKeys, slateUnder, weekRefs, withOutMenZeroed,
+  type Slate, type WeekRef,
 } from "./lib/slate.ts";
 
 export type Order = "war" | "rank" | "adp";
@@ -201,6 +204,8 @@ function App() {
   const [games, setGames] = useState<Matchup[]>([]);
   const [gamesStatus, setGamesStatus] = useState("");
   const [rereading, setRereading] = useState(false);
+  /** who the league office has listed, for the week's pages as well as the draft */
+  const [office, setOffice] = useState<Map<string, Listed>>(() => new Map());
   // the guard has to be the same object every render, since two reads
   // started from different effects would otherwise not see each other
   const reading = useRef(false);
@@ -220,6 +225,19 @@ function App() {
       })
       .then(setBoard)
       .catch((e: Error) => setStatus("could not read the board: " + e.message));
+  }, []);
+
+  /**
+   * The office's list, read once. Sleeper's file is the same file the
+   * draft view reads and is kept for a day either way, so asking for it
+   * here costs nothing. A read that fails leaves the list empty, and then
+   * every man projects the way he did before, which is the old bug rather
+   * than a new one.
+   */
+  useEffect(() => {
+    sleeperPlayers()
+      .then((all) => setOffice(officeList(all)))
+      .catch(() => setOffice(new Map()));
   }, []);
 
   /** the week itself is only fetched once you ask for that tab */
@@ -286,10 +304,29 @@ function App() {
     return slateUnder(built, active.pays["rec"] ?? 0);
   }, [built, active]);
 
-  /** the week's projections, under the same key a lineup uses for a man */
+  /**
+   * Sleeper covers every man in the game, and an ESPN league adds only
+   * what its own rosters say about men Sleeper had nothing on.
+   */
+  const listed = useMemo(
+    () => active ? officeListWith(
+      office, [active.myRoster, ...active.allRosters.map((r) => r.keys)],
+    ) : office,
+    [office, active],
+  );
+
+  /**
+   * The week's projections, under the same key a lineup uses for a man,
+   * with a nought where the office says he is not playing. Every page that
+   * prices a week reads this map, so the ruling is applied once here
+   * rather than in each of them.
+   */
   const slateRows = useMemo(
-    () => new Map((slate?.rows ?? []).map((r) => [normalizeName(r.name), r])),
-    [slate],
+    () => withOutMenZeroed(
+      new Map((slate?.rows ?? []).map((r) => [normalizeName(r.name), r])),
+      listed,
+    ),
+    [slate, listed],
   );
 
   /**
@@ -335,21 +372,7 @@ function App() {
           nameFor: (id) => all[id]?.n ?? "",
           positionFor: (id) => all[id]?.p ?? "",
           teamFor: (id) => all[id]?.t ?? "",
-          /**
-           * Keyed the way the board keys a man, since the page looks
-           * him up by name and not by whatever id a provider uses.
-           */
-          hurt: Object.values(all).reduce<
-            Record<string, { status: string; part?: string }>
-          >((so, man) => {
-            if (man.hurt) {
-              so[normalizeName(man.n)] = {
-                status: man.hurt, ...(man.part ? { part: man.part } : {}),
-              };
-            }
-
-            return so;
-          }, {}),
+          hurt: Object.fromEntries(officeList(all)),
         }))
         .then(setDraft)
         .catch((e: Error) => setStatus(e.message));
@@ -800,6 +823,7 @@ function App() {
             games={games}
             rows={slateRows}
             men={men}
+            listed={listed}
             mine={active?.team ?? null}
             slots={active?.slots ?? null}
             status={gamesStatus || weekStatus}

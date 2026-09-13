@@ -16,21 +16,36 @@ import {
   isSplit, onRoster, splitBy, splitNote, verdict, SPLIT_AT, STARTER_OUT_AT,
   type Slate, type SlateRow,
 } from "../lib/slate.ts";
+import type { Listed } from "../lib/availability.ts";
 import { normalizeName } from "../lib/store.ts";
+import { injuryBadge } from "./Draft.tsx";
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE"];
 
 interface Props {
   slate: Slate | null;
+  /**
+   * The same week with the office's rulings applied. The slate says who
+   * the table lists; this says what each of them is worth.
+   */
+  rows: Map<string, SlateRow>;
   /** the men on your team, or nothing when no league is connected */
   roster: Set<string> | null;
+  listed: Map<string, Listed>;
 }
 
 /** what the league office and his side's injuries say about one man */
-function Chips({ row }: { row: SlateRow }) {
+function Chips({ row, his }: { row: SlateRow; his: Listed | undefined }) {
+  const badge = injuryBadge(his);
+
   return (
     <>
-      {row.questionable && (
+      {badge && (
+        <span class={"badge " + badge.badgeHow} title={badge.badgeTitle}>
+          {badge.badge}
+        </span>
+      )}
+      {row.questionable && !badge && (
         <span class="badge warn" title="listed questionable this week">
           questionable
         </span>
@@ -113,14 +128,17 @@ function Compare({ pair }: { pair: [SlateRow, SlateRow] }) {
   );
 }
 
-export function WeekRanks({ slate, roster }: Props) {
+export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
   const [posFilter, setPosFilter] = useState("ALL");
   const [query, setQuery] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
   const [picks, setPicks] = useState<SlateRow[]>([]);
 
   const rows = useMemo(() => {
-    const all = slate?.rows ?? [];
+    // the slate decides who is listed, and the priced map what he is worth,
+    // so a man ruled out sinks to the bottom rather than leaving the table
+    const all = (slate?.rows ?? [])
+      .map((row) => priced.get(normalizeName(row.name)) ?? row);
     const wanted = query.trim();
 
     return all
@@ -129,7 +147,7 @@ export function WeekRanks({ slate, roster }: Props) {
       .filter((row) => !wanted ||
         normalizeName(row.name).includes(normalizeName(wanted)))
       .sort((a, b) => b.blend - a.blend);
-  }, [slate, posFilter, mineOnly, query, roster]);
+  }, [slate, priced, posFilter, mineOnly, query, roster]);
 
   const max = Math.max(1, ...rows.map((row) => row.ceiling));
 
@@ -248,7 +266,10 @@ export function WeekRanks({ slate, roster }: Props) {
                       <td>
                         <span class="who">{row.name}</span>{" "}
                         <span class="pos">{row.position}</span>
-                        <Chips row={row} />
+                        <Chips
+                          row={row}
+                          his={listed.get(normalizeName(row.name))}
+                        />
                       </td>
                       <td>{row.team}</td>
                       <td>{row.home ? "" : "@"}{row.opponent}</td>
