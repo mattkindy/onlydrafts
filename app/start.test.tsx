@@ -190,7 +190,7 @@ describe("who to start", () => {
     await Promise.resolve();
 
     expect(where.querySelector(".clock")).toBe(null);
-    expect(where.textContent).toContain("Now pick another WR");
+    expect(where.textContent).toContain("Pick another WR");
   });
 
   it("says no week is built yet when none is", () => {

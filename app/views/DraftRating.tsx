@@ -196,10 +196,9 @@ export function DraftRating(props: Props) {
   return (
     <>
       <p class="hint">
-        {rated.length} teams in {league.name}, each against the roster an
-        average draft would have handed its own picks.
-        {drafted.size > 0 ? "" : " Read off the rosters, since this league" +
-          " cannot say what happened pick by pick."}
+        Each team vs what its picks were worth.
+        {drafted.size > 0 ? "" : " Based on rosters, since this league" +
+          " has no pick by pick record."}
       </p>
 
       <table class="rating">
@@ -239,8 +238,7 @@ export function DraftRating(props: Props) {
       {nowRated.length > 0 && (
         <>
           <p class="hint">
-            The same measure against each roster as it stands today, so a
-            trade or a waiver run shows as ground gained or lost.
+            Same grade, rosters as of today.
           </p>
 
           <table class="rating">
@@ -316,8 +314,7 @@ export function MyDraftPicks(props: Props) {
   return (
     <>
       <p class="hint">
-        Each pick as our board would have read it at the time, with
-        everything taken up to then already gone.
+        Each pick vs the best player still on the board at the time.
       </p>
       <table class="rating">
             <thead>
