@@ -98,7 +98,7 @@ function sideText(side: ShareSide, favoured: boolean): SideText {
     name: side.name,
     owner: side.owner && side.owner !== side.name ? side.owner : null,
     points: scoredSays(side.points),
-    projected: side.projected.toFixed(1) + " proj",
+    projected: scoredSays(side.projected) + " proj",
     odds: pctText(side.odds),
     favoured,
   };
