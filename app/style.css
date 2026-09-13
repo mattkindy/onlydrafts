@@ -659,8 +659,9 @@
   .player { display: flex; gap: var(--s1); align-items: baseline; min-width: 0;
     padding: .1rem var(--s1); border-radius: 4px; }
   .player.away { flex-direction: row-reverse; text-align: right; }
-  .player.live { box-shadow: inset 2px 0 0 var(--go); }
-  .player.away.live { box-shadow: inset -2px 0 0 var(--go); }
+  /* a filled cell reads as "on the field" at a glance; the edge bar it
+     replaces was easy to miss between two rows of numbers */
+  .player.live { background: color-mix(in srgb, var(--go) 12%, transparent); }
   .playername { min-width: 0; display: flex; flex-direction: column; flex: 1 1 auto; }
   /* a name breaks between its words or not at all: "Jerem-iyah" reads
      as a different player */
