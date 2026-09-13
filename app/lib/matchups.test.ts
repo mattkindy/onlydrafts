@@ -493,7 +493,7 @@ describe("statesFrom", () => {
           ],
         }],
       }],
-    }, new Map([["401872659", { hurt: new Map(), stats }]]));
+    }, new Map([["401872659", { hurt: new Map(), stats, defences: new Map() }]]));
 
     expect(got.get("BAL")?.stats?.get("derrickhenry")?.rushYds).toBe(117);
     expect(got.get("IND")?.stats).toBe(stats);
