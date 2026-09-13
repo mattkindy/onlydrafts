@@ -125,6 +125,15 @@ const SLEEPER = "https://api.sleeper.app/v1";
 const ask = (path: string) => fetch(SLEEPER + path).then((r) => r.json());
 
 /**
+ * The same read, past Sleeper's CDN, which keeps a matchups response in a
+ * five minute cache and serves it stale for five more, so a page polling
+ * every minute for live points saw ten minute old ones.
+ */
+const askFresh = (path: string) =>
+  fetch(SLEEPER + path + "?t=" + Date.now(), { cache: "no-store" })
+    .then((r) => r.json());
+
+/**
  * What ESPN calls each thing it pays for. Its scoring comes back as
  * numbered items, so the numbers are named here and anything without a
  * name is left alone rather than guessed at.
@@ -623,7 +632,7 @@ async function sleeperMatchups(
   week: number,
 ): Promise<Matchup[]> {
   const [raw, rosters] = await Promise.all([
-    ask("/league/" + league.leagueId + "/matchups/" + week),
+    askFresh("/league/" + league.leagueId + "/matchups/" + week),
     ask("/league/" + league.leagueId + "/rosters"),
   ]);
   const players = await sleeperPlayers();
@@ -755,7 +764,7 @@ async function espnAnswer(
   const at = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/" +
     season + "/segments/0/leagues/" + encodeURIComponent(leagueId) +
     "?" + query.slice(1);
-  const answered = await fetch(at, { credentials: "include" }).catch(() => null);
+  const answered = await fetch(at, { credentials: "include", cache: "no-store" }).catch(() => null);
 
   return answered?.ok
     ? await answered.json()
