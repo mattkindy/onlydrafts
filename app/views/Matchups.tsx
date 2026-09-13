@@ -43,17 +43,20 @@ interface Props {
   status?: string;
   /** leave your own game out, since the matchup tab has it */
   withoutMine?: boolean;
+  /** opens a man's sheet, since every name on the page opens one */
+  onMore?: (key: string) => void;
 }
 
 /** one man on one side of a row, mirrored when he is the away side */
 function Man(
-  { starter, rows, states, lines, at, remainder }: {
+  { starter, rows, states, lines, at, remainder, onMore }: {
     starter: Side["starters"][number] | undefined;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
     at: 0 | 1;
     remainder: Map<string, number[]> | null;
+    onMore?: ((key: string) => void) | undefined;
   },
 ) {
   if (!starter) {
@@ -74,7 +77,11 @@ function Man(
       class={"man " + (at ? "away" : "home") + (playing ? " live" : "") +
         (done ? " done" : "")}
     >
-      <ManName name={nameOf(starter.key, rows, lines)} team={line?.team} />
+      <ManName
+        name={nameOf(starter.key, rows, lines, starter.name)}
+        team={line?.team}
+        onOpen={onMore ? () => onMore(starter.key) : undefined}
+      />
       <span class="num">
         <b>{starter.points.toFixed(1)}</b>
         <i>
@@ -119,12 +126,13 @@ export function pairedRows(game: Matchup): {
 }
 
 function Lineups(
-  { game, rows, states, lines, remainder }: {
+  { game, rows, states, lines, remainder, onMore }: {
     game: Matchup;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
     remainder: Map<string, number[]> | null;
+    onMore?: ((key: string) => void) | undefined;
   },
 ) {
   return (
@@ -133,12 +141,12 @@ function Lineups(
         <div class="seat" key={row.slot + i}>
           <Man
             starter={row.home} rows={rows} states={states} lines={lines} at={0}
-            remainder={remainder}
+            remainder={remainder} onMore={onMore}
           />
           <span class="chip">{row.slot}</span>
           <Man
             starter={row.away} rows={rows} states={states} lines={lines} at={1}
-            remainder={remainder}
+            remainder={remainder} onMore={onMore}
           />
         </div>
       ))}
@@ -147,7 +155,10 @@ function Lineups(
 }
 
 export function Game(
-  { game, rows, states, slots, lines, mine, remainder, withAdvice = true }: {
+  {
+    game, rows, states, slots, lines, mine, remainder, onMore,
+    withAdvice = true,
+  }: {
     game: Matchup;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
@@ -155,6 +166,7 @@ export function Game(
     lines: Lines;
     mine: number;
     remainder: Map<string, number[]> | null;
+    onMore?: ((key: string) => void) | undefined;
     /** the matchup tab says this above the lineup, so its card leaves it out */
     withAdvice?: boolean;
   },
@@ -192,19 +204,22 @@ export function Game(
           lines={lines}
           odds={odds[mine]!}
           remainder={remainder}
+          onMore={onMore}
         />
       )}
       <Lineups
         game={game} rows={rows} states={states} lines={lines}
-        remainder={remainder}
+        remainder={remainder} onMore={onMore}
       />
     </div>
   );
 }
 
 export function Matchups(
-  { games, rows, men, mine, slots, pays, season, week, status, withoutMine }:
-    Props,
+  {
+    games, rows, men, mine, slots, pays, season, week, status, withoutMine,
+    onMore,
+  }: Props,
 ) {
   const lines = useMemo(
     () => new Map(men.map((p) => [p.key, p])), [men]);
@@ -250,6 +265,7 @@ export function Matchups(
             lines={lines}
             mine={game.sides.findIndex((s) => s.owner === mine)}
             remainder={remainder}
+            onMore={onMore}
           />
         ))}
       </div>
