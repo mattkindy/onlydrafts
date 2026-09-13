@@ -24,6 +24,7 @@ mentions a script that is no longer here, it says so.
 - `serve.ts` is a local server for the weekly tools, on port 3210.
 - `start.ts` prints the start or sit comparison for named players at
   the terminal.
+- `seasonOutlook.ts` prints the projected season for all 32 teams.
 
 **The benches that are still run.** These are not part of any build.
 `boardShareEval.ts`, `walkWeeklyEval.ts` and `scorePredictionEval.ts`
@@ -836,3 +837,53 @@ predicted remainder contains what happened. The old draws covered 0.77
 at a tenth played and 0.44 at half, because scaling a whole week down by
 the fraction left understates how much the plays in a quarter vary. The
 shipped width grows with what is left instead, and covers 0.79 and 0.71.
+
+# How the season outlook rates a team
+
+`seasonOutlook.ts` prints a projected regular season for all 32 teams:
+expected wins, a 10th to 90th percentile win range, division and playoff
+odds, and the record so far. Run it with `npx tsx
+scripts/seasonOutlook.ts`, and add `--markdown` for tables you can paste
+into a document. It reads `games.csv`, so refresh that first with `npx
+tsx scripts/fetchData.ts --seasons 2026 --force`.
+
+A rating is how many points a team would beat an average opponent by on
+a neutral field. Two fits produce one, and both are least squares on the
+same rows: one row per game, plus one for the home team and minus one
+for the away team, with a ridge penalty pulling each rating toward a
+prior.
+
+The first fit reads scoring margins, capped at 21 points so a blowout
+counts as a comfortable win rather than as proof, over last season
+including the playoffs and this season to date. A game this season
+counts two and a half times what a game last season does. Its prior is
+zero, which is what shrinks a 4-13 team back toward the league.
+
+The second fit reads the closing spread of every game this season with a
+line posted. A spread is the market's own estimate of the gap between
+two teams plus home field, so fitting ratings to it takes the market's
+view directly. Its prior is the margin rating and its penalty is light,
+so a team the market has priced follows the market and a team it has not
+stays where its margins put it. That prior does the work early in a
+season: one week of lines is 16 numbers for 32 ratings, which leaves a
+whole ridge of equally good answers, and the penalty picks the one
+closest to what the games say.
+
+The printed rating is two thirds the line fit and one third the margin
+fit. Home field comes from the average home margin over the three
+completed seasons before the one being projected, about 2.2 points, and
+a neutral site game gets none of it.
+
+From there each remaining game is a coin weighted by the rating gap plus
+home field, read off a normal with a standard deviation of 13.5 points
+on the margin. The season runs 20000 times, the games already played are
+added to every run, and wins, division titles and playoff berths are
+counted. Seeds are fixed, so two runs of the same data agree.
+
+Seeding uses win percentage, then head to head where two teams played,
+then division record inside a division and conference record across two,
+then a coin flip. Strength of victory, strength of schedule, common
+games and net points are left out, and a three-way tie is settled by
+those same pairwise comparisons rather than by the reduction the league
+applies, so a division race that finishes level is a rough count rather
+than an exact one.
