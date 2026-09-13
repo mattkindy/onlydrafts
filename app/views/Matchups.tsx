@@ -25,7 +25,7 @@ import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import { layoutGame, layoutWeek, shareLayout } from "../lib/shareImage.ts";
 import type { ShareGame } from "../lib/shareImage.ts";
 import type { SlateRow } from "../lib/slate.ts";
-import { Advice, nameOf, pct } from "./Advice.tsx";
+import { Advice, nameOf, pct, pctPair } from "./Advice.tsx";
 import { PlayerName } from "./PlayerName.tsx";
 import { Reading } from "./Reading.tsx";
 import { useLiveWeek } from "./scoreboard.ts";
@@ -247,6 +247,8 @@ export function Game(
     [game, rows, states, lines, remainder],
   );
 
+  const said = pctPair(odds[0]);
+
   return (
     <div
       class={"card plain matchup" + (mine >= 0 ? " on" : "") +
@@ -257,13 +259,13 @@ export function Game(
           <span class="nm">{side.owner}</span>
           <span class="big">{scoredSays(side.points)}</span>
           <span class="val" title="projected">{scoredSays(projected[at]!)}</span>
-          <span class="val win">{pct(odds[at]!)}</span>
+          <span class="val win">{said[at]}</span>
         </div>
       ))}
       <div
         class="odds"
-        title={`${game.sides[0].owner} ${pct(odds[0])}, ` +
-          `${game.sides[1].owner} ${pct(odds[1])}`}
+        title={`${game.sides[0].owner} ${said[0]}, ` +
+          `${game.sides[1].owner} ${said[1]}`}
       >
         <u style={{ width: pct(odds[0]) }} />
       </div>

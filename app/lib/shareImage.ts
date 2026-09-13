@@ -11,6 +11,7 @@
  * layout and the words can be tested where there is no canvas.
  */
 
+import { wholePair } from "./pctPair.ts";
 import { scoredSays } from "./scoring.ts";
 
 /** the dark palette from style.css, written out so a share looks the same to everyone */
@@ -89,17 +90,18 @@ export interface Layout {
   cards: CardLayout[];
 }
 
-export function pctText(odds: number): string {
-  return Math.round(odds * 100) + "%";
+/** both sides of a game as whole percentages that add up to 100 */
+export function pctPairText(odds: number): [string, string] {
+  return wholePair(odds).map((n) => n + "%") as [string, string];
 }
 
-function sideText(side: ShareSide, favoured: boolean): SideText {
+function sideText(side: ShareSide, odds: string, favoured: boolean): SideText {
   return {
     name: side.name,
     owner: side.owner && side.owner !== side.name ? side.owner : null,
     points: scoredSays(side.points),
     projected: scoredSays(side.projected) + " proj",
-    odds: pctText(side.odds),
+    odds,
     favoured,
   };
 }
@@ -115,12 +117,13 @@ export function layoutWeek(week: ShareWeek): Layout {
     const [home, away] = game.sides;
     const owners = game.sides.some((s) => s.owner && s.owner !== s.name);
     const height = CARD_BASE + (owners ? CARD_OWNER : 0);
+    const [homeOdds, awayOdds] = pctPairText(home.odds);
     const card: CardLayout = {
       y,
       height,
       sides: [
-        sideText(home, home.odds > away.odds),
-        sideText(away, away.odds > home.odds),
+        sideText(home, homeOdds, home.odds > away.odds),
+        sideText(away, awayOdds, away.odds > home.odds),
       ],
       fill: Math.min(1, Math.max(0, home.odds)),
     };

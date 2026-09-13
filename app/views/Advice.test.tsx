@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pct } from "./Advice.tsx";
+import { pct, pctPair } from "./Advice.tsx";
 
 describe("pct", () => {
   it("rounds to a whole percent in the middle", () => {
@@ -25,5 +25,18 @@ describe("pct", () => {
     expect(pct(1 - 0.999)).toBe("0.1%");
     expect(pct(0.9985)).toBe("99.8%");
     expect(pct(1 - 0.9985)).toBe("0.2%");
+  });
+});
+
+describe("pctPair", () => {
+  it("makes both whole sides add up to 100", () => {
+    expect(pctPair(0.635)).toEqual(["64%", "36%"]);
+    expect(pctPair(0.365)).toEqual(["36%", "64%"]);
+    expect(pctPair(0.5)).toEqual(["50%", "50%"]);
+  });
+
+  it("keeps the tenths when a game is nearly settled", () => {
+    expect(pctPair(0.9985)).toEqual(["99.8%", "0.2%"]);
+    expect(pctPair(0.003)).toEqual(["0.3%", "99.7%"]);
   });
 });

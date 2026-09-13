@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  fileNameFor, layoutGame, layoutWeek, pctText, textOf, WIDTH,
+  fileNameFor, layoutGame, layoutWeek, pctPairText, textOf, WIDTH,
   type ShareGame,
 } from "./shareImage.ts";
 
@@ -110,11 +110,12 @@ describe("layoutGame", () => {
   });
 });
 
-describe("pctText", () => {
-  it("rounds to whole points", () => {
-    expect(pctText(0.634)).toBe("63%");
-    expect(pctText(1)).toBe("100%");
-    expect(pctText(0)).toBe("0%");
+describe("pctPairText", () => {
+  it("rounds to whole points that add up to 100", () => {
+    expect(pctPairText(0.634)).toEqual(["63%", "37%"]);
+    expect(pctPairText(0.635)).toEqual(["64%", "36%"]);
+    expect(pctPairText(1)).toEqual(["100%", "0%"]);
+    expect(pctPairText(0)).toEqual(["0%", "100%"]);
   });
 });
 
