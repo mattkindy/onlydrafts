@@ -45,6 +45,8 @@ interface Props {
   /** your own team's name in the league */
   mine: string | null;
   slots: string[] | null;
+  /** the league's own name, which the shared picture is headed with */
+  league?: string;
   /** what this league pays, for playing out the rest of a live game */
   pays?: Pays;
   status?: string;
@@ -356,6 +358,9 @@ export function MyMatchup(props: Props) {
             mine={ours.at}
             remainder={remainder}
             onMore={onMore}
+            share={props.league && props.picked
+              ? { league: props.league, week: props.picked.week }
+              : undefined}
             withAdvice={false}
           />
         </>
