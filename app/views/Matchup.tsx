@@ -77,21 +77,15 @@ function Fig(
  * beside a player who had already scored fifteen points.
  */
 function Numbers(
-  { line, left, scored }: {
+  { line, left }: {
     line: ReturnType<typeof lineFor>;
     /** how much of his game is still to play */
     left: number;
-    /** what he has put up so far, when his game has started */
-    scored?: number;
   },
 ) {
   if (!line) {
     return <span class="slot-fig">no projection</span>;
   }
-
-  const toCome = line.blend * left;
-  const onCourse = scored === undefined ? null : scored + toCome;
-  const swing = onCourse === null ? 0 : onCourse - line.blend;
 
   return (
     <>
@@ -99,16 +93,8 @@ function Numbers(
         {line.blend.toFixed(1)}
         {line.stock ? <small> stock</small> : null}
       </Fig>
-      {onCourse !== null && (
-        <Fig label="on course">
-          <span class={swing > 0 ? "up" : swing < 0 ? "down" : ""}>
-            {onCourse.toFixed(1)}
-          </span>
-          <small> {(swing >= 0 ? "+" : "") + swing.toFixed(1)}</small>
-        </Fig>
-      )}
       {left > 0 && left < 1 && (
-        <Fig label="still to come">{toCome.toFixed(1)}</Fig>
+        <Fig label="still to come">{(line.blend * left).toFixed(1)}</Fig>
       )}
       <Fig label="floor to ceiling">
         {line.spread.low.toFixed(1)} to {line.spread.high.toFixed(1)}
@@ -215,10 +201,7 @@ function Slot(
         {his.left < 1 && (
           <Fig label="scored">{choice.starter.points.toFixed(1)}</Fig>
         )}
-        <Numbers
-          line={his.line} left={his.left}
-          scored={his.left < 1 ? choice.starter.points : undefined}
-        />
+        <Numbers line={his.line} left={his.left} />
       </div>
 
       {better.length > 0 && (

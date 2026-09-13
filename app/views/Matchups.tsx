@@ -76,6 +76,9 @@ function StarterCell(
   // what he is on course to finish with, since the bare remainder
   // read like a second projection nobody could place
   const onCourse = toCome === null ? null : starter.points + toCome;
+  // against his pregame number, once his game has started
+  const swing = onCourse !== null && line && playing
+    ? onCourse - line.blend : null;
 
   return (
     <div
@@ -91,6 +94,11 @@ function StarterCell(
         <b>{starter.points.toFixed(1)}</b>
         <i title={toCome === null ? undefined : `${toCome.toFixed(1)} still to come`}>
           {onCourse === null ? "" : onCourse.toFixed(1) + " proj"}
+          {swing !== null && (
+            <span class={swing > 0 ? "up" : swing < 0 ? "down" : ""}>
+              {" " + (swing >= 0 ? "+" : "") + swing.toFixed(1)}
+            </span>
+          )}
           {simmed ? " sim" : line?.stock && toCome !== null ? " stock" : ""}
         </i>
       </span>
