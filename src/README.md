@@ -75,7 +75,7 @@ about .15 where the betting line gets .39, and the line is not
 connected. What a team is worth is still known at the top and never
 reaches the plays.
 
-## The rules that keep it honest
+## Rules the model follows
 
 Everything shrinks toward something, and what it shrinks toward is
 fitted rather than picked. A constant in a per player slot is an error

@@ -1,3 +1,34 @@
+# What is in here
+
+Two kinds of file sit in this directory, and the difference matters
+before you delete anything.
+
+**Entry points**, the ones a person runs on purpose:
+
+- `week.ts` is the weekly refresh. `npm run week` runs it, and it calls
+  the next four in order.
+- `fetchData.ts` downloads the nflverse files into `data/raw/`.
+- `fetchSleeperProjections.ts` pulls Sleeper's weekly projections.
+- `pullAdp.ts` and `pullSleeperAdp.ts` pull draft position snapshots.
+- `aggregate*.ts` count the raw play-by-play into the tables in
+  `data/curated/`. Each writes the file named in its header comment and
+  reproduces it exactly on a rerun.
+- `buildSite.ts` writes the prediction JSON and the page into `docs/`.
+  `buildSimTables.ts` writes the tables the live pages play a game out
+  with, and `buildSite.ts` calls it.
+- `serve.ts` is a local server for the weekly tools, on port 3210.
+- `start.ts` prints the start or sit comparison for named players at
+  the terminal.
+
+**Evals and checks**, everything ending in `Eval.ts` or `Check.ts` plus
+the one-off diagnostics. These are not part of any build. Each one was
+written to answer a single question, and they are kept because the rows
+in `docs/scoreboard.md` and the findings below are reproduced by running
+them. The three that the scoreboard is scored on are
+`boardShareEval.ts`, `walkWeeklyEval.ts` and `scorePredictionEval.ts`.
+
+The findings follow, in the order they were written.
+
 # Where the walk's kicking excess comes from
 
 A kicker on the board takes 2.27 field goal attempts a game where his
