@@ -18,6 +18,9 @@ import {
   posteriorFor, sharedAt, type From, type Mix, type Pace,
 } from "./copula.ts";
 import {
+  statLinesFrom, type BoxScoreSaid, type StatLine,
+} from "./boxScore.ts";
+import {
   chanceWith, explainSwap, worthExplaining,
   type Explanation, type Opening,
 } from "./explain.ts";
@@ -63,6 +66,8 @@ export interface GameState {
   left: number;
   /** who has gone off, by the key the slate gives a player */
   hurt?: Map<string, InGameStatus>;
+  /** what each player has done so far, by the same key, once he has done any */
+  stats?: Map<string, StatLine>;
 }
 
 /**
@@ -193,7 +198,7 @@ interface SummaryInjury {
   athlete?: { displayName?: string; fullName?: string };
 }
 
-interface Summary {
+interface Summary extends BoxScoreSaid {
   header?: { competitions?: { date?: string }[] };
   injuries?: { injuries?: SummaryInjury[] }[];
 }
@@ -245,20 +250,30 @@ function stateOf(status: ScoreboardStatus | undefined): GameState {
   return { where, left: fractionLeft(status?.period, status?.displayClock) };
 }
 
-/** who has gone off, by ESPN's id for the game they are playing in */
-export type HurtByGame = Map<string, Map<string, InGameStatus>>;
+/** what one game's own summary says, over and above the scoreboard */
+export interface GameReading {
+  hurt: Map<string, InGameStatus>;
+  stats: Map<string, StatLine>;
+}
+
+/** each game's reading, by ESPN's id for the game */
+export type ReadingByGame = Map<string, GameReading>;
 
 /** every team playing this week, and where its game has got to */
 export function statesFrom(said: {
   events?: ScoreboardEvent[];
-}, hurt?: HurtByGame): Map<string, GameState> {
+}, readings?: ReadingByGame): Map<string, GameState> {
   const out = new Map<string, GameState>();
 
   for (const event of said.events ?? []) {
     const game = event.competitions?.[0];
     const bare = stateOf(game?.status ?? event.status);
-    const its = event.id ? hurt?.get(event.id) : undefined;
-    const state = its?.size ? { ...bare, hurt: its } : bare;
+    const its = event.id ? readings?.get(event.id) : undefined;
+    const state = {
+      ...bare,
+      ...(its?.hurt.size ? { hurt: its.hurt } : {}),
+      ...(its?.stats.size ? { stats: its.stats } : {}),
+    };
 
     for (const side of game?.competitors ?? []) {
       const code = side.team?.abbreviation;
@@ -345,7 +360,7 @@ function situationOf(
  */
 export function situationsFrom(said: {
   events?: ScoreboardEvent[];
-}, hurt?: HurtByGame): Map<string, LiveSituation> {
+}, readings?: ReadingByGame): Map<string, LiveSituation> {
   const out = new Map<string, LiveSituation>();
 
   for (const event of said.events ?? []) {
@@ -357,7 +372,7 @@ export function situationsFrom(said: {
     }
 
     const live = situationOf(
-      game, status, event.id ? hurt?.get(event.id) : undefined);
+      game, status, event.id ? readings?.get(event.id)?.hurt : undefined);
 
     if (live) {
       out.set(live.home, live);
@@ -368,29 +383,69 @@ export function situationsFrom(said: {
   return out;
 }
 
-const summaryOf = (id: string): Promise<Map<string, InGameStatus>> =>
-  fetch(`${SUMMARY}?event=${id}`)
-    .then((answered) => answered.ok ? answered.json() : null)
-    .then((said) => said
-      ? hurtFrom(said as Summary)
-      : new Map<string, InGameStatus>())
-    .catch(() => new Map<string, InGameStatus>());
+const nothingRead = (): GameReading => ({
+  hurt: new Map<string, InGameStatus>(),
+  stats: new Map<string, StatLine>(),
+});
+
+const readingFrom = (said: Summary): GameReading => ({
+  hurt: hurtFrom(said), stats: statLinesFrom(said),
+});
 
 /**
- * Who has gone off in each game that is on.
- *
- * The scoreboard says nothing about injuries, so every game in progress
- * costs a call of its own. A game nobody is watching is not asked about,
- * and a read that fails leaves that game with nobody hurt.
+ * Games that have finished, so the page stops asking about them. A box
+ * score that is over does not change, and on a Sunday evening a dozen
+ * finished games would otherwise be read again every minute.
  */
-async function hurtInLiveGames(
-  events: ScoreboardEvent[],
-): Promise<HurtByGame> {
-  const live = events.filter((event) => event.id !== undefined &&
-    stateOf(event.competitions?.[0]?.status ?? event.status).where === "in");
-  const asked = await Promise.all(live.map((event) => summaryOf(event.id!)));
+const kept = new Map<string, GameReading>();
 
-  return new Map(live.map((event, at) => [event.id!, asked[at]!]));
+const summaryOf = (id: string): Promise<GameReading> =>
+  fetch(`${SUMMARY}?event=${id}`)
+    .then((answered) => answered.ok ? answered.json() : null)
+    .then((said) => said ? readingFrom(said as Summary) : nothingRead())
+    .catch(() => nothingRead());
+
+/** a finished game is read once and then remembered for the session */
+async function readingOf(
+  id: string, where: GameState["where"],
+): Promise<GameReading> {
+  const already = kept.get(id);
+
+  if (already) {
+    return already;
+  }
+
+  const read = await summaryOf(id);
+
+  // a read that failed is not worth remembering, since the next minute
+  // may well get it
+  if (where === "post" && (read.hurt.size || read.stats.size)) {
+    kept.set(id, read);
+  }
+
+  return read;
+}
+
+/**
+ * What each game that has kicked off says about the players in it.
+ *
+ * The scoreboard includes neither injuries nor a box score, so every game
+ * costs a call of its own. A game that has not started is not asked
+ * about, and a read that fails leaves that game saying nothing.
+ */
+async function readGames(
+  events: ScoreboardEvent[],
+): Promise<ReadingByGame> {
+  const started = events
+    .map((event) => ({
+      id: event.id,
+      where: stateOf(event.competitions?.[0]?.status ?? event.status).where,
+    }))
+    .filter((event) => event.id !== undefined && event.where !== "pre");
+  const asked = await Promise.all(
+    started.map((event) => readingOf(event.id!, event.where)));
+
+  return new Map(started.map((event, at) => [event.id!, asked[at]!]));
 }
 
 /**
@@ -413,11 +468,11 @@ export async function gameStates(
   }
 
   const said = await answered.json() as { events?: ScoreboardEvent[] };
-  const hurt = await hurtInLiveGames(said.events ?? []);
+  const readings = await readGames(said.events ?? []);
 
   return {
-    states: statesFrom(said, hurt),
-    situations: situationsFrom(said, hurt),
+    states: statesFrom(said, readings),
+    situations: situationsFrom(said, readings),
   };
 }
 

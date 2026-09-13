@@ -1,0 +1,311 @@
+{
+  "header": {
+    "id": "401872659",
+    "competitions": [
+      {
+        "date": "2026-09-13T17:00Z"
+      }
+    ]
+  },
+  "boxscore": {
+    "players": [
+      {
+        "team": {
+          "abbreviation": "BAL"
+        },
+        "statistics": [
+          {
+            "name": "passing",
+            "keys": [
+              "completions/passingAttempts",
+              "passingYards",
+              "yardsPerPassAttempt",
+              "passingTouchdowns",
+              "interceptions",
+              "sacks-sackYardsLost",
+              "adjQBR",
+              "QBRating"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "3916387",
+                  "displayName": "Lamar Jackson"
+                },
+                "stats": [
+                  "15/23",
+                  "301",
+                  "13.1",
+                  "1",
+                  "0",
+                  "2-20",
+                  "123.0"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "rushing",
+            "keys": [
+              "rushingAttempts",
+              "rushingYards",
+              "yardsPerRushAttempt",
+              "rushingTouchdowns",
+              "longRushing"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "3043078",
+                  "displayName": "Derrick Henry"
+                },
+                "stats": [
+                  "18",
+                  "117",
+                  "6.5",
+                  "3",
+                  "32"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3916387",
+                  "displayName": "Lamar Jackson"
+                },
+                "stats": [
+                  "4",
+                  "43",
+                  "10.8",
+                  "1",
+                  "19"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "receiving",
+            "keys": [
+              "receptions",
+              "receivingYards",
+              "yardsPerReception",
+              "receivingTouchdowns",
+              "longReception",
+              "receivingTargets"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4429615",
+                  "displayName": "Zay Flowers"
+                },
+                "stats": [
+                  "5",
+                  "150",
+                  "30.0",
+                  "1",
+                  "54",
+                  "6"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3116365",
+                  "displayName": "Mark Andrews"
+                },
+                "stats": [
+                  "3",
+                  "36",
+                  "12.0",
+                  "0",
+                  "17",
+                  "5"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "fumbles",
+            "keys": [
+              "fumbles",
+              "fumblesLost",
+              "fumblesRecovered"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "3916387",
+                  "displayName": "Lamar Jackson"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "kicking",
+            "keys": [
+              "fieldGoalsMade/fieldGoalAttempts",
+              "fieldGoalPct",
+              "longFieldGoalMade",
+              "extraPointsMade/extraPointAttempts",
+              "totalKickingPoints"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4697745",
+                  "displayName": "Tyler Loop"
+                },
+                "stats": [
+                  "1/1",
+                  "100.0",
+                  "57",
+                  "5/5",
+                  "8"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "team": {
+          "abbreviation": "IND"
+        },
+        "statistics": [
+          {
+            "name": "passing",
+            "keys": [
+              "completions/passingAttempts",
+              "passingYards",
+              "yardsPerPassAttempt",
+              "passingTouchdowns",
+              "interceptions",
+              "sacks-sackYardsLost",
+              "adjQBR",
+              "QBRating"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "3917792",
+                  "displayName": "Daniel Jones"
+                },
+                "stats": [
+                  "14/24",
+                  "110",
+                  "4.6",
+                  "0",
+                  "1",
+                  "1-8",
+                  "52.4"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "rushing",
+            "keys": [
+              "rushingAttempts",
+              "rushingYards",
+              "yardsPerRushAttempt",
+              "rushingTouchdowns",
+              "longRushing"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4242335",
+                  "displayName": "Jonathan Taylor"
+                },
+                "stats": [
+                  "19",
+                  "98",
+                  "5.2",
+                  "2",
+                  "21"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "receiving",
+            "keys": [
+              "receptions",
+              "receivingYards",
+              "yardsPerReception",
+              "receivingTouchdowns",
+              "longReception",
+              "receivingTargets"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4688813",
+                  "displayName": "Josh Downs"
+                },
+                "stats": [
+                  "2",
+                  "37",
+                  "18.5",
+                  "0",
+                  "25",
+                  "3"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "fumbles",
+            "keys": [
+              "fumbles",
+              "fumblesLost",
+              "fumblesRecovered"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4242335",
+                  "displayName": "Jonathan Taylor"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "kicking",
+            "keys": [
+              "fieldGoalsMade/fieldGoalAttempts",
+              "fieldGoalPct",
+              "longFieldGoalMade",
+              "extraPointsMade/extraPointAttempts",
+              "totalKickingPoints"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4571557",
+                  "displayName": "Spencer Shrader"
+                },
+                "stats": [
+                  "1/1",
+                  "100.0",
+                  "58",
+                  "1/2",
+                  "4"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
