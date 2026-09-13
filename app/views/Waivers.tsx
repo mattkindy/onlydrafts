@@ -98,19 +98,21 @@ interface Figures {
 }
 
 /**
- * The seat a drop hands over, across the drawn season. A man in the lineup
- * once in three weeks is a bench man, and naming the seat he takes in the
- * odd week he starts says less than saying he hardly starts.
+ * The seat column is a name: who takes the seat, or who loses it. A man
+ * who does not start reads "bench", and an open seat reads nothing, since
+ * a word for nobody is one more thing to read.
  */
 function seasonSeat(row: Drop): string {
   if (row.starts < RARELY_STARTS) {
-    return "rarely starts";
+    return "bench";
   }
 
-  const seat = row.seat ? seatName(row.seat) : "the lineup";
-
-  return `${row.heir?.name ?? "the wire"} at ${seat}`;
+  return withSeat(row.heir?.name ?? "wire", row.seat);
 }
+
+/** the seat after the name only where it is not the man's own position */
+const withSeat = (name: string, seat: string | null | undefined) =>
+  seat === "FLEX" ? `${name} (flex)` : name;
 
 const seasonDrop = (row: Drop): Figures => ({
   points: -row.takes,
@@ -125,8 +127,8 @@ const weekDrop = (
 ): Figures => ({
   points: -his.takes,
   seat: his.slot
-    ? `${his.heir ? nameFor(his.heir) : "nobody"} at ${seatName(his.slot)}`
-    : "not starting",
+    ? withSeat(his.heir ? nameFor(his.heir) : "wire", his.slot)
+    : "bench",
   before: his.before,
   after: his.after,
   delta: -his.costs,
@@ -134,7 +136,7 @@ const weekDrop = (
 
 const seasonAdd = (row: Add): Figures => ({
   points: row.brings,
-  seat: row.displaced?.name ?? "an empty seat",
+  seat: row.displaced?.name ?? "",
   before: row.before,
   after: row.after,
   delta: row.added,
@@ -143,8 +145,8 @@ const seasonAdd = (row: Add): Figures => ({
 const weekAdd = (his: WeekAdd, nameFor: (key: string) => string): Figures => ({
   points: his.brings,
   seat: his.displaced
-    ? `${nameFor(his.displaced)} at ${seatName(his.slot ?? "")}`
-    : his.slot ? "an empty seat" : "would not start",
+    ? withSeat(nameFor(his.displaced), his.slot)
+    : his.slot ? "" : "bench",
   before: his.before,
   after: his.after,
   delta: his.added,
@@ -157,7 +159,7 @@ function Starting(
   return (
     <span class="starting">
       {pct(starts)}
-      {at && <i>{at.slot ? "in at " + seatName(at.slot) : "benched"}</i>}
+      {at && <i>{at.slot ? seatName(at.slot) : "bench"}</i>}
     </span>
   );
 }
@@ -213,7 +215,7 @@ function AddRow(
       <td data-label="team">{row.p.team ?? ""}</td>
       <td data-label="ppg">{(row.p.ppg ?? 0).toFixed(1)}</td>
       <td data-label="starts"><Starting starts={row.starts} at={at} /></td>
-      <Figured figures={figures} absent={absent} seatLabel="instead of" />
+      <Figured figures={figures} absent={absent} seatLabel="over" />
       <td data-label="drop">{paid ? paid.drop : ""}</td>
       <td data-label="net">{paid ? <b>{signed(paid.net)}</b> : ""}</td>
     </tr>
@@ -325,7 +327,7 @@ export function Waivers(props: Props) {
   const hidden = listed.length - worth.length - rest.length;
   const best = worth[0] ?? null;
   const missing = missingWeek(props.week, rows, states, ours);
-  const dropSeat = span === "week" ? "takes his seat" : "when he starts";
+  const dropSeat = "seat to";
 
   /**
    * A row with no week figures says which of the two reasons it is: the
