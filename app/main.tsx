@@ -213,7 +213,9 @@ function App() {
   const [board, setBoard] = useState<Board | null>(null);
   const [leagues, setLeagues] = useState<League[]>(() => stored<League[]>("leagues", []));
   const [active, setActive] = useState<League | null>(() => stored<League | null>("active", null));
-  const [view, setView] = useState<View>("leagues");
+  // a reload lands back on the tab you were on, in the league you had open
+  const [view, setView] = useState<View>(() =>
+    stored<League | null>("active", null) ? stored<View>("view", "leagues") : "leagues");
   const [who, setWho] = useState(() => stored("username", ""));
   const [provider, setProvider] = useState(() => stored("provider", "sleeper"));
   const [perTeamSaid, setPerTeam] = useState(() => stored("keepn", 3));
@@ -636,6 +638,8 @@ function App() {
   // the answer belongs to the tab it was opened on, so moving off it
   // closes it rather than carrying it over to a page it does not explain
   useEffect(() => setAsking(false), [view]);
+
+  useEffect(() => keep("view", view), [view]);
 
   /**
    * Whether this league keeps players. Sleeper and ESPN both say, but
