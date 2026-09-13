@@ -22,6 +22,7 @@
     "scripts/draftWalk.ts",
     "scripts/matchupCalibration.ts",
     "scripts/explainSweep.ts",
-    "scripts/liveRemainderEval.ts"
+    "scripts/liveRemainderEval.ts",
+    "scripts/timeWaivers.ts"
   ]
 }

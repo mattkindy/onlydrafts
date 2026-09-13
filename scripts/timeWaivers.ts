@@ -12,8 +12,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { rescore } from "../app/lib/board.ts";
+import { loadBoard, loadMeta } from "../app/lib/data.ts";
+import { roomFor } from "../app/lib/draftShare.ts";
+import {
+  addsFor, dropsFor, netsFor, openSpotsFor,
+} from "../app/lib/waivers.ts";
+import { barsOf, baselineFor, weeksOf } from "../app/lib/winShare.ts";
+
 const DATA = join(process.cwd(), "docs", "data");
 
+// the board is fetched in the browser, so the files stand in for a server
 (globalThis as unknown as { fetch: unknown }).fetch = async (url: string) => {
   const name = String(url).split("/").pop()!.split("?")[0]!;
 
@@ -22,13 +31,6 @@ const DATA = join(process.cwd(), "docs", "data");
     json: async () => JSON.parse(readFileSync(join(DATA, name), "utf8")),
   };
 };
-
-const { loadBoard, loadMeta } = await import("../app/lib/data.ts");
-const { rescore } = await import("../app/lib/board.ts");
-const { roomFor } = await import("../app/lib/draftShare.ts");
-const { addsFor, dropsFor, netFor, openSpotsFor } =
-  await import("../app/lib/waivers.ts");
-const { barsOf, baselineFor, weeksOf } = await import("../app/lib/winShare.ts");
 
 const meta = await loadMeta();
 const board = await loadBoard(meta.boardSeason);
@@ -72,8 +74,7 @@ const room = t("roomFor", () => roomFor(men, slots, 12, 2000, null));
 const adds = t("addsFor", () => addsFor(mine, pool, slots, room));
 t("dropsFor", () => dropsFor(mine, slots, room));
 const open = openSpotsFor(slots, mine.length);
-t("netFor x12", () =>
-  adds.slice(0, 12).forEach((a) => netFor(mine, a, slots, room, open)));
+t("netsFor x12", () => netsFor(mine, adds.slice(0, 12), slots, room, open));
 t("draw every man", () => men.forEach((p) => weeksOf(p, 2000)));
 
 const bars = barsOf(baselineFor(mine, slots, 2000, room.wire));
