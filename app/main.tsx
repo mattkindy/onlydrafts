@@ -25,6 +25,7 @@ import { draftNow } from "./lib/draftWatch.ts";
 import type { Player } from "./lib/scoring.ts";
 
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
+import { Reading } from "./views/Reading.tsx";
 import { EspnSheet } from "./views/EspnSheet.tsx";
 import { Roster } from "./views/Roster.tsx";
 import { DraftRating } from "./views/DraftRating.tsx";
@@ -47,59 +48,63 @@ export type Order = "war" | "rank" | "adp";
  * eighth on another should not have to work it out.
  */
 const ORDER_MEANS: Record<Order, string> = {
-  war: "what he adds over the man you would otherwise end up with at " +
-    "his seat, so it ranks upgrades rather than players and everyone " +
-    "in your league sees a different order",
-  rank: "where we rank him whoever drafts him, from the regression, " +
-    "his share of the work, the room and the games played out",
-  adp: "where the room is taking him, which says who will last until " +
-    "your next turn",
+  war: "what he adds over the man you would otherwise end up with at his seat",
+  rank: "where we rank him whoever drafts him",
+  adp: "where the room is taking him, so who lasts until your next turn",
 };
 
 type View =
   | "leagues" | "roster" | "keepers" | "draft" | "rating" | "start"
   | "matchups" | "waivers";
 
+/**
+ * What each view is called, the one line under it, and the longer
+ * answer behind "how this works".
+ *
+ * The line under the title is what a reader needs before they look at
+ * the page. Everything else is what they ask once, so it waits behind a
+ * tap rather than standing between them and the numbers.
+ */
 const COPY: Record<View, [string, string, string]> = {
   leagues: [
     "My leagues",
-    "Choose where your league lives, name yourself, then tap a league to open it. Draft help, lineups, and waivers all live inside a league.",
+    "Say where your league lives, name yourself, then tap a league to open it.",
     "",
   ],
   roster: [
     "My roster",
-    "Everyone your league currently has on your team, with this season's projection for each.",
+    "Your team, with this season's projection for each man.",
     "Before a keeper draft this is last season's roster until the league clears it. Tap a player for the season distribution and to mark a keeper.",
   ],
   keepers: [
     "Keeper value",
-    "The most a player is worth keeping for. Paying a round for him means giving up that pick, so he is worth it only while he beats whoever you could take with it.",
-    "Type what your league charges and each card says whether to keep him. A player worth a 5th and costing a 9th is a bargain; one costing a 2nd is not.",
+    "The most a player is worth keeping for.",
+    "Paying a round for him means giving up that pick, so he is worth it only while he beats whoever you could take with it. Type what your league charges and each card says whether to keep him.",
   ],
   draft: [
     "Draft help",
-    "Live board for draft night. It watches your league's draft, removes players as they go, and ranks who is left by what your roster still needs.",
-    "The board leads with what a man adds to the weeks you win, given the side you would finish with. Players stay on the board until they are actually kept or drafted.",
+    "Live board for draft night, ranked by what your roster still needs.",
+    "It watches your league's draft and takes men off the board as they go. The order leads with what a man adds to the weeks you win, given the side you would finish with. Players stay on the board until they are actually kept or drafted.",
   ],
   rating: [
     "How the draft went",
-    "Every team against what its own picks were worth, so the team that drafted third is not rewarded for drafting third. Then your own draft, pick by pick.",
-    "Where the room was taking a man leads and our own value over a replacement starter follows, since the board orders kickers and defences by nothing much.",
+    "Every team against what its own picks were worth. Then your own draft, pick by pick.",
+    "Rating a team by what it took rather than by where it picked means the team that drafted third is not rewarded for drafting third. Where the room was taking a man leads, and our own value over a replacement starter follows, since the board orders kickers and defences by nothing much.",
   ],
   start: [
     "Who to start",
-    "One week, ranked by projected points, with your own men marked so you can set a lineup.",
+    "One week, ranked, with your own men marked.",
     "Our number and Sleeper's sit side by side. Where they disagree by three points or more the row is marked, and Sleeper has the better of those about 55% of the time.",
   ],
   matchups: [
     "Matchups",
-    "Every game in your league this week, with what each side has scored and how often it wins from here.",
+    "Every game in your league this week, and how often each side wins from here.",
     "The chance counts only the part of each game still to play, so a lead with everybody done is the whole thing and a lead with a back to come is not.",
   ],
   waivers: [
     "Who to add",
-    "Everybody no team in your league has, ranked by what adding him does to how often you win a week. Then what dropping each of your own men would cost.",
-    "Two questions, and the buttons above the table choose which one you are reading. This week uses the week's own projections, the lineup you would set, and the team you actually play: the row says whether the man starts, who takes his seat if he goes, and how often you win this one game either way. Rest of season draws a year of weeks against a typical opponent, so a man who starts a third of the time is priced for the weeks he starts. That is why somebody on your bench can cost nothing this week and something over the season.",
+    "Everybody nobody in your league has, and what dropping one of yours would cost.",
+    "This week uses the week's own projections, the lineup you would set, and the team you actually play: the row says whether the man starts, who takes his seat if he goes, and how often you win this one game either way. Rest of season draws a year of weeks against a typical opponent, so a man who starts a third of the time is priced for the weeks he starts. That is why somebody on your bench can cost nothing this week and something over the season.",
   ],
 };
 
@@ -135,6 +140,17 @@ const sameSeat = (a: League | null, b: League | null) =>
   Boolean(a && b && a.provider === b.provider &&
     a.leagueId === b.leagueId && a.userId === b.userId);
 
+/**
+ * Light, dark, or whatever the phone is set to. The page follows the
+ * system until somebody says otherwise, and the button walks around
+ * the three so either choice can be undone.
+ */
+type Theme = "system" | "light" | "dark";
+
+const NEXT_THEME: Record<Theme, Theme> = {
+  system: "light", light: "dark", dark: "system",
+};
+
 /** where the team you picked in a league is remembered */
 const seatKey = (lg: League) => "seat." + lg.provider + "." + lg.leagueId;
 
@@ -154,20 +170,20 @@ const WEEK_VIEWS: View[] = ["start", "matchups", "waivers"];
 /** how old a read can be before one of those views asks the provider again */
 const STALE_AFTER = 2 * 60 * 1000;
 
-/** how fresh the roster on screen is, in one line */
-function rosterRead(league: League, again: boolean): string {
-  if (again) {
-    return "reading your roster again...";
-  }
-
+/**
+ * How fresh the roster on screen is. It hangs off the refresh button
+ * rather than taking a line of its own, since the button is where a
+ * reader who cares about the time is already looking.
+ */
+function rosterRead(league: League): string {
   if (!league.readAt) {
-    return "roster read before the page started noting when";
+    return "read before the page started noting when";
   }
 
   const at = new Date(league.readAt)
     .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-  return "roster read at " + at;
+  return "read at " + at;
 }
 
 function App() {
@@ -180,6 +196,7 @@ function App() {
   const [provider, setProvider] = useState(() => stored("provider", "sleeper"));
   const [perTeam, setPerTeam] = useState(() => stored("keepn", 3));
   const [posFilter, setPosFilter] = useState("ALL");
+  const [theme, setTheme] = useState<Theme>(() => stored<Theme>("theme", "system"));
   const [query, setQuery] = useState("");
   const [everyTeam, setEveryTeam] = useState(false);
   /**
@@ -216,6 +233,16 @@ function App() {
   // the guard has to be the same object every render, since two reads
   // started from different effects would otherwise not see each other
   const reading = useRef(false);
+
+  useEffect(() => {
+    if (theme === "system") {
+      delete document.documentElement.dataset["theme"];
+    } else {
+      document.documentElement.dataset["theme"] = theme;
+    }
+
+    keep("theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     loadMeta()
@@ -548,7 +575,11 @@ function App() {
           <span id="crumb">
             <button onClick={() => setView("leagues")}>all leagues</button>
             <b>{active.name}</b>
-            <button disabled={rereading} onClick={() => void reread(true)}>
+            <button
+              disabled={rereading}
+              title={"roster " + rosterRead(active)}
+              onClick={() => void reread(true)}
+            >
               refresh roster
             </button>
             <span>you: {active.team}</span>
@@ -559,6 +590,13 @@ function App() {
             </span>
           </span>
         )}
+        <button
+          class="theme"
+          title="light, dark, or whatever your phone is set to"
+          onClick={() => setTheme(NEXT_THEME[theme])}
+        >
+          {theme}
+        </button>
       </nav>
 
       {view !== "leagues" && (
@@ -581,6 +619,12 @@ function App() {
       <div id="explain">
         <h1>{title}</h1>
         <p>{blurb}</p>
+        {legend && (
+          <details class="asked">
+            <summary>how this works</summary>
+            <p>{legend}</p>
+          </details>
+        )}
       </div>
 
       {/* every other view leaves this bar with nothing in it, and an
@@ -709,12 +753,12 @@ function App() {
         </div>
       )}
 
-      {active && ROSTER_VIEWS.includes(view) && (
-        <p class="hint">{rosterRead(active, rereading)}</p>
+      {active && rereading && ROSTER_VIEWS.includes(view) && (
+        <Reading>reading your roster again...</Reading>
       )}
 
       <div id="out">
-        {!board && <div class="empty">reading the board...</div>}
+        {!board && <Reading>reading the board...</Reading>}
 
         {board && view === "leagues" && (
           leagues.length === 0
@@ -728,11 +772,6 @@ function App() {
             )
             : (
               <>
-                <h2>your leagues</h2>
-                <p class="hint">
-                  A league you joined since you last looked will not be
-                  here until you look again.
-                </p>
                 {leagues.length > shown.length && (
                   <p class="hint">
                     Showing the team you picked.{" "}
@@ -742,9 +781,7 @@ function App() {
                   </p>
                 )}
                 {opening && (
-                  <p class="loading">
-                    <span class="spin" /> scoring the board for {opening}
-                  </p>
+                  <Reading>scoring the board for {opening}</Reading>
                 )}
                 <div class="cards">
                   {shown.map((lg) => (
@@ -760,10 +797,16 @@ function App() {
                         <span>you: {lg.team}</span>
                       </div>
                       {/* which scoring, since picking the wrong league
-                          of two is otherwise silent */}
+                          of two is otherwise silent. What it pays a
+                          catch is the same fact, so it is the chip's
+                          tooltip rather than a second line. */}
                       <div class="sub">
-                        <span class="pays">{roomFor(lg.pays)}</span>
-                        <span>{lg.pays?.["rec"] ?? 0} a catch</span>
+                        <span
+                          class="pays"
+                          title={payDescription(lg.pays)}
+                        >
+                          {roomFor(lg.pays)}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -864,8 +907,6 @@ function App() {
           />
         )}
       </div>
-
-      <p class="hint">{legend}</p>
 
       {showing && season && (
         <PlayerSheet
