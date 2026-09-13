@@ -10,12 +10,12 @@
  * knowing you missed him is worth more than hiding him.
  */
 
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
 import { leadFor, type Explanation } from "../lib/explain.ts";
 import {
-  alternativesFor, gameStates, lineFor, starterState,
+  alternativesFor, lineFor, myGameIn, starterState,
   type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
@@ -24,6 +24,7 @@ import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
 import { Advice, nameOf } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
 import { ManName } from "./ManName.tsx";
+import { useScoreboard } from "./scoreboard.ts";
 import { WeekRanks } from "./WeekRanks.tsx";
 
 interface Props {
@@ -181,19 +182,6 @@ function Seat(
   );
 }
 
-/** your side of this week's game, and the side across from it */
-function myGame(games: Matchup[], mine: string | null) {
-  for (const game of games) {
-    const at = game.sides.findIndex((s) => s.owner === mine);
-
-    if (at >= 0) {
-      return { side: game.sides[at]!, against: game.sides[1 - at]! };
-    }
-  }
-
-  return null;
-}
-
 function Lineup(
   { side, against, slots, rows, states, lines, listed }: {
     side: Side;
@@ -228,33 +216,13 @@ function Lineup(
 
 export function Start(props: Props) {
   const { games, mine, rows, slots, slate, roster } = props;
-  const [states, setStates] = useState<Map<string, GameState> | null>(null);
-  const [trouble, setTrouble] = useState("");
   const [wholeWeek, setWholeWeek] = useState(false);
-  const season = props.picked?.season;
-  const week = props.picked?.week;
-
-  useEffect(() => {
-    if (season === undefined || week === undefined) {
-      return;
-    }
-
-    let stale = false;
-
-    gameStates(season, week)
-      .then((got) => { if (!stale) { setStates(got.states); setTrouble(""); } })
-      .catch((e: Error) => {
-        if (!stale) {
-          setTrouble("could not read the scoreboard: " + e.message);
-        }
-      });
-
-    return () => { stale = true; };
-  }, [season, week]);
+  const { states, trouble } = useScoreboard(
+    props.picked?.season, props.picked?.week);
 
   const lines = useMemo(
     () => new Map(props.men.map((p) => [p.key, p])), [props.men]);
-  const ours = useMemo(() => myGame(games, mine), [games, mine]);
+  const ours = useMemo(() => myGameIn(games, mine), [games, mine]);
 
   if (!props.weeks.length) {
     return (

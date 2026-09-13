@@ -705,6 +705,21 @@ export interface Live {
   drawingOf: (key: string) => Drawing | null;
 }
 
+/** your own side of this week's game, and the side across from it */
+export function myGameIn(
+  games: Matchup[], mine: string | null,
+): { side: Side; against: Side } | null {
+  for (const game of games) {
+    const at = game.sides.findIndex((s) => s.owner === mine);
+
+    if (at >= 0) {
+      return { side: game.sides[at]!, against: game.sides[1 - at]! };
+    }
+  }
+
+  return null;
+}
+
 /** everybody a matchup puts on the field or on the bench */
 export const menOf = (matchup: Matchup) =>
   matchup.sides.flatMap((side) => [...side.starters, ...side.bench]);
@@ -803,7 +818,7 @@ const locked = (
  * recognises is treated as a flex where the league has any, since that is
  * what an unusual slot name nearly always is.
  */
-function takes(
+export function seatTakes(
   slot: string, position: string, slots: string[] | null | undefined,
 ): boolean {
   if (knownSlot(slot)) {
@@ -864,7 +879,7 @@ export function bestLineupFor(
       for (const starter of starters) {
         if (
           locked(starter, rows, states, lines) ||
-          !takes(starter.slot, position, slots)
+          !seatTakes(starter.slot, position, slots)
         ) {
           continue;
         }
@@ -1018,7 +1033,7 @@ export function alternativesFor(
     const his = live.drawingOf(starter.key);
     const odds = his ? chanceWith(seat, his) : winChance(totals, theirs);
     const options = benched
-      .filter((one) => takes(starter.slot, one.line!.position, slots))
+      .filter((one) => seatTakes(starter.slot, one.line!.position, slots))
       .map((one) => {
         const instead = Array.from(
           { length: draws }, (_, i) => scoredBy(one.man, i));

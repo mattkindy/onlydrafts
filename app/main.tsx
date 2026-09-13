@@ -99,7 +99,7 @@ const COPY: Record<View, [string, string, string]> = {
   waivers: [
     "Who to add",
     "Everybody no team in your league has, ranked by what adding him does to how often you win a week. Then what dropping each of your own men would cost.",
-    "Every win chance here is how often you win one week against a typical opponent, not how often you win the season. Each row also says the points a week the move is worth and who gains or loses the seat, so a pickup is worth making when the man you add beats the man you drop.",
+    "Two questions, and the buttons above the table choose which one you are reading. This week uses the week's own projections, the lineup you would set, and the team you actually play: the row says whether the man starts, who takes his seat if he goes, and how often you win this one game either way. Rest of season draws a year of weeks against a typical opponent, so a man who starts a third of the time is priced for the weeks he starts. That is why somebody on your bench can cost nothing this week and something over the season.",
   ],
 };
 
@@ -143,6 +143,13 @@ const seatKey = (lg: League) => "seat." + lg.provider + "." + lg.leagueId;
  * off waivers since the league was read would show as missing.
  */
 const ROSTER_VIEWS: View[] = ["start", "matchups", "waivers", "draft"];
+
+/**
+ * The views that price this week, so they need the slate and the league's
+ * own games for it. The waiver page needs both to say what a move does to
+ * the game you are actually playing.
+ */
+const WEEK_VIEWS: View[] = ["start", "matchups", "waivers"];
 
 /** how old a read can be before one of those views asks the provider again */
 const STALE_AFTER = 2 * 60 * 1000;
@@ -240,9 +247,9 @@ function App() {
       .catch(() => setOffice(new Map()));
   }, []);
 
-  /** the week itself is only fetched once you ask for that tab */
+  /** the week itself is only fetched once you ask for a tab that prices one */
   useEffect(() => {
-    if ((view !== "start" && view !== "matchups") || !week) {
+    if (!WEEK_VIEWS.includes(view) || !week) {
       return;
     }
 
@@ -263,7 +270,7 @@ function App() {
 
   /** the league's own games, which only the provider knows */
   useEffect(() => {
-    if ((view !== "matchups" && view !== "start") || !active || !week) {
+    if (!WEEK_VIEWS.includes(view) || !active || !week) {
       return;
     }
 
@@ -849,6 +856,10 @@ function App() {
             men={men}
             league={active}
             posFilter={posFilter}
+            rows={slateRows}
+            games={games}
+            season={week?.season ?? null}
+            week={week?.week ?? null}
             onMore={setShowing}
           />
         )}

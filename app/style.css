@@ -444,6 +444,11 @@
   .seat-card h3 .now { font-weight: 800; }
   .seat-fig { font-size: .72rem; color: var(--muted); font-weight: 400; }
   .seat-fig i { font-style: normal; color: var(--faint); }
+  /* the season share above and where he is this week under it, since the
+     two together are what say why a bench man costs little today */
+  .starting { display: block; white-space: nowrap; }
+  .starting i { display: block; font-style: normal; color: var(--faint);
+    font-size: .64rem; }
   .options { list-style: none; margin: 0; padding: 0; }
   .options li { display: flex; flex-wrap: wrap; gap: .4rem;
     align-items: baseline; padding: .3rem 0;
