@@ -806,3 +806,33 @@ about 0.47 a game, so every actual defence week was a point and a half
 light and the board's line with it. That is fixed in the board and in
 this bench. `defenceForecastEval.ts` and `defenceMatchupEval.ts` still
 read the old column, and both have since been deleted.
+
+# What a part played game says about the rest of it
+
+`partialGameProbe.ts` backs `RATE_SHARE` in `app/lib/copula.ts`. It cuts
+every player game in `touches.csv` at a fifth, a third and half the game
+clock, writes the pace before the cut as a normal off the player's own
+season the way the live draws do, and regresses the points after the cut
+on it, centred inside a player season so how good he is cannot stand in
+for how his afternoon started.
+
+The slope is slightly negative at every cut, from -0.024 at a tenth
+played to -0.065 at half, and the correlation with it, -0.04 to -0.12
+over 21885 player games in 2021 to 2025. A game with one play worth more
+than half the early points is no different. So a pace over the first
+half of a game says nothing about the rest of it that the player's own
+week does not already say, and the weight the live draws used, the
+fraction played itself, was a factor of four to ten too strong at the
+cuts this path covers.
+
+No positive rate share fits a negative slope, so `RATE_SHARE` is 0.1,
+which is the most the measurement allows rather than a number read off
+it. Leaving it at zero would delete the pace, and with it the
+quarterback who is hot at half time lifting his receivers, which this
+probe does not measure.
+
+The width was checked the same way, on how often the middle 80% of a
+predicted remainder contains what happened. The old draws covered 0.77
+at a tenth played and 0.44 at half, because scaling a whole week down by
+the fraction left understates how much the plays in a quarter vary. The
+shipped width grows with what is left instead, and covers 0.79 and 0.71.

@@ -179,13 +179,37 @@ export interface Pace {
 }
 
 /**
+ * The share of a week's variance that is the rate a player is playing at
+ * rather than which plays happened to break his way.
+ *
+ * A fraction q of a game measures the rate part and adds q of the play
+ * noise, so the pace is worth q r / (q r + 1 - r) and no more. The probe
+ * that fits this on five seasons of touches cannot tell the rate share
+ * from zero at any cut up to half a game, so this is the most the
+ * measurement allows rather than a number read off it.
+ */
+export const RATE_SHARE = 0.1;
+
+/** how much a pace over a fraction of a game is believed */
+export const paceWeight = (played: number) =>
+  (played * RATE_SHARE) / (played * RATE_SHARE + 1 - RATE_SHARE);
+
+/**
+ * How little of a game can be left before the remaining week is read off
+ * a normal so far out that the ladder has nothing to say there. Half
+ * time hands a game to the drive engine, so nothing near this arrives.
+ */
+const LEAST_LEFT = 0.25;
+
+/**
  * A player's copula normal written as a straight line in his own noise, so
  * a caller can either draw that noise or ask where the line crosses a
  * total it has to beat.
  *
- * Once his game is under way part of his own noise is behind him, so the
- * rest of his week is shrunk towards what his pace implies by the
- * fraction played, which leaves him unit variance.
+ * Once his game is under way the pace pulls the rest of his week toward
+ * it by paceWeight. The width grows with what is left, because the
+ * caller scales a whole week down by the fraction still to play and the
+ * plays in a quarter vary by more than a quarter of a game's worth.
  */
 export function normalLine(
   mix: Mix, shared: number, pace: Pace,
@@ -194,9 +218,13 @@ export function normalLine(
     return { middle: shared, width: mix.own };
   }
 
+  const weight = paceWeight(pace.played);
+  const left = Math.max(LEAST_LEFT, 1 - pace.played);
+  const spread = RATE_SHARE * (1 - weight) + (1 - RATE_SHARE) / left;
+
   return {
-    middle: (1 - pace.played) * shared + pace.played * pace.z,
-    width: mix.own * Math.sqrt(Math.max(0, 1 - pace.played * pace.played)),
+    middle: (1 - weight) * shared + weight * pace.z,
+    width: mix.own * Math.sqrt(Math.max(0, spread)),
   };
 }
 

@@ -332,6 +332,25 @@ describe("liveDraws", () => {
     expect(mean(hot.toCome("def"))).toBeLessThan(mean(onPace.toCome("def")));
     expect(hot.toCome("far")).toEqual(onPace.toCome("far"));
   });
+
+  it("moves a receiver's remaining week under 4 points on one long score", () => {
+    const early = states({
+      BUF: { where: "in", left: 0.8 },
+      MIA: { where: "in", left: 0.8 },
+      KC: { where: "pre", left: 1 },
+      DEN: { where: "pre", left: 1 },
+    });
+    // a 60 yard catch and score at a fifth played is 13 PPR points, which
+    // is a fifth of a 65 point week and reads as the 99.8th percentile
+    const onPace = liveDraws(
+      [{ key: "wr", points: 3.6 }], stack, early, 8000);
+    const hot = liveDraws([{ key: "wr", points: 13 }], stack, early, 8000);
+    const lift = mean(hot.toCome("wr")) - mean(onPace.toCome("wr"));
+
+    // the weight of q gave him 8.2 more points over the rest of his week
+    expect(lift).toBeGreaterThan(0);
+    expect(lift).toBeLessThan(4);
+  });
 });
 
 describe("a player the slate leaves out", () => {
