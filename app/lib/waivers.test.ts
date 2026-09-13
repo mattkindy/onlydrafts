@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { addsFor, capacityOf, dropsFor, netFor, openSpotsFor } from "./waivers.ts";
-import { weeksOf } from "./winShare.ts";
+import { baselineFor, weeksOf } from "./winShare.ts";
 import type { Player } from "./scoring.ts";
 
 const SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF"];
@@ -106,5 +106,62 @@ describe("dropping a man", () => {
 
     expect(starter.costs).toBeGreaterThan(bench.costs);
     expect(starter.starts).toBeGreaterThan(bench.starts);
+  });
+
+  it("says the points he takes, who takes his seat, and both win chances", () => {
+    const roster = [...aRoster(), aMan("rb5", "RB", 4)];
+    const his = dropsFor(roster, SLOTS, aRoom())
+      .find((d) => d.p.key === "rb1")!;
+
+    // he scores 15 and the man behind him on the bench scores 4
+    expect(his.takes).toBeGreaterThan(4);
+    expect(his.takes).toBeLessThan(15);
+    expect(his.heir?.key).toBe("rb5");
+    expect(his.before - his.after).toBeCloseTo(his.costs, 10);
+    expect(his.before).toBeGreaterThan(his.after);
+  });
+
+  /**
+   * The cost is a weekly margin against the typical side, so moving the
+   * mean of that margin by the points he takes has to move the win chance
+   * by about what the normal curve says. Ten points of win chance reads
+   * low to anybody who takes it for a season figure, and this is what
+   * says the figure is the weekly one it claims to be.
+   */
+  it("moves the win chance by about what the margin's spread says", () => {
+    const roster = [...aRoster(), aMan("rb5", "RB", 4)];
+    const room = aRoom();
+    const his = dropsFor(roster, SLOTS, room).find((d) => d.p.key === "rb1")!;
+    const held = baselineFor(roster, SLOTS, DRAWN, room.wire);
+    const margin = held.total.map((x, i) => x - room.opponent[i]!);
+    const mean = margin.reduce((s, x) => s + x, 0) / margin.length;
+    const sd = Math.sqrt(
+      margin.reduce((s, x) => s + (x - mean) ** 2, 0) / margin.length);
+    const phi = (z: number) =>
+      0.5 * (1 + Math.sign(z) *
+        Math.sqrt(1 - Math.exp(-2 * z * z / Math.PI)));
+    const said = phi(mean / sd) - phi((mean - his.takes) / sd);
+
+    expect(his.costs).toBeGreaterThan(said - 0.03);
+    expect(his.costs).toBeLessThan(said + 0.03);
+  });
+});
+
+describe("what an add row says beyond the number", () => {
+  it("names the man he pushes out and the points he brings", () => {
+    const roster = aRoster();
+    const [add] = addsFor(roster, [aMan("bigWr", "WR", 20)], SLOTS, aRoom());
+
+    // the cheapest receiver in the lineup is the 10 ppg flex
+    expect(add!.displaced?.key).toBe("flex");
+    expect(add!.brings).toBeGreaterThan(0);
+    expect(add!.after - add!.before).toBeCloseTo(add!.added, 10);
+  });
+
+  it("has nobody to push out at a seat the roster cannot fill", () => {
+    const [add] = addsFor(aRoster(), [aMan("aK", "K", 9)], SLOTS, aRoom());
+
+    expect(add!.displaced).toBe(null);
+    expect(add!.starts).toBeGreaterThan(0.9);
   });
 });
