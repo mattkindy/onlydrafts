@@ -52,7 +52,7 @@ export function Roster(props: Props) {
                     <div class="sub">
                       {/* he is on last season's roster and nobody has
                           signed him for this one */}
-                      <span>no club for {props.season}, so no projection</span>
+                      <span>no NFL team for {props.season}, so no projection</span>
                     </div>
                   </div>
                 );

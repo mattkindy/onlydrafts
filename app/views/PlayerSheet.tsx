@@ -42,7 +42,7 @@ function WeekByWeek({ p }: { p: Player }) {
     <>
       <h2>week by week</h2>
       <div class="hint">
-        His average for that week, and the range he usually lands in.
+        His projection for that week, and the range he usually lands in.
         Matchups don't say much this far out, so most weeks look alike.
       </div>
       {games.map((w, i) => {
@@ -110,7 +110,7 @@ export function PlayerSheet(props: Props) {
 
         {p.games !== undefined && (
           <>
-            <h2>a season of him, over {p.games.toFixed(1)} games</h2>
+            <h2>season outlook, over {p.games.toFixed(1)} projected games</h2>
             <div class="statline big">
               {lineOver(p.simulated ?? p.projected, p.position, p.games, movedBy(p))
                 .map((f) => (
