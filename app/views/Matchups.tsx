@@ -1,51 +1,48 @@
 /**
- * Every head to head in the league this week, with a live win chance.
+ * Every head to head in the league this week, with a live win
+ * probability.
  *
- * The points are whatever the league has scored so far. The chance is
- * drawn from the week's projections, counting only the part of each
+ * The points are whatever the league has scored so far. The probability
+ * is drawn from the week's projections, counting only the part of each
  * game still to play, so a side behind with everybody done reads nought.
  *
- * A card pairs the two lineups seat by seat. A man who is done shows
- * bright points and no projection, a man playing gets a green edge on
- * his side of the row, and a man yet to kick off shows a faint one.
+ * A card pairs the two lineups slot by slot. A player who is done shows
+ * bright points and no projection, one playing gets a green edge on his
+ * side of the row, and one yet to kick off shows a faint one.
  *
- * Your own game comes first, and the scoreboard is read again every
- * minute while any game is under way.
+ * Your own game lives on the matchup tab, so this view can leave it out.
  */
 
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useMemo } from "preact/hooks";
 
 import {
-  gameStates, lineFor, standingFor, starterState,
-  type GameState, type Lines, type LiveSituation,
+  lineFor, standingFor, starterState,
+  type GameState, type Lines,
 } from "../lib/matchups.ts";
-import {
-  gamesToPlay, remainderInWorker, simTablesFor,
-} from "../lib/remainderDraws.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
 import type { Pays, Player } from "../lib/scoring.ts";
 import type { SlateRow } from "../lib/slate.ts";
 import { Advice, nameOf, pct } from "./Advice.tsx";
 import { ManName } from "./ManName.tsx";
 import { Reading } from "./Reading.tsx";
-
-/** how often the scoreboard is read again while a game is on */
-const EVERY = 60_000;
+import { useLiveWeek } from "./scoreboard.ts";
 
 interface Props {
   games: Matchup[];
   rows: Map<string, SlateRow>;
-  /** the board in this league's terms, for the men the slate leaves out */
+  /** the board in this league's terms, for the players the slate leaves out */
   men: Player[];
-  /** your own team's name in the league, so your game can lead */
+  /** your own team's name in the league, so your game can be told apart */
   mine: string;
-  /** the seats the league starts, for the lineup it says you could put out */
+  /** the slots the league starts, for the lineup it says you could put out */
   slots: string[] | null;
   /** what this league pays, since the remainder engine scores its own plays */
   pays: Pays;
   season: number;
   week: number;
   status?: string;
+  /** leave your own game out, since the matchup tab has it */
+  withoutMine?: boolean;
 }
 
 /** one man on one side of a row, mirrored when he is the away side */
@@ -89,11 +86,38 @@ function Man(
   );
 }
 
+type Starter = Side["starters"][number];
+
 /**
- * The two lineups paired seat by seat. The sides can be set differently,
- * so they are paired by position in the list and a side with fewer men
- * leaves its half of the row empty.
+ * The rows of one card: a slot, and the player each side has in it.
+ *
+ * Pairing the two lists by position put one side's kicker opposite the
+ * other side's defence whenever the two were set in different orders,
+ * and the chip between them then named neither. So each row takes the
+ * slot from the first side and fills the other half with that side's
+ * first unused starter in the same slot.
  */
+export function pairedRows(game: Matchup): {
+  slot: string; home?: Starter; away?: Starter;
+}[] {
+  const left = [...game.sides[0].starters];
+  const right = [...game.sides[1].starters];
+  const rows: { slot: string; home?: Starter; away?: Starter }[] = [];
+
+  for (const home of left) {
+    const at = right.findIndex((s) => s.slot === home.slot);
+    const away = at >= 0 ? right.splice(at, 1)[0] : undefined;
+
+    rows.push({ slot: home.slot, home, ...(away ? { away } : {}) });
+  }
+
+  for (const away of right) {
+    rows.push({ slot: away.slot, away });
+  }
+
+  return rows;
+}
+
 function Lineups(
   { game, rows, states, lines, remainder }: {
     game: Matchup;
@@ -103,35 +127,27 @@ function Lineups(
     remainder: Map<string, number[]> | null;
   },
 ) {
-  const deep = Math.max(
-    game.sides[0].starters.length, game.sides[1].starters.length);
-
   return (
     <div class="lineups">
-      {Array.from({ length: deep }, (_, i) => {
-        const home = game.sides[0].starters[i];
-        const away = game.sides[1].starters[i];
-
-        return (
-          <div class="seat" key={i}>
-            <Man
-              starter={home} rows={rows} states={states} lines={lines} at={0}
-              remainder={remainder}
-            />
-            <span class="chip">{home?.slot ?? away?.slot ?? ""}</span>
-            <Man
-              starter={away} rows={rows} states={states} lines={lines} at={1}
-              remainder={remainder}
-            />
-          </div>
-        );
-      })}
+      {pairedRows(game).map((row, i) => (
+        <div class="seat" key={row.slot + i}>
+          <Man
+            starter={row.home} rows={rows} states={states} lines={lines} at={0}
+            remainder={remainder}
+          />
+          <span class="chip">{row.slot}</span>
+          <Man
+            starter={row.away} rows={rows} states={states} lines={lines} at={1}
+            remainder={remainder}
+          />
+        </div>
+      ))}
     </div>
   );
 }
 
-function Game(
-  { game, rows, states, slots, lines, mine, remainder }: {
+export function Game(
+  { game, rows, states, slots, lines, mine, remainder, withAdvice = true }: {
     game: Matchup;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
@@ -139,6 +155,8 @@ function Game(
     lines: Lines;
     mine: number;
     remainder: Map<string, number[]> | null;
+    /** the matchup tab says this above the lineup, so its card leaves it out */
+    withAdvice?: boolean;
   },
 ) {
   const { odds, projected } = useMemo(
@@ -164,7 +182,7 @@ function Game(
       >
         <u style={{ width: pct(odds[0]) }} />
       </div>
-      {mine >= 0 && (
+      {mine >= 0 && withAdvice && (
         <Advice
           side={game.sides[mine]!}
           against={game.sides[1 - mine]!}
@@ -185,93 +203,26 @@ function Game(
 }
 
 export function Matchups(
-  { games, rows, men, mine, slots, pays, season, week, status }: Props,
+  { games, rows, men, mine, slots, pays, season, week, status, withoutMine }:
+    Props,
 ) {
   const lines = useMemo(
     () => new Map(men.map((p) => [p.key, p])), [men]);
-  const [states, setStates] = useState<Map<string, GameState> | null>(null);
-  const [situations, setSituations] =
-    useState<Map<string, LiveSituation> | null>(null);
-  const [remainder, setRemainder] =
-    useState<Map<string, number[]> | null>(null);
-  const [read, setRead] = useState<Date | null>(null);
-  const [trouble, setTrouble] = useState("");
-  /**
-   * Bumped on every read, which is what asks for the next one. Reading
-   * inside a timer that depends on the states themselves would rebuild
-   * the timer every minute and drift.
-   */
-  const [reads, setReads] = useState(0);
-
-  useEffect(() => {
-    let stale = false;
-
-    gameStates(season, week)
-      .then((got) => {
-        if (!stale) {
-          setStates(got.states);
-          setSituations(got.situations);
-          setRead(new Date());
-          setTrouble("");
-        }
-      })
-      .catch((e: Error) => {
-        if (!stale) {
-          setTrouble("could not read the scoreboard: " + e.message);
-        }
-      });
-
-    return () => { stale = true; };
-  }, [reads, season, week]);
-
-  const live = states
-    ? [...states.values()].some((s) => s.where === "in")
-    : false;
-
-  useEffect(() => {
-    if (!live) {
-      return;
-    }
-
-    const timer = setTimeout(() => setReads((n) => n + 1), EVERY);
-
-    return () => clearTimeout(timer);
-  }, [live, reads]);
+  const { states, remainder, read, live, trouble } =
+    useLiveWeek(season, week, pays);
 
   /**
-   * From half time on, playing the rest of a game out beats pulling a
-   * man's week line toward what he has done, so those games go to the
-   * engine and everything earlier stays on the clock scaling.
+   * Your own game first, or left out entirely when the matchup tab is
+   * already showing it.
    */
-  useEffect(() => {
-    if (!situations || !gamesToPlay(situations).length) {
-      setRemainder(null);
+  const ordered = useMemo(() => {
+    const isMine = (game: Matchup) =>
+      game.sides.some((s) => s.owner === mine);
 
-      return;
-    }
-
-    let stale = false;
-
-    simTablesFor(season)
-      .then((tables) => tables
-        ? remainderInWorker(tables, situations, pays)
-        : new Map<string, number[]>())
-      .then((played) => {
-        if (!stale) {
-          setRemainder(played.size ? played : null);
-        }
-      })
-      .catch(() => undefined);
-
-    return () => { stale = true; };
-  }, [situations, season, pays]);
-
-  const ordered = useMemo(
-    () => [...games].sort((a, b) =>
-      Number(b.sides.some((s) => s.owner === mine)) -
-      Number(a.sides.some((s) => s.owner === mine))),
-    [games, mine],
-  );
+    return withoutMine
+      ? games.filter((game) => !isMine(game))
+      : [...games].sort((a, b) => Number(isMine(b)) - Number(isMine(a)));
+  }, [games, mine, withoutMine]);
 
   return (
     <>
@@ -286,7 +237,7 @@ export function Matchups(
 
       {(status || trouble) && <p class="hint">{status || trouble}</p>}
 
-      {!games.length && <p class="hint">No games for this week yet.</p>}
+      {!ordered.length && <p class="hint">No other games this week yet.</p>}
 
       <div class="cards wide">
         {states && ordered.map((game, at) => (

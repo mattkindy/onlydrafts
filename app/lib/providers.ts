@@ -23,6 +23,15 @@ export interface Roster {
   /** the rounds this team still holds */
   picks: number[];
   keys: Man[];
+  /** wins, losses and points for, where the provider says */
+  record?: TeamRecord;
+}
+
+export interface TeamRecord {
+  wins: number;
+  losses: number;
+  ties: number;
+  pointsFor: number;
 }
 
 export interface League {
@@ -44,6 +53,11 @@ export interface League {
   draftSlot: number | null;
   snake: boolean;
   allRosters: Roster[];
+  /**
+   * Whether this is a keeper league. Nothing means the provider did not
+   * say, and then the page asks the reader.
+   */
+  keepers?: boolean | null;
 }
 
 export interface Provider {
@@ -403,6 +417,28 @@ interface SleeperRoster {
   roster_id: number;
   owner_id: string;
   players?: string[];
+  keepers?: string[] | null;
+  settings?: {
+    wins?: number; losses?: number; ties?: number;
+    fpts?: number; fpts_decimal?: number;
+  };
+}
+
+/** what a Sleeper roster has won and scored so far */
+function sleeperRecord(r: SleeperRoster): TeamRecord | undefined {
+  const said = r.settings;
+
+  if (!said || said.wins === undefined) {
+    return undefined;
+  }
+
+  return {
+    wins: said.wins ?? 0,
+    losses: said.losses ?? 0,
+    ties: said.ties ?? 0,
+    // Sleeper keeps the points either side of the decimal point apart
+    pointsFor: (said.fpts ?? 0) + (said.fpts_decimal ?? 0) / 100,
+  };
 }
 
 /**
@@ -462,6 +498,21 @@ function roundsHeldBy(
       .sort((a, b) => a - b);
 }
 
+/**
+ * Whether Sleeper says this league keeps players. It says so three
+ * ways: a keeper count, a league type of 2, or a roster that already
+ * has somebody marked.
+ */
+function keeperLeague(
+  lg: Record<string, any>, rosters: SleeperRoster[],
+): boolean {
+  const settings = (lg["settings"] ?? {}) as Record<string, number>;
+
+  return (settings["max_keepers"] ?? 0) > 0 ||
+    settings["type"] === 2 ||
+    rosters.some((r) => (r.keepers?.length ?? 0) > 0);
+}
+
 async function sleeperLeagues(username: string): Promise<League[]> {
   const user = await ask("/user/" + encodeURIComponent(username));
 
@@ -508,10 +559,12 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       // pick you would actually make rather than the middle of a round
       draftSlot: drafts?.[0]?.draft_order?.[user.user_id] ?? null,
       snake: !drafts?.[0] || drafts[0].type === "snake",
+      keepers: keeperLeague(lg, rosters as SleeperRoster[]),
       allRosters: (rosters as SleeperRoster[]).map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
         picks: held(r.roster_id),
         keys: sleeperMenOf(men, r.players),
+        ...(sleeperRecord(r) ? { record: sleeperRecord(r)! } : {}),
       })),
     });
   }
@@ -732,6 +785,27 @@ interface EspnTeam {
   location?: string;
   nickname?: string;
   roster?: { entries?: EspnEntry[] };
+  record?: {
+    overall?: {
+      wins?: number; losses?: number; ties?: number; pointsFor?: number;
+    };
+  };
+}
+
+/** what an ESPN team has won and scored so far */
+function espnRecord(team: EspnTeam): TeamRecord | undefined {
+  const said = team.record?.overall;
+
+  if (!said || said.wins === undefined) {
+    return undefined;
+  }
+
+  return {
+    wins: said.wins ?? 0,
+    losses: said.losses ?? 0,
+    ties: said.ties ?? 0,
+    pointsFor: said.pointsFor ?? 0,
+  };
 }
 
 /**
@@ -901,8 +975,12 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     myPicks: everyRound,
     draftSlot: order[String(team.id)] ?? null,
     snake: true,
+    keepers: (settings.draftSettings?.keeperCount ?? 0) > 0,
     allRosters: teams.map((t) => ({
-      owner: nameOf(t), picks: everyRound, keys: menOf(t),
+      owner: nameOf(t),
+      picks: everyRound,
+      keys: menOf(t),
+      ...(espnRecord(t) ? { record: espnRecord(t)! } : {}),
     })),
   }));
 }

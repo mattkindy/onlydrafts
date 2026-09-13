@@ -31,8 +31,9 @@ import { Roster } from "./views/Roster.tsx";
 import { DraftRating } from "./views/DraftRating.tsx";
 import { Keepers } from "./views/Keepers.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
-import { Start } from "./views/Start.tsx";
+import { MyMatchup } from "./views/Matchup.tsx";
 import { Matchups } from "./views/Matchups.tsx";
+import { Standings } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import {
   loadSlate, rosterKeys, slateUnder, weekRefs, withOutMenZeroed,
@@ -48,14 +49,12 @@ export type Order = "war" | "rank" | "adp";
  * eighth on another should not have to work it out.
  */
 const ORDER_MEANS: Record<Order, string> = {
-  war: "what he adds over the man you would otherwise end up with at his seat",
+  war: "what he adds over the player you would otherwise end up with in that slot",
   rank: "where we rank him whoever drafts him",
-  adp: "where the room is taking him, so who lasts until your next turn",
+  adp: "where he usually goes, so who lasts until your next pick",
 };
 
-type View =
-  | "leagues" | "roster" | "keepers" | "draft" | "rating" | "start"
-  | "matchups" | "waivers";
+type View = "leagues" | "matchup" | "league" | "players" | "team" | "draft";
 
 /**
  * What each view is called, the one line under it, and the longer
@@ -68,61 +67,62 @@ type View =
 const COPY: Record<View, [string, string, string]> = {
   leagues: [
     "My leagues",
-    "Say where your league lives, name yourself, then tap a league to open it.",
+    "Pick your platform and enter your username.",
     "",
   ],
-  roster: [
-    "My roster",
-    "Your team, with this season's projection for each man.",
-    "Before a keeper draft this is last season's roster until the league clears it. Tap a player for the season distribution and to mark a keeper.",
+  matchup: [
+    "My matchup",
+    "Your lineup for the week, and the game you are setting it for.",
+    "Every bench player is priced by what starting him would do to your win probability, and only the swaps that gain you something are listed. Win probability counts the part of each game still to play, so a lead with everybody done is the whole thing.",
   ],
-  keepers: [
-    "Keeper value",
-    "The most a player is worth keeping for.",
-    "Paying a round for him means giving up that pick, so he is worth it only while he beats whoever you could take with it. Type what your league charges and each card says whether to keep him.",
+  league: [
+    "League",
+    "The standings, every other game this week, and how the draft went.",
+    "Each game's win probability comes from the week's projections for whatever is still to play. The draft grades rate a team by what it took rather than by where it picked, so the team with the third pick is not rewarded for having it.",
+  ],
+  players: [
+    "Players",
+    "Free agents worth adding, and what dropping one of yours costs.",
+    "This week prices each move against the lineup you would set and the team you actually play. Rest of season runs a year of simulated weeks against an average opponent, which is why a bench player can cost nothing this week and something over the season.",
+  ],
+  team: [
+    "My team",
+    "Your roster, with this season's projection for each player.",
+    "Before a keeper draft this is last season's roster until the league clears it. Tap a player for his season outlook and to mark a keeper.",
   ],
   draft: [
-    "Draft help",
+    "Draft",
     "Live board for draft night, ranked by what your roster still needs.",
-    "It watches your league's draft and takes men off the board as they go. The order leads with what a man adds to the weeks you win, given the side you would finish with. Players stay on the board until they are actually kept or drafted.",
-  ],
-  rating: [
-    "How the draft went",
-    "Every team against what its own picks were worth. Then your own draft, pick by pick.",
-    "Rating a team by what it took rather than by where it picked means the team that drafted third is not rewarded for drafting third. Where the room was taking a man leads, and our own value over a replacement starter follows, since the board orders kickers and defences by nothing much.",
-  ],
-  start: [
-    "Who to start",
-    "One week, ranked, with your own men marked.",
-    "Our number and Sleeper's sit side by side. Where they disagree by three points or more the row is marked, and Sleeper has the better of those about 55% of the time.",
-  ],
-  matchups: [
-    "Matchups",
-    "Every game in your league this week, and how often each side wins from here.",
-    "The chance counts only the part of each game still to play, so a lead with everybody done is the whole thing and a lead with a back to come is not.",
-  ],
-  waivers: [
-    "Who to add",
-    "Everybody nobody in your league has, and what dropping one of yours would cost.",
-    "This week uses the week's own projections, the lineup you would set, and the team you actually play: the row says whether the man starts, who takes his seat if he goes, and how often you win this one game either way. Rest of season draws a year of weeks against a typical opponent, so a man who starts a third of the time is priced for the weeks he starts. That is why somebody on your bench can cost nothing this week and something over the season.",
+    "It watches your league's draft and takes players off the board as they go. The order leads with what a player adds to the weeks you win, given the roster you would end up with.",
   ],
 };
 
+/** what the keeper section is called, since it has its own heading */
+const KEEPERS_SAY =
+  "Keeping a player costs you that pick, so he is worth it only if he " +
+  "beats whoever you would draft there.";
+
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF", "ROOKIES"];
 
-/** the few a reader would check, spelled out on hover */
-function payDescription(pays: Record<string, number> | null | undefined): string {
+/** the short label for a league's scoring, as people say it */
+const SCORING_NAME: Record<"ppr" | "half" | "standard", string> = {
+  ppr: "ppr", half: "half ppr", standard: "standard",
+};
+
+/** the settings a reader would check, spelled out on hover */
+function scoringSettings(
+  pays: Record<string, number> | null | undefined,
+): string {
   const said = [
-    ["a catch", pays?.["rec"] ?? 0],
-    ["a receiving yard", pays?.["rec_yd"] ?? 0.1],
-    ["a rushing yard", pays?.["rush_yd"] ?? 0.1],
-    ["a touchdown", pays?.["rush_td"] ?? 6],
-    ["a passing yard", pays?.["pass_yd"] ?? 0.04],
-    ["a passing touchdown", pays?.["pass_td"] ?? 4],
+    ["reception", pays?.["rec"] ?? 0],
+    ["receiving yard", pays?.["rec_yd"] ?? 0.1],
+    ["rushing yard", pays?.["rush_yd"] ?? 0.1],
+    ["TD", pays?.["rush_td"] ?? 6],
+    ["passing yard", pays?.["pass_yd"] ?? 0.04],
+    ["passing TD", pays?.["pass_td"] ?? 4],
   ];
 
-  return "this league pays " +
-    said.map(([what, n]) => `${n} for ${what}`).join(", ");
+  return "scoring: " + said.map(([what, n]) => `${n} per ${what}`).join(", ");
 }
 
 const NOTHING: DraftNow = {
@@ -154,18 +154,21 @@ const NEXT_THEME: Record<Theme, Theme> = {
 /** where the team you picked in a league is remembered */
 const seatKey = (lg: League) => "seat." + lg.provider + "." + lg.leagueId;
 
+/** and where your answer lives when the provider will not say */
+const keeperKey = (lg: League) => "keepers." + lg.provider + "." + lg.leagueId;
+
 /**
- * The views where your own roster is part of the answer, so a man added
- * off waivers since the league was read would show as missing.
+ * The views where your own roster is part of the answer, so a player
+ * added off waivers since the league was read would show as missing.
  */
-const ROSTER_VIEWS: View[] = ["start", "matchups", "waivers", "draft"];
+const ROSTER_VIEWS: View[] = ["matchup", "league", "players", "team", "draft"];
 
 /**
  * The views that price this week, so they need the slate and the league's
- * own games for it. The waiver page needs both to say what a move does to
+ * own games for it. The players page needs both to say what a move does to
  * the game you are actually playing.
  */
-const WEEK_VIEWS: View[] = ["start", "matchups", "waivers"];
+const WEEK_VIEWS: View[] = ["matchup", "league", "players"];
 
 /** how old a read can be before one of those views asks the provider again */
 const STALE_AFTER = 2 * 60 * 1000;
@@ -177,7 +180,7 @@ const STALE_AFTER = 2 * 60 * 1000;
  */
 function rosterRead(league: League): string {
   if (!league.readAt) {
-    return "read before the page started noting when";
+    return "read, but the page did not note when";
   }
 
   const at = new Date(league.readAt)
@@ -388,12 +391,12 @@ function App() {
   const marked = active ? markedKeepers(active.leagueId) : {};
 
   /**
-   * The draft is read as soon as you open the tab, so the board knows
-   * who is gone without being asked. Watching only decides whether it
-   * keeps asking.
+   * The draft is read as soon as a league is opened, so the board knows
+   * who is gone and the tabs know whether the draft is still to come.
+   * Watching only decides whether it keeps asking.
    */
   useEffect(() => {
-    if (!active || view !== "draft") {
+    if (!active) {
       return;
     }
 
@@ -414,7 +417,7 @@ function App() {
 
     look();
 
-    if (!watching) {
+    if (!watching || view !== "draft") {
       return;
     }
 
@@ -539,8 +542,8 @@ function App() {
       keep(seatKey(lg), lg.userId);
       setEveryTeam(false);
       // once weeks are being played the draft is over, so a league opens
-      // on who to start rather than on pricing the whole board
-      setView(weeks.length ? "start" : "draft");
+      // on your matchup rather than on pricing the whole board
+      setView(weeks.length ? "matchup" : "draft");
       setOpening(null);
     }, 50);
   };
@@ -561,6 +564,39 @@ function App() {
     saveMarkedKeepers(active.leagueId, map);
     setMarks((n) => n + 1);
   };
+
+  /**
+   * Whether the draft is still to come. The provider says so outright
+   * while it runs; a league already playing weeks with nothing to say
+   * about a draft has had one.
+   */
+  const drafting = draft.status
+    ? draft.status !== "complete"
+    : weeks.length === 0;
+
+  /**
+   * Draft night comes first while there is one, and the tab goes away
+   * once it is over, since the grades live under the league from then
+   * on.
+   */
+  const tabs: View[] = drafting
+    ? ["draft", "matchup", "league", "players", "team"]
+    : ["matchup", "league", "players", "team"];
+
+  useEffect(() => {
+    if (view !== "leagues" && !tabs.includes(view)) {
+      setView(tabs[0]!);
+    }
+  }, [drafting, view]);
+
+  /**
+   * Whether this league keeps players. Sleeper and ESPN both say, but
+   * an older saved league does not, and then the reader is asked once
+   * and it is remembered.
+   */
+  const keeperLeague = active
+    ? active.keepers ?? stored(keeperKey(active), false)
+    : false;
 
   const [title, blurb, legend] = COPY[view];
   const asks = PROVIDERS[provider]!;
@@ -585,8 +621,8 @@ function App() {
             <span>you: {active.team}</span>
             {/* what the numbers are scored by, since standard and a
                 board with no league connected look the same on screen */}
-            <span class="pays" title={payDescription(active.pays)}>
-              {roomFor(active.pays)}
+            <span class="pays" title={scoringSettings(active.pays)}>
+              {SCORING_NAME[roomFor(active.pays)]}
             </span>
           </span>
         )}
@@ -601,10 +637,7 @@ function App() {
 
       {view !== "leagues" && (
         <div id="subnav">
-          {([
-            "roster", "keepers", "draft", "rating", "start", "matchups",
-            "waivers",
-          ] as View[]).map((v) => (
+          {tabs.map((v) => (
             <button
               key={v}
               class={v === view ? "on" : ""}
@@ -631,7 +664,8 @@ function App() {
           empty one still draws as a white strip across the page */}
       <div
         class="controls"
-        hidden={!["leagues", "keepers", "draft", "waivers"].includes(view)}
+        hidden={!["leagues", "draft"].includes(view) &&
+          !(view === "team" && keeperLeague)}
       >
         {view === "leagues" && (
           <>
@@ -659,7 +693,7 @@ function App() {
           </>
         )}
 
-        {(view === "keepers" || view === "draft") && (
+        {(view === "draft" || (view === "team" && keeperLeague)) && (
           <label>
             keepers per team{" "}
             <input
@@ -671,20 +705,6 @@ function App() {
               }}
             />
           </label>
-        )}
-
-        {view === "waivers" && (
-          <span id="posfilter">
-            {POSITIONS.map((where) => (
-              <button
-                key={where}
-                class={where === posFilter ? "on" : ""}
-                onClick={() => setPosFilter(where)}
-              >
-                {where.toLowerCase()}
-              </button>
-            ))}
-          </span>
         )}
 
         {view === "draft" && (
@@ -709,8 +729,8 @@ function App() {
                   keep("order", e.currentTarget.value);
                 }}
               >
-                <option value="war">the weeks he wins you</option>
-                <option value="rank">our value</option>
+                <option value="war">weeks won</option>
+                <option value="rank">our ranking</option>
                 <option value="adp">adp</option>
               </select>
             </label>
@@ -722,7 +742,7 @@ function App() {
                 type="checkbox" checked={needOnly}
                 onChange={(e) => setNeedOnly(e.currentTarget.checked)}
               />{" "}
-              only what I still need
+              only positions I still need
             </label>
             <label>
               find{" "}
@@ -742,7 +762,9 @@ function App() {
 
       {view === "draft" && (
         <div class="controls">
-          <label class="hint">extra names to mark as taken, one per line</label>
+          <label class="hint">
+            extra players to mark as drafted, one name per line
+          </label>
           <textarea
             value={manual}
             onInput={(e) => {
@@ -764,10 +786,8 @@ function App() {
           leagues.length === 0
             ? (
               <div class="empty">
-                <b>Start here.</b>
-                <div class="step"><span>1</span><span>Pick where your league lives, then type your {asks.wants} above.</span></div>
-                <div class="step"><span>2</span><span>Press find. Your leagues appear as cards.</span></div>
-                <div class="step"><span>3</span><span>Tap a league, then use draft help or keeper value.</span></div>
+                Sleeper or ESPN, then your {asks.wants} above. Your leagues
+                show up as cards, and you tap one to open it.
               </div>
             )
             : (
@@ -803,9 +823,9 @@ function App() {
                       <div class="sub">
                         <span
                           class="pays"
-                          title={payDescription(lg.pays)}
+                          title={scoringSettings(lg.pays)}
                         >
-                          {roomFor(lg.pays)}
+                          {SCORING_NAME[roomFor(lg.pays)]}
                         </span>
                       </div>
                     </div>
@@ -815,28 +835,51 @@ function App() {
             )
         )}
 
-        {board && active && view === "roster" && season && (
-          <Roster
-            byKey={byKey}
-            league={active}
-            season={season}
-            perTeam={perTeam}
-            marked={marked}
-            onMark={markKeeper}
-            onMore={setShowing}
-          />
-        )}
+        {board && active && view === "team" && season && (
+          <>
+            <Roster
+              byKey={byKey}
+              league={active}
+              season={season}
+              perTeam={perTeam}
+              marked={marked}
+              onMark={markKeeper}
+              onMore={setShowing}
+            />
 
-        {board && active && view === "keepers" && (
-          <Keepers
-            key={marks}
-            men={men}
-            byKey={byKey}
-            league={active}
-            perTeam={perTeam}
-            onMore={setShowing}
-            onChange={() => setMarks((n) => n + 1)}
-          />
+            {active.keepers === undefined || active.keepers === null
+              ? (
+                <p class="hint">
+                  <button
+                    onClick={() => {
+                      keep(keeperKey(active), !keeperLeague);
+                      setMarks((n) => n + 1);
+                    }}
+                  >
+                    {keeperLeague
+                      ? "not a keeper league"
+                      : "this is a keeper league"}
+                  </button>
+                </p>
+              )
+              : null}
+
+            {keeperLeague && (
+              <>
+                <h2>keepers</h2>
+                <p class="hint">{KEEPERS_SAY}</p>
+                <Keepers
+                  key={marks}
+                  men={men}
+                  byKey={byKey}
+                  league={active}
+                  perTeam={perTeam}
+                  onMore={setShowing}
+                  onChange={() => setMarks((n) => n + 1)}
+                />
+              </>
+            )}
+          </>
         )}
 
         {board && view === "draft" && (
@@ -854,17 +897,8 @@ function App() {
           />
         )}
 
-        {board && active && view === "rating" && (
-          <DraftRating
-            board={men}
-            byKey={byKey}
-            league={active}
-            made={draft.made ?? []}
-          />
-        )}
-
-        {view === "start" && (
-          <Start
+        {view === "matchup" && (
+          <MyMatchup
             weeks={weeks}
             picked={week}
             onWeek={setWeek}
@@ -876,34 +910,54 @@ function App() {
             listed={listed}
             mine={active?.team ?? null}
             slots={active?.slots ?? null}
+            pays={active?.pays ?? {}}
             status={gamesStatus || weekStatus}
           />
         )}
 
-        {active && view === "matchups" && week && (
-          <Matchups
-            games={games}
-            rows={slateRows}
-            men={men}
-            mine={active.team}
-            slots={active.slots ?? null}
-            pays={active.pays ?? {}}
-            season={week.season}
-            week={week.week}
-            status={gamesStatus || weekStatus}
-          />
+        {board && active && view === "league" && (
+          <>
+            <Standings league={active} />
+
+            <h2>around the league</h2>
+            {week
+              ? (
+                <Matchups
+                  games={games}
+                  rows={slateRows}
+                  men={men}
+                  mine={active.team}
+                  slots={active.slots ?? null}
+                  pays={active.pays ?? {}}
+                  season={week.season}
+                  week={week.week}
+                  status={gamesStatus || weekStatus}
+                  withoutMine
+                />
+              )
+              : <p class="hint">No week has been built yet.</p>}
+
+            <h2>draft grades</h2>
+            <DraftRating
+              board={men}
+              byKey={byKey}
+              league={active}
+              made={draft.made ?? []}
+            />
+          </>
         )}
 
-        {board && active && view === "waivers" && (
+        {board && active && view === "players" && (
           <Waivers
-            men={men}
-            league={active}
-            posFilter={posFilter}
-            rows={slateRows}
-            games={games}
-            schedule={board.schedule ?? null}
-            season={week?.season ?? null}
-            week={week?.week ?? null}
+              men={men}
+              league={active}
+              posFilter={posFilter}
+              onPosFilter={setPosFilter}
+              rows={slateRows}
+              games={games}
+              schedule={board.schedule ?? null}
+              season={week?.season ?? null}
+              week={week?.week ?? null}
             onMore={setShowing}
           />
         )}

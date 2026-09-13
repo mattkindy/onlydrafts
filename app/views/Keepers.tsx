@@ -43,10 +43,10 @@ function Figures(
   return (
     <div class="figures">
       {cell("he is worth", p.vor ?? 0, "",
-        "what his place on our board is worth over a season, above the " +
-        "last man this league starts at his position")}
+        "his VOR (value over replacement): what he is worth over a season " +
+        "above a replacement-level player at his position")}
       {cell(asRound(costPick, teams) + " buys", rate, "",
-        "what the best man still on the board is worth there, with every " +
+        "what the best player left on the board is worth there, with every " +
         "candidate weighed by how often he lasts that long" +
         (best ? ". Today that is usually " + best.name : ""))}
       {cell("keeping gains", roi, roi >= 0 ? "up" : "down",
@@ -99,7 +99,7 @@ function Instead(
               <th>adp</th>
               <th title="how often he is still on the board at this pick">there</th>
               <th title="fantasy points in a typical game">pts/g</th>
-              <th title="what a man in his place on our board is worth over a season, above the last one this league starts at his position. Positions only compare this way">vor</th>
+              <th title="VOR (value over replacement): what he is worth over a season above a replacement-level player at his position. Positions only compare this way">vor</th>
               <th title="his value less the keeper's, over a season">vs him</th>
             </tr>
           </thead>
@@ -195,11 +195,11 @@ export function Keepers(props: Props) {
   return (
     <>
       <div class="empty">
-        <b>What each man is worth keeping for.</b> Round shown is the
-        earliest pick he still beats. Type what your league charges and
-        the card says whether to keep him.
+        <b>What each player is worth keeping for.</b> The round shown is the
+        earliest pick he still beats. Enter what your league charges and the
+        card says keep or let go.
         <br />
-        Assuming every other team keeps its {perTeam} best it can pay
+        Every other team is assumed to keep the {perTeam} best it can pay
         for, which takes {draft.taken.size} players out of the draft.
         {league.myPicks.length > 0 && (
           <>
@@ -303,7 +303,9 @@ function CostRow({ p, cost, leagueId, onChange }: {
       />
       <b>rd</b>
       {yours ? <span class="chip up">yours</span> : null}
-      {goesAt ? <span class="chip">goes at {Math.round(goesAt)}</span> : null}
+      {goesAt
+        ? <span class="chip">usually goes at {Math.round(goesAt)}</span>
+        : null}
     </label>
   );
 }
