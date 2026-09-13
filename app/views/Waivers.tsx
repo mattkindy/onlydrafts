@@ -30,6 +30,7 @@ import {
 } from "../lib/waiversWeek.ts";
 import { nameOf } from "./Advice.tsx";
 import { matchesFilter } from "./Draft.tsx";
+import { Reading } from "./Reading.tsx";
 import { useScoreboard } from "./scoreboard.ts";
 
 /**
@@ -84,9 +85,21 @@ function points(n: number): string {
 /** a seat by the name a reader would use for it */
 const seatName = (slot: string) => slot === "FLEX" ? "flex" : slot;
 
-/** how often you win a week either side of the move, both said out loud */
-function Swing({ before, after }: { before: number; after: number }) {
-  return <span class="swing">{pct(before)} → {pct(after)}</span>;
+/**
+ * How often you win a week either side of the move, and the gap between
+ * them. The gap on its own does not say whether you are winning to start
+ * with, and the pair on its own leaves the reader subtracting, so they
+ * are one reading rather than two columns.
+ */
+function Swing(
+  { before, after, by }: { before: number; after: number; by: number },
+) {
+  return (
+    <span class="swing">
+      {pct(before)} → {pct(after)}{" "}
+      <b class={by > 0 ? "up" : ""}>{signed(by)}</b>
+    </span>
+  );
 }
 
 /** the four figures a row shows, whichever question is being asked */
@@ -167,13 +180,17 @@ function Starting(
 
 /** the figures, or a word saying why there are none to show */
 function Figured(
-  { figures, absent }: { figures: Figures | null; absent: string },
+  { figures, absent, seatLabel }: {
+    figures: Figures | null;
+    absent: string;
+    /** what the seat column is called, since the two tables differ */
+    seatLabel: string;
+  },
 ) {
   if (!figures) {
     return (
       <>
-        <td>{absent}</td>
-        <td></td>
+        <td data-label="pts">{absent}</td>
         <td></td>
         <td></td>
       </>
@@ -182,10 +199,13 @@ function Figured(
 
   return (
     <>
-      <td>{points(figures.points)}</td>
-      <td>{figures.seat}</td>
-      <td><Swing before={figures.before} after={figures.after} /></td>
-      <td><b>{signed(figures.delta)}</b></td>
+      <td data-label="pts">{points(figures.points)}</td>
+      <td data-label={seatLabel}>{figures.seat}</td>
+      <td data-label="week won">
+        <Swing
+          before={figures.before} after={figures.after} by={figures.delta}
+        />
+      </td>
     </>
   );
 }
@@ -204,58 +224,68 @@ function AddRow(
 ) {
   return (
     <tr onClick={onMore}>
-      <td>{row.p.name}</td>
-      <td>{row.p.position}</td>
-      <td>{row.p.team ?? ""}</td>
-      <td>{(row.p.ppg ?? 0).toFixed(1)}</td>
-      <td><Starting starts={row.starts} at={at} /></td>
-      <Figured figures={figures} absent={absent} />
-      <td>{paid ? paid.drop : ""}</td>
-      <td>{paid ? <b>{signed(paid.net)}</b> : ""}</td>
+      <td data-label="player">{row.p.name}</td>
+      <td data-label="pos">{row.p.position}</td>
+      <td data-label="team">{row.p.team ?? ""}</td>
+      <td data-label="ppg">{(row.p.ppg ?? 0).toFixed(1)}</td>
+      <td data-label="starts"><Starting starts={row.starts} at={at} /></td>
+      <Figured figures={figures} absent={absent} seatLabel="instead of" />
+      <td data-label="drop">{paid ? paid.drop : ""}</td>
+      <td data-label="net">{paid ? <b>{signed(paid.net)}</b> : ""}</td>
     </tr>
   );
 }
 
 function DropRow(
-  { row, at, figures, absent, onMore }: {
+  { row, at, figures, absent, seatLabel, onMore }: {
     row: Drop;
     at: { slot: string | null } | null;
     figures: Figures | null;
     absent: string;
+    seatLabel: string;
     onMore: () => void;
   },
 ) {
   return (
     <tr onClick={onMore}>
-      <td>{row.p.name}</td>
-      <td>{row.p.position}</td>
-      <td>{(row.p.ppg ?? 0).toFixed(1)}</td>
-      <td><Starting starts={row.starts} at={at} /></td>
-      <Figured figures={figures} absent={absent} />
+      <td data-label="player">{row.p.name}</td>
+      <td data-label="pos">{row.p.position}</td>
+      <td data-label="ppg">{(row.p.ppg ?? 0).toFixed(1)}</td>
+      <td data-label="starts"><Starting starts={row.starts} at={at} /></td>
+      <Figured figures={figures} absent={absent} seatLabel={seatLabel} />
     </tr>
   );
 }
 
-/** why this week has nothing to say yet, in the words a reader needs */
+/**
+ * Why this week has nothing to say yet, in the words a reader needs,
+ * and whether it is something still arriving or something that will not.
+ */
 function missingWeek(
   week: number | null, rows: Map<string, SlateRow>,
   states: unknown, ours: unknown,
-): string | null {
+): { says: string; reading: boolean } | null {
   if (week === null) {
-    return "No week has been built yet, so only the season figures are here.";
+    return {
+      says: "No week has been built yet, so only the season figures are here.",
+      reading: false,
+    };
   }
 
   if (!rows.size) {
-    return "This week's projections have not loaded yet.";
+    return { says: "reading this week's projections...", reading: true };
   }
 
   if (!states) {
-    return "Reading the scoreboard...";
+    return { says: "reading the scoreboard...", reading: true };
   }
 
   if (!ours) {
-    return "You have no game in your league this week, so there is nobody " +
-      "to set a lineup against.";
+    return {
+      says: "You have no game in your league this week, so there is nobody " +
+        "to set a lineup against.",
+      reading: false,
+    };
   }
 
   return null;
@@ -350,6 +380,7 @@ export function Waivers(props: Props) {
   const hidden = listed.length - worth.length - rest.length;
   const best = worth[0] ?? null;
   const missing = missingWeek(props.week, rows, states, ours);
+  const dropSeat = span === "week" ? "takes his seat" : "when he starts";
 
   /**
    * A row with no week figures says which of the two reasons it is: the
@@ -405,7 +436,7 @@ export function Waivers(props: Props) {
   return (
     <>
       <div class="controls">
-        <span id="posfilter">
+        <span class="pills">
           <button
             class={span === "week" ? "on" : ""}
             onClick={() => setSpan("week")}
@@ -429,11 +460,13 @@ export function Waivers(props: Props) {
         </span>
       </div>
 
-      {span === "week" && missing && <p class="hint">{missing}</p>}
+      {span === "week" && missing && (missing.reading
+        ? <Reading>{missing.says}</Reading>
+        : <p class="hint">{missing.says}</p>)}
       {span === "week" && trouble && <p class="hint">{trouble}</p>}
 
       <h2>who to add</h2>
-      <table class="line">
+      <table class="line pairs">
         <thead>
           <tr>
             <th>player</th>
@@ -444,7 +477,6 @@ export function Waivers(props: Props) {
             <th>{span === "week" ? "pts" : "pts a week"}</th>
             <th>instead of</th>
             <th>week won</th>
-            <th>win chance</th>
             <th>drop</th>
             <th>net</th>
           </tr>
@@ -477,7 +509,7 @@ export function Waivers(props: Props) {
       )}
 
       <h2>what dropping each of yours costs</h2>
-      <table class="line">
+      <table class="line pairs">
         <thead>
           <tr>
             <th>player</th>
@@ -485,9 +517,8 @@ export function Waivers(props: Props) {
             <th>ppg</th>
             <th>starts</th>
             <th>{span === "week" ? "pts" : "pts a week"}</th>
-            <th>{span === "week" ? "takes his seat" : "when he starts"}</th>
+            <th>{dropSeat}</th>
             <th>week won</th>
-            <th>win chance</th>
           </tr>
         </thead>
         <tbody>
@@ -495,6 +526,7 @@ export function Waivers(props: Props) {
             <DropRow
               key={row.p.key}
               row={row}
+              seatLabel={dropSeat}
               {...dropSeen(row)}
               onMore={() => props.onMore(row.p)}
             />
