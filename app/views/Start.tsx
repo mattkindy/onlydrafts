@@ -160,9 +160,7 @@ function Seat(
         {choice.locked && <span class="badge even">locked</span>}
       </h3>
 
-      {choice.options.length === 0
-        ? <p class="hint">Nobody on the bench can take this seat.</p>
-        : (
+      {choice.options.length > 0 && (
           <ul class="options">
             {choice.options.map((option) => {
               const other = at(option.key);
