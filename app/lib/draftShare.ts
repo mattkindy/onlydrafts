@@ -14,6 +14,7 @@
 
 import { DRAWS } from "./spread.ts";
 import type { Player } from "./scoring.ts";
+import type { Roster } from "./providers.ts";
 import { waiverBar } from "./replacementPool.ts";
 import {
   baselineAcross, baselineFor, drawnPick, FILLS, projectedRoster, takeNowFor,
@@ -43,13 +44,19 @@ export interface Room {
   draws: number;
 }
 
+/**
+ * Say who the league already has wherever you know, or the wire reads far
+ * too good. With nothing to go on the bar assumes one man a team, which
+ * in season puts the best back nobody has around the thirtieth best in
+ * the game when the truth is nearer the hundred and eightieth.
+ */
 export function roomFor(
   board: Player[], slots: string[] | null | undefined, teams: number,
-  draws = DRAWS,
+  draws = DRAWS, rosters: Roster[] | null = null,
 ): Room {
   return {
     opponent: typicalWeek(board, slots, teams, draws),
-    wire: waiverBar(board, slots, teams, null),
+    wire: waiverBar(board, slots, teams, rosters),
     draws,
   };
 }
