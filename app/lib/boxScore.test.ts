@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { statLinesFrom, statLineSays, type StatLine } from "./boxScore.ts";
+import {
+  defenceLinesFrom, defenceLineSays, statLinesFrom, statLineSays,
+  type StatLine,
+} from "./boxScore.ts";
 
 const said = JSON.parse(readFileSync(
   join(import.meta.dirname, "..", "fixtures", "espnSummaryBoxScore.json"),
@@ -148,5 +151,38 @@ describe("statLineSays", () => {
         }
       }
     }
+  });
+});
+
+describe("defenceLinesFrom", () => {
+  const defences = defenceLinesFrom(said);
+
+  it("reads each defence off the team totals and the other side's score", () => {
+    expect(defences.get("bal")).toEqual({
+      allowed: 23, sacks: 2, picks: 1, recovered: 1, defTd: 0,
+    });
+    expect(defences.get("ind")).toEqual({
+      allowed: 41, sacks: 2, picks: 0, recovered: 1, defTd: 0,
+    });
+  });
+
+  it("does not count a runner falling on his own fumble as a takeaway", () => {
+    // Lamar Jackson's row says one fumble and no recovery, and Marlon
+    // Humphrey's says no fumble and one recovery: only the second counts
+    expect(defences.get("bal")?.recovered).toBe(1);
+  });
+
+  it("says what it allowed and then what it took", () => {
+    expect(defenceLineSays(defences.get("bal")))
+      .toEqual(["23 allowed", "2 sacks, 1 INT, 1 FR"]);
+    expect(defenceLineSays(defences.get("ind")))
+      .toEqual(["41 allowed", "2 sacks, 1 FR"]);
+    expect(defenceLineSays(undefined)).toEqual([]);
+  });
+
+  it("says one sack in the singular", () => {
+    expect(defenceLineSays({
+      allowed: 0, sacks: 1, picks: 0, recovered: 0, defTd: 1,
+    })).toEqual(["0 allowed", "1 sack, 1 TD"]);
   });
 });

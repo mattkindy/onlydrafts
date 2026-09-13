@@ -15,7 +15,7 @@
 
 import { useMemo } from "preact/hooks";
 
-import { statLineSays } from "../lib/boxScore.ts";
+import { defenceLineSays, statLineSays } from "../lib/boxScore.ts";
 import {
   lineFor, standingFor, starterState,
   type GameState, type InGameStatus, type Lines,
@@ -106,7 +106,9 @@ function StarterCell(
       <PlayerName
         name={nameOf(starter.key, rows, lines, starter.name)}
         team={line?.team}
-        stats={statLineSays(state?.stats?.get(starter.key), line?.position)}
+        stats={line?.position === "DEF"
+          ? defenceLineSays(state?.defences?.get(starter.key))
+          : statLineSays(state?.stats?.get(starter.key), line?.position)}
         onOpen={onMore ? () => onMore(starter.key) : undefined}
       />
       <span class="num">

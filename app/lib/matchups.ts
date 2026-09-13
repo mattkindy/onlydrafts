@@ -18,7 +18,8 @@ import {
   posteriorFor, sharedAt, type From, type Mix, type Pace,
 } from "./copula.ts";
 import {
-  statLinesFrom, type BoxScoreSaid, type StatLine,
+  defenceLinesFrom, statLinesFrom,
+  type BoxScoreSaid, type Competitor, type DefenceLine, type StatLine,
 } from "./boxScore.ts";
 import {
   chanceWith, explainSwap, worthExplaining,
@@ -68,6 +69,8 @@ export interface GameState {
   hurt?: Map<string, InGameStatus>;
   /** what each player has done so far, by the same key, once he has done any */
   stats?: Map<string, StatLine>;
+  /** and each defence's, under its team key */
+  defences?: Map<string, DefenceLine>;
 }
 
 /**
@@ -204,7 +207,7 @@ interface SummaryInjury {
 }
 
 interface Summary extends BoxScoreSaid {
-  header?: { competitions?: { date?: string }[] };
+  header?: { competitions?: { date?: string; competitors?: Competitor[] }[] };
   injuries?: { injuries?: SummaryInjury[] }[];
 }
 
@@ -259,6 +262,7 @@ function stateOf(status: ScoreboardStatus | undefined): GameState {
 export interface GameReading {
   hurt: Map<string, InGameStatus>;
   stats: Map<string, StatLine>;
+  defences: Map<string, DefenceLine>;
 }
 
 /** each game's reading, by ESPN's id for the game */
@@ -278,6 +282,7 @@ export function statesFrom(said: {
       ...bare,
       ...(its?.hurt.size ? { hurt: its.hurt } : {}),
       ...(its?.stats.size ? { stats: its.stats } : {}),
+      ...(its?.defences.size ? { defences: its.defences } : {}),
     };
 
     for (const side of game?.competitors ?? []) {
@@ -401,10 +406,13 @@ export function situationsFrom(said: {
 const nothingRead = (): GameReading => ({
   hurt: new Map<string, InGameStatus>(),
   stats: new Map<string, StatLine>(),
+  defences: new Map<string, DefenceLine>(),
 });
 
 const readingFrom = (said: Summary): GameReading => ({
-  hurt: hurtFrom(said), stats: statLinesFrom(said),
+  hurt: hurtFrom(said),
+  stats: statLinesFrom(said),
+  defences: defenceLinesFrom(said),
 });
 
 /**

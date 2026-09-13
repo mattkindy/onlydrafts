@@ -3,7 +3,23 @@
     "id": "401872659",
     "competitions": [
       {
-        "date": "2026-09-13T17:00Z"
+        "date": "2026-09-13T17:00Z",
+        "competitors": [
+          {
+            "homeAway": "home",
+            "score": "23",
+            "team": {
+              "abbreviation": "IND"
+            }
+          },
+          {
+            "homeAway": "away",
+            "score": "41",
+            "team": {
+              "abbreviation": "BAL"
+            }
+          }
+        ]
       }
     ]
   },
@@ -133,7 +149,6 @@
             "athletes": [
               {
                 "athlete": {
-                  "id": "3916387",
                   "displayName": "Lamar Jackson"
                 },
                 "stats": [
@@ -141,7 +156,22 @@
                   "1",
                   "0"
                 ]
+              },
+              {
+                "athlete": {
+                  "displayName": "Marlon Humphrey"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "1"
+                ]
               }
+            ],
+            "totals": [
+              "1",
+              "1",
+              "1"
             ]
           },
           {
@@ -165,6 +195,82 @@
                   "57",
                   "5/5",
                   "8"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "defensive",
+            "keys": [
+              "totalTackles",
+              "soloTackles",
+              "sacks",
+              "tacklesForLoss",
+              "passesDefended",
+              "QBHits",
+              "defensiveTouchdowns"
+            ],
+            "totals": [
+              "58",
+              "33",
+              "2",
+              "6",
+              "4",
+              "9",
+              "0"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "displayName": "Malaki Starks"
+                },
+                "stats": [
+                  "7",
+                  "2",
+                  "1",
+                  "1",
+                  "0",
+                  "2",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "displayName": "Tavius Robinson"
+                },
+                "stats": [
+                  "3",
+                  "1",
+                  "1",
+                  "1",
+                  "0",
+                  "4",
+                  "0"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "interceptions",
+            "keys": [
+              "interceptions",
+              "interceptionYards",
+              "interceptionTouchdowns"
+            ],
+            "totals": [
+              "1",
+              "1",
+              "0"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "displayName": "Roquan Smith"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0"
                 ]
               }
             ]
@@ -268,7 +374,6 @@
             "athletes": [
               {
                 "athlete": {
-                  "id": "4242335",
                   "displayName": "Jonathan Taylor"
                 },
                 "stats": [
@@ -276,7 +381,22 @@
                   "1",
                   "0"
                 ]
+              },
+              {
+                "athlete": {
+                  "displayName": "DeForest Buckner"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "1"
+                ]
               }
+            ],
+            "totals": [
+              "1",
+              "1",
+              "1"
             ]
           },
           {
@@ -303,6 +423,95 @@
                 ]
               }
             ]
+          },
+          {
+            "name": "defensive",
+            "keys": [
+              "totalTackles",
+              "soloTackles",
+              "sacks",
+              "tacklesForLoss",
+              "passesDefended",
+              "QBHits",
+              "defensiveTouchdowns"
+            ],
+            "totals": [
+              "71",
+              "43",
+              "2",
+              "0",
+              "0",
+              "4",
+              "0"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "displayName": "Laiatu Latu"
+                },
+                "stats": [
+                  "6",
+                  "4",
+                  "0.5",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "displayName": "Arden Key"
+                },
+                "stats": [
+                  "5",
+                  "3",
+                  "0.5",
+                  "0",
+                  "0",
+                  "1",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "displayName": "DeForest Buckner"
+                },
+                "stats": [
+                  "2",
+                  "0",
+                  "0.5",
+                  "0",
+                  "0",
+                  "1",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "displayName": "Grover Stewart"
+                },
+                "stats": [
+                  "1",
+                  "0",
+                  "0.5",
+                  "0",
+                  "0",
+                  "1",
+                  "0"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "interceptions",
+            "keys": [
+              "interceptions",
+              "interceptionYards",
+              "interceptionTouchdowns"
+            ],
+            "totals": [],
+            "athletes": []
           }
         ]
       }
