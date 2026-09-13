@@ -171,8 +171,7 @@ const caughtSays = (line: StatLine) =>
 
 /**
  * Targets belong to the player a card is watching for them, so they show
- * for a receiver and stay off a running back's second line, where they
- * would push a phone's row on to a third.
+ * for a receiver and stay off a running back's receiving line.
  */
 const receivingSays = (line: StatLine) =>
   `${line.receptions} rec` +
@@ -190,34 +189,50 @@ const caughtAtAll = (line: StatLine) =>
 
 const kickedAtAll = (line: StatLine) => line.fga > 0 || line.xpa > 0;
 
-/** the pieces of a line, middle dots between them */
-const joined = (pieces: (string | null)[]) =>
-  pieces.filter((piece) => piece !== null).join(" · ");
+const fumbled = (line: StatLine) =>
+  line.fumblesLost > 0 ? `, ${line.fumblesLost} FUM` : "";
 
-// after a dot the carries have already been set off from the passing, so
-// the comma inside them would be one break too many
-const asSecondThought = (said: string) => said.replace(" car,", " car");
+/**
+ * Passing, rushing and receiving each on a line of their own. A lost
+ * fumble goes on the rushing line, since that is where most of them
+ * happen, and on the last line there is when he never ran.
+ */
+function withFumbles(lines: (string | null)[], line: StatLine): string[] {
+  const said = lines.filter((piece): piece is string => piece !== null);
+  const lost = fumbled(line);
 
-const quarterbackSays = (line: StatLine) => joined([
+  if (!lost || !said.length) {
+    return said;
+  }
+
+  const ran = said.findIndex((piece) => piece.includes(" car,"));
+  const at = ran >= 0 ? ran : said.length - 1;
+
+  said[at] += lost;
+
+  return said;
+}
+
+const quarterbackSays = (line: StatLine) => withFumbles([
   threwAtAll(line) ? passingSays(line) : null,
-  ranAtAll(line) ? asSecondThought(rushingSays(line)) : null,
-]);
+  ranAtAll(line) ? rushingSays(line) : null,
+], line);
 
-const runnerSays = (line: StatLine) => joined([
+const runnerSays = (line: StatLine) => withFumbles([
   carriedAtAll(line) ? rushingSays(line) : null,
   caughtAtAll(line) ? caughtSays(line) : null,
-]);
+], line);
 
-const catcherSays = (line: StatLine) => joined([
+const catcherSays = (line: StatLine) => withFumbles([
   caughtAtAll(line) ? receivingSays(line) : null,
   ranAtAll(line) ? rushingSays(line) : null,
-]);
+], line);
 
 const kickerSays = (line: StatLine) => kickedAtAll(line)
-  ? `${line.fgm}/${line.fga} FG, ${line.xpm}/${line.xpa} XP`
-  : "";
+  ? [`${line.fgm}/${line.fga} FG, ${line.xpm}/${line.xpa} XP`]
+  : [];
 
-const SAYS: Record<string, (line: StatLine) => string> = {
+const SAYS: Record<string, (line: StatLine) => string[]> = {
   QB: quarterbackSays,
   RB: runnerSays,
   WR: catcherSays,
@@ -226,25 +241,20 @@ const SAYS: Record<string, (line: StatLine) => string> = {
 };
 
 /**
- * His line as a box score would read it out, in the position's own terms.
+ * His line as a box score would read it out, in the position's own terms,
+ * one line each for passing, rushing and receiving.
  *
  * A position nobody keeps a line for, a defence above all, says nothing,
  * and so does a player who has not touched the ball yet.
  */
 export function statLineSays(
   line: StatLine | undefined, position: string | undefined,
-): string {
+): string[] {
   const says = SAYS[(position ?? "").toUpperCase()];
 
   if (!line || !says) {
-    return "";
+    return [];
   }
 
-  const said = says(line);
-
-  if (!said) {
-    return "";
-  }
-
-  return joined([said, line.fumblesLost > 0 ? `${line.fumblesLost} FUM` : null]);
+  return says(line);
 }

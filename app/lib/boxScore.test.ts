@@ -73,19 +73,19 @@ describe("statLinesFrom", () => {
 });
 
 describe("statLineSays", () => {
-  it("gives a quarterback his passing and then his carries", () => {
+  it("gives a quarterback his passing and then his rushing, fumble included", () => {
     expect(statLineSays(lineFor("lamarjackson"), "QB"))
-      .toBe("15/23, 301 yds, 1 TD · 4 car 43 yds, 1 TD · 1 FUM");
+      .toEqual(["15/23, 301 yds, 1 TD", "4 car, 43 yds, 1 TD, 1 FUM"]);
   });
 
   it("counts a quarterback's interception and leaves out his carries", () => {
     expect(statLineSays(lineFor("danieljones"), "QB"))
-      .toBe("14/24, 110 yds, 1 INT");
+      .toEqual(["14/24, 110 yds, 1 INT"]);
   });
 
   it("gives a running back his carries", () => {
     expect(statLineSays(lineFor("derrickhenry"), "RB"))
-      .toBe("18 car, 117 yds, 3 TD");
+      .toEqual(["18 car, 117 yds, 3 TD"]);
   });
 
   it("adds what a running back caught after what he ran for, targets aside", () => {
@@ -95,47 +95,54 @@ describe("statLineSays", () => {
         receptions: 5, targets: 7, recYds: 20,
       }),
       "RB",
-    )).toBe("18 car, 117 yds, 3 TD · 5 rec, 20 yds");
+    )).toEqual(["18 car, 117 yds, 3 TD", "5 rec, 20 yds"]);
   });
 
   it("gives a receiver his targets in brackets", () => {
     expect(statLineSays(lineFor("zayflowers"), "WR"))
-      .toBe("5 rec (6 tgt), 150 yds, 1 TD");
+      .toEqual(["5 rec (6 tgt), 150 yds, 1 TD"]);
   });
 
   it("adds a receiver's carries after what he caught", () => {
     expect(statLineSays(
       line({ receptions: 5, targets: 6, recYds: 150, carries: 1, rushYds: 12 }),
       "WR",
-    )).toBe("5 rec (6 tgt), 150 yds · 1 car, 12 yds");
+    )).toEqual(["5 rec (6 tgt), 150 yds", "1 car, 12 yds"]);
+  });
+
+  it("puts a receiver's lost fumble on his receiving line when he never ran", () => {
+    expect(statLineSays(
+      line({ receptions: 4, targets: 5, recYds: 40, fumblesLost: 1 }),
+      "WR",
+    )).toEqual(["4 rec (5 tgt), 40 yds, 1 FUM"]);
   });
 
   it("reads a tight end the way it reads a receiver", () => {
     expect(statLineSays(lineFor("markandrews"), "TE"))
-      .toBe("3 rec (5 tgt), 36 yds");
+      .toEqual(["3 rec (5 tgt), 36 yds"]);
   });
 
   it("gives a kicker his field goals and his extra points", () => {
-    expect(statLineSays(lineFor("tylerloop"), "K")).toBe("1/1 FG, 5/5 XP");
+    expect(statLineSays(lineFor("tylerloop"), "K")).toEqual(["1/1 FG, 5/5 XP"]);
   });
 
   it("shows a kicker the attempts he missed", () => {
     expect(statLineSays(lineFor("spencershrader"), "K"))
-      .toBe("1/1 FG, 1/2 XP");
+      .toEqual(["1/1 FG, 1/2 XP"]);
   });
 
   it("says nothing for a defence", () => {
-    expect(statLineSays(line({ fumblesLost: 1 }), "DEF")).toBe("");
+    expect(statLineSays(line({ fumblesLost: 1 }), "DEF")).toEqual([]);
   });
 
   it("says nothing for a player nobody has a line for", () => {
-    expect(statLineSays(undefined, "QB")).toBe("");
+    expect(statLineSays(undefined, "QB")).toEqual([]);
   });
 
   it("keeps a line inside the width a phone has for it", () => {
     for (const [key, his] of lines) {
       for (const position of ["QB", "RB", "WR", "TE", "K"]) {
-        for (const piece of statLineSays(his, position).split(" · ")) {
+        for (const piece of statLineSays(his, position)) {
           expect(piece.length, `${key} as a ${position}`)
             .toBeLessThanOrEqual(28);
         }

@@ -75,7 +75,7 @@
     flex-wrap: nowrap; min-width: 0; margin-bottom: var(--s2);
     font-size: var(--t3); color: var(--muted); }
   #crumb b { color: var(--ink); font-size: var(--t4); min-width: 0;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    overflow: hidden; text-overflow: ellipsis; }
   #crumb button.back { font: inherit; font-size: var(--t5); line-height: 1;
     background: none; border: none; color: var(--muted); cursor: pointer;
     flex: 0 0 auto; width: var(--tap); height: var(--tap);
@@ -202,7 +202,7 @@
   .badge { font-size: .6rem; font-weight: 800; letter-spacing: .08em;
     text-transform: uppercase; color: #0C1117; background: var(--go);
     border-radius: 999px; padding: .1rem .45rem; margin-left: var(--s1);
-    vertical-align: .1em; white-space: nowrap; }
+    vertical-align: .1em; }
   .card .top { display: flex; justify-content: space-between; align-items: baseline; }
   .card .nm { font-weight: 700; font-size: var(--t3); display: flex;
     align-items: center; gap: .1rem; min-width: 0; flex-wrap: wrap; }
@@ -446,7 +446,7 @@
     position: sticky; top: 0; background: var(--bg); }
   table.ranks td { padding: var(--s1) var(--s2);
     border-bottom: 1px solid var(--edge); }
-  table.ranks td.n { text-align: right; white-space: nowrap; }
+  table.ranks td.n { text-align: right; }
   table.ranks th.n { text-align: right; }
   table.ranks td.mark { text-align: center; font-size: var(--t4); width: 1.6rem; }
   table.ranks th:last-child { width: 1.6rem; }
@@ -492,7 +492,7 @@
   .wk .wkpts { display: flex; flex-direction: column; align-items: flex-end;
     line-height: 1.15; font-variant-numeric: tabular-nums; }
   .wk .wkpts em { font-style: normal; font-size: var(--t1); color: var(--faint);
-    white-space: nowrap; }
+    }
   .wk .scale { grid-column: 3; display: flex; justify-content: space-between;
     color: var(--faint); font-size: var(--t1); padding-top: .2rem; }
   .fact { font-size: var(--t2); margin: .15rem 0; }
@@ -545,7 +545,7 @@
     padding: .05rem var(--s1); font-size: var(--t1); }
   table.line thead th { text-transform: lowercase; }
   table.line tbody th { text-align: left; color: var(--muted);
-    white-space: nowrap; }
+    }
   table.line td { text-align: right; padding: .05rem var(--s1);
     color: var(--ink); }
   /* the move as a sentence, which only a phone shows: a wide screen has
@@ -554,7 +554,7 @@
   /* how often you win either side of a move. The two figures and the
      arrow between them are one reading, so they never break apart */
   .swing { white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .starting { display: block; white-space: nowrap; }
+  .starting { display: block; }
   .starting i { display: block; font-style: normal; color: var(--faint);
     font-size: var(--t1); }
 
@@ -591,7 +591,7 @@
      of numbers a person reads down rather than across */
   table.rating { width: 100%; border-collapse: collapse; font-size: var(--t2);
     font-variant-numeric: tabular-nums; margin: var(--s1) 0 var(--s4);
-    display: block; overflow-x: auto; white-space: nowrap; }
+    display: block; overflow-x: auto; }
   table.rating th { text-align: left; color: var(--muted); font-weight: 500;
     font-size: var(--t1); text-transform: uppercase; letter-spacing: .04em;
     padding: var(--s1) var(--s2); border-bottom: 1px solid var(--edge); }
@@ -666,11 +666,12 @@
   /* a name breaks between its words or not at all: "Jerem-iyah" reads
      as a different player */
   .playername b { font-weight: 600; overflow-wrap: break-word; hyphens: none; }
-  .playername i { font-style: normal; font-size: var(--t1); color: var(--faint); }
-  /* his box score goes under the team, and wraps rather than pushing the
+  .playername i { font-style: normal; font-weight: 400; font-size: var(--t1);
+    color: var(--faint); }
+  /* his box score goes under the name, a line a piece, and wraps rather than pushing the
      figures out of their column */
-  .playername .line { font-size: var(--t1); color: var(--faint);
-    font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
+  .playername .line { display: block; font-size: var(--t1);
+    color: var(--faint); font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
   /* the figures hug the chip column at one width, so every row's
      score and projection line up down the card */
   .player .num { display: flex; flex-direction: column; flex: 0 0 2.6rem;
@@ -722,7 +723,7 @@
   .why { flex-basis: 100%; margin: .15rem 0 .1rem; font-size: var(--t1);
     color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2);
     align-items: baseline; }
-  .why .piece { color: var(--faint); white-space: nowrap; }
+  .why .piece { color: var(--faint); }
   .why .piece b { color: var(--muted); font-weight: 700; }
 
   /*
@@ -761,7 +762,7 @@
       background: color-mix(in srgb, var(--mark) 10%, var(--bg)); }
     table.ranks tr.picked td:first-child {
       background: color-mix(in srgb, var(--go) 16%, var(--bg)); }
-    table.ranks .who { white-space: nowrap; }
+    table.ranks .who { }
 
     table.pairs { display: block; font-size: var(--t3); }
     table.pairs thead { display: none; }
