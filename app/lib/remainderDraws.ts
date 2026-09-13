@@ -33,7 +33,9 @@ const scalesOf = (hurt: Record<string, InGameStatus>) =>
   Object.fromEntries(Object.entries(hurt)
     .map(([key, status]) => [key, HURT_SHARE[status]]));
 
-export const stateOf = (situation: LiveSituation): RemainderState => ({
+export const stateOf = (
+  situation: LiveSituation, week?: number,
+): RemainderState => ({
   home: situation.home,
   away: situation.away,
   points: situation.points,
@@ -45,12 +47,13 @@ export const stateOf = (situation: LiveSituation): RemainderState => ({
   timeouts: situation.timeouts,
   warningLeft: situation.warningLeft,
   secondHalf: situation.secondHalf,
+  ...(week === undefined ? {} : { week }),
   ...(situation.hurt ? { shareScale: scalesOf(situation.hurt) } : {}),
 });
 
 /** every game past half time, once each, in the order they are keyed */
 export function gamesToPlay(
-  situations: Map<string, LiveSituation>,
+  situations: Map<string, LiveSituation>, week?: number,
 ): { state: RemainderState; seed: number }[] {
   const seen = new Set<string>();
   const out: { state: RemainderState; seed: number }[] = [];
@@ -63,7 +66,7 @@ export function gamesToPlay(
     }
 
     seen.add(name);
-    out.push({ state: stateOf(situation), seed: seedOf(situation) });
+    out.push({ state: stateOf(situation, week), seed: seedOf(situation) });
   }
 
   return out;
@@ -72,12 +75,12 @@ export function gamesToPlay(
 /** what each player in those games still has to come, draw by draw */
 export function remainderDraws(
   tables: SimTables, situations: Map<string, LiveSituation>, pays: Pays,
-  draws = REMAINDER_DRAWS,
+  draws = REMAINDER_DRAWS, week?: number,
 ): Map<string, number[]> {
   const league = leagueOf(tables);
   const out = new Map<string, number[]>();
 
-  for (const game of gamesToPlay(situations)) {
+  for (const game of gamesToPlay(situations, week)) {
     const played = remainderFor(
       tables, league, game.state, draws, pays, game.seed);
 
@@ -100,9 +103,9 @@ export function remainderDraws(
  */
 export function remainderInWorker(
   tables: SimTables, situations: Map<string, LiveSituation>, pays: Pays,
-  draws = REMAINDER_DRAWS,
+  draws = REMAINDER_DRAWS, week?: number,
 ): Promise<Map<string, number[]>> {
-  const games = gamesToPlay(situations);
+  const games = gamesToPlay(situations, week);
 
   if (!games.length) {
     return Promise.resolve(new Map());
