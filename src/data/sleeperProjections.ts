@@ -6,7 +6,8 @@
  * ids, so every row has to be joined to a gsis id before anything here
  * can use it. A player Sleeper has no gsis id for is dropped: he cannot
  * be matched to a weekly example, and guessing by name would quietly
- * pair up the wrong men.
+ * pair up the wrong men. A player who matches but has no points goes to
+ * the quiet file instead, so a reader can tell the two cases apart.
  *
  * The points column is full PPR, and catches let another scoring take
  * the point a catch back off. A defence comes in parts, in its own file.
@@ -23,6 +24,18 @@ export const SLEEPER_WEEKLY_PATH = join(
   "..",
   "curated",
   "sleeperWeekly.csv",
+);
+
+/**
+ * The men Sleeper listed for a week and gave no points to. They are the
+ * backups and the men who are out, and the slate reads a man here as
+ * Sleeper expecting nothing of him.
+ */
+export const SLEEPER_QUIET_PATH = join(
+  RAW_DIR,
+  "..",
+  "curated",
+  "sleeperQuiet.csv",
 );
 
 /**
@@ -79,13 +92,33 @@ export function sleeperPointsUnder(
   return projection.points + (perCatch - 1) * projection.catches;
 }
 
+/** a man Sleeper lists for the week but publishes no points for */
+export interface SleeperQuiet {
+  season: number;
+  week: number;
+  gsisId: string;
+}
+
+export interface JoinedProjections {
+  projected: SleeperProjection[];
+  /**
+   * Sleeper returns its whole pool and gives points to the couple
+   * of hundred it expects to play, so the rest are backups and men who
+   * are out. Keeping them apart from the players nobody could match to
+   * a gsis id is what lets the slate say Sleeper expects nothing of a
+   * man rather than saying Sleeper has never heard of him.
+   */
+  quiet: SleeperQuiet[];
+}
+
 export function joinProjectionsToGsis(
   season: number,
   week: number,
   rows: SleeperProjectionRow[],
   gsisBySleeperId: Map<string, string>,
-): SleeperProjection[] {
-  const joined: SleeperProjection[] = [];
+): JoinedProjections {
+  const projected: SleeperProjection[] = [];
+  const quiet: SleeperQuiet[] = [];
 
   for (const row of rows) {
     const gsisId = gsisBySleeperId.get(row.player_id);
@@ -97,10 +130,11 @@ export function joinProjectionsToGsis(
     const points = row.stats?.pts_ppr;
 
     if (points === undefined || points === null) {
+      quiet.push({ season, week, gsisId });
       continue;
     }
 
-    joined.push({
+    projected.push({
       season,
       week,
       gsisId,
@@ -112,7 +146,46 @@ export function joinProjectionsToGsis(
     });
   }
 
-  return joined;
+  return { projected, quiet };
+}
+
+export function quietToCsv(rows: SleeperQuiet[]): string {
+  const lines = [...rows]
+    .sort((a, b) =>
+      a.season - b.season || a.week - b.week || a.gsisId.localeCompare(b.gsisId))
+    .map((r) => `${r.season},${r.week},${r.gsisId}`);
+
+  return ["season,week,gsisId", ...lines].join("\n") + "\n";
+}
+
+export function parseQuiet(text: string): Set<string> {
+  return new Set(
+    parseCsv(text)
+      .filter((row) => row["gsisId"])
+      .map((row) =>
+        projectionKey(
+          Number(row["season"]), Number(row["week"]), row["gsisId"] ?? "",
+        )),
+  );
+}
+
+let cachedQuiet: Set<string> | undefined;
+
+/**
+ * Every player-week Sleeper listed without a number, under the same key
+ * the projections use. The file may not be there on a checkout taken
+ * before the fetch started writing it, and then nobody is quiet.
+ */
+export async function loadSleeperQuiet(): Promise<Set<string>> {
+  if (cachedQuiet) {
+    return cachedQuiet;
+  }
+
+  cachedQuiet = parseQuiet(
+    await readFile(SLEEPER_QUIET_PATH, "utf8").catch(() => ""),
+  );
+
+  return cachedQuiet;
 }
 
 export function projectionKey(

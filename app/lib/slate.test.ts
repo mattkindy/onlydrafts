@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Listed } from "./availability.ts";
 import { lineOf, liveDraws, spreadOf } from "./matchups.ts";
-import { readSlate, slateUnder, withOutMenZeroed } from "./slate.ts";
+import { isSplit, readSlate, slateUnder, withOutMenZeroed } from "./slate.ts";
 import { normalizeName } from "./store.ts";
 
 const built = readSlate({
@@ -18,6 +18,31 @@ const built = readSlate({
     ours: 18, sleeper: null, average: 18, floor: 10, ceiling: 27,
     catches: 0,
   }],
+});
+
+describe("isSplit", () => {
+  const backup = readSlate({
+    season: 2026,
+    week: 1,
+    perCatch: 0.5,
+    players: [{
+      name: "Trey Lance", position: "QB", team: "LAC", opponent: "v KC",
+      ours: 6.4, sleeper: 0, average: 3.2, floor: 0, ceiling: 9, catches: 0,
+    }],
+  }).rows[0]!;
+
+  it("flags two numbers three or more points apart", () => {
+    expect(isSplit({ ...backup, sleeper: 12 })).toBe(true);
+    expect(isSplit({ ...backup, ours: 12, sleeper: 11 })).toBe(false);
+  });
+
+  it("leaves a man Sleeper projects nothing for unflagged", () => {
+    expect(isSplit(backup)).toBe(false);
+  });
+
+  it("leaves a man Sleeper has no row for unflagged", () => {
+    expect(isSplit({ ...backup, sleeper: null })).toBe(false);
+  });
 });
 
 describe("slateUnder", () => {

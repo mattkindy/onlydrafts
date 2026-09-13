@@ -12,6 +12,7 @@ import {
 import type { GameRow, PlayerWeekStats } from "../src/data/nflverse.js";
 import {
   loadSleeperDefences,
+  loadSleeperQuiet,
   loadSleeperWeekly,
   projectionKey,
   sleeperPointsUnder,
@@ -167,7 +168,9 @@ function earlyWeekLine(
 /**
  * One row a man, in the slate file the app reads. `ours` is our
  * per-position ridge and `sleeper` is Sleeper's number, null when they
- * have no row for him. `average` is the two averaged, or ours alone
+ * have no row for him. A man Sleeper listed without a number is a backup
+ * or a man who is out, and he gets a Sleeper 0; a man Sleeper never
+ * listed keeps ours alone. `average` is the two averaged, or ours alone
  * when Sleeper has nothing, and the file is sorted by it. `floor` and
  * `ceiling` are the tenth and ninetieth of the outcome around that
  * average. `snaps` is a whole percent; `gamesMissed` is out of his last
@@ -184,16 +187,21 @@ function slateRow(
   e: WeeklyExample,
   ours: number,
   projection: SleeperProjection | undefined,
+  quiet: boolean,
 ) {
   const sleeper = projection
     ? sleeperPointsUnder(projection, scoring().receptions)
-    : undefined;
-  // the average uses Sleeper's number with his quarterback bias taken off
+    : quiet ? 0 : undefined;
+  // the average uses Sleeper's number with his quarterback bias taken
+  // off, except at nought, where there is no bias to take off
   const average =
     sleeper === undefined
       ? ours
       : blendPoints(
-        ours, debiasedSleeper(e.position, sleeper), SHIPPED_BLEND_WEIGHT);
+        ours,
+        sleeper === 0 ? 0 : debiasedSleeper(e.position, sleeper),
+        SHIPPED_BLEND_WEIGHT,
+      );
 
   return {
     name: e.playerName,
@@ -820,6 +828,7 @@ async function main(): Promise<void> {
     5,
   );
   const projections = await loadSleeperWeekly();
+  const quiet = await loadSleeperQuiet();
 
   await mkdir(join(DOCS, "data"), { recursive: true });
 
@@ -879,6 +888,7 @@ async function main(): Promise<void> {
             priors,
           ),
           projections.get(projectionKey(season, week, e.playerId)),
+          quiet.has(projectionKey(season, week, e.playerId)),
         ));
     const rows = [
       ...players,
@@ -1353,6 +1363,7 @@ async function main(): Promise<void> {
           row,
           ours,
           projections.get(projectionKey(season, week, p.playerId)),
+          quiet.has(projectionKey(season, week, p.playerId)),
         )];
       });
     const rows = [

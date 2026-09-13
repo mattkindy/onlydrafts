@@ -287,8 +287,12 @@ export const SPLIT_AT = 3;
 /** how often Sleeper has the better of it when they are that far apart */
 export const SLEEPER_WINS_SPLITS = 55;
 
+/**
+ * A Sleeper nought is Sleeper saying he is a backup or he is out, not a
+ * projection that disagrees with ours, so it is not a split.
+ */
 export const splitBy = (row: SlateRow) =>
-  row.sleeper === null ? 0 : row.ours - row.sleeper;
+  row.sleeper === null || row.sleeper === 0 ? 0 : row.ours - row.sleeper;
 
 export const isSplit = (row: SlateRow) =>
   Math.abs(splitBy(row)) >= SPLIT_AT;
