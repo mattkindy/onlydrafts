@@ -30,7 +30,7 @@ export const WEEKS_DRAWN = 2000;
 
 /**
  * How many adds get a drop worked out. Pricing one is a season for every
- * man on the roster, so the top of the list is as far as this goes.
+ * player on the roster, so the top of the list is as far as this goes.
  */
 export const PRICED = 12;
 
@@ -47,14 +47,14 @@ export interface WaiverPrices {
   /** the wire the page shows: the filter and the cap applied */
   listed: Add[];
   drops: Drop[];
-  /** the top of the list with the man a spot for him would cost */
+  /** the top of the list with the player a spot for him would cost */
   priced: { row: Add; paid: Net }[];
   /** the first round has not landed, so there is nothing to draw yet */
   working: boolean;
 }
 
 export function useWaiverPrices(
-  men: Player[], league: League, schedule: Schedule | null, posFilter: string,
+  players: Player[], league: League, schedule: Schedule | null, posFilter: string,
 ): WaiverPrices {
   const [said, setSaid] = useState<Said | null>(null);
   const [nets, setNets] = useState<Map<string, Net>>(new Map());
@@ -72,14 +72,14 @@ export function useWaiverPrices(
     mill
       .season({
         ask: "season",
-        men,
+        players,
         schedule,
         slots: league.slots ?? null,
         teams: league.size || 12,
         draws: WEEKS_DRAWN,
         rosters: rostersOf(league),
         mine: league.myRoster.map((m) => m.key),
-        pool: men.filter((p) => !rostered.has(p.key)).map((p) => p.key),
+        pool: players.filter((p) => !rostered.has(p.key)).map((p) => p.key),
       })
       .then((answered) => {
         if (stale) {
@@ -89,7 +89,7 @@ export function useWaiverPrices(
         setSaid({
           adds: answered.adds,
           drops: answered.drops,
-          // the roster can have men the board has never heard of, and
+          // the roster can have players the board has never heard of, and
           // they take up a spot all the same, so the league's own count
           // is the one to subtract
           openSpots: openSpotsFor(league.slots, league.myRoster.length),
@@ -100,7 +100,7 @@ export function useWaiverPrices(
       stale = true;
       mill.close();
     };
-  }, [men, league, schedule]);
+  }, [players, league, schedule]);
 
   const listed = useMemo(
     () => (said?.adds ?? [])

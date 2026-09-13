@@ -4,7 +4,7 @@
  *
  * The points are whatever the league has scored so far. The probability
  * is drawn from the week's projections, counting only the part of each
- * game still to play, so a side behind with everybody done reads nought.
+ * game still to play, so a side behind with everybody done reads zero.
  *
  * A card pairs the two lineups slot by slot. A player who is done shows
  * bright points and no projection, one playing gets a green edge on his
@@ -25,7 +25,7 @@ import { layoutGame, layoutWeek, shareLayout } from "../lib/shareImage.ts";
 import type { ShareGame } from "../lib/shareImage.ts";
 import type { SlateRow } from "../lib/slate.ts";
 import { Advice, nameOf, pct } from "./Advice.tsx";
-import { ManName } from "./ManName.tsx";
+import { PlayerName } from "./PlayerName.tsx";
 import { Reading } from "./Reading.tsx";
 import { useLiveWeek } from "./scoreboard.ts";
 
@@ -33,7 +33,7 @@ interface Props {
   games: Matchup[];
   rows: Map<string, SlateRow>;
   /** the board in this league's terms, for the players the slate leaves out */
-  men: Player[];
+  players: Player[];
   /** your own team's name in the league, so your game can be told apart */
   mine: string;
   /** the slots the league starts, for the lineup it says you could put out */
@@ -45,12 +45,12 @@ interface Props {
   /** the league's own name, which the shared picture is headed with */
   league?: string;
   status?: string;
-  /** opens a man's sheet, since every name on the page opens one */
+  /** opens a player's sheet, since every name on the page opens one */
   onMore?: (key: string) => void;
 }
 
-/** one man on one side of a row, mirrored when he is the away side */
-function Man(
+/** one player on one side of a row, mirrored when he is the away side */
+function StarterCell(
   { starter, rows, states, lines, at, remainder, onMore }: {
     starter: Side["starters"][number] | undefined;
     rows: Map<string, SlateRow>;
@@ -62,7 +62,7 @@ function Man(
   },
 ) {
   if (!starter) {
-    return <div class={"man " + (at ? "away" : "home")} />;
+    return <div class={"player " + (at ? "away" : "home")} />;
   }
 
   const line = lineFor(starter, rows, lines);
@@ -76,10 +76,10 @@ function Man(
 
   return (
     <div
-      class={"man " + (at ? "away" : "home") + (playing ? " live" : "") +
+      class={"player " + (at ? "away" : "home") + (playing ? " live" : "") +
         (done ? " done" : "")}
     >
-      <ManName
+      <PlayerName
         name={nameOf(starter.key, rows, lines, starter.name)}
         team={line?.team}
         onOpen={onMore ? () => onMore(starter.key) : undefined}
@@ -178,13 +178,13 @@ function Lineups(
   return (
     <div class="lineups">
       {pairedRows(game).map((row, i) => (
-        <div class="seat" key={row.slot + i}>
-          <Man
+        <div class="slot" key={row.slot + i}>
+          <StarterCell
             starter={row.home} rows={rows} states={states} lines={lines} at={0}
             remainder={remainder} onMore={onMore}
           />
           <span class="chip">{row.slot}</span>
-          <Man
+          <StarterCell
             starter={row.away} rows={rows} states={states} lines={lines} at={1}
             remainder={remainder} onMore={onMore}
           />
@@ -267,12 +267,12 @@ export function Game(
 
 export function Matchups(
   {
-    games, rows, men, mine, slots, pays, season, week, league, status,
+    games, rows, players, mine, slots, pays, season, week, league, status,
     onMore,
   }: Props,
 ) {
   const lines = useMemo(
-    () => new Map(men.map((p) => [p.key, p])), [men]);
+    () => new Map(players.map((p) => [p.key, p])), [players]);
   const { states, remainder, read, trouble } =
     useLiveWeek(season, week, pays);
 

@@ -36,11 +36,11 @@ const wire = [
   aMan("bigWr", "WR", 16), aMan("goodK", "K", 11), aMan("poorRb", "RB", 3),
 ];
 
-const men = [...mine, ...wire];
+const players = [...mine, ...wire];
 
 const anAsk = (): SeasonAsk => ({
   ask: "season",
-  men,
+  players,
   schedule: null,
   slots: SLOTS,
   teams: 12,
@@ -53,9 +53,9 @@ const anAsk = (): SeasonAsk => ({
 describe("the season pricing a worker answers", () => {
   it("says what calling the pricing here would have said", async () => {
     // the room draws a typical week, so warm the cache the same way both do
-    weeksOf(men[0]!, DRAWN);
+    weeksOf(players[0]!, DRAWN);
 
-    const room = roomFor(men, SLOTS, 12, DRAWN, null);
+    const room = roomFor(players, SLOTS, 12, DRAWN, null);
     const adds = addsFor(mine, wire, SLOTS, room);
     const drops = dropsFor(mine, SLOTS, room);
     const pricer = pricerHere();

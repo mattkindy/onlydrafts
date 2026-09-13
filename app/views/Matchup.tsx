@@ -25,7 +25,7 @@ import type { Pays, Player } from "../lib/scoring.ts";
 import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
 import { Advice, gainPct, nameOf } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
-import { ManName } from "./ManName.tsx";
+import { PlayerName } from "./PlayerName.tsx";
 import { Game } from "./Matchups.tsx";
 import { Reading } from "./Reading.tsx";
 import { useLiveWeek } from "./scoreboard.ts";
@@ -39,8 +39,8 @@ interface Props {
   games: Matchup[];
   rows: Map<string, SlateRow>;
   /** the board in this league's terms, for the players the slate leaves out */
-  men: Player[];
-  /** who the injury report has listed, so a nought projection says why */
+  players: Player[];
+  /** who the injury report has listed, so a zero projection says why */
   listed: Map<string, Listed>;
   /** your own team's name in the league */
   mine: string | null;
@@ -50,7 +50,7 @@ interface Props {
   /** what this league pays, for playing out the rest of a live game */
   pays?: Pays;
   status?: string;
-  /** opens a man's sheet, since every name on the page opens one */
+  /** opens a player's sheet, since every name on the page opens one */
   onMore?: (key: string) => void;
 }
 
@@ -73,8 +73,8 @@ function Fig(
  * What a player is worth this week, on his own row or under his slot.
  *
  * Proj is his projection for the week, whatever his game has done since.
- * It used to be the part of it still to come, which read as a nought
- * beside a man who had already scored fifteen points.
+ * It used to be the part of it still to come, which read as a zero
+ * beside a player who had already scored fifteen points.
  */
 function Numbers(
   { line, left }: {
@@ -84,7 +84,7 @@ function Numbers(
   },
 ) {
   if (!line) {
-    return <span class="seat-fig">no projection</span>;
+    return <span class="slot-fig">no projection</span>;
   }
 
   return (
@@ -104,10 +104,10 @@ function Numbers(
 }
 
 /**
- * What the office says about him, next to his name, so a man projected at
- * nought is not a mystery.
+ * What the injury report says about him, next to his name, so a player
+ * projected at zero is not a mystery.
  */
-function Office({ his }: { his: Listed | undefined }) {
+function InjuryBadge({ his }: { his: Listed | undefined }) {
   const badge = injuryBadge(his);
 
   if (!badge) {
@@ -157,7 +157,7 @@ function Why({ why }: { why: Explanation }) {
   );
 }
 
-function Seat(
+function Slot(
   { choice, rows, states, lines, listed, onMore }: {
     choice: SlotChoice;
     rows: Map<string, SlateRow>;
@@ -182,22 +182,22 @@ function Seat(
   const better = choice.options.filter((option) => option.gains > 0);
 
   return (
-    <section class="seat-card">
+    <section class="slot-card">
       <h3>
         <span class="chip">{choice.slot}</span>
-        <ManName
+        <PlayerName
           name={nameOf(
             choice.starter.key, rows, lines, choice.starter.name)}
           team={his.line?.team}
           onOpen={onMore ? () => onMore(choice.starter.key) : undefined}
         />
-        <Office his={listed.get(choice.starter.key)} />
+        <InjuryBadge his={listed.get(choice.starter.key)} />
         {choice.locked && <span class="badge even">locked</span>}
       </h3>
 
-      <div class="seat-figs">
-        {/* nothing is scored before kickoff, and a nought there reads as
-            a man who went out and did nothing */}
+      <div class="slot-figs">
+        {/* nothing is scored before kickoff, and a zero there reads as
+            a player who went out and did nothing */}
         {his.left < 1 && (
           <Fig label="scored">{choice.starter.points.toFixed(1)}</Fig>
         )}
@@ -213,13 +213,13 @@ function Seat(
 
               return (
                 <li key={option.key} class={option.locked ? "shut" : ""}>
-                  <ManName
+                  <PlayerName
                     name={nameOf(option.key, rows, lines, option.name)}
                     team={other.line?.team}
                     onOpen={onMore ? () => onMore(option.key) : undefined}
                   />
                   <Numbers line={other.line} left={other.left} />
-                  <Office his={listed.get(option.key)} />
+                  <InjuryBadge his={listed.get(option.key)} />
                   <span class="fig delta up">
                     <i>win %</i>{signed(option.gains)}
                   </span>
@@ -255,7 +255,7 @@ function Lineup(
   return (
     <>
       {choices.map((choice, i) => (
-        <Seat
+        <Slot
           key={choice.starter.key + i}
           choice={choice}
           rows={rows}
@@ -275,7 +275,7 @@ export function MyMatchup(props: Props) {
     props.picked?.season, props.picked?.week, props.pays ?? {});
 
   const lines = useMemo(
-    () => new Map(props.men.map((p) => [p.key, p])), [props.men]);
+    () => new Map(props.players.map((p) => [p.key, p])), [props.players]);
   const ours = useMemo(() => myGameIn(games, mine), [games, mine]);
 
   if (!props.weeks.length) {

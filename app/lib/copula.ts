@@ -1,5 +1,5 @@
 /**
- * How one man's week moves with the other men in his game.
+ * How one player's week moves with the other players in his game.
  *
  * Everybody reads his week off his own five figures, so nobody's
  * distribution changes. What changes is where in it he lands: the
@@ -7,9 +7,9 @@
  * scaled to unit variance and put through the normal CDF. That is a
  * Gaussian copula, and the game correlation note measures the loadings.
  *
- * A man is loadings on named factors plus what is left for his own
+ * A player is loadings on named factors plus what is left for his own
  * noise. The season draws add that up; the live draws also solve it
- * backwards, asking what the men who have played say about the factors.
+ * backwards, asking what the players who have played say about the factors.
  */
 
 import { normalStream } from "./spread.ts";
@@ -22,19 +22,19 @@ export const GAME_LOAD = 0.45;
 
 export const PASS_CATCHERS = ["WR", "TE"];
 
-export interface Man {
+export interface Player {
   key: string;
   position: string;
   team?: string | null;
 }
 
-/** one named factor and how much of a man's week rides on it */
+/** one named factor and how much of a player's week rides on it */
 export interface Term {
   factor: string;
   load: number;
 }
 
-/** a man's week as shared factors plus noise of his own */
+/** a player's week as shared factors plus noise of his own */
 export interface Mix {
   terms: Term[];
   /** what the loadings leave for his own noise */
@@ -70,53 +70,53 @@ function scriptTerms(
   ];
 }
 
-const alone = (man: Man): Mix =>
-  ({ terms: [], own: 1, ownSeed: `own|${man.key}` });
+const alone = (player: Player): Mix =>
+  ({ terms: [], own: 1, ownSeed: `own|${player.key}` });
 
 /**
- * What a man's week is loaded on. `top` says whether he is his team's
+ * What a player's week is loaded on. `top` says whether he is his team's
  * first pass catcher, which decides the sign he takes the split factor
  * with; null means nobody has said, and then he takes the script and
  * nothing else, because there is no sign to take the split with.
  *
  * The split factor only has two signs, so the first pass catcher comes
  * out uncorrelated with each of the others, and any two of the others
- * pick up about 0.42 between them where the measurement says nought.
+ * pick up about 0.42 between them where the measurement says zero.
  */
 export function mixFor(
-  man: Man, against: string | null, week: number, top: boolean | null,
+  player: Player, against: string | null, week: number, top: boolean | null,
 ): Mix {
-  const ownSeed = `own|${man.key}`;
+  const ownSeed = `own|${player.key}`;
 
-  if (!man.team) {
-    return alone(man);
+  if (!player.team) {
+    return alone(player);
   }
 
-  if (man.position === "QB") {
+  if (player.position === "QB") {
     return {
-      terms: scriptTerms(man.team, against, week, QB_LOAD),
+      terms: scriptTerms(player.team, against, week, QB_LOAD),
       own: rest(QB_LOAD),
       ownSeed,
     };
   }
 
-  if (man.position === "DEF") {
+  if (player.position === "DEF") {
     if (!against) {
-      return alone(man);
+      return alone(player);
     }
 
     return {
-      terms: scriptTerms(against, man.team, week, DEF_LOAD),
+      terms: scriptTerms(against, player.team, week, DEF_LOAD),
       own: rest(DEF_LOAD),
       ownSeed,
     };
   }
 
-  if (!PASS_CATCHERS.includes(man.position)) {
-    return alone(man);
+  if (!PASS_CATCHERS.includes(player.position)) {
+    return alone(player);
   }
 
-  const script = scriptTerms(man.team, against, week, SCRIPT_LOAD);
+  const script = scriptTerms(player.team, against, week, SCRIPT_LOAD);
 
   if (top === null) {
     return { terms: script, own: rest(SCRIPT_LOAD), ownSeed };
@@ -125,7 +125,7 @@ export function mixFor(
   return {
     terms: [
       ...script,
-      { factor: `split|${man.team}`, load: top ? SPLIT_LOAD : -SPLIT_LOAD },
+      { factor: `split|${player.team}`, load: top ? SPLIT_LOAD : -SPLIT_LOAD },
     ],
     own: CATCHER_REST,
     ownSeed,
@@ -134,7 +134,7 @@ export function mixFor(
 
 const streams = new Map<string, number[]>();
 
-/** a named factor's draws, kept because every man in a game wants them */
+/** a named factor's draws, kept because every player in a game wants them */
 export function factorFor(seed: string, draws: number): number[] {
   const at = `${seed}|${draws}`;
   let its = streams.get(at);
@@ -150,7 +150,7 @@ export function factorFor(seed: string, draws: number): number[] {
 /** where a factor's numbers come from, so a caller can substitute them */
 export type From = (seed: string, draws: number) => number[];
 
-/** a man's copula normal in one draw, factors and noise added up */
+/** a player's copula normal in one draw, factors and noise added up */
 export function normalAt(
   mix: Mix, i: number, draws: number, from: From = factorFor,
 ): number {
@@ -158,7 +158,7 @@ export function normalAt(
     mix.own * from(mix.ownSeed, draws)[i]!;
 }
 
-/** the shared part of a man's copula normal, his own noise left out */
+/** the shared part of a player's copula normal, his own noise left out */
 export function sharedAt(
   mix: Mix, i: number, draws: number, from: From = factorFor,
 ): number {
@@ -171,7 +171,7 @@ export function sharedAt(
   return z;
 }
 
-/** how much of a man's game is behind him, and where his pace puts him */
+/** how much of a player's game is behind him, and where his pace puts him */
 export interface Pace {
   played: number;
   /** the normal his pace so far corresponds to */
@@ -179,7 +179,7 @@ export interface Pace {
 }
 
 /**
- * A man's copula normal written as a straight line in his own noise, so
+ * A player's copula normal written as a straight line in his own noise, so
  * a caller can either draw that noise or ask where the line crosses a
  * total it has to beat.
  *
@@ -201,7 +201,7 @@ export function normalLine(
 }
 
 /**
- * The same man, tied only to the factors named. What he was loaded on
+ * The same player, tied only to the factors named. What he was loaded on
  * elsewhere goes into his own noise, so his week has the distribution it
  * had and moves with nobody outside that list.
  */
@@ -214,7 +214,7 @@ export function tiedTo(mix: Mix, factors: Set<string>): Mix {
   return { ...mix, terms, own: Math.sqrt(own) };
 }
 
-/** a man whose week is partly played, and where his pace puts him */
+/** a player whose week is partly played, and where his pace puts him */
 export interface Seen {
   mix: Mix;
   /** the normal his pace so far corresponds to */
@@ -223,7 +223,7 @@ export interface Seen {
   noise: number;
 }
 
-/** the factors a run of men are loaded on, once each */
+/** the factors a run of players are loaded on, once each */
 export function factorsOf(mixes: Mix[]): string[] {
   const named = new Set<string>();
 
@@ -300,13 +300,13 @@ export interface Posterior {
 }
 
 /**
- * What the men who have already played say about the factors their game
+ * What the players who have already played say about the factors their game
  * shares out.
  *
- * The factors are standard normals and every man is a fixed combination
+ * The factors are standard normals and every player is a fixed combination
  * of them plus noise of his own, so this is a linear Gaussian system and
  * the answer is written down rather than searched for. With A the
- * loadings of the men seen, one row each, and D the variance left to
+ * loadings of the players seen, one row each, and D the variance left to
  * each of them, the seen numbers have covariance A Aᵀ + D, the factors
  * come out at Aᵀ (A Aᵀ + D)⁻¹ z on average, and what is left around
  * them is I − Aᵀ (A Aᵀ + D)⁻¹ A.
@@ -314,10 +314,10 @@ export interface Posterior {
 export function posteriorFor(seen: Seen[], factors: string[]): Posterior {
   const k = factors.length;
   const at = new Map(factors.map((name, i) => [name, i]));
-  const a = seen.map((man) => {
+  const a = seen.map((player) => {
     const row = new Array(k).fill(0) as number[];
 
-    for (const term of man.mix.terms) {
+    for (const term of player.mix.terms) {
       const j = at.get(term.factor);
 
       if (j != null) {
@@ -338,7 +338,7 @@ export function posteriorFor(seen: Seen[], factors: string[]): Posterior {
     return sum;
   }));
   const l = cholesky(s);
-  const solvedZ = solveWith(l, seen.map((man) => man.z));
+  const solvedZ = solveWith(l, seen.map((player) => player.z));
   const mean = Array.from({ length: k }, (_, f) =>
     a.reduce((sum, row, i) => sum + row[f]! * solvedZ[i]!, 0));
   // one solve per factor, on the column of A that factor appears in

@@ -1,9 +1,9 @@
 /**
- * Your team, by position, with what each man is projected to do.
+ * Your team, by position, with what each player is projected to do.
  *
  * In a keeper league what he is worth keeping for opens on his own card
  * rather than in a second grid underneath. The two grids listed the same
- * twelve players, so every man on the page appeared twice.
+ * twelve players, so every player on the page appeared twice.
  */
 
 import type { Player } from "../lib/scoring.ts";
@@ -16,7 +16,7 @@ const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "other"];
 interface Props {
   byKey: Map<string, Player>;
   /** the whole board, which pricing a keeper against the draft needs */
-  men: Player[];
+  players: Player[];
   league: League;
   season: number;
   perTeam: number;
@@ -34,7 +34,7 @@ interface Props {
 }
 
 export function Roster(props: Props) {
-  const { league, marked, men } = props;
+  const { league, marked, players } = props;
   const mine = league.myRoster
     .map((r) => ({ r, p: props.byKey.get(r.key) ?? null }))
     .sort((a, b) => (b.p?.vor ?? -99) - (a.p?.vor ?? -99));
@@ -43,7 +43,7 @@ export function Roster(props: Props) {
   const draft = props.keeperLeague
     ? keeperDraft(league, props.byKey, props.perTeam)
     : null;
-  const rounds = draft ? keeperRounds(men, mine, draft) : new Map<string, number>();
+  const rounds = draft ? keeperRounds(players, mine, draft) : new Map<string, number>();
 
   const byPosition = new Map<string, typeof mine>();
 
@@ -112,7 +112,7 @@ export function Roster(props: Props) {
                 >
                   {draft && (
                     <KeeperRow
-                      men={men}
+                      players={players}
                       p={p}
                       league={league}
                       perTeam={props.perTeam}

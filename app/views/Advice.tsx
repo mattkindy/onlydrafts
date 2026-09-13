@@ -25,7 +25,7 @@ export const gainPct = (share: number) =>
   100 * share < 0.5 ? "<1%" : "+" + pct(share);
 
 /**
- * Whatever anybody calls this man: the week, the board, the provider, or
+ * Whatever anybody calls this player: the week, the board, the provider, or
  * failing all three his key. The key is a name with its spaces taken out,
  * so falling straight to it printed "treysmack" on a kicker's row.
  */
@@ -33,10 +33,10 @@ export const nameOf = (
   key: string, rows: Map<string, SlateRow>, lines: Lines, said?: string,
 ) => rows.get(key)?.name ?? lines.get(key)?.name ?? said ?? key;
 
-/** what the provider calls every man in a game, by the key a lineup uses */
+/** what the provider calls every player in a game, by the key a lineup uses */
 export const namesIn = (sides: Side[]) => new Map(
   sides.flatMap((side) => [...side.starters, ...side.bench])
-    .map((man) => [man.key, man.name] as const),
+    .map((player) => [player.key, player.name] as const),
 );
 
 interface Props {
@@ -48,14 +48,14 @@ interface Props {
   lines: Lines;
   /** how often you win with the lineup you have, where the caller has it */
   odds?: number;
-  /** what the remainder engine says a man in a live game still has to come */
+  /** what the remainder engine says a player in a live game still has to come */
   remainder?: Map<string, number[]> | null;
-  /** opens a man's sheet, where the page has one to open */
+  /** opens a player's sheet, where the page has one to open */
   onMore?: (key: string) => void;
 }
 
 /**
- * A man's name where tapping it opens his sheet. Every name on the page
+ * A player's name where tapping it opens his sheet. Every name on the page
  * opens the same sheet, so they all have to look alike and none of them
  * can be a bare span some readers learn is dead.
  */
