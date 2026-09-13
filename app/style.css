@@ -643,17 +643,18 @@
     gap: var(--s2); flex-wrap: wrap; }
   button.quiet.share { display: inline-flex; align-items: center; gap: var(--s1);
     min-height: var(--tap); flex: 0 0 auto; }
-  button.quiet.share.icon { grid-column: 1 / -1; justify-self: end;
+  button.quiet.share.icon { grid-column: 1 / -1; justify-self: end; margin-top: calc(var(--s2) * -1);
     width: var(--tap); padding: 0; justify-content: center; }
   /* each side gets two fifths of the row and the slot's chip the rest,
      so a long name wraps to two lines instead of pushing the far side
      off a phone screen */
   .card.matchup .lineups { grid-column: 1 / -1; display: flex;
     flex-direction: column; min-width: 0; }
-  .slot { display: grid; grid-template-columns: 2fr minmax(2.6rem, 1fr) 2fr;
+  .slot { display: grid; grid-template-columns: 1fr auto 1fr;
     align-items: center; gap: var(--s1); font-size: var(--t1);
     border-bottom: 1px solid var(--edge); padding: var(--s1) 0; }
-  .slot > .chip { justify-self: center; text-transform: uppercase;
+  .slot > .chip { justify-self: center; text-transform: uppercase; margin: 0 var(--s1);
+    min-width: 3.4rem; text-align: center;
     color: var(--muted); background: var(--chip); }
   .player { display: flex; gap: var(--s1); align-items: baseline; min-width: 0;
     padding: .1rem var(--s1); border-radius: 4px; }
@@ -665,8 +666,11 @@
      as a different player */
   .playername b { font-weight: 600; overflow-wrap: break-word; hyphens: none; }
   .playername i { font-style: normal; font-size: var(--t1); color: var(--faint); }
-  .player .num { display: flex; flex-direction: column; flex: 0 0 auto;
-    text-align: inherit; font-variant-numeric: tabular-nums; }
+  /* the figures hug the chip column at one width, so every row's
+     score and projection line up down the card */
+  .player .num { display: flex; flex-direction: column; flex: 0 0 2.4rem;
+    text-align: right; font-variant-numeric: tabular-nums; }
+  .player.away .num { text-align: left; }
   .player .num b { font-weight: 700; color: var(--muted); }
   .player.done .num b { color: var(--ink); }
   .player .num i { font-style: normal; font-size: var(--t1); color: var(--faint); }
@@ -802,5 +806,8 @@
 
     table.rating { font-size: var(--t1); }
     .slot { font-size: var(--t1); gap: 2px; }
+    /* on a phone the name needs the room more than the chip column
+       needs one width */
+    .slot > .chip { min-width: 0; }
     .why .piece { white-space: normal; }
   }
