@@ -8,7 +8,9 @@
 
 import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
-import { leagueOf, remainderFor, type RemainderState } from "./remainder.ts";
+import {
+  defenceKeyOf, leagueOf, remainderFor, type RemainderState,
+} from "./remainder.ts";
 import {
   bytesOf, DIST_BANDS, MARGIN_BANDS, TIME_BANDS, type SimTables,
 } from "./simTables.ts";
@@ -18,6 +20,22 @@ const PPR = {
   pass_yd: 0.04, pass_td: 4, pass_int: -2, rush_yd: 0.1, rush_td: 6,
   rec: 1, rec_yd: 0.1, rec_td: 6, fum_lost: -2, rush_2pt: 2,
 };
+
+/** the same league, with what it pays a defence spelled out */
+const DEFENCE = {
+  ...PPR,
+  sack: 1, int: 2, fum_rec: 2, def_td: 6, safe: 2, blk_kick: 2,
+  pts_allow_0: 10, pts_allow_1_6: 7, pts_allow_7_13: 4, pts_allow_14_20: 1,
+  pts_allow_21_27: 0, pts_allow_28_34: -1, pts_allow_35p: -4,
+};
+
+const BUCKET: [number, string][] = [
+  [0, "pts_allow_0"], [6, "pts_allow_1_6"], [13, "pts_allow_7_13"],
+  [20, "pts_allow_14_20"], [27, "pts_allow_21_27"], [34, "pts_allow_28_34"],
+];
+
+const bucketPay = (allowed: number, pays: Record<string, number>) =>
+  pays[BUCKET.find(([top]) => allowed <= top)?.[1] ?? "pts_allow_35p"] ?? 0;
 
 const mean = (its: Float64Array) => {
   let sum = 0;
@@ -285,5 +303,58 @@ describe.skipIf(!existsSync(PATH))("the rest of a game, played in the browser", 
       tables, league, { ...atHalf, secondsLeft: 0 }, 20, PPR, 5)!;
 
     expect(mean(played.teamPoints[home]!)).toBe(0);
+  });
+
+  describe("a defence in a live game", () => {
+    const atKickoff: RemainderState = {
+      home, away,
+      points: { [home]: 0, [away]: 0 },
+      secondsLeft: 3600,
+      timeouts: { [home]: 3, [away]: 3 },
+      warningLeft: true, secondHalf: false, week: 8,
+    };
+    const key = defenceKeyOf(home);
+
+    /** what a league pays a defence for the score alone */
+    const bucketOnly = {
+      ...DEFENCE,
+      sack: 0, int: 0, fum_rec: 0, def_td: 0, safe: 0, blk_kick: 0,
+    };
+
+    it("is worth about a stock week at kickoff, not a shutout and a week", () => {
+      const played = remainderFor(tables, league, atKickoff, 600, DEFENCE, 21)!;
+      // a shutout is what the provider has paid so far, so the projection
+      // is that plus whatever the draws add
+      const projected = DEFENCE.pts_allow_0 + mean(played.players.get(key)!);
+
+      expect(projected).toBeGreaterThan(2);
+      expect(projected).toBeLessThan(11);
+    });
+
+    it("leaves a defence three scores down near what it has earned", () => {
+      const late: RemainderState = {
+        ...atHalf,
+        points: { [home]: 10, [away]: 21 },
+        secondsLeft: 300,
+        withBall: away, yardline: 60, down: 1, toGo: 10,
+      };
+      const played = remainderFor(tables, league, late, 600, DEFENCE, 21)!;
+
+      expect(Math.abs(mean(played.players.get(key)!))).toBeLessThan(2);
+    });
+
+    it("pays the points allowed bucket once, at the score it finishes on", () => {
+      const played =
+        remainderFor(tables, league, atKickoff, 200, bucketOnly, 21)!;
+      const its = played.players.get(key)!;
+
+      for (let draw = 0; draw < its.length; draw++) {
+        const allowed = played.teamPoints[away]![draw]!;
+
+        // what the provider has paid so far is the shutout it is on
+        expect(bucketOnly.pts_allow_0 + its[draw]!)
+          .toBeCloseTo(bucketPay(allowed, bucketOnly), 6);
+      }
+    });
   });
 });

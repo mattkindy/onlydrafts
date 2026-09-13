@@ -779,8 +779,13 @@ export function liveDraws(
   const posterior = new Map<string, number[]>();
   const games = new Map<string, Watching[]>();
 
-  for (const his of watched.values()) {
-    if (his.played > 0) {
+  for (const [key, his] of watched) {
+    // a live defence's running total prices a shutout it has not kept
+    // yet, so its pace is no evidence about anybody's factors
+    const bogus = his.line.position === "DEF" &&
+      Boolean(remainder?.get(key)?.length);
+
+    if (his.played > 0 && !bogus) {
       const game = gameOf(his.line);
       games.set(game, [...(games.get(game) ?? []), his]);
     }
