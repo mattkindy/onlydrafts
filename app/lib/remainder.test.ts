@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { leagueOf, remainderFor, type RemainderState } from "./remainder.ts";
 import {
-  DIST_BANDS, MARGIN_BANDS, TIME_BANDS, type SimTables,
+  bytesOf, DIST_BANDS, MARGIN_BANDS, TIME_BANDS, type SimTables,
 } from "./simTables.ts";
 
 const PATH = "docs/data/sim-2025.json";
@@ -118,6 +118,90 @@ describe.skipIf(!existsSync(PATH))("the rest of a game, played in the browser", 
 
     expect(share).toBeGreaterThan(0.3);
     expect(share).toBeLessThan(0.75);
+  });
+
+  /** the same man the engine picks: the most work in the shares table */
+  const busiestAt = (positions: string[]) => {
+    const men = tables.teams[home]!.men;
+    const shares = bytesOf(tables.teams[home]!.shares);
+    const totals = men.map(() => 0);
+
+    for (let at = 0; at < shares.length; at++) {
+      const i = at % men.length;
+      totals[i] = totals[i]! + shares[at]!;
+    }
+
+    return men
+      .filter((man) => positions.includes(man.position))
+      .sort((a, b) => totals[men.indexOf(b)]! - totals[men.indexOf(a)]!)[0]!;
+  };
+
+  const inTheFourth = (lead: number, week?: number): RemainderState => ({
+    ...atHalf,
+    points: { [home]: 24, [away]: 24 - lead },
+    secondsLeft: 800,
+    ...(week === undefined ? {} : { week }),
+  });
+
+  const meanFor = (state: RemainderState, key: string, draws = 600) =>
+    mean(remainderFor(tables, league, state, draws, PPR, 31)!.players.get(key)!);
+
+  it("takes the top back off in a lopsided fourth quarter", () => {
+    const back = busiestAt(["RB", "FB"]).key;
+
+    expect(meanFor(inTheFourth(21), back))
+      .toBeLessThan(meanFor(inTheFourth(3), back) * 0.8);
+  });
+
+  it("leaves a close fourth quarter alone, whatever the week", () => {
+    const back = busiestAt(["RB", "FB"]).key;
+    const early = remainderFor(tables, league, inTheFourth(3, 8), 200, PPR, 9)!;
+    const late = remainderFor(tables, league, inTheFourth(3, 15), 200, PPR, 9)!;
+
+    expect([...late.players.get(back)!]).toEqual([...early.players.get(back)!]);
+  });
+
+  it("rests starters harder once the standings have settled", () => {
+    const back = busiestAt(["RB", "FB"]).key;
+
+    expect(meanFor(inTheFourth(21, 15), back))
+      .toBeLessThan(meanFor(inTheFourth(21, 8), back));
+  });
+
+  /**
+   * A draw that started with the back already off would hand every later
+   * draw the same, and the whole run would read near zero. Comparing the
+   * first fifty draws with the last fifty catches that.
+   */
+  it("puts the starters back on for each draw", () => {
+    const back = busiestAt(["RB", "FB"]).key;
+    const blowout = inTheFourth(21);
+    const played = remainderFor(tables, league, blowout, 400, PPR, 31)!;
+    const his = played.players.get(back)!;
+    const first = mean(his.slice(0, 50));
+    const last = mean(his.slice(-50));
+
+    expect(last).toBeGreaterThan(first * 0.5);
+    expect(last).toBeLessThan(first * 2);
+
+    const again = remainderFor(tables, league, blowout, 400, PPR, 31)!;
+    expect([...again.players.get(back)!]).toEqual([...his]);
+  });
+
+  /**
+   * Both margins are the same band to every fitted table, so what is
+   * left between them is the twenty percent already off at seventeen.
+   * Half a minute leaves the per-snap hazards little room, so the back
+   * should keep about four fifths of what he keeps at sixteen.
+   */
+  it("starts a lopsided fourth quarter with a fifth of them already off", () => {
+    const back = busiestAt(["RB", "FB"]).key;
+    const wide = { ...inTheFourth(-21), secondsLeft: 30 };
+    const narrow = { ...inTheFourth(-16), secondsLeft: 30 };
+    const share = meanFor(wide, back, 3000) / meanFor(narrow, back, 3000);
+
+    expect(share).toBeGreaterThan(0.6);
+    expect(share).toBeLessThan(0.95);
   });
 
   it("has nothing left for a game that is over", () => {
