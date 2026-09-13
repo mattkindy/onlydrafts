@@ -10,7 +10,7 @@
  *
  * Read straight, the walk's weeks are mostly sampling until it has run
  * hundreds of times. These are pooled over every fixture a side played,
- * which settles far sooner. See scripts/aggregateGameScript.ts.
+ * which settles far sooner.
  */
 
 export interface Script {

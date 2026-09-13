@@ -8,7 +8,6 @@
  * yards move apart the way they do in a season anybody watched.
  *
  * Both answer the same three questions, so either can be swapped in.
- * See scripts/sourceCompare.ts for which one is winning.
  */
 
 import type { StatParts } from "./seasonSummary.js";

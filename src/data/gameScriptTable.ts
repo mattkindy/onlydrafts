@@ -1,8 +1,3 @@
-/**
- * The fitted game script table, as written by
- * scripts/aggregateGameScript.ts.
- */
-
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "./csv.js";

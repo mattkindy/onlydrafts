@@ -30,8 +30,8 @@ export interface SeasonResult {
 }
 
 /**
- * Correlation loadings measured by scripts/estimateCorrelation.ts on
- * 2016 to 2023 residuals: opponents 0.028, QB with his catchers 0.232.
+ * Correlation loadings measured on 2016 to 2023 residuals: opponents
+ * 0.028, QB with his catchers 0.232.
  * GAME loads everyone; catchers also load on their QB's own shock.
  * Known approximation: catcher pairs on one team come out near 0.07
  * where the data says 0, since shared factors cannot express the

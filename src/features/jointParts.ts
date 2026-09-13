@@ -7,9 +7,8 @@
  * own past does not. Pulling each part back toward the league on its
  * own treats them as separate and gives that up.
  *
- * So this hands the lot to one fit. Measured in
- * scripts/jointProjectionEval.ts, where it takes a quarter to a third
- * off the error against pulling them back one at a time.
+ * So this hands the lot to one fit. It takes a quarter to a third off
+ * the error against pulling them back one at a time.
  */
 
 import { fitRidge, predictRidge } from "../backtest/ridge.js";

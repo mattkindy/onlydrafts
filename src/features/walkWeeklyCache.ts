@@ -2,8 +2,8 @@
  * What the walk scored each man in a week, kept on disk.
  *
  * Playing a week costs minutes, so the numbers are written once by
- * scripts/walkWeekCache.ts and read back by anything that wants them. A
- * week that was never played is absent from the file, and a caller has to
+ * the caching script and read back by anything that wants them. A week
+ * that was never played is absent from the file, and a caller has to
  * cope with that rather than assume the file covers a season.
  */
 

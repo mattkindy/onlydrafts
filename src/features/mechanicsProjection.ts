@@ -7,8 +7,6 @@
  * keeps 0.878 and barely moves; his drops keep 0.176 and go nearly all
  * the way back. Projecting his yards a target as one number applies the
  * same pull to all of it and throws the difference away.
- *
- * The numbers are measured in scripts/mechanicsCarryEval.ts.
  */
 
 /** how much of each part a man takes into next season */

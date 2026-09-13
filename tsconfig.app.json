@@ -8,21 +8,6 @@
   },
   "include": [
     "app/**/*.ts",
-    "app/**/*.tsx",
-    "scripts/boxScoreWeekEval.ts",
-    "scripts/rateDraft.ts",
-    "scripts/draftReportData.ts",
-    "scripts/rateMyDraft.ts",
-    "scripts/checkDefenceValue.ts",
-    "scripts/checkKickersAndDefences.ts",
-    "scripts/checkPositionHeight.ts",
-    "scripts/checkWinShare.ts",
-    "scripts/myPicksEval.ts",
-    "scripts/betterDraft.ts",
-    "scripts/draftWalk.ts",
-    "scripts/matchupCalibration.ts",
-    "scripts/explainSweep.ts",
-    "scripts/liveRemainderEval.ts",
-    "scripts/timeWaivers.ts"
+    "app/**/*.tsx"
   ]
 }

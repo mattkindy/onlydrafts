@@ -1,10 +1,9 @@
 /**
  * The browser engine, against the tables the site ships.
  *
- * The full check is scripts/simAgreement.ts, which asks the Node
- * simulator the same questions off a season of checkpoints. That wants
- * the raw play by play, so what runs here is the cheap half: the engine
- * plays a recognisable game and gives the same answer twice.
+ * The full check asks the Node simulator the same questions off a
+ * season of checkpoints, and it wants the raw play by play. So what
+ * runs here is the cheap half: one recognisable game, played twice.
  */
 
 import { describe, expect, it } from "vitest";

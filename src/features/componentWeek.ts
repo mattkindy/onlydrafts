@@ -10,7 +10,7 @@
  *
  * The site ships this for weeks 1 to 4, where a season-anchored line has
  * almost nothing of this season to anchor to. From week 5 the ridge model
- * takes over. scripts/README.md has the bench that settled the split.
+ * takes over.
  */
 
 import type { PlayerWeekStats } from "../data/nflverse.js";
