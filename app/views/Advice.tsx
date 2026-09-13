@@ -21,15 +21,18 @@ import type { SlateRow } from "../lib/slate.ts";
  */
 export function pct(share: number): string {
   const percent = 100 * share;
-  const nearEnd = percent > 99 || percent < 1;
-  const tenths = percent.toFixed(1);
 
-  // 99.97 would print as 100.0, and then the tenth says nothing
-  if (!nearEnd || tenths === "100.0" || tenths === "0.0") {
+  if (percent === 0 || percent === 100 || (percent >= 1 && percent <= 99)) {
     return percent.toFixed(0) + "%";
   }
 
-  return tenths + "%";
+  // rounded toward the middle, so 99.97 says 99.9 and 0.04 says 0.1:
+  // only a settled game prints as 100 or 0
+  const tenths = percent > 99
+    ? Math.floor(percent * 10) / 10
+    : Math.ceil(percent * 10) / 10;
+
+  return tenths.toFixed(1) + "%";
 }
 
 /**

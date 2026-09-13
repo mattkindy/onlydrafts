@@ -21,7 +21,7 @@ import {
   type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
-import type { Pays, Player } from "../lib/scoring.ts";
+import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
 import { Advice, gainPct, nameOf } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
@@ -194,7 +194,7 @@ function Slot(
         {/* nothing is scored before kickoff, and a zero there reads as
             a player who went out and did nothing */}
         {his.left < 1 && (
-          <Fig label="scored">{choice.starter.points.toFixed(1)}</Fig>
+          <Fig label="scored">{scoredSays(choice.starter.points)}</Fig>
         )}
         <Numbers line={his.line} left={his.left} />
       </div>

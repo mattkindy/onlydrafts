@@ -20,7 +20,7 @@ import {
   type GameState, type InGameStatus, type Lines,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
-import type { Pays, Player } from "../lib/scoring.ts";
+import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import { layoutGame, layoutWeek, shareLayout } from "../lib/shareImage.ts";
 import type { ShareGame } from "../lib/shareImage.ts";
 import type { SlateRow } from "../lib/slate.ts";
@@ -108,7 +108,7 @@ function StarterCell(
         onOpen={onMore ? () => onMore(starter.key) : undefined}
       />
       <span class="num">
-        <b>{starter.points.toFixed(1)}</b>
+        <b>{scoredSays(starter.points)}</b>
         <i class={tone} title={reading}>
           {onCourse === null ? "" : onCourse.toFixed(1)}
         </i>
@@ -251,7 +251,7 @@ export function Game(
       {game.sides.map((side, at) => (
         <div class={"team" + (at ? " away" : "")} key={side.owner + at}>
           <span class="nm">{side.owner}</span>
-          <span class="big">{side.points.toFixed(1)}</span>
+          <span class="big">{scoredSays(side.points)}</span>
           <span class="val">{projected[at]!.toFixed(1)} proj</span>
           <span class="val win">{pct(odds[at]!)}</span>
         </div>

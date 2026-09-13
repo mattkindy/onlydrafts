@@ -669,7 +669,7 @@
   .playername i { font-style: normal; font-size: var(--t1); color: var(--faint); }
   /* the figures hug the chip column at one width, so every row's
      score and projection line up down the card */
-  .player .num { display: flex; flex-direction: column; flex: 0 0 2.4rem;
+  .player .num { display: flex; flex-direction: column; flex: 0 0 2.6rem;
     text-align: right; font-variant-numeric: tabular-nums; }
   .player.away .num { text-align: left; }
   .player .num b { font-weight: 700; color: var(--muted); }
