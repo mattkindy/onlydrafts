@@ -165,23 +165,107 @@ function Beat({ beaten, costPick, teams }: {
   );
 }
 
-export function Keepers(props: Props) {
-  const { men, byKey, league, perTeam } = props;
-  const teams = league.size || 12;
-  const costs = keeperCosts(league.leagueId);
-  const draft: Draft = {
-    teams,
+/**
+ * The draft a keeper is priced against: your own turns, and everybody
+ * already spoken for.
+ *
+ * Your own marks, plus the men every other team is likely to keep.
+ * Everyone else on a roster goes back into the draft, so treating a whole
+ * roster as unavailable would empty the board.
+ */
+export function keeperDraft(
+  league: League, byKey: Map<string, Player>, perTeam: number,
+): Draft {
+  return {
+    teams: league.size || 12,
     slot: league.draftSlot,
     snake: league.snake,
     myRounds: league.myPicks.length ? league.myPicks : null,
-    // Your own marks, plus the men every other team is likely to keep.
-    // Everyone else on a roster goes back into the draft, so treating a
-    // whole roster as unavailable would empty the board.
     taken: new Set([
       ...Object.keys(markedKeepers(league.leagueId)),
       ...likelyKept(league, byKey, perTeam),
     ]),
   };
+}
+
+/** the earliest pick each of your men still beats, by his key */
+export function keeperRounds(
+  men: Player[],
+  mine: { p: Player | null }[],
+  draft: Draft,
+): Map<string, number> {
+  const onRoster = mine
+    .map((x) => x.p)
+    .filter((p): p is Player => Boolean(p));
+
+  return new Map(
+    worthUpToEach(men, onRoster, draft).map(({ p, round }) => [p.key, round]),
+  );
+}
+
+/**
+ * Keeping one man: what the pick he costs would buy instead, who else is
+ * on the board there, and who beats him.
+ */
+export function KeeperPricing(
+  { men, p, league, perTeam, onChange }: {
+    men: Player[];
+    p: Player;
+    league: League;
+    perTeam: number;
+    onChange: () => void;
+  },
+) {
+  const teams = league.size || 12;
+  const cost = Number(keeperCosts(league.leagueId)[p.key]) || 0;
+  const draft = keeperDraft(
+    league, new Map(men.map((one) => [one.key, one])), perTeam);
+  const costPick = cost ? pickForRound(cost, draft) : null;
+  // he is the one being priced, so he cannot also be off the board
+  const mineToo: Draft = { ...draft, taken: new Set(draft.taken) };
+  mineToo.taken.delete(p.key);
+
+  return (
+    <div class="keeperfold">
+      <CostRow
+        p={p}
+        cost={cost}
+        leagueId={league.leagueId}
+        onChange={onChange}
+      />
+      {costPick
+        ? (
+          <>
+            <Figures
+              men={men} p={p} costPick={costPick}
+              draft={mineToo} teams={teams}
+            />
+            <Beat
+              beaten={betterLater(men, p, costPick, mineToo.taken)}
+              costPick={costPick}
+              teams={teams}
+            />
+            <Instead
+              men={men} p={p} costPick={costPick}
+              draft={mineToo} teams={teams}
+            />
+          </>
+        )
+        : (
+          <p class="hint">
+            Say which round your league charges for him and this prices the
+            keep against what that pick would buy instead.
+          </p>
+        )}
+    </div>
+  );
+}
+
+export function Keepers(props: Props) {
+  const { men, byKey, league, perTeam } = props;
+  const teams = league.size || 12;
+  const costs = keeperCosts(league.leagueId);
+  const draft = keeperDraft(league, byKey, perTeam);
   const onRoster = league.myRoster
     .map((r) => byKey.get(r.key))
     .filter((p): p is Player => Boolean(p));
