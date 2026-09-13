@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  alternativesFor, bestLineupFor, fractionLeft, initialForm, liveDraws, oddsFor,
+  alternativesFor, bestLineupFor, fractionLeft, initialForm, liveDraws, oddsFor, standingFor,
   sideTotals, situationsFrom, spreadOf, starterState, statesFrom, stockLine,
 } from "./matchups.ts";
 import type { GameState } from "./matchups.ts";
@@ -565,5 +565,38 @@ describe("situationsFrom", () => {
 
     expect(got.get("DAL")?.secondsLeft).toBe(0);
     expect(got.get("DAL")?.warningLeft).toBe(false);
+  });
+});
+
+describe("standingFor", () => {
+  it("hands back a still to come for each starter that sums to the side's total", () => {
+    const rows = rowsFor(
+      row("qb", "BUF", 22, "QB", "MIA"), row("wr", "BUF", 18, "WR", "MIA"),
+      row("rb", "KC", 14, "RB", "DEN"), row("k", "SF", 8, "K", "SEA"),
+      row("far", "MIA", 12, "WR", "BUF"), row("te", "DEN", 6, "TE", "KC"),
+    );
+    const now = states({
+      BUF: { where: "in", left: 0.4 }, MIA: { where: "in", left: 0.4 },
+      KC: { where: "pre", left: 1 }, DEN: { where: "pre", left: 1 },
+      SF: { where: "post", left: 0 }, SEA: { where: "post", left: 0 },
+    });
+    const game: Matchup = { sides: [
+      side("me", 30, [
+        { key: "qb", points: 15, slot: "QB" }, { key: "wr", points: 3, slot: "WR" },
+        { key: "rb", points: 0, slot: "RB" }, { key: "k", points: 12, slot: "K" },
+      ]),
+      side("them", 4, [
+        { key: "far", points: 4, slot: "WR" }, { key: "te", points: 0, slot: "TE" },
+      ]),
+    ] };
+    const remainder = new Map([["wr", [5, 7, 9]]]);
+    const standing = standingFor(game, rows, now, undefined, 2000, remainder);
+
+    for (const [at, his] of game.sides.entries()) {
+      const summed = his.starters.reduce(
+        (sum, s) => sum + s.points + standing.toCome.get(s.key)!, 0);
+
+      expect(summed).toBeCloseTo(standing.projected[at]!, 6);
+    }
   });
 });
