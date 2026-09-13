@@ -313,7 +313,7 @@ function FullRankings(
         {staleAt && " as of " + staleAt}
       </h2>
       <p class="hint">{left} of {all.length} still on the board</p>
-      <div class="how noprint">
+      <div class="seg how noprint">
         <button
           class={how === "cards" ? "on" : ""}
           onClick={() => setHow("cards")}

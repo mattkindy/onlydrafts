@@ -59,6 +59,12 @@ const click = (selector: string) => {
   (where.querySelector(selector) as HTMLElement).click();
 };
 
+/** the chip that hides everybody who is not on your roster */
+const myRosterChip = () =>
+  Array.from(where.querySelectorAll(".chips button"))
+    .find((b) => b.textContent === "my roster") as
+    HTMLButtonElement | undefined;
+
 /** the row for one man, so a test can press compare on him */
 const rowFor = (name: string) =>
   Array.from(where.querySelectorAll("table.ranks tbody tr"))
@@ -94,7 +100,7 @@ describe("who to start", () => {
   it("keeps only one position when you ask for one", async () => {
     draw();
 
-    const qb = Array.from(where.querySelectorAll("#posfilter button"))
+    const qb = Array.from(where.querySelectorAll(".chips button"))
       .find((b) => b.textContent === "qb") as HTMLButtonElement;
 
     qb.click();
@@ -113,7 +119,7 @@ describe("who to start", () => {
 
     expect(mine.length).toBe(2);
 
-    click(".controls input[type=checkbox]");
+    myRosterChip()!.click();
     await Promise.resolve();
 
     expect(names().sort()).toEqual(["Bijan Robinson", "Trey McBride"]);
@@ -122,7 +128,7 @@ describe("who to start", () => {
   it("has no roster switch when no league is connected", () => {
     draw();
 
-    expect(where.querySelector(".controls input[type=checkbox]")).toBe(null);
+    expect(myRosterChip()).toBe(undefined);
   });
 
   it("flags the rows where we and Sleeper disagree", () => {
@@ -190,7 +196,7 @@ describe("who to start", () => {
   it("says no week is built yet when none is", () => {
     render(
       <MyMatchup
-        weeks={[]} picked={null} onWeek={() => {}} slate={null} roster={null}
+        weeks={[]} picked={null} onWeek={() => {}} slate={null}
         games={[]} rows={new Map()} men={[]} mine={null} slots={null}
         listed={new Map()}
       />,

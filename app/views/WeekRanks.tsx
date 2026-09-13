@@ -180,7 +180,7 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
   return (
     <>
       <div class="controls">
-        <span id="posfilter">
+        <span class="chips">
           {POSITIONS.map((where) => (
             <button
               key={where}
@@ -190,28 +190,28 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
               {where.toLowerCase()}
             </button>
           ))}
+          {roster && (
+            <button
+              class={mineOnly ? "on" : ""}
+              onClick={() => setMineOnly((on) => !on)}
+            >
+              my roster
+            </button>
+          )}
         </span>
 
-        <label>
-          find{" "}
-          <input
-            size={12} placeholder="a name" value={query}
-            onInput={(e) => setQuery(e.currentTarget.value)}
-          />
-        </label>
-
-        {roster && (
-          <label>
-            <input
-              type="checkbox" checked={mineOnly}
-              onChange={(e) => setMineOnly(e.currentTarget.checked)}
-            />{" "}
-            my roster only
-          </label>
-        )}
+        <input
+          class="find"
+          type="search"
+          placeholder="find a name"
+          value={query}
+          onInput={(e) => setQuery(e.currentTarget.value)}
+        />
 
         {picks.length > 0 && (
-          <button onClick={() => setPicks([])}>clear the comparison</button>
+          <button class="quiet" onClick={() => setPicks([])}>
+            clear the comparison
+          </button>
         )}
       </div>
 
