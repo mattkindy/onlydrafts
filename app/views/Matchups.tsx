@@ -7,8 +7,8 @@
  * game still to play, so a side behind with everybody done reads zero.
  *
  * A card pairs the two lineups slot by slot. A player who is done shows
- * bright points and no projection, one playing gets a green edge on his
- * side of the row, and one yet to kick off shows a faint one.
+ * bright points and no projection, one playing gets a green tint on his
+ * half of the row, and one yet to kick off shows a faint one.
  *
  * Your own game comes first, so the shared picture of the week has it.
  */
