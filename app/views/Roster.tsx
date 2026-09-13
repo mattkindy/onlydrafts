@@ -1,28 +1,88 @@
-/** Your team, by position, with what each man is projected to do. */
+/**
+ * Your team, by position, with what each man is projected to do.
+ *
+ * In a keeper league what he is worth keeping for opens on his own card
+ * rather than in a second grid underneath. The two grids listed the same
+ * twelve players, so every man on the page appeared twice.
+ */
+
+import { useState } from "preact/hooks";
 
 import type { Player } from "../lib/scoring.ts";
 import type { League } from "../lib/providers.ts";
-import { SeasonCard, seasonScale } from "./Card.tsx";
+import { SeasonCard, ordinal, seasonScale } from "./Card.tsx";
+import { KeeperPricing, keeperDraft, keeperRounds } from "./Keepers.tsx";
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "other"];
 
 interface Props {
   byKey: Map<string, Player>;
+  /** the whole board, which pricing a keeper against the draft needs */
+  men: Player[];
   league: League;
   season: number;
   perTeam: number;
   marked: Record<string, string>;
+  /** when the provider was last asked, for the line over the roster */
+  readAt?: number | undefined;
+  rereading?: boolean;
+  onRefresh?: () => void;
   onMark: (p: Player) => void;
   onMore: (p: Player) => void;
+  keeperLeague?: boolean;
+  /** what keeping a player costs you, said once over the grid */
+  keepersSay?: string;
+  onKeeperChange?: () => void;
+}
+
+/** what each man is worth keeping for, opened one card at a time */
+function KeeperFold(
+  { men, p, league, perTeam, round, onChange }: {
+    men: Player[];
+    p: Player;
+    league: League;
+    perTeam: number;
+    round: number | null;
+    onChange: () => void;
+  },
+) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        class="disclose"
+        aria-expanded={open}
+        onClick={(e) => { e.stopPropagation(); setOpen((on) => !on); }}
+      >
+        <span class="chev">{open ? "⌄" : "›"}</span>
+        keep him or let him go
+        {round ? ` (he beats a ${ordinal(round)})` : ""}
+      </button>
+      {open && (
+        <KeeperPricing
+          men={men}
+          p={p}
+          league={league}
+          perTeam={perTeam}
+          onChange={onChange}
+        />
+      )}
+    </>
+  );
 }
 
 export function Roster(props: Props) {
-  const { league, marked } = props;
+  const { league, marked, men } = props;
   const mine = league.myRoster
     .map((r) => ({ r, p: props.byKey.get(r.key) ?? null }))
     .sort((a, b) => (b.p?.vor ?? -99) - (a.p?.vor ?? -99));
   const kept = Object.keys(marked).filter((k) => marked[k] === league.team).length;
   const max = seasonScale(mine.map((x) => x.p).filter((p): p is Player => Boolean(p)));
+  const draft = props.keeperLeague
+    ? keeperDraft(league, props.byKey, props.perTeam)
+    : null;
+  const rounds = draft ? keeperRounds(men, mine, draft) : new Map<string, number>();
 
   const byPosition = new Map<string, typeof mine>();
 
@@ -33,12 +93,30 @@ export function Roster(props: Props) {
 
   return (
     <>
+      <div class="rosterhead">
+        <b>{league.team}</b>
+        <span>{props.readAt === undefined ? "" : rosterRead(props.readAt)}</span>
+        {props.onRefresh && (
+          <button
+            class="quiet"
+            disabled={props.rereading}
+            onClick={props.onRefresh}
+          >
+            {props.rereading ? "refreshing..." : "refresh"}
+          </button>
+        )}
+      </div>
+
       <div class="empty">
         <b>{mine.length} players</b> on {league.team} in {league.name}
         {kept
           ? `, ${kept} marked as keepers`
           : ", none marked as keepers yet"}
       </div>
+
+      {props.keeperLeague && props.keepersSay && (
+        <p class="hint">{props.keepersSay}</p>
+      )}
 
       {POSITIONS.filter((where) => byPosition.has(where)).map((where) => (
         <div key={where}>
@@ -79,6 +157,16 @@ export function Roster(props: Props) {
                   >
                     {isKept ? "kept" : "mark keeper"}
                   </button>
+                  {draft && (
+                    <KeeperFold
+                      men={men}
+                      p={p}
+                      league={league}
+                      perTeam={props.perTeam}
+                      round={rounds.get(p.key) ?? null}
+                      onChange={props.onKeeperChange ?? (() => {})}
+                    />
+                  )}
                 </SeasonCard>
               );
             })}
@@ -87,4 +175,24 @@ export function Roster(props: Props) {
       ))}
     </>
   );
+}
+
+/** how fresh the roster is, in the words somebody checking would use */
+export function rosterRead(readAt: number): string {
+  if (!readAt) {
+    return "read, but the page did not note when";
+  }
+
+  const mins = Math.floor((Date.now() - readAt) / 60000);
+
+  if (mins < 1) {
+    return "roster read just now";
+  }
+
+  if (mins < 60) {
+    return `roster read ${mins} min ago`;
+  }
+
+  return "roster read at " + new Date(readAt)
+    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
