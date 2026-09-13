@@ -188,8 +188,9 @@ export function slateUnder(slate: Slate, perCatch: number): Slate {
     return slate;
   }
 
+  // a Sleeper nought means he is not expected to play, so it stays nought
   const moved = (row: SlateRow, points: number | null | undefined) =>
-    points === null || points === undefined
+    points === null || points === undefined || points === 0
       ? points
       : Number((points + shift * row.catches).toFixed(1));
 
