@@ -627,7 +627,9 @@
     gap: var(--s1) var(--s3); }
   .card.matchup.on { border-color: var(--go); }
   .card.matchup .team { display: flex; flex-direction: column; min-width: 0; }
-  .card.matchup .team:last-of-type { text-align: right; align-items: flex-end; }
+  .card.matchup .team.away { text-align: right; align-items: flex-end; }
+  /* a card on its own reads like one in the league grid, not a banner */
+  .card.matchup.alone { max-width: 40rem; }
   .card.matchup .team .nm { font-weight: 700; font-size: var(--t3);
     display: block; overflow-wrap: break-word; }
   .card.matchup .team .big { align-items: inherit; }
