@@ -17,6 +17,7 @@
   "//": "These reach into app, and app spells its imports with a .ts extension under bundler resolution, which NodeNext will not read. tsx runs them anyway.",
   "exclude": [
     "scripts/buildSimTables.ts",
+    "scripts/partialGameProbe.ts",
     "scripts/simAgreement.ts"
   ]
 }

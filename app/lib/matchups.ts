@@ -14,8 +14,8 @@
  */
 
 import {
-  factorFor, factorsOf, mixFor, normalLine, PASS_CATCHERS, posteriorDraws,
-  posteriorFor, sharedAt, type From, type Mix, type Pace,
+  factorFor, factorsOf, mixFor, normalLine, paceWeight, PASS_CATCHERS,
+  posteriorDraws, posteriorFor, sharedAt, type From, type Mix, type Pace,
 } from "./copula.ts";
 import {
   defenceLinesFrom, statLinesFrom,
@@ -685,17 +685,24 @@ function topCatchers(rows: Map<string, SlateRow>): Set<string> {
 /**
  * How much of his game a player has played before his pace is believed.
  *
- * Reading a whole game off a fraction q of one has about 1/q the
- * variance a whole game has, so (1 - q) / q of invented spread goes into
- * the system as observation noise and the evidence is discounted by it.
- * Under a tenth played that would divide by almost nothing, and one
- * touchdown in the first two minutes would move everybody's odds, so the
+ * Under a tenth played the weight below would be read off two minutes of
+ * football, and one touchdown there would move everybody's odds, so the
  * fraction is floored here instead.
  */
 const BARELY_PLAYED = 0.1;
 
-const noiseAt = (played: number) =>
-  (1 - played) / Math.max(BARELY_PLAYED, played);
+/**
+ * How much the pace is not to be trusted, as spread added to the
+ * observation the posterior is given.
+ *
+ * The posterior sees the pace as a whole week plus noise, so the noise
+ * that pulls its weight down to paceWeight is (1 - w) / w.
+ */
+const noiseAt = (played: number) => {
+  const weight = paceWeight(Math.max(BARELY_PLAYED, played));
+
+  return (1 - weight) / weight;
+};
 
 /** how far out a pace is read, since a quantile of zero has no normal */
 const FURTHEST = 0.002;
@@ -739,8 +746,8 @@ export interface Drawing {
  * that game. Two games share no factor, so each is solved on its own.
  *
  * His own noise is partly observed too, so the rest of his own week is
- * shrunk towards what the pace implies, by the fraction played. That is
- * the simple treatment, and it leaves him unit variance.
+ * pulled toward what the pace implies, by a weight well under the
+ * fraction played.
  */
 export function liveDraws(
   players: Starter[],
