@@ -66,8 +66,8 @@ function points(n: number): string {
   return n > 0 ? `+${text}` : text;
 }
 
-/** a seat by the name a reader would use for it */
-const seatName = (slot: string) => slot === "FLEX" ? "flex" : slot;
+/** a lineup slot by the name a reader would use for it */
+const seatName = (slot: string) => slot === "FLEX" ? "FLEX" : slot;
 
 /**
  * How often you win a week either side of the move, and the gap between
@@ -109,7 +109,7 @@ function seasonSeat(row: Drop): string {
 
   const seat = row.seat ? seatName(row.seat) : "the lineup";
 
-  return `${row.heir?.name ?? "the wire"} at ${seat}`;
+  return `${row.heir?.name ?? "a free agent"} at ${seat}`;
 }
 
 const seasonDrop = (row: Drop): Figures => ({
@@ -125,7 +125,7 @@ const weekDrop = (
 ): Figures => ({
   points: -his.takes,
   seat: his.slot
-    ? `${his.heir ? nameFor(his.heir) : "nobody"} at ${seatName(his.slot)}`
+    ? `${his.heir ? nameFor(his.heir) : "nobody"} takes his ${seatName(his.slot)} slot`
     : "not starting",
   before: his.before,
   after: his.after,
@@ -134,7 +134,7 @@ const weekDrop = (
 
 const seasonAdd = (row: Add): Figures => ({
   points: row.brings,
-  seat: row.displaced?.name ?? "an empty seat",
+  seat: row.displaced?.name ?? "an open starting spot",
   before: row.before,
   after: row.after,
   delta: row.added,
@@ -144,7 +144,7 @@ const weekAdd = (his: WeekAdd, nameFor: (key: string) => string): Figures => ({
   points: his.brings,
   seat: his.displaced
     ? `${nameFor(his.displaced)} at ${seatName(his.slot ?? "")}`
-    : his.slot ? "an empty seat" : "would not start",
+    : his.slot ? "an open starting spot" : "would not start",
   before: his.before,
   after: his.after,
   delta: his.added,
@@ -266,8 +266,8 @@ function missingWeek(
 
   if (!ours) {
     return {
-      says: "You have no game in your league this week, so there is nobody " +
-        "to set a lineup against.",
+      says: "You have no game this week, so there is no lineup to price a " +
+        "move against.",
       reading: false,
     };
   }
@@ -325,13 +325,13 @@ export function Waivers(props: Props) {
   const hidden = listed.length - worth.length - rest.length;
   const best = worth[0] ?? null;
   const missing = missingWeek(props.week, rows, states, ours);
-  const dropSeat = span === "week" ? "takes his seat" : "when he starts";
+  const dropSeat = span === "week" ? "takes his slot" : "when he starts";
 
   /**
    * A row with no week figures says which of the two reasons it is: the
    * week itself has not loaded, or it has and nobody has a line on him.
    */
-  const absent = week ? "no line" : "no week";
+  const absent = week ? "no projection" : "no week yet";
 
   /** what an add's row shows, in whichever span is on screen */
   const addSeen = (row: Add, paid: Net | null) => {
@@ -344,7 +344,7 @@ export function Waivers(props: Props) {
         absent,
         figures: seasonAdd(row),
         paid: paid
-          ? { drop: paid.drop?.name ?? "open spot", net: paid.net }
+          ? { drop: paid.drop?.name ?? "nobody, spot open", net: paid.net }
           : null,
       };
     }
@@ -354,7 +354,10 @@ export function Waivers(props: Props) {
       absent,
       figures: his ? weekAdd(his, nameFor) : null,
       paid: net
-        ? { drop: net.drop ? nameFor(net.drop) : "open spot", net: net.net }
+        ? {
+            drop: net.drop ? nameFor(net.drop) : "nobody, spot open",
+            net: net.net,
+          }
         : null,
     };
   };
@@ -370,14 +373,14 @@ export function Waivers(props: Props) {
   };
 
   if (working) {
-    return <Reading>pricing the wire against your season</Reading>;
+    return <Reading>pricing the waiver wire against your season</Reading>;
   }
 
   if (!drops.length) {
     return (
       <div class="empty">
         <b>Nobody on your roster yet.</b> Once your league has a team for
-        you, this page says what each man on the wire would add.
+        you, this says what each free agent would add.
       </div>
     );
   }
@@ -401,11 +404,11 @@ export function Waivers(props: Props) {
         </span>
         <span class="says">
           {span === "season"
-            ? "a season of drawn weeks against a typical opponent"
+            ? "a full season of simulated weeks against an average opponent"
             : week
               ? "the lineup you would set against " + week.opponent +
-                ", and how often you beat him"
-              : "this week's own game, once the week has loaded"}
+                ", and your win probability either way"
+              : "this week's game, once the week has loaded"}
         </span>
       </div>
 
@@ -414,7 +417,7 @@ export function Waivers(props: Props) {
         : <p class="hint">{missing.says}</p>)}
       {span === "week" && trouble && <p class="hint">{trouble}</p>}
 
-      <h2>who to add</h2>
+      <h2>waiver wire adds</h2>
       <table class="line pairs">
         <thead>
           <tr>
@@ -452,8 +455,8 @@ export function Waivers(props: Props) {
 
       {hidden > 0 && (
         <p class="hint">
-          {hidden} more came out under half a point of win chance a week,
-          which is inside the noise of the draw, so they are left off.
+          {hidden} more came out under half a point of win probability a
+          week, which is inside the noise, so they are left off.
         </p>
       )}
 
@@ -488,18 +491,20 @@ export function Waivers(props: Props) {
           {best.paid.drop
             ? (
               <>
-                Adding <b>{best.row.p.name}</b> and dropping{" "}
-                <b>{best.paid.drop.name}</b> takes the weeks you win from{" "}
-                <b>{pct(best.paid.before)}</b> to <b>{pct(best.paid.after)}</b>,
-                so <b>{signed(best.paid.net)}</b> points of win chance a week.
+                Add <b>{best.row.p.name}</b>, drop{" "}
+                <b>{best.paid.drop.name}</b>: your weekly win probability
+                goes from <b>{pct(best.paid.before)}</b> to{" "}
+                <b>{pct(best.paid.after)}</b>, so{" "}
+                <b>{signed(best.paid.net)}</b> points a week.
               </>
             )
             : (
               <>
-                You have a spot open, so <b>{best.row.p.name}</b> can be added
-                without dropping anybody. He takes the weeks you win from{" "}
-                <b>{pct(best.paid.before)}</b> to <b>{pct(best.paid.after)}</b>,
-                so <b>{signed(best.paid.net)}</b> points of win chance a week.
+                You have a roster spot open, so <b>{best.row.p.name}</b> can
+                be added without dropping anybody. Your weekly win probability
+                goes from <b>{pct(best.paid.before)}</b> to{" "}
+                <b>{pct(best.paid.after)}</b>, so{" "}
+                <b>{signed(best.paid.net)}</b> points a week.
               </>
             )}
         </p>

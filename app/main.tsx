@@ -48,9 +48,9 @@ export type Order = "war" | "rank" | "adp";
  * eighth on another should not have to work it out.
  */
 const ORDER_MEANS: Record<Order, string> = {
-  war: "what he adds over the man you would otherwise end up with at his seat",
+  war: "what he adds over the player you would otherwise end up with in that slot",
   rank: "where we rank him whoever drafts him",
-  adp: "where the room is taking him, so who lasts until your next turn",
+  adp: "where he usually goes, so who lasts until your next pick",
 };
 
 type View =
@@ -68,61 +68,67 @@ type View =
 const COPY: Record<View, [string, string, string]> = {
   leagues: [
     "My leagues",
-    "Say where your league lives, name yourself, then tap a league to open it.",
+    "Pick your platform and enter your username.",
     "",
   ],
   roster: [
-    "My roster",
-    "Your team, with this season's projection for each man.",
-    "Before a keeper draft this is last season's roster until the league clears it. Tap a player for the season distribution and to mark a keeper.",
+    "My team",
+    "Your roster, with this season's projection for each player.",
+    "Before a keeper draft this is last season's roster until the league clears it. Tap a player for his season outlook and to mark a keeper.",
   ],
   keepers: [
-    "Keeper value",
-    "The most a player is worth keeping for.",
-    "Paying a round for him means giving up that pick, so he is worth it only while he beats whoever you could take with it. Type what your league charges and each card says whether to keep him.",
+    "Keepers",
+    "The latest round each player is still worth keeping in.",
+    "Keeping him costs you that pick, so he is worth it only if he beats whoever you would draft there. Enter what your league charges and the card says keep or let go.",
   ],
   draft: [
-    "Draft help",
+    "Draft",
     "Live board for draft night, ranked by what your roster still needs.",
-    "It watches your league's draft and takes men off the board as they go. The order leads with what a man adds to the weeks you win, given the side you would finish with. Players stay on the board until they are actually kept or drafted.",
+    "It watches your league's draft and takes players off the board as they go. The order leads with what a player adds to the weeks you win, given the roster you would end up with.",
   ],
   rating: [
-    "How the draft went",
-    "Every team against what its own picks were worth. Then your own draft, pick by pick.",
-    "Rating a team by what it took rather than by where it picked means the team that drafted third is not rewarded for drafting third. Where the room was taking a man leads, and our own value over a replacement starter follows, since the board orders kickers and defences by nothing much.",
+    "Draft grades",
+    "Every team against what its own picks were worth, then your draft pick by pick.",
+    "Grading a team by what it took rather than by where it picked means the team with the third pick is not rewarded for having it. ADP leads and our VOR (value over replacement) follows.",
   ],
   start: [
-    "Who to start",
-    "One week, ranked, with your own men marked.",
-    "Our number and Sleeper's sit side by side. Where they disagree by three points or more the row is marked, and Sleeper has the better of those about 55% of the time.",
+    "Start/sit",
+    "Your lineup for the week, with the bench players who could take each slot.",
+    "Our projection and Sleeper's sit side by side. Where they disagree by three points or more the row is flagged, and Sleeper is right about 55% of the time.",
   ],
   matchups: [
     "Matchups",
-    "Every game in your league this week, and how often each side wins from here.",
-    "The chance counts only the part of each game still to play, so a lead with everybody done is the whole thing and a lead with a back to come is not.",
+    "Every game in your league this week, with each side's win probability.",
+    "Win probability counts only the part of each game still to play, so a lead with everybody done is the whole thing and a lead with a running back still to play is not.",
   ],
   waivers: [
-    "Who to add",
-    "Everybody nobody in your league has, and what dropping one of yours would cost.",
-    "This week uses the week's own projections, the lineup you would set, and the team you actually play: the row says whether the man starts, who takes his seat if he goes, and how often you win this one game either way. Rest of season draws a year of weeks against a typical opponent, so a man who starts a third of the time is priced for the weeks he starts. That is why somebody on your bench can cost nothing this week and something over the season.",
+    "Add/drop",
+    "Every free agent nobody in your league has, and what dropping one of yours would cost.",
+    "This week prices each move against the lineup you would set and the team you actually play. Rest of season runs a year of weeks against an average opponent, which is why a bench player can cost nothing this week and something over the season.",
   ],
 };
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF", "ROOKIES"];
 
-/** the few a reader would check, spelled out on hover */
-function payDescription(pays: Record<string, number> | null | undefined): string {
+/** the short label for a league's scoring, as people say it */
+const SCORING_NAME: Record<"ppr" | "half" | "standard", string> = {
+  ppr: "ppr", half: "half ppr", standard: "standard",
+};
+
+/** the settings a reader would check, spelled out on hover */
+function scoringSettings(
+  pays: Record<string, number> | null | undefined,
+): string {
   const said = [
-    ["a catch", pays?.["rec"] ?? 0],
-    ["a receiving yard", pays?.["rec_yd"] ?? 0.1],
-    ["a rushing yard", pays?.["rush_yd"] ?? 0.1],
-    ["a touchdown", pays?.["rush_td"] ?? 6],
-    ["a passing yard", pays?.["pass_yd"] ?? 0.04],
-    ["a passing touchdown", pays?.["pass_td"] ?? 4],
+    ["reception", pays?.["rec"] ?? 0],
+    ["receiving yard", pays?.["rec_yd"] ?? 0.1],
+    ["rushing yard", pays?.["rush_yd"] ?? 0.1],
+    ["TD", pays?.["rush_td"] ?? 6],
+    ["passing yard", pays?.["pass_yd"] ?? 0.04],
+    ["passing TD", pays?.["pass_td"] ?? 4],
   ];
 
-  return "this league pays " +
-    said.map(([what, n]) => `${n} for ${what}`).join(", ");
+  return "scoring: " + said.map(([what, n]) => `${n} per ${what}`).join(", ");
 }
 
 const NOTHING: DraftNow = {
@@ -177,7 +183,7 @@ const STALE_AFTER = 2 * 60 * 1000;
  */
 function rosterRead(league: League): string {
   if (!league.readAt) {
-    return "read before the page started noting when";
+    return "read, but the page did not note when";
   }
 
   const at = new Date(league.readAt)
@@ -585,8 +591,8 @@ function App() {
             <span>you: {active.team}</span>
             {/* what the numbers are scored by, since standard and a
                 board with no league connected look the same on screen */}
-            <span class="pays" title={payDescription(active.pays)}>
-              {roomFor(active.pays)}
+            <span class="pays" title={scoringSettings(active.pays)}>
+              {SCORING_NAME[roomFor(active.pays)]}
             </span>
           </span>
         )}
@@ -709,8 +715,8 @@ function App() {
                   keep("order", e.currentTarget.value);
                 }}
               >
-                <option value="war">the weeks he wins you</option>
-                <option value="rank">our value</option>
+                <option value="war">weeks won</option>
+                <option value="rank">our ranking</option>
                 <option value="adp">adp</option>
               </select>
             </label>
@@ -722,7 +728,7 @@ function App() {
                 type="checkbox" checked={needOnly}
                 onChange={(e) => setNeedOnly(e.currentTarget.checked)}
               />{" "}
-              only what I still need
+              only positions I still need
             </label>
             <label>
               find{" "}
@@ -742,7 +748,9 @@ function App() {
 
       {view === "draft" && (
         <div class="controls">
-          <label class="hint">extra names to mark as taken, one per line</label>
+          <label class="hint">
+            extra players to mark as drafted, one name per line
+          </label>
           <textarea
             value={manual}
             onInput={(e) => {
@@ -764,10 +772,8 @@ function App() {
           leagues.length === 0
             ? (
               <div class="empty">
-                <b>Start here.</b>
-                <div class="step"><span>1</span><span>Pick where your league lives, then type your {asks.wants} above.</span></div>
-                <div class="step"><span>2</span><span>Press find. Your leagues appear as cards.</span></div>
-                <div class="step"><span>3</span><span>Tap a league, then use draft help or keeper value.</span></div>
+                Sleeper or ESPN, then your {asks.wants} above. Your leagues
+                show up as cards, and you tap one to open it.
               </div>
             )
             : (
@@ -803,9 +809,9 @@ function App() {
                       <div class="sub">
                         <span
                           class="pays"
-                          title={payDescription(lg.pays)}
+                          title={scoringSettings(lg.pays)}
                         >
-                          {roomFor(lg.pays)}
+                          {SCORING_NAME[roomFor(lg.pays)]}
                         </span>
                       </div>
                     </div>

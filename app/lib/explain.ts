@@ -234,7 +234,7 @@ const LEADS: Record<Cause, (good: boolean, underdog: boolean) => string> = {
       : "his is the wider week, and the ceiling it adds is worth more here than the floor it costs.")
     : (underdog
       ? "his is the narrower week, which leaves you short of the big afternoon you need from behind."
-      : "his is the narrower week, and you are ahead, so the steadier man keeps more of the lead."),
+      : "his is the narrower week, and you are ahead, so the steadier player keeps more of the lead."),
   ownLineup: (good, underdog) => good
     ? (underdog
       ? "his week moves with your other starters, which widens your whole week, and that helps from behind."

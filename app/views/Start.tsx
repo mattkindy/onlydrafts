@@ -66,7 +66,7 @@ function Numbers(
   },
 ) {
   if (!line) {
-    return <span class="seat-fig">no line</span>;
+    return <span class="seat-fig">no projection</span>;
   }
 
   return (
@@ -106,7 +106,7 @@ function Why({ why }: { why: Explanation }) {
   const gap = why.projected.candidate - why.projected.starter;
   const pieces: [string, number][] = [
     ["points", why.points],
-    ["spread", why.spread],
+    ["range", why.spread],
     ["their game", why.opponent],
     ["your lineup", why.ownLineup],
   ];
@@ -161,7 +161,7 @@ function Seat(
       </h3>
 
       {choice.options.length === 0
-        ? <p class="hint">Nobody on the bench can take this seat.</p>
+        ? <p class="hint">Nobody on your bench can take this slot.</p>
         : (
           <ul class="options">
             {choice.options.map((option) => {
@@ -236,7 +236,7 @@ export function Start(props: Props) {
       <div class="empty">
         <b>No week has been built yet.</b> Weekly projections need a few
         games of this year's snaps and targets, so they turn on about a
-        month in. Until then use <b>draft help</b> and <b>my roster</b>.
+        month in. Until then use <b>draft</b> and <b>team</b>.
       </div>
     );
   }
@@ -288,8 +288,8 @@ export function Start(props: Props) {
             lines={lines}
           />
           <p class="hint">
-            Against {ours.against.owner} this week. Each man is priced by
-            what starting him does to your chance of winning it.
+            Against {ours.against.owner} this week. Each player is priced by
+            what starting him does to your win probability.
           </p>
           <Lineup
             side={ours.side}
@@ -307,7 +307,7 @@ export function Start(props: Props) {
 
       {!ours && (
         <p class="hint">
-          You have no game to set a lineup against this week, so here is
+          You have no game this week, so there is no lineup to set. Here is
           the whole week ranked instead.
         </p>
       )}

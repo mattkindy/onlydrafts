@@ -55,20 +55,22 @@ export function Advice(
   if (!best.swaps.length) {
     return (
       <div class="advice">
-        <b>Lineup wins {pct(standing)}.</b> This is the best lineup you can set.
+        <b>Your lineup wins {pct(standing)}.</b> It is already the optimal
+        lineup.
       </div>
     );
   }
 
   return (
     <div class="advice">
-      <b>Lineup wins {pct(standing)}.</b> Best lineup {pct(best.odds)}.
+      <b>Your lineup wins {pct(standing)}.</b> Optimal lineup{" "}
+      {pct(best.odds)}.
       <ul>
         {best.swaps.map((swap) => (
           <li key={swap.starts + swap.benches}>
             Start {nameOf(swap.starts, rows, lines)} over{" "}
             {nameOf(swap.benches, rows, lines)} at {swap.slot}{" "}
-            <span class="gain">(+{(100 * swap.gains).toFixed(1)}%)</span>
+            <span class="gain">(+{pct(swap.gains)})</span>
           </li>
         ))}
       </ul>

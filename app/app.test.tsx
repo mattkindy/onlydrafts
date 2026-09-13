@@ -1006,11 +1006,11 @@ describe("a slot you cannot leave empty", () => {
     return at.querySelector(".card")!;
   };
 
-  it("leads a kicker and a defence with what he beats the wire by", () => {
+  it("leads a kicker and a defence with what he beats waivers by", () => {
     for (const position of ["K", "DEF"]) {
       const card = cardFor(position);
 
-      expect(card.textContent, position).toContain("over the wire");
+      expect(card.textContent, position).toContain("over waivers");
       expect(card.textContent, position).not.toContain("value here");
     }
   });
@@ -1026,7 +1026,7 @@ describe("a slot you cannot leave empty", () => {
     const card = cardFor("RB");
 
     expect(card.textContent).toContain("value here");
-    expect(card.textContent).not.toContain("over the wire");
+    expect(card.textContent).not.toContain("over waivers");
   });
 });
 
