@@ -47,6 +47,32 @@ export interface Baseline {
   displaced: Record<string, Held[]>;
   /** how many drawn weeks each man was in the lineup, by his key */
   started: Record<string, number>;
+  /**
+   * How many of those weeks he spent in each seat, by his key and then
+   * by the seat's name. A back who plays the flex half the time and the
+   * second back the other half has two entries, so a page naming one
+   * seat has to pick the commonest.
+   */
+  seated: Record<string, Record<string, number>>;
+}
+
+/** the seat he was in most of the weeks he started, if he started at all */
+export function seatOf(baseline: Baseline, key: string): string | null {
+  const his = baseline.seated[key];
+
+  if (!his) {
+    return null;
+  }
+
+  let seat: string | null = null;
+
+  for (const [where, weeks] of Object.entries(his)) {
+    if (seat === null || weeks > his[seat]!) {
+      seat = where;
+    }
+  }
+
+  return seat;
 }
 
 /** The season is this many weeks, and every man has a bye in one of them. */
@@ -194,6 +220,8 @@ function drawWeeks(p: Player, draws: number): number[] {
 
 interface Seat {
   where: string[];
+  /** what to call it on a page, which for a flex is not a position */
+  slot: string;
   taken: Held | null;
 }
 
@@ -204,12 +232,12 @@ function seatsOf(slots: string[] | null | undefined): Seat[] {
 
   for (const [where, count] of Object.entries(named)) {
     for (let i = 0; i < count; i++) {
-      seats.push({ where: [where], taken: null });
+      seats.push({ where: [where], slot: where, taken: null });
     }
   }
 
   for (let i = 0; i < flex; i++) {
-    seats.push({ where: FLEX_POSITIONS, taken: null });
+    seats.push({ where: FLEX_POSITIONS, slot: "FLEX", taken: null });
   }
 
   return seats;
@@ -260,13 +288,14 @@ export function baselineFor(
   const total: number[] = [];
   const displaced: Record<string, Held[]> = {};
   const started: Record<string, number> = {};
+  const seated: Record<string, Record<string, number>> = {};
 
   for (const where of WHERE) {
     displaced[where] = [];
   }
 
   for (let i = only[0]; i < only[1]; i++) {
-    const seated = seats.map((seat) => ({ ...seat }));
+    const filled = seats.map((seat) => ({ ...seat }));
 
     for (const man of weeks) {
       const score = man.its[i]!;
@@ -276,20 +305,22 @@ export function baselineFor(
         continue;
       }
 
-      const seat = seated.find((s) =>
+      const seat = filled.find((s) =>
         !s.taken && s.where.includes(man.p.position));
 
       if (seat) {
         seat.taken = { expect: man.expect, score, who: man.p.key };
         started[man.p.key] = (started[man.p.key] ?? 0) + 1;
+        const his = seated[man.p.key] ??= {};
+        his[seat.slot] = (his[seat.slot] ?? 0) + 1;
       }
     }
 
-    fillFromTheWire(seated, wire);
-    total.push(seated.reduce((sum, s) => sum + (s.taken?.score ?? 0), 0));
+    fillFromTheWire(filled, wire);
+    total.push(filled.reduce((sum, s) => sum + (s.taken?.score ?? 0), 0));
 
     for (const where of WHERE) {
-      const his = seated.filter((s) => s.where.includes(where));
+      const his = filled.filter((s) => s.where.includes(where));
       const open = his.length === 0 || his.some((s) => !s.taken);
       const worst = open
         ? null
@@ -302,7 +333,7 @@ export function baselineFor(
     }
   }
 
-  return { total, displaced, started };
+  return { total, displaced, started, seated };
 }
 
 /**
@@ -318,6 +349,7 @@ export function baselineAcross(
   const total: number[] = [];
   const displaced: Record<string, Held[]> = {};
   const started: Record<string, number> = {};
+  const seated: Record<string, Record<string, number>> = {};
 
   for (const where of WHERE) {
     displaced[where] = [];
@@ -337,9 +369,17 @@ export function baselineAcross(
     for (const [key, count] of Object.entries(base.started)) {
       started[key] = (started[key] ?? 0) + count;
     }
+
+    for (const [key, his] of Object.entries(base.seated)) {
+      const mine = seated[key] ??= {};
+
+      for (const [slot, count] of Object.entries(his)) {
+        mine[slot] = (mine[slot] ?? 0) + count;
+      }
+    }
   });
 
-  return { total, displaced, started };
+  return { total, displaced, started, seated };
 }
 
 /**

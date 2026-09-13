@@ -16,7 +16,8 @@
 import type { Player } from "./scoring.ts";
 import type { Room } from "./draftShare.ts";
 import {
-  baselineFor, winChance, winShareFor, type Baseline, type Priced,
+  baselineFor, seatOf, winChance, winShareFor,
+  type Baseline, type Priced,
 } from "./winShare.ts";
 
 /**
@@ -25,6 +26,13 @@ import {
  * changes nothing.
  */
 export const WORTH_ADDING = 0.005;
+
+/**
+ * A man who is in the lineup less often than this is a bench man, and
+ * naming the seat he takes in the odd week he starts tells a reader less
+ * than saying he hardly ever starts.
+ */
+export const RARELY_STARTS = 1 / 3;
 
 export interface Add extends Omit<Priced, "displaces"> {
   p: Player;
@@ -44,6 +52,8 @@ export interface Drop {
   after: number;
   /** who starts most in the weeks he would have, nobody if the wire does */
   heir: Player | null;
+  /** the seat he is in most of the weeks he starts, nobody's if he never does */
+  seat: string | null;
 }
 
 export interface Net {
@@ -108,6 +118,7 @@ export function dropsFor(
         before: with_,
         after,
         heir: heirTo(rest, held, base),
+        seat: seatOf(held, p.key),
       };
     })
     .sort((a, b) => b.costs - a.costs);

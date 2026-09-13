@@ -121,6 +121,18 @@ describe("dropping a man", () => {
     expect(his.before).toBeGreaterThan(his.after);
   });
 
+  it("names the seat each man spends most of his starts in", () => {
+    const roster = [...aRoster(), aMan("aK", "K", 9)];
+    const drops = dropsFor(roster, SLOTS, aRoom());
+    const seatOf = (key: string) =>
+      drops.find((d) => d.p.key === key)!.seat;
+
+    expect(seatOf("rb1")).toBe("RB");
+    expect(seatOf("aK")).toBe("K");
+    // three receivers and two receiver seats, so the cheapest plays the flex
+    expect(seatOf("flex")).toBe("FLEX");
+  });
+
   /**
    * The cost is a weekly margin against the typical side, so moving the
    * mean of that margin by the points he takes has to move the win chance
