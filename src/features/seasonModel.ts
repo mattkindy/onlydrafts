@@ -31,6 +31,12 @@ export type Group =
 
 export interface SeasonExample {
   playerId: string;
+  /**
+   * What the season he was read from calls him. A man who missed last
+   * season is not in last season's summaries, so anyone naming him
+   * from there gets his gsis id on the page instead.
+   */
+  playerName?: string;
   position: string;
   prevPpg: number;
   /** the same three seasons in yards and catches, which no league scores */
@@ -814,6 +820,100 @@ export function predictSeason(fit: SeasonModelFit, e: SeasonExample): number {
 }
 
 /**
+ * How far back the board will reach for a man who did not play last
+ * season. One season, so a man who spent a year on injured reserve
+ * still gets a row. Past that his numbers are too old to project from,
+ * and the rookie path picks him up instead.
+ */
+const STALE_SEASONS = 1;
+
+/** enough of a season to say what a man is */
+const ENOUGH_GAMES = 4;
+
+/**
+ * Whether the board has a season of this man it can project from.
+ *
+ * False for a rookie, and false too for a man whose last season of
+ * four games or more is older than the board reaches, or who has
+ * never had one. Those men
+ * are projected from their draft slot and their side instead.
+ */
+export function hasSeasonToRead(
+  playerId: string,
+  target: number,
+  data: Map<number, SeasonData>,
+): boolean {
+  for (let back = 1; back <= 1 + STALE_SEASONS; back++) {
+    const was = data.get(target - back)?.summaries.get(playerId);
+
+    if (was && SEASON_POSITIONS.includes(was.position) &&
+      was.games >= ENOUGH_GAMES) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * The last season each man played, along with the season data it came
+ * from, so the features that read his season read the right one.
+ *
+ * A man who missed all of last season used to have no row at all,
+ * because the board was built by walking last season's summaries. He
+ * kept his roster spot and the model had three years of him on file,
+ * and he still came out of the build as though he had retired.
+ */
+function lastSeasonPlayed(
+  target: number,
+  data: Map<number, SeasonData>,
+  context: DraftContext,
+): {
+  playerId: string;
+  was: SeasonSummary;
+  from: SeasonData;
+  older: Map<string, SeasonSummary> | undefined;
+}[] {
+  const found = new Map<string, {
+    playerId: string;
+    was: SeasonSummary;
+    from: SeasonData;
+    older: Map<string, SeasonSummary> | undefined;
+  }>();
+
+  for (let back = 1; back <= 1 + STALE_SEASONS; back++) {
+    const from = data.get(target - back);
+
+    if (!from) {
+      continue;
+    }
+
+    for (const [playerId, was] of from.summaries) {
+      if (
+        found.has(playerId) ||
+        !SEASON_POSITIONS.includes(was.position) ||
+        was.games < ENOUGH_GAMES
+      ) {
+        continue;
+      }
+
+      // Reaching past last season is only safe for a man somebody has
+      // put on a roster this year. Without it the board fills up with
+      // everyone who has ever retired.
+      if (back > 1 && !context.weekOneTeam.has(playerId)) {
+        continue;
+      }
+
+      found.set(playerId, {
+        playerId, was, from, older: data.get(target - back - 1)?.summaries,
+      });
+    }
+  }
+
+  return [...found.values()];
+}
+
+/**
  * Draft-day projections for a target season, from the previous seasons
  * and the week-1 roster only. Unlike examplesForTransition, nothing
  * here reads the target season's stats, so the board is fair to draft
@@ -829,11 +929,9 @@ export async function projectDraftExamples(
   const adp = await loadAdp(target).catch(() => new Map());
   const examples: SeasonExample[] = [];
 
-  for (const [playerId, was] of prev.summaries) {
-    if (!SEASON_POSITIONS.includes(was.position) || was.games < 4) {
-      continue;
-    }
-
+  for (const { playerId, was, from, older } of lastSeasonPlayed(
+    target, data, context,
+  )) {
     const targetTeam =
       context.weekOneTeam.get(playerId) ?? was.primaryTeamId;
     const moved = was.primaryTeamId !== targetTeam;
@@ -844,12 +942,13 @@ export async function projectDraftExamples(
 
     const example: SeasonExample = {
       playerId,
+      playerName: was.playerName,
       position: was.position,
       prevPpg: was.pointsPerGame,
-      prev2Ppg: prev2?.summaries.get(playerId)?.pointsPerGame,
+      prev2Ppg: older?.get(playerId)?.pointsPerGame,
       actualPpg: 0,
       prevParts: was.perGame,
-      prev2Parts: prev2?.summaries.get(playerId)?.perGame,
+      prev2Parts: older?.get(playerId)?.perGame,
       moved,
       group: groupOf(was.position, moved, qbChanged),
       expYears: entered === undefined ? undefined : target - entered,
@@ -859,7 +958,7 @@ export async function projectDraftExamples(
       // It was zero here, so the model met a feature at prediction time
       // that it had never seen empty while it was learning.
       snapPct:
-        prev.snapShare.get(
+        from.snapShare.get(
           `${normalizeName(was.playerName)}|${was.primaryTeamId}`,
         ) ?? 0,
       age: ageOf(context, playerId, target),
@@ -874,10 +973,10 @@ export async function projectDraftExamples(
       airYardsPerGame: was.airYardsPerGame,
       earlyPpg: was.earlyPpg,
       latePpg: was.latePpg,
-      healthyPpg: prev.healthyPpg.get(playerId),
-      compromised: prev.compromised.get(playerId) ?? 0,
-      clearPpg: prev.clearPpg.get(playerId),
-      softShadow: prev.softShadow.get(playerId) ?? 0,
+      healthyPpg: from.healthyPpg.get(playerId),
+      compromised: from.compromised.get(playerId) ?? 0,
+      clearPpg: from.clearPpg.get(playerId),
+      softShadow: from.softShadow.get(playerId) ?? 0,
       ...roomFeatures(context, playerId, targetTeam, was.position, was.pointsPerGame),
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,

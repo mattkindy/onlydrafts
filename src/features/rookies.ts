@@ -1,8 +1,19 @@
 import { loadWeeklyRosters, type GameRow } from "../data/nflverse.js";
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
-import type { SeasonData } from "./seasonModel.js";
+import { hasSeasonToRead, type SeasonData } from "./seasonModel.js";
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
+
+/**
+ * How many seasons since a man entered the league this model will still
+ * speak for him. Its features are his draft slot, his age and his
+ * side, which is all anybody has on a second year back who spent his
+ * first year hurt. A thirty year old fullback who has never been
+ * handed the ball is nothing like a rookie, and projecting him this
+ * way put him well above anything the fit was trained on: Kyle
+ * Juszczyk came out at 11.6 points a game.
+ */
+const STILL_A_PROSPECT = 3;
 
 export interface RookieExample {
   playerId: string;
@@ -18,15 +29,30 @@ export interface RookieExample {
   age: number;
   /** his team's points per game the season before */
   teamPointsPg: number;
+  /** false for a man taken in an earlier draft who has yet to play */
+  rookie: boolean;
   /** rookie-year points per game, once the season has happened */
   actualPpg?: number;
   actualGames: number;
+}
+
+export interface RookieOptions {
+  /**
+   * Also take the men on the week-1 roster the board has no season to
+   * read: a second year back who spent his first year hurt, a man cut
+   * and re-signed after two quiet seasons. Nothing here reads a man's
+   * own history, so the same model works for them as for a rookie.
+   *
+   * Off while training, so the fit stays on men in their first season.
+   */
+  alsoUnread?: boolean;
 }
 
 export async function rookiesFor(
   season: number,
   data: Map<number, SeasonData>,
   games: GameRow[],
+  options: RookieOptions = {},
 ): Promise<RookieExample[]> {
   const roster = await loadWeeklyRosters(season);
   const prev = data.get(season - 1)!.summaries;
@@ -93,10 +119,21 @@ export async function rookiesFor(
 
     if (
       appearance.week !== 1 ||
-      appearance.draftYear !== season ||
       !POSITIONS.includes(position) ||
       seen.has(appearance.playerId)
     ) {
+      continue;
+    }
+
+    const isRookie = appearance.draftYear === season;
+    const sinceEntry =
+      appearance.draftYear === undefined ? 99 : season - appearance.draftYear;
+    const unread =
+      options.alsoUnread === true &&
+      sinceEntry <= STILL_A_PROSPECT &&
+      !hasSeasonToRead(appearance.playerId, season, data);
+
+    if (!isRookie && !unread) {
       continue;
     }
 
@@ -110,6 +147,7 @@ export async function rookiesFor(
       name: appearance.name,
       position,
       overall: appearance.draftOverall ?? 260,
+      rookie: isRookie,
       incumbentPpg: incumbents.get(`${appearance.teamId}|${position}`) ?? 0,
       vacatedPerGame: vacated.get(`${appearance.teamId}|${position}`) ?? 0,
       age: birthYear.has(appearance.playerId)
