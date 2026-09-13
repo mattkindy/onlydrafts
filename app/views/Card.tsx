@@ -164,7 +164,19 @@ export function Card(props: CardProps) {
     <div class={classes}>
       <div class="top">
         <span class="nm">
-          <span class="who">{p.name}</span>
+          {/* his name opens his sheet, the same as it does on every
+              other page, since half the names being dead was the whole
+              complaint */}
+          {onMore
+            ? (
+              <button
+                class="who link"
+                onClick={(e) => { e.stopPropagation(); onMore(); }}
+              >
+                {p.name}
+              </button>
+            )
+            : <span class="who">{p.name}</span>}
           {props.badge && (
             <span
               class={"badge " + (props.badgeHow ?? "")}
