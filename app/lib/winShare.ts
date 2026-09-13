@@ -12,9 +12,9 @@
  * and a man is worth the change in how often it beats a typical side.
  */
 
-import { mixFor, normalAt, PASS_CATCHERS, type Mix } from "./copula.ts";
+import { factorFor, mixFor, PASS_CATCHERS, type Mix } from "./copula.ts";
 import { FLEX_POSITIONS, lineupOf, type Player } from "./scoring.ts";
-import { DRAWS, normalCdf, streamFor, weeksFromSpread } from "./spread.ts";
+import { DRAWS, streamFor, weeksFromNormals } from "./spread.ts";
 
 const WHERE = ["QB", "RB", "WR", "TE", "K", "DEF"];
 
@@ -152,8 +152,45 @@ function mixAt(p: Player, i: number): Mix {
 
 let mixes = new Map<string, Mix>();
 
-const normalFor = (p: Player, i: number, draws: number) =>
-  normalAt(mixAt(p, i), i, draws);
+/** a man's loadings for one week, with the factor draws already found */
+interface Loaded {
+  terms: { load: number; its: number[] }[];
+  own: number;
+  ownIts: number[];
+}
+
+/**
+ * The normal behind each of a man's draws.
+ *
+ * His loadings change with the fixture and nothing else, so there are
+ * eighteen sets of them however many weeks are drawn. Looking them up
+ * per draw, and looking up each factor's numbers by name inside that,
+ * was most of what drawing a board cost.
+ */
+function normalsFor(p: Player, draws: number): number[] {
+  const byWeek: Loaded[] = Array.from({ length: SEASON_WEEKS }, (_, w) => {
+    const mix = mixAt(p, w);
+
+    return {
+      terms: mix.terms.map((term) => ({
+        load: term.load, its: factorFor(term.factor, draws),
+      })),
+      own: mix.own,
+      ownIts: factorFor(mix.ownSeed, draws),
+    };
+  });
+
+  return Array.from({ length: draws }, (_, i) => {
+    const his = byWeek[i % SEASON_WEEKS]!;
+    let z = 0;
+
+    for (const term of his.terms) {
+      z += term.load * term.its[i]!;
+    }
+
+    return z + his.own * his.ownIts[i]!;
+  });
+}
 
 /**
  * A man's weeks, zeroed where he does not play: his bye, and the games
@@ -196,15 +233,13 @@ function drawWeeks(p: Player, draws: number): number[] {
     return new Array(draws).fill(0) as number[];
   }
 
-  const weeks = weeksFromSpread(
+  const weeks = weeksFromNormals(
     {
       ev: g["ev"]!, q1: g["q1"] ?? g["ev"]!, mid: g["mid"] ?? g["ev"]!,
       q3: g["q3"] ?? g["ev"]!, low: g["low"] ?? g["ev"]!,
       high: g["high"] ?? g["ev"]!,
     },
-    p.key,
-    draws,
-    Array.from({ length: draws }, (_, i) => normalCdf(normalFor(p, i, draws))),
+    normalsFor(p, draws),
   );
 
   const out = streamFor(p.key + "|out", draws);
@@ -687,22 +722,59 @@ function wouldStart(his: number, seat: Held): boolean {
   return his > seat.expect;
 }
 
+/**
+ * What a newcomer at each position has to expect to start in any drawn
+ * week at all: the least the man he would push out expects, across the
+ * whole season.
+ *
+ * A man off the wire goes in on a tie, so the bar is what he has to
+ * reach rather than beat, and anybody under it is worth nought whatever
+ * he goes on to score.
+ */
+export function barsOf(baseline: Baseline): Record<string, number> {
+  const bars: Record<string, number> = {};
+
+  for (const [where, beats] of Object.entries(baseline.displaced)) {
+    let least = Infinity;
+
+    for (const out of beats) {
+      least = Math.min(least, out.expect);
+    }
+
+    bars[where] = beats.length ? least : 0;
+  }
+
+  return bars;
+}
+
 export function winShareFor(
   baseline: Baseline, opponent: number[], draws = DRAWS,
 ): (p: Player) => Priced {
   const without = winChance(baseline.total, opponent);
   const now = meanOf(baseline.total);
+  const bars = barsOf(baseline);
 
   return (p: Player) => {
-    const his = weeksOf(p, draws);
     const beats = baseline.displaced[p.position];
+    const nothing = {
+      added: 0, starts: 0, brings: 0, displaces: null,
+      before: without, after: without,
+    };
 
     if (!beats) {
-      return {
-        added: 0, starts: 0, brings: 0, displaces: null,
-        before: without, after: without,
-      };
+      return nothing;
     }
+
+    /**
+     * Below the bar he never gets into the lineup in any drawn week, so
+     * the loop below would come back with nothing and his weeks would
+     * have been drawn for it. Most of the wire is below the bar.
+     */
+    if ((p.ppg ?? 0) < bars[p.position]!) {
+      return nothing;
+    }
+
+    const his = weeksOf(p, draws);
 
     const withHim: number[] = [];
     const pushedOut = new Map<string, number>();

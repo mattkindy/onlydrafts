@@ -1,0 +1,84 @@
+/**
+ * How long each stage of the waiver page's season pricing takes, on the
+ * board that ships in docs/data.
+ *
+ * The page draws a year of weeks for the whole board and then prices
+ * every man on the wire off one baseline, so a change to the draws or
+ * to the drop side shows up here before anybody opens a phone.
+ *
+ * Run: npx tsx scripts/timeWaivers.ts
+ */
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const DATA = join(process.cwd(), "docs", "data");
+
+(globalThis as unknown as { fetch: unknown }).fetch = async (url: string) => {
+  const name = String(url).split("/").pop()!.split("?")[0]!;
+
+  return {
+    ok: true,
+    json: async () => JSON.parse(readFileSync(join(DATA, name), "utf8")),
+  };
+};
+
+const { loadBoard, loadMeta } = await import("../app/lib/data.ts");
+const { rescore } = await import("../app/lib/board.ts");
+const { roomFor } = await import("../app/lib/draftShare.ts");
+const { addsFor, dropsFor, netFor, openSpotsFor } =
+  await import("../app/lib/waivers.ts");
+const { barsOf, baselineFor, weeksOf } = await import("../app/lib/winShare.ts");
+
+const meta = await loadMeta();
+const board = await loadBoard(meta.boardSeason);
+const slots = [
+  "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF",
+  "BN", "BN", "BN", "BN", "BN", "BN",
+];
+const men = rescore(
+  board.players, { teams: 12, slots, pays: { rec: 0.5 } }, board.schedule);
+
+const t = <T>(label: string, f: () => T): T => {
+  const at = performance.now();
+  const out = f();
+  console.log(label.padEnd(28), (performance.now() - at).toFixed(0), "ms");
+
+  return out;
+};
+
+const byPos = (pos: string, n: number, skip = 0) =>
+  men
+    .filter((p) => p.position === pos)
+    .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))
+    .slice(skip, skip + n);
+const mine = [
+  ...byPos("QB", 1, 3), ...byPos("RB", 5, 2), ...byPos("WR", 5, 4),
+  ...byPos("TE", 2, 3), ...byPos("K", 1, 2), ...byPos("DEF", 1, 4),
+];
+const rostered = new Set<string>();
+
+for (const pos of ["QB", "RB", "WR", "TE", "K", "DEF"]) {
+  for (const p of byPos(pos, pos === "RB" || pos === "WR" ? 60 : 14)) {
+    rostered.add(p.key);
+  }
+}
+
+const pool = men.filter((p) => !rostered.has(p.key));
+console.log("board", men.length, "pool", pool.length);
+
+// the order the page runs them in, with nobody's weeks drawn yet
+const room = t("roomFor", () => roomFor(men, slots, 12, 2000, null));
+const adds = t("addsFor", () => addsFor(mine, pool, slots, room));
+t("dropsFor", () => dropsFor(mine, slots, room));
+const open = openSpotsFor(slots, mine.length);
+t("netFor x12", () =>
+  adds.slice(0, 12).forEach((a) => netFor(mine, a, slots, room, open)));
+t("draw every man", () => men.forEach((p) => weeksOf(p, 2000)));
+
+const bars = barsOf(baselineFor(mine, slots, 2000, room.wire));
+const under = pool.filter((p) => (p.ppg ?? 0) < (bars[p.position] ?? 0));
+console.log(
+  "bars",
+  Object.entries(bars).map(([at, n]) => `${at} ${n.toFixed(1)}`).join("  "));
+console.log("pool skipped", under.length, "of", pool.length);
