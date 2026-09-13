@@ -17,7 +17,7 @@ import { useMemo } from "preact/hooks";
 
 import {
   lineFor, standingFor, starterState,
-  type GameState, type Lines,
+  type GameState, type InGameStatus, type Lines,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
 import type { Pays, Player } from "../lib/scoring.ts";
@@ -49,6 +49,13 @@ interface Props {
   onMore?: (key: string) => void;
 }
 
+/** what the hover says about a player the sideline has */
+const HURT_SAYS: Record<InGameStatus, string> = {
+  out: "out for the game",
+  doubtful: "doubtful to return",
+  questionable: "questionable to return",
+};
+
 /** one player on one side of a row, mirrored when he is the away side */
 function StarterCell(
   { starter, rows, states, lines, at, remainder, stillToCome, onMore }: {
@@ -70,7 +77,8 @@ function StarterCell(
   const line = lineFor(starter, rows, lines);
   const state = starterState(starter, rows, states, lines);
   const playing = state?.where === "in";
-  const done = !state || state.left <= 0;
+  const hurt = state?.hurt?.get(starter.key);
+  const done = !state || state.left <= 0 || hurt === "out";
   const simmed = !done && remainder?.has(starter.key);
   const toCome = done ? null : stillToCome.get(starter.key) ?? null;
   // what he is on course to finish with, since the bare remainder
@@ -80,6 +88,14 @@ function StarterCell(
   const swing = onCourse !== null && line && playing
     ? onCourse - line.blend : 0;
   const tone = swing > 0 ? " up" : swing < 0 ? " below" : "";
+  const hurtSays = hurt ? HURT_SAYS[hurt] : "";
+  const reading = toCome === null
+    ? hurtSays || undefined
+    : `projected ${onCourse!.toFixed(1)}` +
+      (line && playing ? ` against ${line.blend.toFixed(1)} pregame` : "") +
+      `, ${toCome.toFixed(1)} still to come` +
+      (simmed ? ", from the simulation" : line?.stock ? ", a stock week" : "") +
+      (hurtSays ? `, ${hurtSays}` : "");
 
   return (
     <div
@@ -93,13 +109,7 @@ function StarterCell(
       />
       <span class="num">
         <b>{starter.points.toFixed(1)}</b>
-        <i
-          class={tone}
-          title={toCome === null ? undefined : `projected ${onCourse!.toFixed(1)}` +
-            (line && playing ? ` against ${line.blend.toFixed(1)} pregame` : "") +
-            `, ${toCome.toFixed(1)} still to come` +
-            (simmed ? ", from the simulation" : line?.stock ? ", a stock week" : "")}
-        >
+        <i class={tone} title={reading}>
           {onCourse === null ? "" : onCourse.toFixed(1)}
         </i>
       </span>

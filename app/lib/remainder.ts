@@ -39,6 +39,11 @@ export interface RemainderState {
   warningLeft: boolean;
   secondHalf: boolean;
   receivedFirst?: string;
+  /**
+   * What a player who has gone off keeps of the snaps still to come, by
+   * the key the slate gives him. Anyone left out keeps all of his.
+   */
+  shareScale?: Record<string, number>;
 }
 
 /** what one draw gave a player, in whatever the league pays */
@@ -83,6 +88,8 @@ interface Loaded {
   passerAt: number;
   runRate: Uint8Array;
   shares: Uint8Array;
+  /** one multiplier a player, where any of them has gone off */
+  scale: Float64Array | null;
   caught: Uint8Array;
   gains: Uint8Array[];
   lift: number;
@@ -131,8 +138,22 @@ export function leagueOf(tables: SimTables): LeagueTables {
   };
 }
 
+/** the scales this side's players are on, or null where nobody is hurt */
+function scalesFor(
+  men: { key: string }[], shareScale: Record<string, number> | undefined,
+): Float64Array | null {
+  if (!shareScale) {
+    return null;
+  }
+
+  const scales = Float64Array.from(men, (man) => shareScale[man.key] ?? 1);
+
+  return scales.some((one) => one !== 1) ? scales : null;
+}
+
 function loadSide(
   tables: SimTables, team: string, against: string, lift: number,
+  shareScale: Record<string, number> | undefined,
 ): Loaded | null {
   const side = tables.teams[team];
 
@@ -151,6 +172,7 @@ function loadSide(
     passerAt: side.men.findIndex((player) => player.id === side.passer),
     runRate: bytesOf(side.runRate),
     shares: bytesOf(side.shares),
+    scale: scalesFor(side.men, shareScale),
     caught: bytesOf(side.caught),
     gains: side.men.flatMap((player) => [
       bytesOf(side.gains[`${player.id}|run`] ?? ""),
@@ -194,6 +216,13 @@ const runRateAt = (
   return (side.runRate[at] ?? 128) / 255;
 };
 
+/**
+ * How likely one player is to get the ball here. Cutting his weight and
+ * leaving his teammates alone is what hands his snaps to them.
+ */
+const shareAt = (side: Loaded, block: number, i: number) =>
+  (side.shares[block + i] ?? 0) * (side.scale ? side.scale[i] ?? 1 : 1);
+
 /** who the ball goes to here, as an index into the side's players */
 function goesTo(
   side: Loaded, call: number, down: number, yardline: number,
@@ -205,7 +234,7 @@ function goesTo(
   let total = 0;
 
   for (let i = 0; i < count; i++) {
-    total += side.shares[block + i] ?? 0;
+    total += shareAt(side, block, i);
   }
 
   if (total <= 0) {
@@ -215,7 +244,7 @@ function goesTo(
   let left = uniform() * total;
 
   for (let i = 0; i < count; i++) {
-    left -= side.shares[block + i] ?? 0;
+    left -= shareAt(side, block, i);
 
     if (left <= 0) {
       return i;
@@ -577,8 +606,10 @@ export function remainderFor(
   tables: SimTables, league: LeagueTables, state: RemainderState,
   draws: number, pays: Pays, seed: number,
 ): RemainderDraws | null {
-  const home = loadSide(tables, state.home, state.away, AT_HOME);
-  const away = loadSide(tables, state.away, state.home, 1 / AT_HOME);
+  const home =
+    loadSide(tables, state.home, state.away, AT_HOME, state.shareScale);
+  const away =
+    loadSide(tables, state.away, state.home, 1 / AT_HOME, state.shareScale);
 
   if (!home || !away) {
     return null;
@@ -628,7 +659,11 @@ export function remainderFor(
         const his = key ? players.get(key) : undefined;
 
         if (his) {
-          his[draw] = payFor(
+          // a passer's throws come from whoever caught them rather than
+          // from his own share, so his snaps have to be cut here as well
+          const cut = i === side.passerAt ? side.scale?.[i] ?? 1 : 1;
+
+          his[draw] = cut * payFor(
             its[i]! as unknown as Record<string, number>, pays);
         }
       }

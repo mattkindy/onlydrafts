@@ -9,7 +9,7 @@
 
 import { leagueOf, remainderFor, type RemainderState } from "./remainder.ts";
 import type { SimTables } from "./simTables.ts";
-import type { LiveSituation } from "./matchups.ts";
+import { HURT_SHARE, type InGameStatus, type LiveSituation } from "./matchups.ts";
 import type { Pays } from "./scoring.ts";
 
 /** how many replays a live game gets */
@@ -29,6 +29,10 @@ const seedOf = (situation: LiveSituation) => {
   return (seed ^ (situation.secondsLeft * 31)) >>> 0;
 };
 
+const scalesOf = (hurt: Record<string, InGameStatus>) =>
+  Object.fromEntries(Object.entries(hurt)
+    .map(([key, status]) => [key, HURT_SHARE[status]]));
+
 export const stateOf = (situation: LiveSituation): RemainderState => ({
   home: situation.home,
   away: situation.away,
@@ -41,6 +45,7 @@ export const stateOf = (situation: LiveSituation): RemainderState => ({
   timeouts: situation.timeouts,
   warningLeft: situation.warningLeft,
   secondHalf: situation.secondHalf,
+  ...(situation.hurt ? { shareScale: scalesOf(situation.hurt) } : {}),
 });
 
 /** every game past half time, once each, in the order they are keyed */
