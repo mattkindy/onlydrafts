@@ -100,7 +100,7 @@ export function PlayerSheet(props: Props) {
   return (
     <div id="overlay" class="open" onClick={props.onClose}>
       <div class="sheet" onClick={(e) => e.stopPropagation()}>
-        <button class="shut" aria-label="close" onClick={props.onClose}>
+        <button class="close" aria-label="close" onClick={props.onClose}>
           ×
         </button>
         <h3>{p.name}</h3>
