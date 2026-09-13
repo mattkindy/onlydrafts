@@ -169,9 +169,9 @@ function earlyWeekLine(
  * One row a man, in the slate file the app reads. `ours` is our
  * per-position ridge and `sleeper` is Sleeper's number, null when they
  * have no row for him. A man Sleeper listed without a number is a backup
- * or a man who is out, and he gets a Sleeper 0; a man Sleeper never
- * listed keeps ours alone. `average` is the two averaged, or ours alone
- * when Sleeper has nothing, and the file is sorted by it. `floor` and
+ * or a man who is out, so he gets a Sleeper 0 and an average of 0; a
+ * man Sleeper never listed keeps ours alone. Otherwise `average` is the
+ * two averaged, and the file is sorted by it. `floor` and
  * `ceiling` are the tenth and ninetieth of the outcome around that
  * average. `snaps` is a whole percent; `gamesMissed` is out of his last
  * four club weeks; `absenceShare` runs 0 to 1. Every point figure is
@@ -192,16 +192,18 @@ function slateRow(
   const sleeper = projection
     ? sleeperPointsUnder(projection, scoring().receptions)
     : quiet ? 0 : undefined;
-  // the average uses Sleeper's number with his quarterback bias taken
-  // off, except at nought, where there is no bias to take off
+  // Sleeper leaves a man blank when he is not going to play, and a
+  // half of our number would still rank him over men who will
   const average =
     sleeper === undefined
       ? ours
-      : blendPoints(
-        ours,
-        sleeper === 0 ? 0 : debiasedSleeper(e.position, sleeper),
-        SHIPPED_BLEND_WEIGHT,
-      );
+      : sleeper === 0
+        ? 0
+        : blendPoints(
+          ours, debiasedSleeper(e.position, sleeper), SHIPPED_BLEND_WEIGHT);
+  // a man who is not playing has no week to draw around
+  const quantile = (q: number) =>
+    average === 0 ? 0 : outcomeQuantile(residuals, e.position, average, q);
 
   return {
     name: e.playerName,
@@ -212,14 +214,10 @@ function slateRow(
     ours: Number(ours.toFixed(1)),
     sleeper: sleeper === undefined ? null : Number(sleeper.toFixed(1)),
     average: Number(average.toFixed(1)),
-    floor: Number(
-      outcomeQuantile(residuals, e.position, average, 0.1).toFixed(1),
-    ),
-    ceiling: Number(
-      outcomeQuantile(residuals, e.position, average, 0.9).toFixed(1),
-    ),
-    q1: Number(outcomeQuantile(residuals, e.position, average, 0.25).toFixed(1)),
-    q3: Number(outcomeQuantile(residuals, e.position, average, 0.75).toFixed(1)),
+    floor: Number(quantile(0.1).toFixed(1)),
+    ceiling: Number(quantile(0.9).toFixed(1)),
+    q1: Number(quantile(0.25).toFixed(1)),
+    q3: Number(quantile(0.75).toFixed(1)),
     catches: Number((projection?.catches ?? e.receptionsRecent).toFixed(2)),
     snaps: Math.round(e.snapRecent * 100),
     questionable: e.questionable,
