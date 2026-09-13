@@ -12,7 +12,7 @@
  */
 
 import type { ComponentChildren } from "preact";
-import { useMemo, useState } from "preact/hooks";
+import { useMemo } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
 import { leadFor, type Explanation } from "../lib/explain.ts";
@@ -29,15 +29,12 @@ import { ManName } from "./ManName.tsx";
 import { Game } from "./Matchups.tsx";
 import { Reading } from "./Reading.tsx";
 import { useLiveWeek } from "./scoreboard.ts";
-import { WeekRanks } from "./WeekRanks.tsx";
 
 interface Props {
   weeks: WeekRef[];
   picked: WeekRef | null;
   onWeek: (w: WeekRef) => void;
   slate: Slate | null;
-  /** the players on your team, or nothing when no league is connected */
-  roster: Set<string> | null;
   /** this week's games in your league, for the one you are in */
   games: Matchup[];
   rows: Map<string, SlateRow>;
@@ -51,6 +48,8 @@ interface Props {
   /** what this league pays, for playing out the rest of a live game */
   pays?: Pays;
   status?: string;
+  /** opens a man's sheet, since every name on the page opens one */
+  onMore?: (key: string) => void;
 }
 
 const signed = (gains: number) =>
@@ -68,7 +67,13 @@ function Fig(
   );
 }
 
-/** what a player is worth this week, on his own row or under his slot */
+/**
+ * What a player is worth this week, on his own row or under his slot.
+ *
+ * Proj is his projection for the week, whatever his game has done since.
+ * It used to be the part of it still to come, which read as a nought
+ * beside a man who had already scored fifteen points.
+ */
 function Numbers(
   { line, left }: {
     line: ReturnType<typeof lineFor>;
@@ -83,9 +88,12 @@ function Numbers(
   return (
     <>
       <Fig label="proj">
-        {(line.blend * left).toFixed(1)}
+        {line.blend.toFixed(1)}
         {line.stock ? <small> stock</small> : null}
       </Fig>
+      {left > 0 && left < 1 && (
+        <Fig label="still to come">{(line.blend * left).toFixed(1)}</Fig>
+      )}
       <Fig label="floor to ceiling">
         {line.spread.low.toFixed(1)} to {line.spread.high.toFixed(1)}
       </Fig>
@@ -148,12 +156,13 @@ function Why({ why }: { why: Explanation }) {
 }
 
 function Seat(
-  { choice, rows, states, lines, listed }: {
+  { choice, rows, states, lines, listed, onMore }: {
     choice: SlotChoice;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
     listed: Map<string, Listed>;
+    onMore?: ((key: string) => void) | undefined;
   },
 ) {
   const at = (key: string, slot?: string) => {
@@ -175,15 +184,21 @@ function Seat(
       <h3>
         <span class="chip">{choice.slot}</span>
         <ManName
-          name={nameOf(choice.starter.key, rows, lines)}
+          name={nameOf(
+            choice.starter.key, rows, lines, choice.starter.name)}
           team={his.line?.team}
+          onOpen={onMore ? () => onMore(choice.starter.key) : undefined}
         />
         <Office his={listed.get(choice.starter.key)} />
         {choice.locked && <span class="badge even">locked</span>}
       </h3>
 
       <div class="seat-figs">
-        <Fig label="scored">{choice.starter.points.toFixed(1)}</Fig>
+        {/* nothing is scored before kickoff, and a nought there reads as
+            a man who went out and did nothing */}
+        {his.left < 1 && (
+          <Fig label="scored">{choice.starter.points.toFixed(1)}</Fig>
+        )}
         <Numbers line={his.line} left={his.left} />
       </div>
 
@@ -197,8 +212,9 @@ function Seat(
               return (
                 <li key={option.key} class={option.locked ? "shut" : ""}>
                   <ManName
-                    name={nameOf(option.key, rows, lines)}
+                    name={nameOf(option.key, rows, lines, option.name)}
                     team={other.line?.team}
+                    onOpen={onMore ? () => onMore(option.key) : undefined}
                   />
                   <Numbers line={other.line} left={other.left} />
                   <Office his={listed.get(option.key)} />
@@ -218,7 +234,7 @@ function Seat(
 }
 
 function Lineup(
-  { side, against, slots, rows, states, lines, listed }: {
+  { side, against, slots, rows, states, lines, listed, onMore }: {
     side: Side;
     against: Side;
     slots: string[] | null;
@@ -226,6 +242,7 @@ function Lineup(
     states: Map<string, GameState>;
     lines: Lines;
     listed: Map<string, Listed>;
+    onMore?: ((key: string) => void) | undefined;
   },
 ) {
   const choices = useMemo(
@@ -243,6 +260,7 @@ function Lineup(
           states={states}
           lines={lines}
           listed={listed}
+          onMore={onMore}
         />
       ))}
     </>
@@ -250,8 +268,7 @@ function Lineup(
 }
 
 export function MyMatchup(props: Props) {
-  const { games, mine, rows, slots, slate, roster } = props;
-  const [wholeWeek, setWholeWeek] = useState(false);
+  const { games, mine, rows, slots, slate, onMore } = props;
   const { states, remainder, trouble } = useLiveWeek(
     props.picked?.season, props.picked?.week, props.pays ?? {});
 
@@ -314,6 +331,7 @@ export function MyMatchup(props: Props) {
             rows={rows}
             states={states}
             lines={lines}
+            onMore={onMore}
           />
           <p class="hint">
             Against {ours.against.owner} this week. Each player is priced by
@@ -327,6 +345,7 @@ export function MyMatchup(props: Props) {
             states={states}
             lines={lines}
             listed={props.listed}
+            onMore={onMore}
           />
 
           <h2>your game</h2>
@@ -338,6 +357,7 @@ export function MyMatchup(props: Props) {
             lines={lines}
             mine={ours.at}
             remainder={remainder}
+            onMore={onMore}
             withAdvice={false}
           />
         </>
@@ -347,26 +367,9 @@ export function MyMatchup(props: Props) {
 
       {!ours && (
         <p class="hint">
-          You have no game this week, so there is no lineup to set. Here is
-          the whole week ranked instead.
+          You have no game this week, so there is no lineup to set. The
+          whole week ranked is under <b>players</b>, on the rankings tab.
         </p>
-      )}
-
-      {ours && (
-        <p class="hint">
-          <button onClick={() => setWholeWeek((on) => !on)}>
-            {wholeWeek ? "hide the whole week" : "show the whole week"}
-          </button>
-        </p>
-      )}
-
-      {(!ours || wholeWeek) && (
-        <WeekRanks
-          slate={slate}
-          rows={rows}
-          roster={roster}
-          listed={props.listed}
-        />
       )}
     </>
   );
