@@ -1265,8 +1265,21 @@ describe("my team lists each player once", () => {
       where,
     );
 
-    expect(where.querySelectorAll(".disclose").length)
+    expect(where.querySelectorAll(".keeprow .costrow input").length)
       .toBe(namesOnScreen().length);
+  });
+
+  it("leaves the keeper row off when the league has no keepers", () => {
+    render(
+      <Roster
+        byKey={byKey} men={men} league={{ ...league, keepers: false }}
+        season={2026} perTeam={3}
+        marked={{}} onMark={() => {}} onMore={() => {}}
+      />,
+      where,
+    );
+
+    expect(where.querySelectorAll(".keeprow").length).toBe(0);
   });
 });
 

@@ -6,12 +6,10 @@
  * twelve players, so every man on the page appeared twice.
  */
 
-import { useState } from "preact/hooks";
-
 import type { Player } from "../lib/scoring.ts";
 import type { League } from "../lib/providers.ts";
-import { SeasonCard, ordinal, seasonScale } from "./Card.tsx";
-import { KeeperPricing, keeperDraft, keeperRounds } from "./Keepers.tsx";
+import { SeasonCard, seasonScale } from "./Card.tsx";
+import { KeeperRow, keeperDraft, keeperRounds } from "./Keepers.tsx";
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "other"];
 
@@ -33,43 +31,6 @@ interface Props {
   /** what keeping a player costs you, said once over the grid */
   keepersSay?: string;
   onKeeperChange?: () => void;
-}
-
-/** what each man is worth keeping for, opened one card at a time */
-function KeeperFold(
-  { men, p, league, perTeam, round, onChange }: {
-    men: Player[];
-    p: Player;
-    league: League;
-    perTeam: number;
-    round: number | null;
-    onChange: () => void;
-  },
-) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <button
-        class="disclose"
-        aria-expanded={open}
-        onClick={(e) => { e.stopPropagation(); setOpen((on) => !on); }}
-      >
-        <span class="chev">{open ? "⌄" : "›"}</span>
-        keep him or let him go
-        {round ? ` (he beats a ${ordinal(round)})` : ""}
-      </button>
-      {open && (
-        <KeeperPricing
-          men={men}
-          p={p}
-          league={league}
-          perTeam={perTeam}
-          onChange={onChange}
-        />
-      )}
-    </>
-  );
 }
 
 export function Roster(props: Props) {
@@ -143,27 +104,21 @@ export function Roster(props: Props) {
                   key={p.key}
                   p={p}
                   max={max}
+                  slim
                   teams={props.league.size || 12}
                   kept={isKept}
                   badge={isKept ? "keeper" : ""}
-                  tag={isKept
-                    ? `counts against your ${props.perTeam} keeper slots`
-                    : ""}
                   onMore={() => props.onMore(p)}
                 >
-                  <button
-                    class={"keepbtn" + (isKept ? " on" : "")}
-                    onClick={(e) => { e.stopPropagation(); props.onMark(p); }}
-                  >
-                    {isKept ? "kept" : "mark keeper"}
-                  </button>
                   {draft && (
-                    <KeeperFold
+                    <KeeperRow
                       men={men}
                       p={p}
                       league={league}
                       perTeam={props.perTeam}
                       round={rounds.get(p.key) ?? null}
+                      kept={isKept}
+                      onMark={() => props.onMark(p)}
                       onChange={props.onKeeperChange ?? (() => {})}
                     />
                   )}
