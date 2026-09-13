@@ -88,38 +88,38 @@ describe("statLineSays", () => {
       .toEqual(["18 car, 117 yds, 3 TD"]);
   });
 
-  it("adds what a running back caught after what he ran for, targets aside", () => {
+  it("adds what a running back caught after what he ran for", () => {
     expect(statLineSays(
       line({
         carries: 18, rushYds: 117, rushTd: 3,
         receptions: 5, targets: 7, recYds: 20,
       }),
       "RB",
-    )).toEqual(["18 car, 117 yds, 3 TD", "5 rec, 20 yds"]);
+    )).toEqual(["18 car, 117 yds, 3 TD", "5/7 rec, 20 yds"]);
   });
 
-  it("gives a receiver his targets in brackets", () => {
+  it("gives a receiver his catches over his targets", () => {
     expect(statLineSays(lineFor("zayflowers"), "WR"))
-      .toEqual(["5 rec (6 tgt), 150 yds, 1 TD"]);
+      .toEqual(["5/6 rec, 150 yds, 1 TD"]);
   });
 
   it("adds a receiver's carries after what he caught", () => {
     expect(statLineSays(
       line({ receptions: 5, targets: 6, recYds: 150, carries: 1, rushYds: 12 }),
       "WR",
-    )).toEqual(["5 rec (6 tgt), 150 yds", "1 car, 12 yds"]);
+    )).toEqual(["5/6 rec, 150 yds", "1 car, 12 yds"]);
   });
 
   it("puts a receiver's lost fumble on his receiving line when he never ran", () => {
     expect(statLineSays(
       line({ receptions: 4, targets: 5, recYds: 40, fumblesLost: 1 }),
       "WR",
-    )).toEqual(["4 rec (5 tgt), 40 yds, 1 FUM"]);
+    )).toEqual(["4/5 rec, 40 yds, 1 FUM"]);
   });
 
   it("reads a tight end the way it reads a receiver", () => {
     expect(statLineSays(lineFor("markandrews"), "TE"))
-      .toEqual(["3 rec (5 tgt), 36 yds"]);
+      .toEqual(["3/5 rec, 36 yds"]);
   });
 
   it("gives a kicker his field goals and his extra points", () => {
