@@ -357,6 +357,21 @@ describe("a player the slate leaves out", () => {
     expect(mean(totals)).toBeLessThan(12);
   });
 
+  it("takes the engine's draws for a defence in a live game", () => {
+    const its = [-3, 1, 6];
+    const live = liveDraws(
+      [{ key: "buf", slot: "DEF", points: 10 }],
+      new Map(),
+      states({ BUF: { where: "in", left: 0.4 } }),
+      6,
+      board,
+      new Map([["buf", its]]),
+    );
+
+    expect(live.toCome("buf")).toEqual([...its, ...its]);
+    expect(live.drawingOf("buf")).toBeNull();
+  });
+
   it("says nothing about a player neither the week nor the board has", () => {
     expect(starterState({ key: "nobody" }, new Map(), states({}), board))
       .toBeNull();
