@@ -19,6 +19,7 @@ import {
 import type { Listed } from "../lib/availability.ts";
 import { normalizeName } from "../lib/store.ts";
 import { injuryBadge } from "./Draft.tsx";
+import { Reading } from "./Reading.tsx";
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE"];
 
@@ -214,7 +215,7 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
         )}
       </div>
 
-      {!slate && <div class="empty">reading the week...</div>}
+      {!slate && <Reading>reading the week...</Reading>}
 
       {pair && <Compare pair={pair} />}
 
@@ -228,10 +229,9 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
       {slate && (
         <>
           <p class="hint">
-            Ranked by the blend of our number and Sleeper's. A row in
-            amber is one where the two disagree by {SPLIT_AT} points or more;
-            hover it to see which way. Press compare on two men at the
-            same position for a straight answer.
+            A row in amber is one our number and Sleeper's disagree
+            about by {SPLIT_AT} points or more. Tap two men at the same
+            position to compare them.
           </p>
 
           <div class="scroll">

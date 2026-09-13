@@ -195,18 +195,12 @@ export function DraftRating(props: Props) {
 
   return (
     <>
-      <div class="empty">
-        <b>{rated.length} teams</b> in {league.name}, each by how often the
-        roster it drafted wins a week against a typical lineup from this room,
-        over how often the roster the room would have handed its picks wins.
-        A team picking third should come away with more than one picking
-        tenth, so only beating your own slots counts.
-        {drafted.size > 0
-          ? " Only the men who were picked count, so a free agent taken the moment the draft ended is nobody's pick."
-          : " Read off the rosters, since this league cannot say what happened pick by pick."}
-        {kept.length > 0 && " A keeper counts as a pick at the turn he" +
-          " was kept at."}
-      </div>
+      <p class="hint">
+        {rated.length} teams in {league.name}, each against the roster the
+        room would have handed its own slots.
+        {drafted.size > 0 ? "" : " Read off the rosters, since this league" +
+          " cannot say what happened pick by pick."}
+      </p>
 
       <table class="rating">
         <thead>
@@ -244,11 +238,10 @@ export function DraftRating(props: Props) {
 
       {nowRated.length > 0 && (
         <>
-          <div class="empty">
-            The same measure against each team's roster as it stands today,
-            so a trade or a waiver run since the draft shows up as ground
-            gained or lost from where the draft left it.
-          </div>
+          <p class="hint">
+            The same measure against each roster as it stands today, so a
+            trade or a waiver run shows as ground gained or lost.
+          </p>
 
           <table class="rating">
             <thead>
@@ -278,12 +271,10 @@ export function DraftRating(props: Props) {
       {picks.length > 0 && (
         <>
           <h2>{league.team}, pick by pick</h2>
-          <div class="empty">
-            Each pick as the draft board would have read it at the time, with
-            the room's picks up to then off the board: what taking him added
-            to how often you win a week, in points of win chance, and who the
-            board would have taken instead.
-          </div>
+          <p class="hint">
+            Each pick as the board would have read it at the time, with the
+            room's picks up to then already gone.
+          </p>
           <table class="rating">
             <thead>
               <tr>
