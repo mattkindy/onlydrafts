@@ -170,6 +170,9 @@ const WEEK_VIEWS: View[] = ["matchup", "league", "players"];
 /** how old a read can be before one of those views asks the provider again */
 const STALE_AFTER = 2 * 60 * 1000;
 
+/** how often the league is asked for its scores again while a week tab is open */
+const GAMES_EVERY = 60_000;
+
 /**
  * Light, dark, or the phone's own setting, as one glyph. The word used to
  * sit in the nav and take a pill's worth of a 390px row to say something
@@ -245,6 +248,9 @@ function App() {
   const [weekStatus, setWeekStatus] = useState("");
   const [games, setGames] = useState<Matchup[]>([]);
   const [gamesStatus, setGamesStatus] = useState("");
+  /** bumped once a minute while a week tab is open, so the points move with the games */
+  const [gameReads, setGameReads] = useState(0);
+  const gamesKey = useRef("");
   const [rereading, setRereading] = useState(false);
   /** who the injury report has listed, for the week's pages as well as the draft */
   const [allListed, setAllListed] = useState<Map<string, Listed>>(() => new Map());
@@ -329,18 +335,28 @@ function App() {
 
     let stale = false;
 
-    setGames([]);
-    setGamesStatus("");
+    // a re-read of the same week keeps the cards up rather than blanking them
+    const key = [active.provider, active.leagueId, active.userId, week.week]
+      .join("/");
+
+    if (gamesKey.current !== key) {
+      gamesKey.current = key;
+      setGames([]);
+      setGamesStatus("");
+    }
+
     asks(active, week.week)
-      .then((got) => { if (!stale) { setGames(got); } })
+      .then((got) => { if (!stale) { setGames(got); setGamesStatus(""); } })
       .catch((e: Error) => {
         if (!stale) {
           setGamesStatus("could not read this week's games: " + e.message);
         }
       });
 
-    return () => { stale = true; };
-  }, [view, week, active]);
+    const timer = setTimeout(() => setGameReads((n) => n + 1), GAMES_EVERY);
+
+    return () => { stale = true; clearTimeout(timer); };
+  }, [view, week, active, gameReads]);
 
   /**
    * The week in this league's scoring. The build scored it once, and
