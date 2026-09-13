@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
-  alternativesFor, bestLineupFor, fractionLeft, initialForm, liveDraws, oddsFor, standingFor,
-  sideTotals, situationsFrom, spreadOf, starterState, statesFrom, stockLine,
+  alternativesFor, bestLineupFor, fractionLeft, hurtFrom, initialForm, liveDraws,
+  oddsFor, standingFor, sideTotals, situationsFrom, spreadOf, starterState,
+  statesFrom, stockLine,
 } from "./matchups.ts";
-import type { GameState } from "./matchups.ts";
+import type { GameState, InGameStatus } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
 import type { SlateRow } from "./slate.ts";
 import { weeksFromSpread } from "./spread.ts";
@@ -598,5 +601,78 @@ describe("standingFor", () => {
 
       expect(summed).toBeCloseTo(standing.projected[at]!, 6);
     }
+  });
+});
+
+describe("hurtFrom", () => {
+  const said = JSON.parse(readFileSync(
+    join(import.meta.dirname, "..", "fixtures", "espnSummaryInjuries.json"),
+    "utf8",
+  )) as Parameters<typeof hurtFrom>[0];
+
+  it("has a player listed questionable since kickoff questionable to return", () => {
+    expect(hurtFrom(said).get("zayflowers")).toBe("questionable");
+  });
+
+  it("has a player the team sat before kickoff out", () => {
+    expect(hurtFrom(said).get("djgiddens")).toBe("out");
+  });
+
+  it("leaves a player listed questionable before kickoff playing", () => {
+    const before = {
+      header: { competitions: [{ date: "2026-09-13T17:00Z" }] },
+      injuries: [{
+        injuries: [{
+          status: "Questionable",
+          date: "2026-09-13T15:30Z",
+          athlete: { displayName: "Derrick Henry" },
+        }],
+      }],
+    };
+
+    expect(hurtFrom(before).size).toBe(0);
+  });
+
+  it("reads a player doubtful to return", () => {
+    const gone = {
+      header: { competitions: [{ date: "2026-09-13T17:00Z" }] },
+      injuries: [{
+        injuries: [{
+          status: "Doubtful",
+          date: "2026-09-13T18:55Z",
+          athlete: { displayName: "Minkah Fitzpatrick" },
+        }],
+      }],
+    };
+
+    expect(hurtFrom(gone).get("minkahfitzpatrick")).toBe("doubtful");
+  });
+});
+
+describe("liveDraws for a player who has gone off", () => {
+  const mean = (its: number[]) =>
+    its.reduce((sum, n) => sum + n, 0) / its.length;
+
+  it("leaves an out player nothing and halves a questionable one", () => {
+    const rows = rowsFor(
+      row("gone", "BUF", 12), row("iffy", "BUF", 12), row("fit", "BUF", 12));
+    const hurt = new Map<string, InGameStatus>([
+      ["gone", "out"], ["iffy", "questionable"],
+    ]);
+    const live = liveDraws(
+      [
+        { key: "gone", slot: "WR", points: 4 },
+        { key: "iffy", slot: "WR", points: 4 },
+        { key: "fit", slot: "WR", points: 4 },
+      ],
+      rows,
+      states({ BUF: { where: "in", left: 0.5, hurt } }),
+      600,
+    );
+    const fit = mean(live.toCome("fit"));
+
+    expect(mean(live.toCome("gone"))).toBe(0);
+    expect(mean(live.toCome("iffy")) / fit).toBeGreaterThan(0.3);
+    expect(mean(live.toCome("iffy")) / fit).toBeLessThan(0.75);
   });
 });

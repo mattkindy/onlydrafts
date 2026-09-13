@@ -80,6 +80,46 @@ describe.skipIf(!existsSync(PATH))("the rest of a game, played in the browser", 
     expect(his).toBeGreaterThan(mean(played.teamPoints[home]!));
   });
 
+  /**
+   * The two men picked are the side's busiest runners or catchers other
+   * than the last in its list, who is the one the engine falls back on
+   * when a block of shares adds to nothing.
+   */
+  const busiest = (played: ReturnType<typeof remainderFor>, count: number) => {
+    const men = tables.teams[home]!.men;
+
+    return men.slice(0, -1)
+      .filter((man) => man.position !== "QB")
+      .sort((a, b) => mean(played!.players.get(b.key)!) -
+        mean(played!.players.get(a.key)!))
+      .slice(0, count);
+  };
+
+  it("hands the snaps of a player ruled out to his teammates", () => {
+    const before = remainderFor(tables, league, atHalf, 400, PPR, 21)!;
+    const [gone, mate] = busiest(before, 2);
+    const after = remainderFor(
+      tables, league, { ...atHalf, shareScale: { [gone!.key]: 0 } },
+      400, PPR, 21)!;
+
+    expect(mean(after.players.get(gone!.key)!)).toBe(0);
+    expect(mean(after.players.get(mate!.key)!))
+      .toBeGreaterThan(mean(before.players.get(mate!.key)!));
+  });
+
+  it("leaves a player questionable to return about half of what he had", () => {
+    const before = remainderFor(tables, league, atHalf, 600, PPR, 23)!;
+    const [iffy] = busiest(before, 1);
+    const after = remainderFor(
+      tables, league, { ...atHalf, shareScale: { [iffy!.key]: 0.5 } },
+      600, PPR, 23)!;
+    const share = mean(after.players.get(iffy!.key)!) /
+      mean(before.players.get(iffy!.key)!);
+
+    expect(share).toBeGreaterThan(0.3);
+    expect(share).toBeLessThan(0.75);
+  });
+
   it("has nothing left for a game that is over", () => {
     const played = remainderFor(
       tables, league, { ...atHalf, secondsLeft: 0 }, 20, PPR, 5)!;
