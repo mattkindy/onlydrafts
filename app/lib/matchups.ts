@@ -29,15 +29,40 @@ import type { SlateRow } from "./slate.ts";
 import {
   normalCdf, normalQuantile, quantileOf, weeksFromSpread, type Spread,
 } from "./spread.ts";
+import { normalizeName } from "./store.ts";
 import { winChance } from "./winShare.ts";
 
 export const SCOREBOARD =
   "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 
+/** one game on its own, which is the only place ESPN says who has gone off */
+export const SUMMARY =
+  "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary";
+
+/** what the sideline says about a player while his game is on */
+export type InGameStatus = "out" | "doubtful" | "questionable";
+
+/**
+ * How much of the snaps still to come a player who has gone off keeps.
+ *
+ * A player ruled out takes no more snaps, and one questionable to return
+ * misses some of them. The rest of his side is left alone, so the snaps
+ * he loses go to his teammates.
+ */
+export const HURT_SHARE: Record<InGameStatus, number> = {
+  out: 0, doubtful: 0.25, questionable: 0.5,
+};
+
+/** the same share for a player the sideline has said nothing about */
+export const hurtShareOf = (status: InGameStatus | undefined) =>
+  status ? HURT_SHARE[status] : 1;
+
 export interface GameState {
   where: "pre" | "in" | "post";
   /** how much of the game is still to play, zero to one */
   left: number;
+  /** who has gone off, by the key the slate gives a player */
+  hurt?: Map<string, InGameStatus>;
 }
 
 /**
@@ -66,6 +91,8 @@ export interface LiveSituation {
   secondHalf: boolean;
   /** the two minute warning of this half has not come round yet */
   warningLeft: boolean;
+  /** who has gone off, by the key the slate gives a player */
+  hurt?: Record<string, InGameStatus>;
 }
 
 /** four quarters of fifteen minutes */
@@ -153,8 +180,52 @@ interface ScoreboardCompetition {
 }
 
 interface ScoreboardEvent {
+  id?: string;
   status?: ScoreboardStatus;
   competitions?: ScoreboardCompetition[];
+}
+
+interface SummaryInjury {
+  /** "Out", "Doubtful" or "Questionable", spelled as ESPN spells them */
+  status?: string;
+  /** when ESPN said it, which is what tells this from a pregame listing */
+  date?: string;
+  athlete?: { displayName?: string; fullName?: string };
+}
+
+interface Summary {
+  header?: { competitions?: { date?: string }[] };
+  injuries?: { injuries?: SummaryInjury[] }[];
+}
+
+const IN_GAME: Record<string, InGameStatus> = {
+  Out: "out", Doubtful: "doubtful", Questionable: "questionable",
+};
+
+/** who has gone off in one game, off that game's own summary */
+export function hurtFrom(said: Summary): Map<string, InGameStatus> {
+  const out = new Map<string, InGameStatus>();
+  const kickoff = Date.parse(said.header?.competitions?.[0]?.date ?? "");
+
+  for (const team of said.injuries ?? []) {
+    for (const row of team.injuries ?? []) {
+      const status = IN_GAME[row.status ?? ""];
+      const name = row.athlete?.displayName ?? row.athlete?.fullName;
+
+      if (!status || !name) {
+        continue;
+      }
+
+      // Questionable before kickoff is the week's injury report, and he
+      // is playing. Said since kickoff, he has left the field. Out means
+      // no more snaps either way, whether he was a scratch or went off.
+      if (status === "out" || Date.parse(row.date ?? "") >= kickoff) {
+        out.set(normalizeName(name), status);
+      }
+    }
+  }
+
+  return out;
 }
 
 /** one game's state, read off however the scoreboard describes it */
@@ -174,15 +245,20 @@ function stateOf(status: ScoreboardStatus | undefined): GameState {
   return { where, left: fractionLeft(status?.period, status?.displayClock) };
 }
 
+/** who has gone off, by ESPN's id for the game they are playing in */
+export type HurtByGame = Map<string, Map<string, InGameStatus>>;
+
 /** every team playing this week, and where its game has got to */
 export function statesFrom(said: {
   events?: ScoreboardEvent[];
-}): Map<string, GameState> {
+}, hurt?: HurtByGame): Map<string, GameState> {
   const out = new Map<string, GameState>();
 
   for (const event of said.events ?? []) {
     const game = event.competitions?.[0];
-    const state = stateOf(game?.status ?? event.status);
+    const bare = stateOf(game?.status ?? event.status);
+    const its = event.id ? hurt?.get(event.id) : undefined;
+    const state = its?.size ? { ...bare, hurt: its } : bare;
 
     for (const side of game?.competitors ?? []) {
       const code = side.team?.abbreviation;
@@ -218,6 +294,7 @@ const downOf = (down: number | undefined) =>
 
 function situationOf(
   game: ScoreboardCompetition, status: ScoreboardStatus | undefined,
+  hurt: Map<string, InGameStatus> | undefined,
 ): LiveSituation | undefined {
   const competitors = game.competitors ?? [];
   const home = sideOf(competitors, "home", 0);
@@ -258,6 +335,7 @@ function situationOf(
     redZone: at?.isRedZone === true,
     secondHalf: secondsLeft <= SECONDS_IN_HALF,
     warningLeft: leftInHalf > 120,
+    ...(hurt?.size ? { hurt: Object.fromEntries(hurt) } : {}),
   };
 }
 
@@ -267,7 +345,7 @@ function situationOf(
  */
 export function situationsFrom(said: {
   events?: ScoreboardEvent[];
-}): Map<string, LiveSituation> {
+}, hurt?: HurtByGame): Map<string, LiveSituation> {
   const out = new Map<string, LiveSituation>();
 
   for (const event of said.events ?? []) {
@@ -278,7 +356,8 @@ export function situationsFrom(said: {
       continue;
     }
 
-    const live = situationOf(game, status);
+    const live = situationOf(
+      game, status, event.id ? hurt?.get(event.id) : undefined);
 
     if (live) {
       out.set(live.home, live);
@@ -287,6 +366,31 @@ export function situationsFrom(said: {
   }
 
   return out;
+}
+
+const summaryOf = (id: string): Promise<Map<string, InGameStatus>> =>
+  fetch(`${SUMMARY}?event=${id}`)
+    .then((answered) => answered.ok ? answered.json() : null)
+    .then((said) => said
+      ? hurtFrom(said as Summary)
+      : new Map<string, InGameStatus>())
+    .catch(() => new Map<string, InGameStatus>());
+
+/**
+ * Who has gone off in each game that is on.
+ *
+ * The scoreboard says nothing about injuries, so every game in progress
+ * costs a call of its own. A game nobody is watching is not asked about,
+ * and a read that fails leaves that game with nobody hurt.
+ */
+async function hurtInLiveGames(
+  events: ScoreboardEvent[],
+): Promise<HurtByGame> {
+  const live = events.filter((event) => event.id !== undefined &&
+    stateOf(event.competitions?.[0]?.status ?? event.status).where === "in");
+  const asked = await Promise.all(live.map((event) => summaryOf(event.id!)));
+
+  return new Map(live.map((event, at) => [event.id!, asked[at]!]));
 }
 
 /**
@@ -308,9 +412,13 @@ export async function gameStates(
     throw new Error("ESPN would not hand over the scoreboard.");
   }
 
-  const said = await answered.json();
+  const said = await answered.json() as { events?: ScoreboardEvent[] };
+  const hurt = await hurtInLiveGames(said.events ?? []);
 
-  return { states: statesFrom(said), situations: situationsFrom(said) };
+  return {
+    states: statesFrom(said, hurt),
+    situations: situationsFrom(said, hurt),
+  };
 }
 
 /**
@@ -655,10 +763,10 @@ export function liveDraws(
       return normalCdf(middle + width * noise[i]!);
     });
     const week = weeksFromSpread(his.line.spread, key, draws, us);
+    const share = Math.min(1, his.state.left) *
+      hurtShareOf(his.state.hurt?.get(key));
 
-    return his.state.left >= 1
-      ? week
-      : week.map((points) => points * his.state.left);
+    return share >= 1 ? week : week.map((points) => points * share);
   };
 
   const toCome = (key: string): number[] => {

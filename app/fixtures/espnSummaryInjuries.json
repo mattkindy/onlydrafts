@@ -1,0 +1,196 @@
+{
+  "header": {
+    "id": "401872659",
+    "competitions": [
+      {
+        "date": "2026-09-13T17:00Z"
+      }
+    ]
+  },
+  "injuries": [
+    {
+      "team": {
+        "abbreviation": "IND"
+      },
+      "injuries": [
+        {
+          "status": "Out",
+          "date": "2026-09-13T15:54Z",
+          "athlete": {
+            "id": "4683423",
+            "displayName": "Riley Leonard",
+            "position": {
+              "abbreviation": "QB"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_OUT"
+          },
+          "details": {
+            "returnDate": "2026-09-20"
+          }
+        },
+        {
+          "status": "Out",
+          "date": "2026-09-13T15:50Z",
+          "athlete": {
+            "id": "4874509",
+            "displayName": "DJ Giddens",
+            "position": {
+              "abbreviation": "RB"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_OUT"
+          },
+          "details": {
+            "returnDate": "2026-09-20"
+          }
+        },
+        {
+          "status": "Out",
+          "date": "2026-09-13T15:36Z",
+          "athlete": {
+            "id": "4370363",
+            "displayName": "Dalton Tucker",
+            "position": {
+              "abbreviation": "G"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_OUT"
+          },
+          "details": {
+            "returnDate": "2026-09-20"
+          }
+        },
+        {
+          "status": "Out",
+          "date": "2026-09-13T15:36Z",
+          "athlete": {
+            "id": "4708238",
+            "displayName": "George Gumbs Jr.",
+            "position": {
+              "abbreviation": "LB"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_OUT"
+          },
+          "details": {
+            "returnDate": "2026-09-20"
+          }
+        },
+        {
+          "status": "Out",
+          "date": "2026-09-13T15:36Z",
+          "athlete": {
+            "id": "4695991",
+            "displayName": "Johnathan Edwards",
+            "position": {
+              "abbreviation": "CB"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_OUT"
+          },
+          "details": {
+            "returnDate": "2026-09-20"
+          }
+        }
+      ]
+    },
+    {
+      "team": {
+        "abbreviation": "BAL"
+      },
+      "injuries": [
+        {
+          "status": "Questionable",
+          "date": "2026-09-13T18:43Z",
+          "athlete": {
+            "id": "4429615",
+            "displayName": "Zay Flowers",
+            "position": {
+              "abbreviation": "WR"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_QUESTIONABLE"
+          },
+          "details": {
+            "returnDate": "2026-09-13"
+          }
+        },
+        {
+          "status": "Questionable",
+          "date": "2026-09-13T17:51Z",
+          "athlete": {
+            "id": "4575483",
+            "displayName": "T.J. Tampa",
+            "position": {
+              "abbreviation": "CB"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_QUESTIONABLE"
+          },
+          "details": {
+            "returnDate": "2026-09-20"
+          }
+        },
+        {
+          "status": "Out",
+          "date": "2026-09-13T16:07Z",
+          "athlete": {
+            "id": "4696882",
+            "displayName": "Devontez Walker",
+            "position": {
+              "abbreviation": "WR"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_OUT"
+          },
+          "details": {
+            "returnDate": "2026-09-20"
+          }
+        },
+        {
+          "status": "Out",
+          "date": "2026-09-13T15:59Z",
+          "athlete": {
+            "id": "4429582",
+            "displayName": "Joe Fagnano",
+            "position": {
+              "abbreviation": "QB"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_OUT"
+          },
+          "details": {
+            "returnDate": "2026-09-20"
+          }
+        },
+        {
+          "status": "Out",
+          "date": "2026-09-13T15:54Z",
+          "athlete": {
+            "id": "5088338",
+            "displayName": "Elijah Sarratt",
+            "position": {
+              "abbreviation": "WR"
+            }
+          },
+          "type": {
+            "name": "INJURY_STATUS_OUT"
+          },
+          "details": {
+            "returnDate": "2026-09-20"
+          }
+        }
+      ]
+    }
+  ]
+}
