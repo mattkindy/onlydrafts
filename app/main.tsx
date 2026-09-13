@@ -99,7 +99,7 @@ const COPY: Record<View, [string, string, string]> = {
   waivers: [
     "Who to add",
     "Everybody no team in your league has, ranked by what adding him does to how often you win a week. Then what dropping each of your own men would cost.",
-    "Both numbers are points of win chance over the rest of the season, so a pickup is worth making when the man you add beats the man you drop.",
+    "Every win chance here is how often you win one week against a typical opponent, not how often you win the season. Each row also says the points a week the move is worth and who gains or loses the seat, so a pickup is worth making when the man you add beats the man you drop.",
   ],
 };
 

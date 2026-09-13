@@ -14,8 +14,10 @@ import { useMemo } from "preact/hooks";
 import type { Player } from "../lib/scoring.ts";
 import type { League } from "../lib/providers.ts";
 import { roomFor } from "../lib/draftShare.ts";
+import { rostersOf } from "../lib/replacementPool.ts";
 import {
-  addsFor, dropsFor, netFor, openSpotsFor, type Add, type Drop, type Net,
+  addsFor, dropsFor, netFor, openSpotsFor, WORTH_ADDING,
+  type Add, type Drop, type Net,
 } from "../lib/waivers.ts";
 import { matchesFilter } from "./Draft.tsx";
 
@@ -31,6 +33,9 @@ const WEEKS_DRAWN = 2000;
  * go and stay quick.
  */
 const PRICED = 12;
+
+/** how far down the wire the page goes before it stops listing anybody */
+const LISTED = 60;
 
 interface Props {
   men: Player[];
@@ -49,6 +54,18 @@ function pct(share: number): string {
   return `${(100 * share).toFixed(0)}%`;
 }
 
+/** points a week, which unlike a win chance is not a percentage */
+function points(n: number): string {
+  const text = n.toFixed(1);
+
+  return n > 0 ? `+${text}` : text;
+}
+
+/** how often you win a week either side of the move, both said out loud */
+function Swing({ before, after }: { before: number; after: number }) {
+  return <span class="swing">{pct(before)} → {pct(after)}</span>;
+}
+
 function AddRow(
   { row, paid, onMore }: { row: Add; paid: Net | null; onMore: () => void },
 ) {
@@ -59,6 +76,9 @@ function AddRow(
       <td>{row.p.team ?? ""}</td>
       <td>{(row.p.ppg ?? 0).toFixed(1)}</td>
       <td>{pct(row.starts)}</td>
+      <td>{points(row.brings)}</td>
+      <td>{row.displaced?.name ?? "an empty seat"}</td>
+      <td><Swing before={row.before} after={row.after} /></td>
       <td><b>{signed(row.added)}</b></td>
       <td>{paid ? paid.drop?.name ?? "open spot" : ""}</td>
       <td>{paid ? <b>{signed(paid.net)}</b> : ""}</td>
@@ -73,6 +93,9 @@ function DropRow({ row, onMore }: { row: Drop; onMore: () => void }) {
       <td>{row.p.position}</td>
       <td>{(row.p.ppg ?? 0).toFixed(1)}</td>
       <td>{pct(row.starts)}</td>
+      <td>{row.takes.toFixed(1)}</td>
+      <td>{row.heir?.name ?? "the wire"}</td>
+      <td><Swing before={row.before} after={row.after} /></td>
       <td><b>{signed(row.costs)}</b></td>
     </tr>
   );
@@ -89,7 +112,9 @@ export function Waivers(props: Props) {
       .map((m) => men.find((p) => p.key === m.key))
       .filter((p): p is Player => Boolean(p));
     const pool = men.filter((p) => !rostered.has(p.key));
-    const room = roomFor(men, league.slots, league.size || 12, WEEKS_DRAWN);
+    const room = roomFor(
+      men, league.slots, league.size || 12, WEEKS_DRAWN, rostersOf(league),
+    );
 
     return {
       adds: addsFor(mine, pool, league.slots, room),
@@ -108,18 +133,28 @@ export function Waivers(props: Props) {
     [adds, posFilter],
   );
 
+  const listed = useMemo(() => shown.slice(0, LISTED), [shown]);
+
   /** the top of the list, each with the man he would cost you */
   const priced = useMemo(
-    () => shown
+    () => listed
       .slice(0, PRICED)
       .map((row) => ({
         row, paid: netFor(mine, row, league.slots, room, openSpots),
       }))
       .sort((a, b) => b.paid.net - a.paid.net),
-    [shown, mine, room, league, openSpots],
+    [listed, mine, room, league, openSpots],
   );
 
-  const best = priced[0] ?? null;
+  /**
+   * Only the top of the list has a drop worked out, and paying for a man
+   * can only take value off him, so anybody adding less than the bar
+   * cannot clear it once he is paid for either.
+   */
+  const worth = priced.filter(({ paid }) => paid.net >= WORTH_ADDING);
+  const rest = listed.slice(PRICED).filter((row) => row.added >= WORTH_ADDING);
+  const hidden = listed.length - worth.length - rest.length;
+  const best = worth[0] ?? null;
 
   if (!drops.length) {
     return (
@@ -141,13 +176,16 @@ export function Waivers(props: Props) {
             <th>team</th>
             <th>ppg</th>
             <th>starts</th>
+            <th>pts a week</th>
+            <th>instead of</th>
+            <th>week won</th>
             <th>win chance</th>
             <th>drop</th>
             <th>net</th>
           </tr>
         </thead>
         <tbody>
-          {priced.map(({ row, paid }) => (
+          {worth.map(({ row, paid }) => (
             <AddRow
               key={row.p.key}
               row={row}
@@ -155,7 +193,7 @@ export function Waivers(props: Props) {
               onMore={() => props.onMore(row.p)}
             />
           ))}
-          {shown.slice(PRICED, 60).map((row) => (
+          {rest.map((row) => (
             <AddRow
               key={row.p.key}
               row={row}
@@ -166,6 +204,13 @@ export function Waivers(props: Props) {
         </tbody>
       </table>
 
+      {hidden > 0 && (
+        <p class="hint">
+          {hidden} more came out under half a point of win chance a week,
+          which is inside the noise of the draw, so they are left off.
+        </p>
+      )}
+
       <h2>what dropping each of yours costs</h2>
       <table class="line">
         <thead>
@@ -174,6 +219,9 @@ export function Waivers(props: Props) {
             <th>pos</th>
             <th>ppg</th>
             <th>starts</th>
+            <th>pts a week</th>
+            <th>seat goes to</th>
+            <th>week won</th>
             <th>win chance</th>
           </tr>
         </thead>
@@ -194,15 +242,17 @@ export function Waivers(props: Props) {
             ? (
               <>
                 Adding <b>{best.row.p.name}</b> and dropping{" "}
-                <b>{best.paid.drop.name}</b> leaves you{" "}
-                <b>{signed(best.paid.net)}</b> points of win chance better off.
+                <b>{best.paid.drop.name}</b> takes the weeks you win from{" "}
+                <b>{pct(best.paid.before)}</b> to <b>{pct(best.paid.after)}</b>,
+                so <b>{signed(best.paid.net)}</b> points of win chance a week.
               </>
             )
             : (
               <>
                 You have a spot open, so <b>{best.row.p.name}</b> can be added
-                without dropping anybody, and he is worth{" "}
-                <b>{signed(best.paid.net)}</b> points of win chance.
+                without dropping anybody. He takes the weeks you win from{" "}
+                <b>{pct(best.paid.before)}</b> to <b>{pct(best.paid.after)}</b>,
+                so <b>{signed(best.paid.net)}</b> points of win chance a week.
               </>
             )}
         </p>
