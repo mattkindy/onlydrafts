@@ -51,13 +51,15 @@ interface Props {
 
 /** one player on one side of a row, mirrored when he is the away side */
 function StarterCell(
-  { starter, rows, states, lines, at, remainder, onMore }: {
+  { starter, rows, states, lines, at, remainder, stillToCome, onMore }: {
     starter: Side["starters"][number] | undefined;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
     at: 0 | 1;
     remainder: Map<string, number[]> | null;
+    /** what each starter still adds on average, from the card's own draws */
+    stillToCome: Map<string, number>;
     onMore?: ((key: string) => void) | undefined;
   },
 ) {
@@ -69,10 +71,8 @@ function StarterCell(
   const state = starterState(starter, rows, states, lines);
   const playing = state?.where === "in";
   const done = !state || state.left <= 0;
-  const simmed = done ? undefined : remainder?.get(starter.key);
-  const toCome = simmed
-    ? simmed.reduce((sum, points) => sum + points, 0) / simmed.length
-    : line && !done ? line.blend * (state?.left ?? 1) : null;
+  const simmed = !done && remainder?.has(starter.key);
+  const toCome = done ? null : stillToCome.get(starter.key) ?? null;
   // what he is on course to finish with, since the bare remainder
   // read like a second projection nobody could place
   const onCourse = toCome === null ? null : starter.points + toCome;
@@ -178,12 +178,14 @@ export function pairedRows(game: Matchup): {
 }
 
 function Lineups(
-  { game, rows, states, lines, remainder, onMore }: {
+  { game, rows, states, lines, remainder, stillToCome, onMore }: {
     game: Matchup;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
     remainder: Map<string, number[]> | null;
+    /** what each starter still adds on average, from the card's own draws */
+    stillToCome: Map<string, number>;
     onMore?: ((key: string) => void) | undefined;
   },
 ) {
@@ -193,12 +195,12 @@ function Lineups(
         <div class="slot" key={row.slot + i}>
           <StarterCell
             starter={row.home} rows={rows} states={states} lines={lines} at={0}
-            remainder={remainder} onMore={onMore}
+            remainder={remainder} stillToCome={stillToCome} onMore={onMore}
           />
           <span class="chip">{row.slot}</span>
           <StarterCell
             starter={row.away} rows={rows} states={states} lines={lines} at={1}
-            remainder={remainder} onMore={onMore}
+            remainder={remainder} stillToCome={stillToCome} onMore={onMore}
           />
         </div>
       ))}
@@ -225,7 +227,7 @@ export function Game(
     withAdvice?: boolean;
   },
 ) {
-  const { odds, projected } = useMemo(
+  const { odds, projected, toCome } = useMemo(
     () => standingFor(
       game, rows, states, lines, undefined, remainder ?? undefined),
     [game, rows, states, lines, remainder],
@@ -274,7 +276,7 @@ export function Game(
       )}
       <Lineups
         game={game} rows={rows} states={states} lines={lines}
-        remainder={remainder} onMore={onMore}
+        remainder={remainder} stillToCome={toCome} onMore={onMore}
       />
     </div>
   );
