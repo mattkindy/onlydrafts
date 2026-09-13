@@ -561,13 +561,23 @@
   .seat-fig { font-size: var(--t1); color: var(--muted); font-weight: 400;
     font-variant-numeric: tabular-nums; }
   .seat-fig i { font-style: normal; color: var(--faint); }
+  /* every number on the card says what it measures, since a row reading
+     4.0 20.2 9.1 to 32.4 -3% told you nothing about any of them */
+  .seat-figs { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3);
+    font-variant-numeric: tabular-nums; }
+  .seat-card .fig { font-size: var(--t2); font-weight: 700; color: var(--ink); }
+  .seat-card .fig small { color: var(--faint); font-size: var(--t1);
+    font-weight: 600; }
+  /* what the list under a slot is: the bench players who could take it */
+  .seat-card .over { color: var(--faint); text-transform: uppercase;
+    letter-spacing: .05em; font-size: var(--t1); margin-top: var(--s2); }
   .options { list-style: none; margin: 0; padding: 0; }
-  .options li { display: flex; flex-wrap: wrap; gap: var(--s1);
+  .options li { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3);
     align-items: baseline; padding: var(--s1) 0;
     border-top: 1px solid var(--edge); font-size: var(--t2); }
   .options li.shut { opacity: .55; }
   .options .delta { margin-left: auto; font-weight: 700; color: var(--muted);
-    font-variant-numeric: tabular-nums; }
+    font-variant-numeric: tabular-nums; text-align: right; }
   .options .delta.up { color: var(--go); }
   .why { flex-basis: 100%; margin: .15rem 0 .1rem; font-size: var(--t1);
     color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2);
@@ -638,15 +648,15 @@
     table.pairs td[data-label="pos"] { grid-column: 3; text-align: right; }
     table.pairs td[data-label="pos"]::before { display: none; }
     table.pairs td[data-label="team"] { display: none; }
-    table.pairs td[data-label="week won"] { grid-column: 1 / -1; }
-    table.pairs td[data-label="week won"] b { margin-left: var(--s1); }
+    /* what the move does to your week leads, since it is the answer */
+    table.pairs td[data-label="win %"] { grid-column: 1 / -1; }
+    table.pairs td[data-label="win %"] b { margin-left: var(--s1); }
     table.pairs td[data-label="instead of"],
-    table.pairs td[data-label="takes his seat"],
+    table.pairs td[data-label="takes his slot"],
     table.pairs td[data-label="when he starts"] { grid-column: 1 / -1; }
-    /* what he costs you and what the pair is worth read together */
-    table.pairs td[data-label="drop"] { grid-column: 1 / span 2; }
-    table.pairs td[data-label="net"] { grid-column: 3; text-align: right; }
-    table.pairs td[data-label="net"] b { font-size: var(--t4); }
+    /* who you drop and what the pair is worth read as one line */
+    table.pairs td[data-label="drop"] { grid-column: 1 / -1; }
+    table.pairs td[data-label="drop"] b { margin-left: var(--s1); }
 
     table.rating { font-size: var(--t1); }
     .seat { font-size: var(--t1); gap: 2px; }

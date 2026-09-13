@@ -52,7 +52,7 @@ interface Props {
   onMore: (p: Player) => void;
 }
 
-function signed(share: number, places = 1): string {
+function signed(share: number, places = 0): string {
   const text = (100 * share).toFixed(places);
 
   return share > 0 ? `+${text}` : text;
@@ -177,7 +177,7 @@ function Figured(
   if (!figures) {
     return (
       <>
-        <td data-label="pts">{absent}</td>
+        <td data-label="win %">{absent}</td>
         <td></td>
         <td></td>
       </>
@@ -186,26 +186,27 @@ function Figured(
 
   return (
     <>
-      <td data-label="pts">{points(figures.points)}</td>
-      <td data-label={seatLabel}>{figures.seat}</td>
-      <td data-label="week won">
+      <td data-label="win %">
         <Swing
           before={figures.before} after={figures.after} by={figures.delta}
         />
       </td>
+      <td data-label="pts">{points(figures.points)}</td>
+      <td data-label={seatLabel}>{figures.seat}</td>
     </>
   );
 }
 
 function AddRow(
-  { row, at, figures, absent, paid, onMore }: {
+  { row, at, figures, absent, paid, span, onMore }: {
     row: Add;
     /** where he is in this week's lineup, when the week is loaded */
     at: { slot: string | null } | null;
     figures: Figures | null;
     absent: string;
-    /** the man a spot for him costs and what the pair is worth, when priced */
+    /** who a spot for him costs and what the pair is worth, when priced */
     paid: { drop: string; net: number } | null;
+    span: Span;
     onMore: () => void;
   },
 ) {
@@ -213,23 +214,30 @@ function AddRow(
     <tr onClick={onMore}>
       <td data-label="player">{row.p.name}</td>
       <td data-label="pos">{row.p.position}</td>
-      <td data-label="team">{row.p.team ?? ""}</td>
-      <td data-label="ppg">{(row.p.ppg ?? 0).toFixed(1)}</td>
-      <td data-label="starts"><Starting starts={row.starts} at={at} /></td>
+      {/* a season of him says nothing about one week, and the week's own
+          figures are already the three cells after it */}
+      {span === "season" && (
+        <>
+          <td data-label="ppg">{(row.p.ppg ?? 0).toFixed(1)}</td>
+          <td data-label="starts"><Starting starts={row.starts} at={at} /></td>
+        </>
+      )}
       <Figured figures={figures} absent={absent} seatLabel="instead of" />
-      <td data-label="drop">{paid ? paid.drop : ""}</td>
-      <td data-label="net">{paid ? <b>{signed(paid.net)}</b> : ""}</td>
+      <td data-label="drop">
+        {paid ? <>{paid.drop} <b>{signed(paid.net)}</b></> : ""}
+      </td>
     </tr>
   );
 }
 
 function DropRow(
-  { row, at, figures, absent, seatLabel, onMore }: {
+  { row, at, figures, absent, seatLabel, span, onMore }: {
     row: Drop;
     at: { slot: string | null } | null;
     figures: Figures | null;
     absent: string;
     seatLabel: string;
+    span: Span;
     onMore: () => void;
   },
 ) {
@@ -237,8 +245,12 @@ function DropRow(
     <tr onClick={onMore}>
       <td data-label="player">{row.p.name}</td>
       <td data-label="pos">{row.p.position}</td>
-      <td data-label="ppg">{(row.p.ppg ?? 0).toFixed(1)}</td>
-      <td data-label="starts"><Starting starts={row.starts} at={at} /></td>
+      {span === "season" && (
+        <>
+          <td data-label="ppg">{(row.p.ppg ?? 0).toFixed(1)}</td>
+          <td data-label="starts"><Starting starts={row.starts} at={at} /></td>
+        </>
+      )}
       <Figured figures={figures} absent={absent} seatLabel={seatLabel} />
     </tr>
   );
@@ -480,14 +492,12 @@ export function Waivers(props: Props) {
           <tr>
             <th>player</th>
             <th>pos</th>
-            <th>team</th>
-            <th>ppg</th>
-            <th>starts</th>
+            {span === "season" && <th>ppg</th>}
+            {span === "season" && <th>starts</th>}
+            <th>win %</th>
             <th>{span === "week" ? "pts" : "pts a week"}</th>
             <th>instead of</th>
-            <th>week won</th>
             <th>drop</th>
-            <th>net</th>
           </tr>
         </thead>
         <tbody>
@@ -495,6 +505,7 @@ export function Waivers(props: Props) {
             <AddRow
               key={row.p.key}
               row={row}
+              span={span}
               {...addSeen(row, paid)}
               onMore={() => props.onMore(row.p)}
             />
@@ -524,11 +535,11 @@ export function Waivers(props: Props) {
           <tr>
             <th>player</th>
             <th>pos</th>
-            <th>ppg</th>
-            <th>starts</th>
+            {span === "season" && <th>ppg</th>}
+            {span === "season" && <th>starts</th>}
+            <th>win %</th>
             <th>{span === "week" ? "pts" : "pts a week"}</th>
             <th>{dropSeat}</th>
-            <th>week won</th>
           </tr>
         </thead>
         <tbody>
@@ -537,6 +548,7 @@ export function Waivers(props: Props) {
               key={row.p.key}
               row={row}
               seatLabel={dropSeat}
+              span={span}
               {...dropSeen(row)}
               onMore={() => props.onMore(row.p)}
             />

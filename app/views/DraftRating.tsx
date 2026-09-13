@@ -68,7 +68,7 @@ function NowTeamRow(
       <td>{team.owner}</td>
       <td>{grade}</td>
       <td>{pct(team.wins)}</td>
-      <td>{signed(sinceDraft)}</td>
+      <td>{signed(sinceDraft, 0)}</td>
       <td>{team.picks}</td>
       <td>{starters.slice(0, 3).map((s) => s.p.name).join(", ")}</td>
     </tr>
