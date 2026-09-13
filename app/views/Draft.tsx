@@ -6,7 +6,7 @@
  * full, for looking someone up or seeing how far a run has gone.
  */
 
-import { useState } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 
 import type { Player } from "../lib/scoring.ts";
 import { asRound, expectedBestAt, type Draft as DraftPicks } from "../lib/picks.ts";
@@ -557,13 +557,15 @@ export function DraftView(props: Props) {
       (_, r) => r * teams + Math.ceil(teams / 2),
     );
 
-  const worth = props.order === "war"
+  // pricing every man draws thousands of weeks, so it waits on a change
+  // to what it prices rather than running again on every keystroke
+  const worth = useMemo(() => props.order === "war"
     ? takeNowFor(
       drafted, props.slots, left, turns,
       typicalWeek(men, props.slots, teams, WEEKS_DRAWN), WEEKS_DRAWN,
       waiverBar(men, props.slots, teams, null),
     )
-    : null;
+    : null, [props.order, men, props.slots, teams, state, upcoming.length]);
 
   const scored = left
     .filter(wanted)

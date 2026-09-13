@@ -481,7 +481,9 @@ function App() {
       keep("active", lg);
       keep(seatKey(lg), lg.userId);
       setEveryTeam(false);
-      setView("draft");
+      // once weeks are being played the draft is over, so a league opens
+      // on who to start rather than on pricing the whole board
+      setView(weeks.length ? "start" : "draft");
       setOpening(null);
     }, 50);
   };
