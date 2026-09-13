@@ -131,7 +131,6 @@ function InjuryBadge({ his }: { his: Listed | undefined }) {
 function Why({ why }: { why: Explanation }) {
   const part = (share: number) =>
     (share > 0 ? "+" : "") + (100 * share).toFixed(1) + "%";
-  const gap = why.projected.candidate - why.projected.starter;
   const pieces: [string, number][] = [
     ["points", why.points],
     ["range", why.spread],
@@ -140,11 +139,7 @@ function Why({ why }: { why: Explanation }) {
   ];
 
   return (
-    <p class="why">
-      <span class="said">
-        {(gap > 0 ? "+" : "") + gap.toFixed(1)} projected points, and{" "}
-        {leadFor(why)}
-      </span>
+    <p class="why" title={leadFor(why)}>
       {pieces.map(([said, worth]) => (
         <span key={said} class="piece">
           {said} <b>{part(worth)}</b>
