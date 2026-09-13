@@ -2,10 +2,10 @@
  * A play, written as the things that decide it, each conditioned on the
  * same state.
  *
- * A snap is a call, a man it goes to, and what he gains. Those are
+ * A snap is a call, a player it goes to, and what he gains. Those are
  * separate questions and the model has been answering each at its own
  * granularity: personnel off the continuous state, the call off four
- * distance bands, the man off four situations, the yards off the state
+ * distance bands, the player off four situations, the yards off the state
  * again. Composing factors fitted at different resolutions loses
  * whatever the coarsest one threw away, so they are defined together
  * here and fitted the same way.
@@ -38,10 +38,10 @@ export interface PlayFactors {
       shotgun?: boolean; shell?: string;
     },
   ) => number;
-  /** how the work at this state divides between the men available */
+  /** how the work at this state divides between the players available */
   /**
-   * How the work at this state divides between the men available.
-   * Given the defence, the split can lean toward the men it struggles
+   * How the work at this state divides between the players available.
+   * Given the defence, the split can lean toward the players it struggles
    * with: a receiver's slice moves a long way with the coverage.
    */
   goesTo: (
@@ -49,7 +49,7 @@ export interface PlayFactors {
     sides?: { offence?: string; defence?: string; shell?: string },
   ) => Map<string, number>;
   /**
-   * Told that a new game is starting. A man's cut of the work moves
+   * Told that a new game is starting. A player's cut of the work moves
    * game to game for reasons a snap cannot see, so it is drawn here
    * and then stays put across that game's snaps.
    */
@@ -92,7 +92,7 @@ export interface PlayFactors {
   /** whether a throw for this many yards was caught, drawn */
   caught: (gained: number, uniform: () => number) => boolean;
   /**
-   * A whole play drawn as the man's own, yards and catch together,
+   * A whole play drawn as the player's own, yards and catch together,
    * or nothing when he is too thin to sample and the pooled path
    * should answer instead.
    */
@@ -108,7 +108,7 @@ export interface PlayFactors {
   ) => { yards: number; caught: boolean } | undefined;
   /**
    * What this matchup does to a carry or a throw, near one. The
-   * sampled path draws a man's own plays against every defence he
+   * sampled path draws a player's own plays against every defence he
    * ever faced, so without this the walk cannot tell this week's
    * opponent from an average one.
    */
@@ -138,7 +138,7 @@ export const emptyCell = (): StateCell =>
  * threw the game situation away entirely. So the score is loosened by a
  * band at a time before it is let go, the same way the field is.
  */
-export interface Spot {
+interface Spot {
   toGo: number;
   yardline: number;
   /** how far the score has been let go: 0 exact, 1 either side, 2 any */

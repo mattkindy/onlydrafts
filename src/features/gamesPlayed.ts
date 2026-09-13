@@ -2,10 +2,10 @@
  * How many games a player is likely to be available for.
  *
  * The board used to answer this with four buckets of last season's
- * games, so every man who played nine got the same eight and a half
+ * games, so every player who played nine got the same eight and a half
  * back. That misses what anyone reading a depth chart can see: a back
  * who took three hundred carries, a receiver who spent November
- * on the injury report, a thirty year old, a man who finished the
+ * on the injury report, a thirty year old, a player who finished the
  * season hurt and is still recovering.
  *
  * Fitted on the seasons before the one being projected, so nothing
@@ -54,16 +54,16 @@ export interface AvailabilityRow {
   played?: number;
 }
 
-const ROOM = 17;
+const GAMES_IN_SEASON = 17;
 
-export function availabilityRow(r: AvailabilityRow): number[] {
+function availabilityRow(r: AvailabilityRow): number[] {
   const played = (n: number | undefined) => (n === undefined ? 14 : n);
 
   return [
     1,
-    r.gamesPrev / ROOM,
-    played(r.gamesPrev2) / ROOM,
-    played(r.gamesPrev3) / ROOM,
+    r.gamesPrev / GAMES_IN_SEASON,
+    played(r.gamesPrev2) / GAMES_IN_SEASON,
+    played(r.gamesPrev3) / GAMES_IN_SEASON,
     r.gamesPrev2 === undefined ? 1 : 0,
     (r.age ?? 26) - 26,
     Math.max(0, (r.age ?? 26) - 29),
@@ -76,11 +76,11 @@ export function availabilityRow(r: AvailabilityRow): number[] {
     // carries run to twenty, so what the number means to him is his own
     r.position === "QB" ? r.touchesPerGame / 20 : 0,
     ((r.weightPounds ?? 210) - 210) / 40,
-    r.weeksOut / ROOM,
-    r.weeksListed / ROOM,
+    r.weeksOut / GAMES_IN_SEASON,
+    r.weeksListed / GAMES_IN_SEASON,
     r.endedHurt ? 1 : 0,
     r.onTurf,
-    (r.weeksOnReserve ?? 0) / ROOM,
+    (r.weeksOnReserve ?? 0) / GAMES_IN_SEASON,
     r.openedOnReserve ? 1 : 0,
   ];
 }
@@ -90,7 +90,7 @@ export function fitAvailability(rows: AvailabilityRow[]): number[] {
 
   return fitRidge(
     usable.map(availabilityRow),
-    usable.map((r) => r.played! / ROOM),
+    usable.map((r) => r.played! / GAMES_IN_SEASON),
     3,
   );
 }
@@ -101,5 +101,5 @@ export function predictAvailability(
 ): number {
   const share = predictRidge(weights, availabilityRow(row));
 
-  return Math.min(ROOM, Math.max(1, share * ROOM));
+  return Math.min(GAMES_IN_SEASON, Math.max(1, share * GAMES_IN_SEASON));
 }

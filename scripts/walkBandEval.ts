@@ -4,7 +4,7 @@
  * The card is switching its spread from the role simulation's bands,
  * kept because an 80% band covered 79.6%, to the walk's own dealt
  * games. This asks the same question of the walk: over a played
- * season, how many of a man's weeks as they were scored land inside
+ * season, how many of a player's weeks as they were scored land inside
  * the 10th to 90th of the games the walk dealt him?
  *
  * Run: npx tsx scripts/walkBandEval.ts [season]
@@ -45,7 +45,7 @@ const coverage = (wider: number) => {
   let weeks = 0;
   let inside = 0;
   let widths = 0;
-  let men = 0;
+  let players = 0;
 
   for (const [playerId, his] of samples) {
     const was = weekly.get(playerId) ?? [];
@@ -65,7 +65,7 @@ const coverage = (wider: number) => {
 
     const low = Math.max(0, middle + (at(0.1) - middle) * wider);
     const high = middle + (at(0.9) - middle) * wider;
-    men++;
+    players++;
     widths += high - low;
 
     for (const points of was) {
@@ -78,9 +78,9 @@ const coverage = (wider: number) => {
   }
 
   console.log(
-    `wider ${wider.toFixed(2)}: ${men} men, ${weeks} played weeks, ` +
+    `wider ${wider.toFixed(2)}: ${players} players, ${weeks} played weeks, ` +
     `${(100 * inside / weeks).toFixed(1)}% inside the 10th to 90th ` +
-    `(should be 80), bands ${(widths / men).toFixed(1)} points wide`,
+    `(should be 80), bands ${(widths / players).toFixed(1)} points wide`,
   );
 };
 

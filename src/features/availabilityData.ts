@@ -59,10 +59,10 @@ async function readSeason(season: number): Promise<Season> {
      *
      * Counting only what he was handed or thrown made every starting
      * quarterback look like a five touch player, which is a backup's
-     * profile, and how much a man is given is the second strongest
+     * profile, and how much a player is given is the second strongest
      * signal of whether he stays on the field. The board came out
      * expecting quarterbacks to play 8.8 games where the rest of the
-     * board got 12.7 to 13.3, and the men who finish worth starting
+     * board got 12.7 to 13.3, and the players who finish worth starting
      * play about 14.8 whatever they do.
      */
     out.touches.set(
@@ -137,7 +137,7 @@ const ageAt = (born: string | undefined, season: number) =>
   born ? season - Number(born.slice(0, 4)) : undefined;
 
 
-export interface AvailabilityWorld {
+interface AvailabilityWorld {
   byYear: Map<number, Season>;
   rowsFor: (season: number) => AvailabilityRow[];
 }

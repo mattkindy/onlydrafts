@@ -14,7 +14,7 @@ export interface LineupCandidate {
   score: number;
 }
 
-export interface LineupFormat {
+interface LineupFormat {
   /** how many of each position must start */
   required: Record<string, number>;
   /** which positions may take a flex slot */

@@ -1,15 +1,15 @@
 /**
- * Start/sit scoring: take every pair of men you could have chosen between
+ * Start/sit scoring: take every pair of players you could have chosen between
  * and ask how often the one a method ranked higher outscored the other.
  *
  * This is the question a manager actually asks on Sunday morning, and it
  * is not the same as a slate-wide rank correlation. A method can order a
- * whole position well and still lose the two-man calls that were close.
+ * whole position well and still lose the two-player calls that were close.
  * Pairs are bucketed by how far apart the two projections were, because
  * a method that only wins the blowout calls has told you nothing.
  *
  * A pair where the two projections are identical is left out, since no
- * call was made. A pair where both men scored the same counts as half.
+ * call was made. A pair where both players scored the same counts as half.
  */
 
 export interface PairEntry {
@@ -17,18 +17,18 @@ export interface PairEntry {
   actual: number;
 }
 
-export interface PairTally {
+interface PairTally {
   right: number;
   total: number;
 }
 
-export interface GapBucket {
+interface GapBucket {
   name: string;
   min: number;
   max: number;
 }
 
-export const PAIR_GAPS: readonly GapBucket[] = [
+const PAIR_GAPS: readonly GapBucket[] = [
   { name: "0-2", min: 0, max: 2 },
   { name: "2-5", min: 2, max: 5 },
   { name: "5+", min: 5, max: Infinity },
@@ -62,7 +62,7 @@ export function addPairs(
 }
 
 /** one call, into whichever gap buckets it belongs to */
-export function addCredit(
+function addCredit(
   tally: Map<string, PairTally>,
   gap: number,
   credit: number,
@@ -78,7 +78,7 @@ export function addCredit(
   }
 }
 
-export function creditFor(higherActual: number, lowerActual: number): number {
+function creditFor(higherActual: number, lowerActual: number): number {
   if (higherActual > lowerActual) {
     return 1;
   }

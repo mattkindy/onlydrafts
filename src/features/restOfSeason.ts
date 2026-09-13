@@ -47,7 +47,7 @@ export function toDateWeight(games: number): number {
   return FITTED[FITTED.length - 1]![1];
 }
 
-export interface RestOfSeasonInput {
+interface RestOfSeasonInput {
   /** points a game we expected before the season started */
   preseason: number;
   /** points a game he has actually averaged */

@@ -60,11 +60,11 @@ staff does not kick when it should punt.
 
 ## What is wrong
 
-A throw goes to a man drawn from his share, and the walk then tries to
+A throw goes to a player drawn from his share, and the walk then tries to
 draw one of his own plays. It gives up when he has fewer than 25 in
 three seasons and falls back to a pooled draw.
 
-That fallback takes **20.5%** of every throw. In life the men with
+That fallback takes **20.5%** of every throw. In life the players with
 fewer than 25 targets over the same seasons take **4.9%** of them, so
 the walk sends a fifth of its passing to the back of the roster.
 
@@ -74,7 +74,7 @@ and misses about 35% of the time. A fifth of throws come back worth
 4.62, and the passing runs 10% short of the pool it samples.
 
 Being short there is what hides the second one. `storePlays` keeps only
-the plays a man was credited with:
+the plays a player was credited with:
 
 ```ts
 const kept = rows.filter((r) => r.player);
@@ -109,14 +109,14 @@ game, so the kicking gets worse rather than better.
 
 ## Where the flatness comes from
 
-The shares handed to the walk give a side's five busiest men 59.9% of
+The shares handed to the walk give a side's five busiest players 59.9% of
 its throws where a side gives them 74.2%. The walk's own leaning and
 script multipliers push that back up to 71.8%, so the flatness is in
 the projected shares and not in the walk.
 
 Those shares divide a position's work by `Math.pow(standing, sharpness)`
 and sharpness is 1. It was swept over 2024 and 1 came out best, .761
-against .724 at .5 and .733 at 3. That sweep scored **ordering men**,
+against .724 at .5 and .733 at 3. That sweep scored **ordering players**,
 which is what the board reads. Picking who catches a particular ball is
 a different job and wants a sharper number. The two uses pull opposite
 ways on one model.
@@ -126,7 +126,7 @@ ways on one model.
 Sharpening only the walk's own targeting, leaving the projection alone:
 
 ```
-sharpness   five busiest take   throws to men it cannot sample
+sharpness   five busiest take   throws to players it cannot sample
    1              63.8%                  19.9%
    1.3            72.2%                  16.2%
    1.6            78.4%                  16.2%
@@ -254,15 +254,15 @@ three passes and the last one ignores where the ball is:
 () => true,
 ```
 
-A man drawn on the eight gets a play he made at midfield, capped at the
+A player drawn on the eight gets a play he made at midfield, capped at the
 goal line. Getting that conditioning right, and then putting the sacks
 back, is the fix. Everything else in here follows from it.
 
 ## The order to do it in
 
-1. The target shares, so a fifth of throws stop going to men nobody
+1. The target shares, so a fifth of throws stop going to players nobody
    throws to. Sharpening the walk alone gets part of it; the rest is
-   that `among` carries 27 men where a side dresses about 11.
+   that `among` carries 27 players where a side dresses about 11.
 2. The pooled draw those fall back to, which gains 4.62 where a
    targeted throw gains 7.33.
 3. The sacks and the balls thrown away, drawn from where the ball is.
@@ -274,18 +274,18 @@ doing together with the box score evals beside them.
 
 # Where the weekly points line has room left
 
-`boxScoreWeekEval.ts` scored every way of guessing one man's week over
+`boxScoreWeekEval.ts` scored every way of guessing one player's week over
 2024 and 2025, weeks 1 to 17, by position and split at week 4.
 Everything is full PPR, because Sleeper's points column is PPR. The
 script has been deleted and its row is in `docs/scoreboard.md`.
 
 Two rows are the reason the bench exists. "Oracle: usage known" gets the
-man's actual targets, carries and pass attempts and has to guess his
+player's actual targets, carries and pass attempts and has to guess his
 rates from his own history. "Oracle: rates known" gets the rates and has
 to guess the usage. Together they say which half of a usage model has the
 points in it.
 
-Points per man per week, mae and bias:
+Points per player per week, mae and bias:
 
 ```
   candidate                          QB wk1-4       RB wk1-4       WR wk1-4       TE wk1-4      QB wk5-17      RB wk5-17      WR wk5-17      TE wk5-17
@@ -318,7 +318,7 @@ full set because those weeks are a harder draw:
   (b) walk points                  5.68/+0.13     4.75/-0.67     5.05/-1.21     3.61/-0.91     7.34/-0.74     4.53/-0.67     5.21/-0.86     4.49/-1.78
 ```
 
-Targets and carries, mae per man per week, over every week:
+Targets and carries, mae per player per week, over every week:
 
 ```
   candidate                         QB tgt/car      RB tgt/car      WR tgt/car      TE tgt/car
@@ -385,9 +385,9 @@ The component model already beats the shipped ridge across the early
 weeks, by 0.20 at quarterback, 0.27 at back, 0.27 at receiver and 0.13 at
 tight end, and it loses by about a tenth from week 5 on. That is the
 split to ship: the ridge has four weeks of in-season form to fit and
-nothing before that, and a man's previous season put through per-touch
+nothing before that, and a player's previous season put through per-touch
 rates is a better guess in September than his season line is. Three
-things that looked worth trying are not. Scaling a man's touches by his
+things that looked worth trying are not. Scaling a player's touches by his
 side's implied total costs a tenth of a point everywhere, so Vegas is
 already in the ridge and adding it again double counts. The game
 simulator's touches are worse than his trailing four games at predicting
@@ -400,20 +400,20 @@ does widen the top of the band, a back projected for 22 going from a
 
 ## Playing out the rest of a game that is under way
 
-The live pages price what a man still has to come by taking his whole
+The live pages price what a player still has to come by taking his whole
 week line and multiplying it by the fraction of the game left, and then
 the copula posterior pulls that toward what he has already done. Neither
 of them knows the score, the clock or who has the ball. The game engine
 does, now that `playGame` takes a starting state, so the third way to
 answer the question is to play the rest of the game out snap by snap and
-add up what each man gets.
+add up what each player gets.
 
 `scripts/aggregateCheckpoints.ts` stops every played game at six snaps
 and writes them to `data/curated/checkpoints-<season>.csv`: the end of
 each of the first three quarters, the middle of the second quarter, the
 first third down of the second quarter, and the first snap inside the
 twenty in the third. Each one gives the state the engine takes over
-from, what each man had scored by then, and what the rest of the game
+from, what each player had scored by then, and what the rest of the game
 gave him, all in PPR. 2024 gives 1595 of them over 272 games and
 2025 gives 1602.
 
@@ -424,14 +424,14 @@ and by checkpoint, for weeks 3, 6, 9, 12 and 15 of 2024 and
 is the check on whether the engine is right about the game at all before
 anybody argues about a receiver, and it pairs random lineups off the
 week's pool to get a Brier score and an implied against realised spread,
-each man's draws being what he has plus what the variant says is left.
+each player's draws being what he has plus what the variant says is left.
 The sim ships if it wins on error at every position at half time and at
 the end of the third quarter and stays level with them on the Brier
 score and the spread.
 
 Week 9 of 2024 and 2025, 174 checkpoints, 60 runs a checkpoint. Each
 cell is the mean absolute error in points and then the bias, so a
-negative number means the variant said less than the man scored.
+negative number means the variant said less than the player scored.
 
 ```
                   time scaled    copula posterior  remainder sim
@@ -507,7 +507,7 @@ back, 4.55 to 3.82 at receiver, 4.37 to 3.72 at tight end) and at all
 four again at the end of the third quarter, where the quarterback gap is
 4.48 to 3.57. It also beats it on the Brier score at both (0.1594 to
 0.1501, and 0.1204 to 0.0980), so the matchup odds do not pay for the
-per-man win.
+per-player win.
 
 The spread is where the copula is worst and the sim helps most. At half
 time the copula's draws imply a side scores within 6.3 points of its
@@ -530,18 +530,18 @@ scaling early and the sim from half time on, and the engine's scoring
 bias is the thing to fix before it is trusted before half.
 
 Two cautions. This is one week of each season, so a position cell is 59
-to 159 men and a Brier cell about 150 pairs; the half time and third
+to 159 players and a Brier cell about 150 pairs; the half time and third
 quarter wins are consistent across all four positions, which is harder
 to get by luck than any single one of them, but the size of each win is
 not settled. And the time scaled variant uses the component line rebuilt
 in process rather than the shipped slate, since only two slates were
 ever written to `docs/data`.
 
-The per-man rate reconciliation and the pass-catcher fallback both have
+The per-player rate reconciliation and the pass-catcher fallback both have
 numbers now, in the next section. `matchupCalibration.ts`, now deleted,
 was left alone: a lineup there needs all
-seven men drawn, the walk has only played the odd weeks, and a Brier
-over the subset of lineups where every seat has simulator runs cannot be
+seven players drawn, the walk has only played the odd weeks, and a Brier
+over the subset of lineups where every slot has simulator runs cannot be
 read against the 0.2112 the shipped bench reports.
 
 ## Reconciling the rates, and the fallback with the sacks
@@ -549,22 +549,22 @@ read against the 0.2112 the shipped bench reports.
 Two more walks, each played over the same odd weeks of 2024 and 2025 and
 each written to its own file.
 
-`VARIANT=component-rates` keeps the trailing shares and adds the per-man
-rates. Every man gets one multiplier per call, his shrunk yards per
+`VARIANT=component-rates` keeps the trailing shares and adds the per-player
+rates. Every player gets one multiplier per call, his shrunk yards per
 target over what his position averages, likewise per carry, likewise for
 his touchdowns, and a quarterback gets the same per attempt he throws.
 The pooled draw's level term is replaced by it outright, since both say
-how good a man is at this. His own sampled plays get the smaller
+how good a player is at this. His own sampled plays get the smaller
 correction of his history against what those plays already say. The
 touchdown multiplier moves a drawn gain onto the goal line, or off it,
 inside the twenty.
 
 `VARIANT=component-full` adds the two the top of this file asks for
 together: the sacks and the throwaways go into the depth pools the
-pooled draw samples, and a man too thin to sample borrows the plays of
-the busy men on his own side before he falls back to the crowd.
+pooled draw samples, and a player too thin to sample borrows the plays of
+the busy players on his own side before he falls back to the crowd.
 
-Targets and carries, mae per man per week:
+Targets and carries, mae per player per week:
 
 ```
   candidate                         QB tgt/car      RB tgt/car      WR tgt/car      TE tgt/car
@@ -611,13 +611,13 @@ The rates were meant to take the low bias off back and tight end, and
 they do not. A back's bias goes from -1.06 to -1.03 in weeks 1 to 4 and
 from -1.18 to -1.13 from week 5, which is a twentieth of a point where
 the gap to the component line is a point. So the bias is not in the
-per-touch rates. Sharper shares hand a busy man more work and the work
+per-touch rates. Sharper shares hand a busy player more work and the work
 itself is short; reconciling what he makes of a touch against his own
 history does not lengthen it, because his history is measured over the
 same short plays. The shortfall the top of this file works out, a
 targeted play needing 15 to 25% more near the goal, is the thing to fix,
 and it lives in how the sampled draw is conditioned rather than in any
-per-man number.
+per-player number.
 
 Where the rates do bite is the walk's own points, and they bite the
 wrong way: a quarterback's error goes from 5.90 to 6.69 early and from
@@ -626,17 +626,17 @@ so a throw is now multiplied twice, once for the receiver and once for
 the passer, and the two compound. One multiplier per throw is what that
 says, and the passer is the one to keep.
 
-Putting the sacks in the depth pools and giving a thin man the busy
-men's plays moves almost nothing, 2.10 receiver targets against 2.12 and
+Putting the sacks in the depth pools and giving a thin player the busy
+players' plays moves almost nothing, 2.10 receiver targets against 2.12 and
 a bias inside a hundredth. The fallback was already much smaller than
-the 20.5% at the top of this file: restricting `among` to the men with
+the 20.5% at the top of this file: restricting `among` to the players with
 trailing usage had taken most of it out, so there was little left for
 the stand-in pool to catch, and the sacks on the pooled path arrive
 where the sampled path already had them.
 
 The runs get worse as a fit. `week sd` rises at every position on both
 walks, a back's from 6.42 to 6.61 and a quarterback's from 8.90 to 9.89,
-and coverage falls with it. So the reconciliation moves men further from
+and coverage falls with it. So the reconciliation moves players further from
 where their weeks land.
 
 `DEALT_WIDER` stays at 1.2. The case for refitting it to about 1.05 was
@@ -699,7 +699,7 @@ The site has no server, so the browser cannot ask the fitted model
 anything. `scripts/buildSimTables.ts` asks it instead, on a grid, and
 writes the answers to `docs/data/sim-<season>.json` as base64 bytes:
 each side's run rate by down, distance, field position, score and
-clock; who the ball goes to; each man's catch rate and sixteen gain
+clock; who the ball goes to; each player's catch rate and sixteen gain
 quantiles; and the league's kicks, punts, fourth downs, turnovers,
 penalties and seconds a snap. A season is 201 KB on disk and 85 KB
 gzipped. `app/lib/remainder.ts` is the same drive and game loop reading
@@ -717,12 +717,12 @@ now, ordered by the carries and targets he saw last year, with the
 quarterback being whoever threw most. The sides are the same franchises
 either way, so a team's run rate is reused unchanged. The live page
 also falls back to last season's file when this season has none, and a
-man who has moved or arrived since is absent from it, which puts him
+player who has moved or arrived since is absent from it, which puts him
 back on the copula rather than on nothing.
 
 `scripts/simAgreement.ts` asks both engines about the same checkpoints.
 Over 20 checkpoints of 2025 week 10 at 60 runs each, the browser engine
-is 0.73 points a man away from Node with no bias, and 1.47 points a
+is 0.73 points a player away from Node with no bias, and 1.47 points a
 side away, of which 0.65 is scoring sides high.
 
 That side bias was 0.88 until the fourth down table learned the score
@@ -730,7 +730,7 @@ and the clock. The fitted model keys the choice on the score band and
 the time band as well as the spot, and the table was sampled once at
 nil apiece with twenty minutes left, so a side behind in the fourth got
 the kicker where the staff would have gone for it. The remaining 0.65
-is worth another look: with the per-man bias at -0.05, whatever is
+is worth another look: with the per-player bias at -0.05, whatever is
 still generous is not reaching anybody's fantasy line, which points at
 the kicks rather than the gains.
 

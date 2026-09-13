@@ -12,10 +12,10 @@
  * out negative on thin samples, so it is floored at zero.
  */
 
-export const middle = (values: number[]): number =>
+const middle = (values: number[]): number =>
   values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
 
-export const varianceOf = (values: number[]): number => {
+const varianceOf = (values: number[]): number => {
   const mid = middle(values);
 
   return middle(values.map((v) => (v - mid) ** 2));
@@ -23,7 +23,7 @@ export const varianceOf = (values: number[]): number => {
 
 export const spreadOf = (values: number[]): number => Math.sqrt(varianceOf(values));
 
-export interface Split {
+interface Split {
   /** how far the per-game number moves, all in */
   total: number;
   /** the part independent draws inside one game would have given */
@@ -94,11 +94,11 @@ export function meanSplit(games: number[][]): Split | undefined {
 }
 
 /**
- * The mean of a set of splits, so many men or many sides read as one
+ * The mean of a set of splits, so many players or many sides read as one
  * row. Averaged as spreads rather than as variances, to match how the
- * per-man numbers are quoted everywhere else.
+ * per-player numbers are quoted everywhere else.
  */
-export function poolSplits(splits: Split[]): Split {
+function poolSplits(splits: Split[]): Split {
   return {
     total: middle(splits.map((s) => s.total)),
     flips: middle(splits.map((s) => s.flips)),

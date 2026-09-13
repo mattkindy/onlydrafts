@@ -1,21 +1,21 @@
 /**
- * What to expect of a man before he has done anything, from what he is.
+ * What to expect of a player before he has done anything, from what he is.
  *
  * fitRoles shrinks a thin player toward the league: a catch rate of
  * .64, 10.4 yards a catch, 4.3 a carry, and the same swing for
  * everybody. Nobody is league average across the board, so every one of
- * those is an error the moment it is applied to a particular man.
+ * those is an error the moment it is applied to a particular player.
  *
  * He already has thirty four attributes. Guessing his rates from those
  * gives a target to shrink toward that is his rather than the league's,
- * and it works for a man with no history at all, which is where
+ * and it works for a player with no history at all, which is where
  * shrinking to the league hurts most.
  */
 
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
 import { buildPlayerVectors, type PlayerVector } from "./playerVector.js";
 
-export interface Expected {
+interface Expected {
   catchRate: number;
   yardsPerCatch: number;
   /** what he makes once he is hit, which is his where a whole carry is not */
@@ -24,23 +24,23 @@ export interface Expected {
   swing: number;
 }
 
-export interface PriorSettings {
+interface PriorSettings {
   /** how hard to keep a guess near what the position usually does */
   penalty: number;
 }
 
-export const PRIOR_DEFAULTS: PriorSettings = { penalty: 3 };
+const PRIOR_DEFAULTS: PriorSettings = { penalty: 3 };
 
 /** how much of the attribute guess to use, the rest being the league */
-export type Weights = Record<keyof Expected, number>;
+type Weights = Record<keyof Expected, number>;
 
-/** what a man actually did, to fit the guesses against */
-export interface Shown extends Expected {
+/** what a player actually did, to fit the guesses against */
+interface Shown extends Expected {
   playerId: string;
   touches: number;
 }
 
-export const RATES: (keyof Expected)[] = [
+const RATES: (keyof Expected)[] = [
   "catchRate", "yardsPerCatch", "afterContact", "swing",
 ];
 
@@ -49,12 +49,12 @@ export const RATES: (keyof Expected)[] = [
  * rather than chosen.
  *
  * Saying attributes for these and the league for those is picking
- * whichever won on the men being scored. One rule instead: guess from
+ * whichever won on the players being scored. One rule instead: guess from
  * the attributes, mix with the league, and fit the proportions by
  * trying them on a season nobody is being judged on. A guess with
  * nothing behind it takes a share of nothing by itself.
  */
-export function fitWeights(
+function fitWeights(
   guessed: Map<string, Expected>,
   wentOnToDo: Shown[],
   league: Expected,
@@ -62,17 +62,17 @@ export function fitWeights(
   const out = {} as Weights;
 
   for (const rate of RATES) {
-    const men = wentOnToDo.filter((m) => guessed.has(m.playerId));
+    const players = wentOnToDo.filter((m) => guessed.has(m.playerId));
     let best = 0;
     let bestMiss = Infinity;
 
     for (let lean = 0; lean <= 1.001; lean += 0.05) {
       let miss = 0;
 
-      for (const man of men) {
-        const said = lean * guessed.get(man.playerId)![rate] +
+      for (const player of players) {
+        const said = lean * guessed.get(player.playerId)![rate] +
           (1 - lean) * league[rate];
-        miss += (said - man[rate]) ** 2;
+        miss += (said - player[rate]) ** 2;
       }
 
       if (miss < bestMiss) {
@@ -81,14 +81,14 @@ export function fitWeights(
       }
     }
 
-    out[rate] = men.length >= 25 ? best : 0;
+    out[rate] = players.length >= 25 ? best : 0;
   }
 
   return out;
 }
 
 /** the two mixed, in whatever proportion was fitted */
-export const blended = (
+const blended = (
   guessed: Expected | undefined, league: Expected, weights: Weights,
 ): Expected => {
   const out = {} as Expected;
@@ -116,11 +116,11 @@ const bounded = (value: number, low: number, high: number) =>
  *
  * Fitting a season's attributes to its own rates teaches nothing: the
  * vector contains his catch rate, so a fit learns to copy it, and then
- * on a man with forty targets it copies noise. Asking a season's
+ * on a player with forty targets it copies noise. Asking a season's
  * attributes about the season after forces it to lean on the parts that
- * carry, which is what a man with no history needs.
+ * carry, which is what a player with no history needs.
  */
-export async function expectedFrom(
+async function expectedFrom(
   learnFrom: number,
   wentOnToDo: Shown[],
   applyTo: number,
@@ -130,38 +130,39 @@ export async function expectedFrom(
   const vectors = await buildPlayerVectors(applyTo);
   const byPosition = new Map<string, Shown[]>();
 
-  for (const man of wentOnToDo) {
-    const described = learnVectors.get(man.playerId);
+  for (const player of wentOnToDo) {
+    const described = learnVectors.get(player.playerId);
 
-    if (!described || man.touches < 25) {
+    if (!described || player.touches < 25) {
       continue;
     }
 
     byPosition.set(
-      described.position, [...(byPosition.get(described.position) ?? []), man],
+      described.position, [...(byPosition.get(described.position) ?? []), player],
     );
   }
 
   const out = new Map<string, Expected>();
   const row = (described: PlayerVector) => [1, ...described.values];
 
-  for (const [position, men] of byPosition) {
-    if (men.length < 20) {
+  for (const [position, players] of byPosition) {
+    if (players.length < 20) {
       continue;
     }
 
-    const rows = men.map((man) => row(learnVectors.get(man.playerId)!));
-    const weightsFor = (of: (man: Shown) => number) =>
-      fitRidge(rows, men.map(of), settings.penalty);
+    const rows = players.map((player) => row(learnVectors.get(player.playerId)!));
+    const weightsFor = (of: (player: Shown) => number) =>
+      fitRidge(rows, players.map(of), settings.penalty);
     const forCatch = weightsFor((m) => m.catchRate);
     const forCatchYards = weightsFor((m) => m.yardsPerCatch);
     const forAfterContact = weightsFor((m) => m.afterContact);
     const forSwing = weightsFor((m) => m.swing);
     const average = {
-      catchRate: men.reduce((a, m) => a + m.catchRate, 0) / men.length,
-      yardsPerCatch: men.reduce((a, m) => a + m.yardsPerCatch, 0) / men.length,
-      afterContact: men.reduce((a, m) => a + m.afterContact, 0) / men.length,
-      swing: men.reduce((a, m) => a + m.swing, 0) / men.length,
+      catchRate: players.reduce((a, m) => a + m.catchRate, 0) / players.length,
+      yardsPerCatch:
+        players.reduce((a, m) => a + m.yardsPerCatch, 0) / players.length,
+      afterContact: players.reduce((a, m) => a + m.afterContact, 0) / players.length,
+      swing: players.reduce((a, m) => a + m.swing, 0) / players.length,
     };
 
     for (const [playerId, described] of vectors) {

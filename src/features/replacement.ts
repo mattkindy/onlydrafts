@@ -26,12 +26,12 @@ export interface StarterSlots {
   superFlex: number;
 }
 
-export interface ReplacementPlayer {
+interface ReplacementPlayer {
   position: string;
   ppg: number;
 }
 
-export interface ReplacementResult {
+interface ReplacementResult {
   /** points a game for the best player at each position nobody starts */
   levels: Record<string, number>;
   /** how many at each position ended up starting somewhere */

@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { parseCsv } from "../data/csv.js";
 import { RAW_DIR } from "../data/nflverse.js";
 
-export async function loadDriveStarts(seasons: number[]): Promise<number[]> {
+async function loadDriveStarts(seasons: number[]): Promise<number[]> {
   const rows = parseCsv(
     await readFile(join(RAW_DIR, "..", "curated", "drives.csv"), "utf8"),
   );
@@ -35,5 +35,5 @@ export async function loadDriveStarts(seasons: number[]): Promise<number[]> {
 }
 
 /** one of them, drawn */
-export const startFrom = (starts: number[], uniform: () => number): number =>
+const startFrom = (starts: number[], uniform: () => number): number =>
   starts.length === 0 ? 75 : starts[Math.floor(uniform() * starts.length)]!;

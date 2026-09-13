@@ -1,7 +1,7 @@
 /**
  * Whether a training set is worth fitting, and what to say when it is
  * not. When the weekly stats file has no column for a part, every row
- * reads nought for it, so the season model fits happily and the parts
+ * reads zero for it, so the season model fits happily and the parts
  * model is handed nothing at all. The message says which seasons
  * produced rows and which parts came out empty, so a reader knows which
  * input to go and look at.
@@ -14,7 +14,7 @@ import type { SeasonExample } from "./seasonModel.js";
 /** the least a part needs before a ridge on it means anything */
 const FEWEST_ROWS = 20;
 
-export function usableByPart(
+function usableByPart(
   examples: SeasonExample[],
 ): Map<keyof StatParts, number> {
   const counts = new Map<keyof StatParts, number>();
@@ -50,7 +50,7 @@ export function trainingComplaint(
   if (empty.length > 0) {
     return `${examples.length} training rows, but too few carry ` +
       `${empty.join(", ")}. Rows by season: ${found}. A part that is ` +
-      "nought on every row means the weekly stats file has no column " +
+      "zero on every row means the weekly stats file has no column " +
       "for it, which happens when nflverse renames one.";
   }
 

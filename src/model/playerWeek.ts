@@ -112,7 +112,7 @@ export function shareDraw(
 
 /**
  * How firmly each depth chart holds, fitted by matching how far a
- * man's weekly share wanders from his season share. Over 160
+ * player's weekly share wanders from his season share. Over 160
  * team-seasons a backfield wanders at .859 and a receiving room at
  * .708, which comes out as 6 and 16. A committee rotates; a target
  * order does not. Whether the play-caller changed makes no difference
@@ -135,8 +135,7 @@ export function simulateTeamWeek(
 
   // Callers rarely pass a whole offence, so the rest of it competes as
   // one extra mouth. Without it three receivers would split every pass
-  // the team throws, and whoever is missing would hand his targets
-  // only to the players we happen to be modelling.
+  // the team throws, and an absence would feed only those three.
   const withRest = (get: (p: PlayerRole) => number, holds: number) => {
     const shares = roster.map((p, i) => (active[i] ? get(p) : 0));
     const rest = Math.max(0, 1 - roster.reduce((sum, p) => sum + get(p), 0));

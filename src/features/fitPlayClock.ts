@@ -13,7 +13,7 @@
 
 import type { Call } from "../model/playFactors.js";
 
-export interface ClockRow {
+interface ClockRow {
   call: Call;
   yards: number;
   margin: number;
@@ -69,7 +69,7 @@ const keyFor = (
 };
 
 /** how much of a side's own tempo survives the staff changing */
-export interface StaffKept {
+interface StaffKept {
   /** true when the same head coach is still there */
   sameHeadCoach: (offence: string) => boolean;
   /** and the same coordinator */

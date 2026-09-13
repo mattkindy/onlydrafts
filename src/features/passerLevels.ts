@@ -8,13 +8,13 @@
  * Multiplying the receiver's level by his quarterback's counts the
  * quarterback twice, because the receiver's history already contains
  * whoever was throwing to him. What is missing is the change: this
- * man's yards were made with those quarterbacks and will be made with
+ * player's yards were made with those quarterbacks and will be made with
  * this one, so his level moves by the difference between them.
  */
 
 import type { PlayRow } from "./fitPlayFactors.js";
 
-export interface Passing {
+interface Passing {
   /** what a receiver's level should be multiplied by, given who throws now */
   changeFor: (receiver: string, passerNow: string) => number;
   /** each passer against the league, for reporting */
@@ -22,7 +22,7 @@ export interface Passing {
   knownPassers: number;
 }
 
-export interface PassingSettings {
+interface PassingSettings {
   /** attempts before a passer's own yards are taken at face value */
   steadyAt: number;
   /** how much of the difference between two passers reaches the receiver */
@@ -31,7 +31,7 @@ export interface PassingSettings {
   most: number;
 }
 
-export const PASSING_DEFAULTS: PassingSettings = {
+const PASSING_DEFAULTS: PassingSettings = {
   steadyAt: 400, reaches: 1, most: 0.35,
 };
 
@@ -48,10 +48,10 @@ const rate = (tally: Tally | undefined, fallback: number) =>
  * making them.
  *
  * A receiver's own quarterbacks are weighted by how often each threw
- * to him, so a man who split a season between two of them carries
+ * to him, so a player who split a season between two of them carries
  * both.
  */
-export function fitPassing(
+function fitPassing(
   rows: PlayRow[], settings: PassingSettings = PASSING_DEFAULTS,
 ): Passing {
   const byPasser = new Map<string, Tally>();

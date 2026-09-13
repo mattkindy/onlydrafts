@@ -13,7 +13,7 @@
 
 import type { PlayState } from "../model/playFactors.js";
 
-export interface FormationRow {
+interface FormationRow {
   season: number;
   offence: string;
   down: number;

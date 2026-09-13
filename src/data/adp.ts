@@ -66,7 +66,7 @@ export async function loadAdp(
  * from drafts on Sleeper itself, and the two disagree by rounds on
  * some players. A league that drafts on Sleeper should be priced
  * against Sleeper. There is no range with it, so the spread comes
- * from whatever the mocks say about the same man.
+ * from whatever the mocks say about the same player.
  */
 export async function loadSleeperAdp(
   season: number,

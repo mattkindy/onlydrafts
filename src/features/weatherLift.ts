@@ -9,7 +9,7 @@
  * A closed roof is a mild still afternoon, which is what it is.
  */
 
-export interface Day {
+interface Day {
   indoors: boolean;
   temperature?: number;
   wind?: number;
@@ -24,7 +24,7 @@ const A_SIDE_SCORES = 21.4;
 const COLD_COSTS = 1.18;
 const WIND_COSTS = 1.63;
 
-export function weatherLift(day: Day): number {
+function weatherLift(day: Day): number {
   if (day.indoors) {
     return 1;
   }

@@ -22,7 +22,7 @@ const withWidth = async (width: string) => {
   return loaded;
 };
 
-/** every man carries for the same ten yards, so the day is all that moves */
+/** every player carries for the same ten yards, so the day is all that moves */
 const GAINS = 10;
 
 const factors: PlayFactors = {
@@ -34,8 +34,8 @@ const factors: PlayFactors = {
   caught: () => true,
 };
 
-const sideOf = (team: string, men: string[]): Side =>
-  ({ team, among: men, factors });
+const sideOf = (team: string, players: string[]): Side =>
+  ({ team, among: players, factors });
 
 const rules: EndingRules = {
   kickSucceeds: () => 1,
@@ -57,7 +57,7 @@ const ticking: PlayClock = {
 };
 
 /**
- * The gains each side made, by the man who made them, off one played
+ * The gains each side made, by the player who made them, off one played
  * game. Plays that ran out of field are dropped, since the yardline
  * caps those before the day is ever visible in them.
  */
@@ -71,15 +71,15 @@ async function gainsBySide(width: string, seed: number) {
   const byTeam = new Map<string, Map<string, number[]>>();
 
   for (const one of game.possessions) {
-    const byMan = byTeam.get(one.team) ?? new Map<string, number[]>();
-    byTeam.set(one.team, byMan);
+    const byPlayer = byTeam.get(one.team) ?? new Map<string, number[]>();
+    byTeam.set(one.team, byPlayer);
 
     for (const play of one.drive.plays) {
       if (play.scored) {
         continue;
       }
 
-      byMan.set(play.player, [...(byMan.get(play.player) ?? []), play.yards]);
+      byPlayer.set(play.player, [...(byPlayer.get(play.player) ?? []), play.yards]);
     }
   }
 
@@ -88,21 +88,21 @@ async function gainsBySide(width: string, seed: number) {
 
 /**
  * The two whole yards a side's ten yard carries can land on. A day of
- * d turns ten yards into floor(10d) or one more, so every man on the
+ * d turns ten yards into floor(10d) or one more, so every player on the
  * side shares one pair and the pair says what the day was.
  */
-const landedOn = (byMan: Map<string, number[]>) =>
-  [...new Set([...byMan.values()].flat())].sort((a, b) => a - b);
+const landedOn = (byPlayer: Map<string, number[]>) =>
+  [...new Set([...byPlayer.values()].flat())].sort((a, b) => a - b);
 
 describe("the day a game hands a side", () => {
-  it("is the same for every man on that side", async () => {
+  it("is the same for every player on that side", async () => {
     const byTeam = await gainsBySide("0.3", 41);
 
-    for (const byMan of byTeam.values()) {
-      const shared = landedOn(byMan);
+    for (const byPlayer of byTeam.values()) {
+      const shared = landedOn(byPlayer);
       expect(shared.length).toBeLessThanOrEqual(2);
 
-      for (const his of byMan.values()) {
+      for (const his of byPlayer.values()) {
         expect(his.every((y) => shared.includes(y))).toBe(true);
       }
     }
@@ -132,8 +132,8 @@ describe("the day a game hands a side", () => {
   it("leaves every gain where it was when the width is off", async () => {
     const byTeam = await gainsBySide("0", 41);
 
-    for (const byMan of byTeam.values()) {
-      expect(landedOn(byMan)).toEqual([GAINS]);
+    for (const byPlayer of byTeam.values()) {
+      expect(landedOn(byPlayer)).toEqual([GAINS]);
     }
   });
 });

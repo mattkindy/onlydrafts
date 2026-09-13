@@ -113,7 +113,7 @@ export interface SeasonNoise {
   within: ResidualModel;
 }
 
-export interface SeasonTrainingPoint extends TrainingPoint {
+interface SeasonTrainingPoint extends TrainingPoint {
   playerId: string;
   season: number;
 }
@@ -192,12 +192,12 @@ export function sampleSeasonBias(
  * miss in different ways when one of them is a deep threat, and
  * pooling them hands both the average of the two.
  */
-export interface ShapedTrainingPoint extends TrainingPoint {
+interface ShapedTrainingPoint extends TrainingPoint {
   /** predicted share of his season coming in his best weeks */
   concentration: number;
 }
 
-export interface ShapedResidualModel {
+interface ShapedResidualModel {
   /** cut points between concentration bands, per position */
   bands: Map<string, number[]>;
   /** one plain model per position and band */
@@ -210,7 +210,7 @@ function quantile(sorted: number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))]!;
 }
 
-export function buildShapedResidualModel(
+function buildShapedResidualModel(
   points: ShapedTrainingPoint[],
   buckets: number,
   bandCount: number,
@@ -258,7 +258,7 @@ function bandOf(cuts: number[], concentration: number): number {
 }
 
 /** the p quantile for this prediction, given how lumpy his role is */
-export function shapedQuantile(
+function shapedQuantile(
   model: ShapedResidualModel,
   position: string,
   predicted: number,

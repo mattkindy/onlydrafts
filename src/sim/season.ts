@@ -20,11 +20,11 @@ export interface PlayerWeek {
 }
 
 /** playerId -> a fixed preseason value, for the naive policy */
-export type StaticValues = Map<string, number>;
+type StaticValues = Map<string, number>;
 
-export type PolicyName = "hindsight" | "model" | "naive";
+type PolicyName = "hindsight" | "model" | "naive";
 
-export interface SeasonResult {
+interface SeasonResult {
   /** mean weekly starter points per policy */
   meanPoints: Record<PolicyName, number>;
 }

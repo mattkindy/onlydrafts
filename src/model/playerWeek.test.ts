@@ -81,7 +81,7 @@ describe("simulateTeamWeek", () => {
     expect(correlation(a, b)).toBeLessThan(0);
   });
 
-  it("hands a target share to the others when one man sits out", () => {
+  it("hands a target share to the others when one player sits out", () => {
     const roster = [receiver("a", 0.28), receiver("b", 0.24)];
     const withBoth = { ...roster[1]!, availability: 1 };
     const withoutHim = { ...roster[1]!, availability: 0 };
@@ -100,7 +100,7 @@ describe("simulateTeamWeek", () => {
     expect(meanFor(withoutHim)).toBeGreaterThan(meanFor(withBoth));
   });
 
-  it("scores no touchdowns for a man who is not on the field", () => {
+  it("scores no touchdowns for a player who is not on the field", () => {
     const roster = [receiver("a", 0.3), { ...receiver("b", 0.3), availability: 0 }];
     const draws = drawsFrom(5);
 

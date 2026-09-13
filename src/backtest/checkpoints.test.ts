@@ -68,8 +68,8 @@ describe("a game stopped at a snap", () => {
     expect(stops.get("redQ3")?.state.timeouts).toEqual({ HHH: 2, AAA: 3 });
   });
 
-  it("splits a man's afternoon at the snap, in PPR", () => {
-    const his = stops.get("half")?.men.find((man) => man.playerId === "back");
+  it("splits a player's afternoon at the snap, in PPR", () => {
+    const his = stops.get("half")?.players.find((player) => player.playerId === "back");
 
     expect(his?.soFar).toBeCloseTo(1.4, 6);
     expect(his?.toCome).toBeCloseTo(0.9, 6);
@@ -85,7 +85,7 @@ describe("a game stopped at a snap", () => {
     const back = fromCache(text)[0]!;
 
     expect(back.state).toEqual(one.state);
-    expect(back.men).toEqual(one.men);
+    expect(back.players).toEqual(one.players);
     expect(back.finalPoints).toEqual(one.finalPoints);
   });
 });

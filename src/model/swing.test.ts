@@ -16,7 +16,7 @@ const spreadOf = (values: number[]) => {
   return Math.sqrt(middle(values.map((v) => (v - mid) ** 2)));
 };
 
-describe("swinging a man's yards", () => {
+describe("swinging a player's yards", () => {
   it("leaves his average where it was, however far he swings", () => {
     for (const swing of [0.3, 0.8, 1.3, 1.8]) {
       expect(middle(drawsFor(swing))).toBeCloseTo(1, 1);
@@ -24,8 +24,8 @@ describe("swinging a man's yards", () => {
   });
 
   it("swings about as far as it is asked to", () => {
-    // the clipping at nought costs a little of it, which is what
-    // happens to a man who cannot lose more yards than he has
+    // the clipping at zero costs a little of it, which is what
+    // happens to a player who cannot lose more yards than he has
     expect(spreadOf(drawsFor(1.3))).toBeGreaterThan(0.9);
     expect(spreadOf(drawsFor(1.3))).toBeLessThan(1.3);
   });
@@ -34,7 +34,7 @@ describe("swinging a man's yards", () => {
     expect(Math.min(...drawsFor(1.8, 20000))).toBeGreaterThanOrEqual(0);
   });
 
-  it("leaves a man alone who does not swing at all", () => {
+  it("leaves a player alone who does not swing at all", () => {
     expect(keepMean(0, 2)).toBe(1);
   });
 });

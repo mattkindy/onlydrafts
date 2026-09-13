@@ -15,9 +15,9 @@
 
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
 
-export const GROUPINGS = ["11", "12", "21", "heavy", "spread"] as const;
+const GROUPINGS = ["11", "12", "21", "heavy", "spread"] as const;
 
-export type Grouping = (typeof GROUPINGS)[number];
+type Grouping = (typeof GROUPINGS)[number];
 
 export interface PlayState {
   down: number;
@@ -31,13 +31,13 @@ export interface PlayState {
 }
 
 /**
- * How much of the call is the state and how much is the man making it.
+ * How much of the call is the state and how much is the player making it.
  * Measured over 2022 to 2025, an offence's personnel mix repeats at
  * .19 to .23 under the same coordinator and at nothing at all under a
  * new one, so who is calling plays belongs in the model beside the
  * down and distance.
  */
-export interface PersonnelHabit {
+interface PersonnelHabit {
   /** this offence's own mix, as a share per grouping */
   mix: Record<Grouping, number>;
 }
@@ -48,7 +48,7 @@ export interface PersonnelHabit {
  * from one yard to five changes the call far more than fifteen to
  * twenty does.
  */
-export function stateRow(state: PlayState, teams: string[] = [], team = ""): number[] {
+function stateRow(state: PlayState, teams: string[] = [], team = ""): number[] {
   const toGo = Math.min(state.toGo, 25) / 10;
   const yard = state.yardline / 100;
   const late = state.seconds < 300 ? 1 : 0;
@@ -71,25 +71,25 @@ export function stateRow(state: PlayState, teams: string[] = [], team = ""): num
     late * (state.margin < 0 ? 1 : 0),
     (state.down >= 3 ? 1 : 0) * toGo,
     // one column per offence, so the fit works out how much of the
-    // call is the situation and how much is the man making it, rather
+    // call is the situation and how much is the player making it, rather
     // than being told afterward by a multiplier
     ...teams.map((name) => (name === team ? 1 : 0)),
   ];
 }
 
-export interface PersonnelModel {
+interface PersonnelModel {
   weights: Map<Grouping, number[]>;
   leagueMix: Record<Grouping, number>;
   /** the offences the fit knows about, in the order their columns sit */
   teams: string[];
 }
 
-export interface PersonnelExample extends PlayState {
+interface PersonnelExample extends PlayState {
   grouping: Grouping;
   offense?: string;
 }
 
-export function fitPersonnel(
+function fitPersonnel(
   examples: PersonnelExample[],
   penalty = 20,
   withTeams = false,
@@ -118,7 +118,7 @@ export function fitPersonnel(
 }
 
 /** an offence's own mix, for tilting the state's answer */
-export function habitOf(examples: PersonnelExample[]): PersonnelHabit {
+function habitOf(examples: PersonnelExample[]): PersonnelHabit {
   const mix = {} as Record<Grouping, number>;
 
   for (const grouping of GROUPINGS) {
@@ -135,7 +135,7 @@ export function habitOf(examples: PersonnelExample[]): PersonnelHabit {
  * says how the situation moves a team from its own baseline rather
  * than what a league-average team would line up in.
  */
-export function personnelChances(
+function personnelChances(
   model: PersonnelModel,
   state: PlayState,
   habit?: PersonnelHabit,
@@ -163,7 +163,7 @@ export function personnelChances(
 }
 
 /** one grouping, drawn from those chances */
-export function drawPersonnel(
+function drawPersonnel(
   model: PersonnelModel,
   state: PlayState,
   uniform: () => number,

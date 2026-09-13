@@ -1,5 +1,5 @@
 /**
- * A week's points built from a man's opportunities times his per-touch
+ * A week's points built from a player's opportunities times his per-touch
  * rates, rather than from a model anchored to his season.
  *
  * Usage is his own recent workload per game, mixed with his previous
@@ -19,14 +19,14 @@ import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
 /** the last week the component line beats the season-anchored one */
 export const COMPONENT_THROUGH_WEEK = 4;
 
-/** how many of a man's own games the trailing window reads */
-export const COMPONENT_WINDOW = 4;
+/** how many of a player's own games the trailing window reads */
+const COMPONENT_WINDOW = 4;
 
 /** the positions the component model has priors and rates for */
-export const COMPONENT_POSITIONS = ["QB", "RB", "WR", "TE"];
+const COMPONENT_POSITIONS = ["QB", "RB", "WR", "TE"];
 
 /** the opportunities a projection multiplies a rate by */
-export interface Usage {
+interface Usage {
   passAtt: number;
   carries: number;
   targets: number;
@@ -44,8 +44,8 @@ export interface Rates {
   recTdRate: number;
 }
 
-/** what a man did over some stretch, on both sides of usage times rate */
-export interface Box extends Usage {
+/** what a player did over some stretch, on both sides of usage times rate */
+interface Box extends Usage {
   passYds: number;
   passTd: number;
   interceptions: number;
@@ -58,7 +58,7 @@ export interface Box extends Usage {
 }
 
 /** how many opportunities a rate needs before it stops being the prior */
-export const SHRINK = { passAtt: 80, carries: 40, targets: 30 };
+const SHRINK = { passAtt: 80, carries: 40, targets: 30 };
 
 export const emptyBox = (): Box => ({
   passAtt: 0, carries: 0, targets: 0, passYds: 0, passTd: 0,
@@ -66,7 +66,7 @@ export const emptyBox = (): Box => ({
   recTd: 0, points: 0,
 });
 
-export function boxOf(s: PlayerWeekStats, rules: ScoringRules): Box {
+function boxOf(s: PlayerWeekStats, rules: ScoringRules): Box {
   const line = s.statLine;
 
   return {
@@ -85,14 +85,14 @@ export function boxOf(s: PlayerWeekStats, rules: ScoringRules): Box {
   };
 }
 
-export function addBox(into: Box, from: Box): void {
+function addBox(into: Box, from: Box): void {
   for (const key of Object.keys(into) as (keyof Box)[]) {
     into[key] += from[key];
   }
 }
 
 /** per game over whichever window a caller is reading */
-export function perGame(box: Box, count: number): Box {
+function perGame(box: Box, count: number): Box {
   if (count <= 0) {
     return emptyBox();
   }
@@ -106,11 +106,11 @@ export function perGame(box: Box, count: number): Box {
   return out;
 }
 
-export const usageOf = (box: Box): Usage => ({
+const usageOf = (box: Box): Usage => ({
   passAtt: box.passAtt, carries: box.carries, targets: box.targets,
 });
 
-export function scaleUsage(usage: Usage, by: number): Usage {
+function scaleUsage(usage: Usage, by: number): Usage {
   return {
     passAtt: usage.passAtt * by,
     carries: usage.carries * by,
@@ -118,7 +118,7 @@ export function scaleUsage(usage: Usage, by: number): Usage {
   };
 }
 
-export function mixUsage(a: Usage, b: Usage, weight: number): Usage {
+function mixUsage(a: Usage, b: Usage, weight: number): Usage {
   return {
     passAtt: (1 - weight) * a.passAtt + weight * b.passAtt,
     carries: (1 - weight) * a.carries + weight * b.carries,
@@ -127,11 +127,11 @@ export function mixUsage(a: Usage, b: Usage, weight: number): Usage {
 }
 
 /**
- * Points from a man's opportunities and his rates, under the league's
+ * Points from a player's opportunities and his rates, under the league's
  * rules. This is the whole component model in one place, so a candidate
  * differs only in where its usage and its rates come from.
  */
-export function pointsFrom(
+function pointsFrom(
   usage: Usage,
   rates: Rates,
   rules: ScoringRules,
@@ -148,7 +148,7 @@ export function pointsFrom(
   return passing + rushing + receiving;
 }
 
-export function ratesFrom(box: Box, prior: Rates, shrink = SHRINK): Rates {
+function ratesFrom(box: Box, prior: Rates, shrink = SHRINK): Rates {
   const per = (total: number, count: number, k: number, floor: number) =>
     (total + k * floor) / (count + k);
 
@@ -165,7 +165,7 @@ export function ratesFrom(box: Box, prior: Rates, shrink = SHRINK): Rates {
 }
 
 /** the same rates with no shrinkage, which is what one stretch itself says */
-export function rawRates(box: Box, prior: Rates): Rates {
+function rawRates(box: Box, prior: Rates): Rates {
   const per = (total: number, count: number, floor: number) =>
     count > 0 ? total / count : floor;
 
@@ -221,7 +221,7 @@ export function positionRatePriors(
   return priors;
 }
 
-/** everything about a man the component line is allowed to look at */
+/** everything about a player the component line is allowed to look at */
 export interface History {
   /** his last few games played this season, summed, and how many */
   trailing: Box;
@@ -233,7 +233,7 @@ export interface History {
 
 /**
  * The per-game usage the component line works from. Vegas is left out on
- * purpose: scaling a man's touches by his side's implied total cost a
+ * purpose: scaling a player's touches by his side's implied total cost a
  * tenth of a point at every position on the bench.
  */
 export function componentUsage(history: History): Usage {
@@ -247,7 +247,7 @@ export function componentUsage(history: History): Usage {
   return mixUsage(before, recent, history.trailingGames / 3);
 }
 
-/** what a man's own history says his rates are, prior season included */
+/** what a player's own history says his rates are, prior season included */
 export function componentRates(history: History, prior: Rates): Rates {
   const box = emptyBox();
   addBox(box, history.trailing);
@@ -270,7 +270,7 @@ export function componentPoints(
 }
 
 /**
- * Each man's trailing window and previous season as of one week. `stats`
+ * Each player's trailing window and previous season as of one week. `stats`
  * is this season's weekly stats and `prevStats` last season's; only the
  * weeks before `week` count toward the trailing box, so the same call
  * works for a week that has already been played.

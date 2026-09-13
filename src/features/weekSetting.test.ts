@@ -44,7 +44,7 @@ describe("what the schedule says about a week", () => {
     expect(out[0]).toBeGreaterThan(out[2]!);
   });
 
-  it("leaves a man with nothing to share out alone", () => {
+  it("leaves a player with nothing to share out alone", () => {
     expect(sharedOut([]).length).toBe(0);
     expect(sharedOut([1, 1, 1])).toEqual([1, 1, 1]);
   });

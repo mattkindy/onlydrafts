@@ -5,7 +5,7 @@
  * where 0 is all ours and 1 is all Sleeper. The weight is chosen on one
  * season and reported on another, so it has to be fit from data rather
  * than picked, and the thing it is fit on is the same pair accuracy the
- * eval reports: for each slate, every pair of men, how often the higher
+ * eval reports: for each slate, every pair of players, how often the higher
  * projection outscored the other.
  */
 
@@ -17,7 +17,7 @@ export interface BlendEntry {
   actual: number;
 }
 
-export const BLEND_WEIGHTS: readonly number[] = Array.from(
+const BLEND_WEIGHTS: readonly number[] = Array.from(
   { length: 21 },
   (_, i) => i / 20,
 );
@@ -38,7 +38,7 @@ export const SHIPPED_BLEND_WEIGHT = 0.5;
  * of error at quarterback and leaves every other position where it was.
  * A per-position bias fitted on the other season did no better.
  */
-export const SLEEPER_QB_BIAS = 3;
+const SLEEPER_QB_BIAS = 3;
 
 /** Sleeper's number with his level bias off, which is what the blend reads */
 export function debiasedSleeper(position: string, points: number): number {

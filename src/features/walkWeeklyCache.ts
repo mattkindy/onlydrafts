@@ -1,5 +1,5 @@
 /**
- * What the walk scored each man in a week, kept on disk.
+ * What the walk scored each player in a week, kept on disk.
  *
  * Playing a week costs minutes, so the numbers are written once by
  * the caching script and read back by anything that wants them. A week
@@ -79,7 +79,7 @@ export function parseWalkRows(text: string): Map<string, WalkWeekRow> {
 const cached = new Map<string, Map<string, WalkWeekRow>>();
 
 /** empty when nobody has played the weeks yet */
-export async function loadWalkWeekly(
+async function loadWalkWeekly(
   path = WALK_WEEKLY_PATH,
 ): Promise<Map<string, WalkWeekRow>> {
   const already = cached.get(path);

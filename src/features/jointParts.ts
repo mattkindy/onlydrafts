@@ -1,5 +1,5 @@
 /**
- * One model over everything a season said about a man.
+ * One model over everything a season said about a player.
  *
  * The parts of his play are not independent. A staff throws at him more
  * because he is better with it, so how often he got it and what he did
@@ -49,10 +49,10 @@ export const noParts = (): Parts => ({
 const per = (top: number, bottom: number) => (bottom > 0 ? top / bottom : 0);
 
 /**
- * His season as rates, since a man who played nine games and one who
+ * His season as rates, since a player who played nine games and one who
  * played seventeen are being asked the same question.
  */
-export function columnsFor(parts: Parts): number[] {
+function columnsFor(parts: Parts): number[] {
   const games = Math.max(1, parts.games);
 
   return [
@@ -86,14 +86,14 @@ export const LINE_PARTS = [
 
 export type LinePart = (typeof LINE_PARTS)[number];
 
-export interface FittedLine {
+interface FittedLine {
   /** what he does in a game next season, category by category */
   says: (parts: Parts, position: string) => Record<LinePart, number>;
 }
 
 /**
  * The same columns, one fit per category instead of one for points, so
- * the stat line and the points come from a single view of the man
+ * the stat line and the points come from a single view of the player
  * rather than the points from one model and the yards from another.
  */
 export function fitJointLine(
@@ -133,14 +133,14 @@ export function fitJointLine(
   };
 }
 
-export interface Fitted {
+interface Fitted {
   /** what it says he scores a game next season */
   says: (parts: Parts, position: string) => number;
-  /** how many men stood behind each position's fit */
+  /** how many players stood behind each position's fit */
   learnedFrom: Map<string, number>;
 }
 
-/** a position with fewer than this many men falls back to everybody */
+/** a position with fewer than this many players falls back to everybody */
 const ENOUGH = 60;
 
 /**

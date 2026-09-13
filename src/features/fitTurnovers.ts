@@ -15,11 +15,11 @@
 import { marginBand, timeBand } from "../model/playFactors.js";
 import type { Call, PlayState } from "../model/playFactors.js";
 
-export interface Turnovers {
+interface Turnovers {
   rate: (state: PlayState, call: Call) => number;
 }
 
-export interface TurnoverRow {
+interface TurnoverRow {
   down: number;
   toGo: number;
   yardline: number;
@@ -34,7 +34,7 @@ interface Tally {
   all: number;
 }
 
-export function fitTurnovers(rows: TurnoverRow[], least = 400): Turnovers {
+function fitTurnovers(rows: TurnoverRow[], least = 400): Turnovers {
   const cells = new Map<string, Tally>();
 
   const add = (at: string, lost: number) => {

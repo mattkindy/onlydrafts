@@ -1,7 +1,7 @@
 /**
  * The fitted source against the walked one, on a season we can mark.
  *
- * The board predicts a man's stats with a regression per stat and
+ * The board predicts a player's stats with a regression per stat and
  * spreads his season across his weeks with a multiplier. The walk plays
  * the fixtures instead. This runs both at a season already played and
  * scores them the same way, so switching is a decision with a number
@@ -55,7 +55,7 @@ const walked = walkSeason(
   seededRng(23),
 );
 
-/** what each man actually did that season */
+/** what each player actually did that season */
 const truth = new Map<string, { points: number; games: number; parts: StatParts }>();
 
 for (const s of await loadPlayerStats(SEASON)) {

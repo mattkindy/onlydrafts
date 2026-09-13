@@ -14,7 +14,7 @@ import {
 import { loadWeeklyAvailability } from "../data/weeklyStatus.js";
 import { staffChangesFor } from "./staffChange.js";
 
-export const WEEKLY_FEATURES = [
+const WEEKLY_FEATURES = [
   "intercept",
   "isQB",
   "isRB",

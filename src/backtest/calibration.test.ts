@@ -10,7 +10,7 @@ const cycling = (values: number[]) => {
 };
 
 describe("brierScore", () => {
-  it("is nought when the outcome was called with certainty", () => {
+  it("is zero when the outcome was called with certainty", () => {
     expect(brierScore([0, 1, 0], 1)).toBe(0);
   });
 
@@ -24,7 +24,7 @@ describe("brierScore", () => {
 });
 
 describe("logScore", () => {
-  it("is nought when the outcome was certain", () => {
+  it("is zero when the outcome was certain", () => {
     expect(logScore([0, 1], 1)).toBeCloseTo(0, 10);
   });
 

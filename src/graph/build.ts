@@ -29,7 +29,7 @@ export interface RosterAppearance {
   depthPosition?: string;
   /**
    * What the league had him as that week. ACT is playing, RES is hurt,
-   * and EXE is the commissioner's exempt list, which is where a man
+   * and EXE is the commissioner's exempt list, which is where a player
    * goes while he is charged with something: he cannot practise or
    * play and nobody knows for how long.
    */
@@ -70,7 +70,7 @@ export function mapPosition(raw: string): RosterPosition | undefined {
   return positionMap[raw.toUpperCase()];
 }
 
-export interface BuildResult {
+interface BuildResult {
   graph: LeagueGraph;
   /** appearances dropped because their position label is unmapped, by label */
   skippedPositions: Map<string, number>;

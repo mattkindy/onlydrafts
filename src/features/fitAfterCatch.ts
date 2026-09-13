@@ -1,5 +1,5 @@
 /**
- * What a man makes once the ball is his.
+ * What a player makes once the ball is his.
  *
  * A catch is 6.10 yards of throw and 5.19 after it, near enough half
  * each, and the walk draws the two as one number. They are different
@@ -10,7 +10,7 @@
  * after it are his kind.
  */
 
-export interface AfterCatchRow {
+interface AfterCatchRow {
   player: string;
   /** how far downfield it was thrown */
   airYards: number;
@@ -26,7 +26,7 @@ export interface AfterCatch {
   learnedFrom: number;
 }
 
-/** a man needs this many catches before his own number is believed */
+/** a player needs this many catches before his own number is believed */
 const ENOUGH = 25;
 const SETTLES_AT = Number(process.env["YAC_SETTLES"] ?? 60);
 /** and how far his own can carry him, since one long run is not a skill */
@@ -57,7 +57,7 @@ export function fitAfterCatch(rows: AfterCatchRow[]): AfterCatch {
 
   /**
    * His own against what everybody made on the throws he actually
-   * got, so a man who lives on checkdowns is not credited with the
+   * got, so a player who lives on checkdowns is not credited with the
    * room they leave him.
    */
   const expected = new Map<string, number>();

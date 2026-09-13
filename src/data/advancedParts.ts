@@ -2,7 +2,7 @@
  * The advanced stat files, keyed the way the rest of the repo keys
  * players.
  *
- * Those files name a man by his pro football reference id and
+ * Those files name a player by his pro football reference id and
  * everything else here uses the nflverse one, so the players file
  * has both and does the joining.
  */
@@ -41,8 +41,8 @@ async function idsAcross(): Promise<Map<string, string>> {
 }
 
 /**
- * Every man's season in the parts a play is made of, by nflverse id.
- * A man in neither file is absent rather than zeroed, so a caller can
+ * Every player's season in the parts a play is made of, by nflverse id.
+ * A player in neither file is absent rather than zeroed, so a caller can
  * tell "he did nothing" from "we have nothing".
  */
 export async function partsIn(season: number): Promise<Map<string, Parts>> {

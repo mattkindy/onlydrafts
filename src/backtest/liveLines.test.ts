@@ -13,7 +13,7 @@ describe("a week's cached lines", () => {
     expect(lines[0]!.five).toEqual([4.2, 8.35, 12.5, 17.1, 21.8]);
   });
 
-  it("leaves a man Sleeper never priced without a number", () => {
+  it("leaves a player Sleeper never priced without a number", () => {
     expect(lines[1]!.sleeper).toBeNull();
     expect(lines[1]!.blend).toBe(9.25);
   });

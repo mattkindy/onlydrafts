@@ -1,9 +1,9 @@
 /**
- * One week of football played by the walk, summed per man.
+ * One week of football played by the walk, summed per player.
  *
  * The weekly bench and the site's slate build both need the same
  * thing: every fixture of a week played enough times that the noise
- * settles, each man's box scores averaged, and the afternoon sized by
+ * settles, each player's box scores averaged, and the afternoon sized by
  * the market where a line exists. Keeping it here keeps the two from
  * drifting apart.
  */
@@ -23,7 +23,7 @@ import type { PlayedWorld } from "./playedWorld.js";
  */
 const WALK_SEED = Number(process.env["WALK_SEED"] ?? 0);
 
-export interface WalkedWeek {
+interface WalkedWeek {
   points: Map<string, number>;
   touches: Map<string, number>;
   tds: Map<string, number>;
@@ -31,11 +31,11 @@ export interface WalkedWeek {
   played: number;
   /**
    * The same games described by their spread rather than their mean. A
-   * run the man was not on the field for counts as nothing, so the mean
+   * run the player was not on the field for counts as nothing, so the mean
    * of his runs is the number in `points`.
    */
   spread: Map<string, RunSpread>;
-  /** what a man scored in each run, in run order */
+  /** what a player scored in each run, in run order */
   perRun: Map<string, number[]>;
 }
 
@@ -135,7 +135,7 @@ export const WEEKLY_WALK_SHARE: Record<string, number> = {
 };
 
 /**
- * How much wider a man's week runs than the games the walk deals him.
+ * How much wider a player's week runs than the games the walk deals him.
  * One world deals every week with no role changes, so the walk's
  * bands run narrow. Once absences were lived inside the season the
  * stretch came down: at 1.2 an 80% band covers 81.3% of 2025's played

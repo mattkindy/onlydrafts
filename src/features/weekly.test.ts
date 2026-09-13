@@ -138,7 +138,7 @@ function backWeek(
 describe("backfield share", () => {
   const games = [1, 2, 3, 4, 5].map(game);
 
-  it("gives each back his cut of what the room was given", () => {
+  it("gives each back his cut of what the group was given", () => {
     const rows = [1, 2, 3, 4, 5].flatMap((w) => [
       backWeek("starter", w, 12, 3),
       backWeek("backup", w, 4, 1),
@@ -163,7 +163,7 @@ describe("backfield share", () => {
     expect(examples[0]!.backfieldShareRecent).toBe(0);
   });
 
-  it("is zero for a week nobody in the room touched it", () => {
+  it("is zero for a week nobody in the group touched it", () => {
     const rows = [1, 2, 3, 4, 5].map((w) => backWeek("starter", w, 0, 0));
     const examples = buildWeeklyExamples(2023, rows, new Map(), games, [], presets.ppr);
 
@@ -198,14 +198,14 @@ function passWeek(playerId: string, week: number, attempts: number): PlayerWeekS
 
 describe("absence share", () => {
   const games = [1, 2, 3, 4, 5].map(game);
-  const room = [1, 2, 3, 4, 5].flatMap((w) => [
+  const group = [1, 2, 3, 4, 5].flatMap((w) => [
     backWeek("starter", w, 12, 3),
     backWeek("backup", w, 4, 1),
   ]);
 
-  it("hands the backup the touches of the man ruled out", () => {
+  it("hands the backup the touches of the player ruled out", () => {
     const examples = buildWeeklyExamples(
-      2023, room, new Map(), games, [], presets.ppr, undefined, undefined,
+      2023, group, new Map(), games, [], presets.ppr, undefined, undefined,
       ruledOut(["starter"], 5),
     );
 
@@ -213,17 +213,17 @@ describe("absence share", () => {
     expect(examples[0]!.absenceShare).toBeCloseTo(0.75);
   });
 
-  it("is zero when the whole room is available", () => {
+  it("is zero when the whole group is available", () => {
     const examples = buildWeeklyExamples(
-      2023, room, new Map(), games, [], presets.ppr, undefined, undefined,
+      2023, group, new Map(), games, [], presets.ppr, undefined, undefined,
       ruledOut([], 5),
     );
 
     expect(examples.every((e) => e.absenceShare === 0)).toBe(true);
   });
 
-  it("ignores a man ruled out in a different room", () => {
-    const rows = [...room, ...[1, 2, 3, 4, 5].map((w) => passWeek("qb", w, 30))];
+  it("ignores a player ruled out in a different group", () => {
+    const rows = [...group, ...[1, 2, 3, 4, 5].map((w) => passWeek("qb", w, 30))];
     const examples = buildWeeklyExamples(
       2023, rows, new Map(), games, [], presets.ppr, undefined, undefined,
       ruledOut(["qb"], 5),
@@ -235,7 +235,7 @@ describe("absence share", () => {
     expect(byId.has("qb")).toBe(false);
   });
 
-  it("leaves a quarterback's own room out of his quarterback measure", () => {
+  it("leaves a quarterback's own group out of his quarterback measure", () => {
     const rows = [1, 2, 3, 4, 5].flatMap((w) => [
       passWeek("qb1", w, 30),
       passWeek("qb2", w, 10),
@@ -266,7 +266,7 @@ describe("the recent window around an absence", () => {
     return examples.find((e) => e.week === week && e.playerId === playerId)!;
   };
 
-  it("counts the club weeks a man missed", () => {
+  it("counts the club weeks a player missed", () => {
     expect(at(6, "starter").gamesMissedRecent).toBe(2);
     expect(at(6, "backup").gamesMissedRecent).toBe(0);
   });
@@ -277,13 +277,13 @@ describe("the recent window around an absence", () => {
     expect(at(6, "starter").targetsRecent).toBe(3);
   });
 
-  it("counts a week he missed as no share of the room", () => {
+  it("counts a week he missed as no share of the group", () => {
     // weeks 2 and 3 at three quarters, weeks 4 and 5 at nothing
     expect(at(6, "starter").backfieldShareRecent).toBeCloseTo(0.375);
     expect(at(6, "backup").backfieldShareRecent).toBeCloseTo(0.625);
   });
 
-  it("measures a ruled-out man's hold on the room over the same weeks", () => {
+  it("measures a ruled-out player's hold on the group over the same weeks", () => {
     const examples = buildWeeklyExamples(
       2023, rows, new Map(), games, [], presets.ppr, undefined, undefined,
       ruledOut(["starter"], 6),
@@ -319,7 +319,7 @@ describe("depth chart join", () => {
     expect(examples[0]!.depthKnown).toBe(true);
   });
 
-  it("says it does not know when the man is off the chart", () => {
+  it("says it does not know when the player is off the chart", () => {
     const examples = buildWeeklyExamples(
       2023, rows, new Map(), games, [], presets.ppr, undefined, undefined,
       withRanks(new Map()),

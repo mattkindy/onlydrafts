@@ -4,7 +4,7 @@
  *
  * Every checkpoint is one snap in the released play by play. The state
  * is what the two sides faced before that snap, in the form playGame
- * takes over from. Each man's afternoon is split at the same snap:
+ * takes over from. Each player's afternoon is split at the same snap:
  * what he had already, and what the plays from there on gave him. All
  * of it is scored in PPR, the presets.ppr rules.
  *
@@ -21,10 +21,10 @@ import {
 import type { GameStart } from "../model/gameFromDrives.js";
 
 /** which snap a checkpoint stopped at */
-export type CheckpointLabel =
+type CheckpointLabel =
   | "endQ1" | "half" | "endQ3" | "midQ2" | "thirdQ2" | "redQ3";
 
-export interface CheckpointMan {
+interface CheckpointPlayer {
   playerId: string;
   player: string;
   team: string;
@@ -34,7 +34,7 @@ export interface CheckpointMan {
   toCome: number;
 }
 
-export interface Checkpoint {
+interface Checkpoint {
   season: number;
   week: number;
   gameId: string;
@@ -44,7 +44,7 @@ export interface Checkpoint {
   state: GameStart;
   /** the final score, so the remaining team points are known */
   finalPoints: Record<string, number>;
-  men: CheckpointMan[];
+  players: CheckpointPlayer[];
 }
 
 /** the columns a checkpoint needs out of the release */
@@ -87,7 +87,7 @@ function warningLeft(secondsLeft: number): boolean {
   return inThisHalf > 120;
 }
 
-/** the men who touched the ball on one play, with what it gave them */
+/** the players who touched the ball on one play, with what it gave them */
 function credit(
   row: Row, lines: Map<string, StatLine>, names: Map<string, string>,
   teams: Map<string, string>,
@@ -197,7 +197,7 @@ export function checkpointsOf(rows: Row[]): Checkpoint[] {
     [home]: Math.max(...rows.map((row) => num(row.total_home_score))),
     [away]: Math.max(...rows.map((row) => num(row.total_away_score))),
   };
-  /** the running line of each man over every play, in order */
+  /** the running line of each player over every play, in order */
   const overall = new Map<string, StatLine>();
   const names = new Map<string, string>();
   const teams = new Map<string, string>();
@@ -267,7 +267,7 @@ export function checkpointsOf(rows: Row[]): Checkpoint[] {
       return [];
     }
 
-    const men = [...finalFor].map(([playerId, whole]) => ({
+    const players = [...finalFor].map(([playerId, whole]) => ({
       playerId,
       player: names.get(playerId) ?? "",
       team: teams.get(playerId) ?? "",
@@ -279,7 +279,7 @@ export function checkpointsOf(rows: Row[]): Checkpoint[] {
       season: num(first.season) || num(first.game_id.slice(0, 4)),
       week: num(first.week),
       gameId: first.game_id,
-      home, away, label, state, finalPoints, men,
+      home, away, label, state, finalPoints, players,
     }];
   });
 }
@@ -354,7 +354,7 @@ const CACHE_COLUMNS = [
 
 export const cacheHeader = () => CACHE_COLUMNS.join(",");
 
-/** one row per man per checkpoint, which is what the eval reads back */
+/** one row per player per checkpoint, which is what the eval reads back */
 export function cacheRows(one: Checkpoint): string[] {
   const { state } = one;
   const head = [
@@ -368,9 +368,9 @@ export function cacheRows(one: Checkpoint): string[] {
     one.finalPoints[one.home] ?? 0, one.finalPoints[one.away] ?? 0,
   ];
 
-  return one.men.map((man) => [
-    ...head, man.playerId, man.player.replaceAll(",", " "), man.team,
-    man.soFar, man.toCome,
+  return one.players.map((player) => [
+    ...head, player.playerId, player.player.replaceAll(",", " "), player.team,
+    player.soFar, player.toCome,
   ].join(","));
 }
 
@@ -410,10 +410,10 @@ export function fromCache(text: string): Checkpoint[] {
       finalPoints: {
         [home]: num(cell("homeFinal")), [away]: num(cell("awayFinal")),
       },
-      men: [],
+      players: [],
     };
     byKey.set(key, already);
-    already.men.push({
+    already.players.push({
       playerId: cell("playerId"),
       player: cell("player"),
       team: cell("team"),

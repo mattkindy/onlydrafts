@@ -1,25 +1,25 @@
 /**
- * What share of his side's work a man has been taking lately.
+ * What share of his side's work a player has been taking lately.
  *
  * The walk's allocation takes its level from the August projection and
  * lets the state-conditioned counts only lean it. Those counts pool
- * every season in the play file at the same weight, so a man who was a
+ * every season in the play file at the same weight, so a player who was a
  * starter in 2022 and a backup since still shows up at his 2022 size.
  * This reads each season on its own, as his share of what his side
  * ran, and averages them with the latest worth much more than the ones
  * before it. A season with few weeks in it counts for less, and a
- * season a man sat out counts at nought once he has arrived, which
+ * season a player sat out counts at zero once he has arrived, which
  * stops an old level from standing.
  */
 
 /** a run share and a throw share, the two halves the walk asks for */
-export interface RecentShare {
+interface RecentShare {
   carries: number;
   targets: number;
 }
 
 /** one touch, as the curated play file has it */
-export interface TouchRow {
+interface TouchRow {
   season: number;
   week: number;
   offence: string;
@@ -30,7 +30,7 @@ export interface TouchRow {
 /**
  * How much a season counts against the one after it. Hard, because
  * the failure this is answering is a stale level rather than a noisy
- * one: at 0.35 a man two seasons back is worth an eighth of last
+ * one: at 0.35 a player two seasons back is worth an eighth of last
  * season and three back almost nothing.
  */
 const LEVEL_FADE = Number(process.env["LEVEL_FADE"] ?? 0.35);
@@ -49,7 +49,7 @@ interface PerSeason {
 }
 
 /**
- * Each man's recency-weighted share of the carries and of the targets.
+ * Each player's recency-weighted share of the carries and of the targets.
  *
  * Rows from the season being played are expected to be already cut to
  * the weeks that had happened; nothing here filters them.
@@ -57,7 +57,7 @@ interface PerSeason {
 export function recentShares(
   rows: TouchRow[], through: number,
 ): Map<string, RecentShare> {
-  const byMan = new Map<string, PerSeason>();
+  const byPlayer = new Map<string, PerSeason>();
   const bySide = new Map<string, { carries: number; targets: number }>();
   const sideWeeks = new Map<string, Set<number>>();
   const arrived = new Map<string, number>();
@@ -86,7 +86,7 @@ export function recentShares(
     }
 
     const key = `${row.player}|${row.season}`;
-    const own = byMan.get(key) ?? { carries: 0, targets: 0, team: row.offence };
+    const own = byPlayer.get(key) ?? { carries: 0, targets: 0, team: row.offence };
 
     if (row.call === "run") {
       own.carries++;
@@ -95,7 +95,7 @@ export function recentShares(
     }
 
     own.team = row.offence;
-    byMan.set(key, own);
+    byPlayer.set(key, own);
     arrived.set(
       row.player, Math.min(arrived.get(row.player) ?? row.season, row.season),
     );
@@ -133,7 +133,7 @@ export function recentShares(
 
       const counting = counts.get(season) ?? 0;
       weight += counting;
-      const own = byMan.get(`${player}|${season}`);
+      const own = byPlayer.get(`${player}|${season}`);
 
       if (!own) {
         continue;
@@ -145,9 +145,9 @@ export function recentShares(
         continue;
       }
 
-      // Missed games are left where they fall. Reading a man on the
+      // Missed games are left where they fall. Reading a player on the
       // weeks he played, the way the projection reads him, costs a
-      // point of the share the walk gives the man who really got it.
+      // point of the share the walk gives the player who really got it.
       carries += counting * (own.carries / Math.max(1, ran.carries));
       targets += counting * (own.targets / Math.max(1, ran.targets));
     }

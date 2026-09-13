@@ -28,7 +28,7 @@ import {
 const NEUTRAL_TOTAL = 21.5;
 const NEUTRAL_PASS_RATE = 0.57;
 
-export interface PreseasonWeeklyInput {
+interface PreseasonWeeklyInput {
   season: number;
   games: GameRow[];
   weekly: WeeklyByPosition;
@@ -211,7 +211,7 @@ export function preseasonWeeklyExamples(
         // so out of season this is false for everyone
         questionable: input.isQuestionable(playerId, slot.week),
         limitedPractice: false,
-        // no rooms have lost anyone yet, so there is no share to move
+        // no position group has lost anyone yet, so there is no share to move
         absenceShare: 0,
         qbAbsenceShare: 0,
         depthRank: 0,

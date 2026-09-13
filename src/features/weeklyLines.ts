@@ -1,12 +1,12 @@
 /**
- * Where a week's score puts a man among the men a manager could have
+ * Where a week's score puts a player among the players a manager could have
  * started at his position.
  *
  * Both lines are read off what was really scored in the training
  * seasons rather than picked as round numbers. The boom line is what it took to
  * finish top five at quarterback or tight end and top twelve at back or
  * receiver, which is the finish that wins a week. The bust line is
- * replacement level: the best man at the position nobody in a twelve
+ * replacement level: the best player at the position nobody in a twelve
  * team league started, so finishing under it means the waiver wire
  * would have done as well. Twenty points is a poor week for a
  * quarterback and a huge one for a tight end, so a flat threshold
@@ -18,7 +18,7 @@ import { loadPlayerStats } from "../data/nflverse.js";
 import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
 
 /** how many at a position finish a week high enough to win it for you */
-export const BOOM_RANK: Record<string, number> = {
+const BOOM_RANK: Record<string, number> = {
   QB: 5, RB: 12, WR: 12, TE: 5,
 };
 
@@ -27,7 +27,7 @@ export interface WeeklyScore {
   points: number;
 }
 
-export interface WeeklyLines {
+interface WeeklyLines {
   /** points needed to finish that high, by position */
   boom: Record<string, number>;
   /** points at or below which the waiver wire would have done as well */
@@ -89,7 +89,7 @@ export function weeklyLines(
 }
 
 /** the lines these seasons were scored under, week by week */
-export async function linesFor(
+async function linesFor(
   seasons: number[],
   rules: ScoringRules,
   slots: StarterSlots = DEFAULT_SLOTS,

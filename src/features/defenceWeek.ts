@@ -88,7 +88,7 @@ export interface DefenceWeekRead {
   impliedAgainst: number;
 }
 
-export interface DefenceWeekLine {
+interface DefenceWeekLine {
   /** the counting rates and the chance of each bracket */
   parts: Parts;
   /** what those parts pay under the standard ladder */

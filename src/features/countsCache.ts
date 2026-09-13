@@ -23,7 +23,7 @@ interface Flat {
     [number, number, number, number],
     [string, number, number, number, number, number][],
     [number, number[]][], [number, number[]][]][];
-  byMan: [string, number, number, number, number][];
+  byPlayer: [string, number, number, number, number][];
   leagueOn: [string, number, number, number, number][];
   caughtAt: [number, number, number][];
   overall: [string, number][];
@@ -51,7 +51,7 @@ const flatten = (counted: CountedPlays): Flat => ({
       [id, o.touches, o.yards, o.scores, o.long, o.longYards]),
     [...c.byDepth.entries()], [...c.byDepthFrom.entries()],
   ]),
-  byMan: [...counted.byMan.entries()].map(
+  byPlayer: [...counted.byPlayer.entries()].map(
     ([k, r]) => [k, r.touches, r.yards, r.long, r.longYards]),
   leagueOn: [...counted.leagueOn.entries()].map(
     ([k, r]) => [k, r.touches, r.yards, r.long, r.longYards]),
@@ -104,7 +104,7 @@ const raise = (flat: Flat): CountedPlays => ({
   byDefence: new Map(flat.bySide.filter(([w]) => w === "d")
     .map(([, k, plays, runs, scores, yards]) =>
       [k, sideCell(plays, runs, scores, yards)])),
-  byMan: new Map(flat.byMan.map(([k, touches, yards, long, longYards]) =>
+  byPlayer: new Map(flat.byPlayer.map(([k, touches, yards, long, longYards]) =>
     [k, { touches, yards, long, longYards }])),
   leagueOn: new Map(flat.leagueOn.map(([k, touches, yards, long, longYards]) =>
     [k, { touches, yards, long, longYards }])),
@@ -135,7 +135,7 @@ export async function countsFor(
   // the counting changes shape sometimes, and an older file would come
   // back missing whatever was added since. What the depth pools keep
   // is in the name for the same reason.
-  const at = join(KEPT, `counts14${POOL_WASTE ? "w" : ""}` +
+  const at = join(KEPT, `counts15${POOL_WASTE ? "w" : ""}` +
     `-${maxSeason}-${Math.round(stamp)}.json`);
   const already = await readFile(at, "utf8").catch(() => "");
 

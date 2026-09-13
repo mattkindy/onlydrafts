@@ -1,14 +1,14 @@
 /**
- * Who is going to get the ball this week, once the men who are out have
- * handed their work to the rest of their room.
+ * Who is going to get the ball this week, once the players who are out have
+ * handed their work to the rest of their position group.
  *
- * A man counts as out when his club ruled him Out or Doubtful, when the
+ * A player counts as out when his club ruled him Out or Doubtful, when the
  * weekly roster has him as anything but active, or when he is off that
  * team's roster, which is what a trade or a release looks like here.
  *
- * The room's workload over its last four weeks is the budget, and the
- * men available divide it. What a man would do if he plays counts only
- * the games he played, because the weekly file gives an inactive man a
+ * The position group's workload over its last four weeks is the budget, and the
+ * players available divide it. What a player would do if he plays counts only
+ * the games he played, because the weekly file gives an inactive player a
  * row of zeroes, and averaging those in leaves a returning starter
  * stale. That is what makes the two directions come out even.
  */
@@ -27,7 +27,7 @@ const MAX_WEEK = 18;
 const ACTIVE_STATUS = "ACT";
 
 /**
- * How much of a room's spare work a man listed at this spot takes,
+ * How much of a position group's spare work a player listed at this spot takes,
  * relative to the starter.
  */
 function depthWeight(rank: number): number {
@@ -35,8 +35,8 @@ function depthWeight(rank: number): number {
 }
 
 /**
- * A room where everybody's recent touches are zero still has to hand
- * the absent man's work to somebody, so nobody weighs exactly nothing.
+ * A position group where everybody's recent touches are zero still has to hand
+ * the absent player's work to somebody, so nobody weighs exactly nothing.
  */
 const TOUCH_FLOOR = 0.25;
 
@@ -49,19 +49,19 @@ export function weeklyVolume(row: PlayerWeekStats): number {
   return row.carries + row.targets;
 }
 
-export interface Touches {
+interface Touches {
   carries: number;
   targets: number;
 }
 
-export type TouchKind = keyof Touches;
+type TouchKind = keyof Touches;
 
 const KINDS: TouchKind[] = ["carries", "targets"];
 
-export interface WeeklyVolumeModel {
-  /** what his room gave him over its last four weeks */
+interface WeeklyVolumeModel {
+  /** what his group gave him over its last four weeks */
   recentFor(playerId: string, week: number): Touches;
-  /** his cut of the room once the men who are out are taken off it */
+  /** his cut of the group once the players who are out are taken off it */
   expectedFor(playerId: string, week: number): Touches;
   /** whether he is unavailable to the club he last played for */
   isOut(playerId: string, week: number): boolean;
@@ -77,10 +77,10 @@ interface Standing {
   /** his last four weeks, counting a week he sat out as nothing */
   current: Touches;
   /**
-   * What he asks of the room. His last four weeks say it for a man who
-   * has been around all along. A man back from an absence gets the last
+   * What he asks of the group. His last four weeks say it for a player who
+   * has been around all along. A player back from an absence gets the last
    * four games he actually played instead, because the weeks he missed
-   * are in the other men's numbers already.
+   * are in the other players' numbers already.
    */
   claim: Touches;
 }
@@ -175,7 +175,7 @@ function standingsForWeek(
   return standings;
 }
 
-function group<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
+function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   const groups = new Map<string, T[]>();
 
   for (const item of items) {
@@ -188,9 +188,9 @@ function group<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
 }
 
 /**
- * How work nobody is claiming splits among the men left. The club's own
+ * How work nobody is claiming splits among the players left. The club's own
  * chart is the better guide when it exists, because it says who moved
- * up. Without one, the men already getting touches take the rest.
+ * up. Without one, the players already getting touches take the rest.
  */
 function shareWeights(
   present: Standing[],
@@ -221,9 +221,9 @@ function shareOut(pool: number, weights: number[]): number[] {
 }
 
 /**
- * Everyone shrinks in proportion when the men available want more than
- * the room has been giving out, which is what a starter coming back
- * from a month off does to the men who covered for him.
+ * Everyone shrinks in proportion when the players available want more than
+ * the group has been giving out, which is what a starter coming back
+ * from a month off does to the players who covered for him.
  */
 function scaledToBudget(claims: number[], budget: number): number[] {
   const total = claims.reduce((s, c) => s + c, 0);
@@ -235,7 +235,7 @@ function scaledToBudget(claims: number[], budget: number): number[] {
   return claims.map((c) => (c * budget) / total);
 }
 
-function divideRoom(
+function dividePositionGroup(
   present: Standing[],
   week: number,
   kind: TouchKind,
@@ -280,30 +280,30 @@ export function buildWeeklyVolume(
       teamWeeks,
     );
 
-    for (const man of standings) {
-      recent.set(at(man.playerId, week), man.current);
-      expected.set(at(man.playerId, week), { ...man.current });
+    for (const player of standings) {
+      recent.set(at(player.playerId, week), player.current);
+      expected.set(at(player.playerId, week), { ...player.current });
 
-      if (man.playingFor === undefined) {
-        out.add(at(man.playerId, week));
+      if (player.playingFor === undefined) {
+        out.add(at(player.playerId, week));
       }
     }
 
-    const budgets = group(standings, (m) => `${m.earnedWith}|${m.position}`);
-    const rooms = group(
+    const budgets = groupBy(standings, (m) => `${m.earnedWith}|${m.position}`);
+    const groups = groupBy(
       standings.filter((m) => m.playingFor !== undefined),
       (m) => `${m.playingFor}|${m.position}`,
     );
 
-    for (const [room, present] of rooms) {
-      const everyone = budgets.get(room) ?? present;
+    for (const [groupKey, present] of groups) {
+      const everyone = budgets.get(groupKey) ?? present;
 
       for (const kind of KINDS) {
         const budget = everyone.reduce((s, m) => s + m.current[kind], 0);
-        const shares = divideRoom(present, week, kind, budget, rankOf);
+        const shares = dividePositionGroup(present, week, kind, budget, rankOf);
 
-        present.forEach((man, i) => {
-          expected.get(at(man.playerId, week))![kind] = shares[i]!;
+        present.forEach((player, i) => {
+          expected.get(at(player.playerId, week))![kind] = shares[i]!;
         });
       }
     }

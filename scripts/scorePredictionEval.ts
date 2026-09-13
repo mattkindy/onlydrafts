@@ -1,7 +1,7 @@
 /**
  * Is the walk any good at football?
  *
- * It gets a seat on the board and its weekly output has been argued
+ * It gets a slot on the board and its weekly output has been argued
  * about all week, and nobody ever asked the plain question: does it
  * say what the score will be. Vegas is the benchmark, because a line
  * is the best public guess there is and it is in the games file.

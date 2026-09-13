@@ -1,5 +1,5 @@
 /**
- * Where a player was drafted, which is the only thing said about a man
+ * Where a player was drafted, which is the only thing said about a player
  * before he has played.
  *
  * A rookie has no share of anything to carry forward, so a model built
@@ -43,11 +43,11 @@ export async function loadDraftPicks(
   const idOf = new Map<string, string>();
 
   for (const season of seasons) {
-    for (const man of await loadWeeklyRosters(season).catch(() => [])) {
-      const key = `${normalizeName(man.name)}|${man.rawPosition}`;
+    for (const player of await loadWeeklyRosters(season).catch(() => [])) {
+      const key = `${normalizeName(player.name)}|${player.rawPosition}`;
 
       if (!idOf.has(key)) {
-        idOf.set(key, man.playerId);
+        idOf.set(key, player.playerId);
       }
     }
   }
@@ -79,11 +79,11 @@ export async function loadDraftPicks(
 /**
  * A pick turned into something that can be sorted against a share.
  *
- * An undrafted man is worth less than the last pick, and a player who
+ * An undrafted player is worth less than the last pick, and a player who
  * was drafted years ago and still has no season behind him is not the
  * prospect his pick once made him, so it fades.
  */
-export function standingFrom(
+function standingFrom(
   pick: DraftPick | undefined, season: number,
 ): number {
   if (!pick) {

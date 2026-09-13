@@ -83,20 +83,20 @@ export function spearman(a: number[], b: number[]): number {
  * Spearman treats getting pick 3 right and pick 160 right as the same
  * job, and a drafter does not. These two ask what the order was for.
  *
- * Both take what the board said a man was worth and what he turned out
+ * Both take what the board said a player was worth and what he turned out
  * to be worth, and both want value over replacement rather than points,
- * since a man who scores less than the waiver wire is worth nothing
+ * since a player who scores less than the waiver wire is worth nothing
  * whatever he scores.
  */
 
-/** what a man is worth to a drafter, which is nothing below the wire */
+/** what a player is worth to a drafter, which is nothing below the wire */
 const worth = (value: number) => Math.max(0, value);
 
 /**
  * The share of the value available in the first so many picks that this
- * order actually collected. One means it took the best men there were.
+ * order actually collected. One means it took the best players there were.
  *
- * The cutoff does the weighting: a man the board put at 200 never comes
+ * The cutoff does the weighting: a player the board put at 200 never comes
  * into it, however wrong he was.
  */
 export function caught(said: number[], was: number[], picks: number): number {
@@ -119,7 +119,7 @@ export function caught(said: number[], was: number[], picks: number): number {
 /**
  * The same idea without a cliff at the cutoff: every place is worth
  * less than the one above it, the way a pick is. One means it put the
- * best men first.
+ * best players first.
  */
 export function gain(said: number[], was: number[]): number {
   if (said.length !== was.length || said.length < 2) {

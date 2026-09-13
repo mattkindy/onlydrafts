@@ -1,8 +1,8 @@
 /**
- * What a man did once somebody had hold of him.
+ * What a player did once somebody had hold of him.
  *
  * Yards a carry is the line as much as the back: 2.52 of a 4.4 yard
- * carry happens before contact, and that part follows a man who
+ * carry happens before contact, and that part follows a player who
  * changes teams at .16 where what he makes after contact follows him at
  * .35. So a description built on the whole gain is asking about
  * something that is mostly not him.
@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { parseCsv } from "./csv.js";
 import { RAW_DIR } from "./nflverse.js";
 
-export interface AfterContact {
+interface AfterContact {
   /** yards a carry before anybody touched him, which is the line */
   beforeContact: number;
   /** and after, which is him */
@@ -49,7 +49,7 @@ export async function pfrToGsis(): Promise<Map<string, string>> {
 }
 
 /** one back's season of carrying, with the side he did it for */
-export interface RushingSeason {
+interface RushingSeason {
   /** the reference's own identifier, the only one in this file */
   pfrId: string;
   team: string;
@@ -66,7 +66,7 @@ export interface RushingSeason {
  * Every back's season of carrying, for questions about what travels.
  *
  * Kept apart from the season lookup above because these questions
- * compare a man with himself a year later, and want the team he did it
+ * compare a player with himself a year later, and want the team he did it
  * for rather than a description to hang on a player.
  */
 export async function loadRushingSeasons(
@@ -86,7 +86,7 @@ export async function loadRushingSeasons(
     .filter((row) => row.pfrId && row.attempts >= leastCarries);
 }
 
-export async function loadAfterContact(
+async function loadAfterContact(
   season: number,
 ): Promise<Map<string, AfterContact>> {
   const toGsis = await pfrToGsis();

@@ -1,5 +1,5 @@
 /**
- * What a man's dealt games looked like, not only their average.
+ * What a player's dealt games looked like, not only their average.
  *
  * The walk plays a fixture forty times and every reader has taken the
  * mean, so a big afternoon and a quiet one came back as the same

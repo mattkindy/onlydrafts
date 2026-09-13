@@ -45,7 +45,7 @@ describe("hasSeasonToRead", () => {
     expect(hasSeasonToRead("p1", 2026, seasons([[2025, 16]]))).toBe(true);
   });
 
-  it("reaches back a season for a man who missed all of last year", () => {
+  it("reaches back a season for a player who missed all of last year", () => {
     expect(hasSeasonToRead("p1", 2026, seasons([[2024, 16], [2025, 0]])))
       .toBe(true);
   });
@@ -58,7 +58,7 @@ describe("hasSeasonToRead", () => {
     expect(hasSeasonToRead("p1", 2026, seasons([[2024, 1]]))).toBe(false);
   });
 
-  it("says nothing to read for a man with no seasons at all", () => {
+  it("says nothing to read for a player with no seasons at all", () => {
     expect(hasSeasonToRead("p1", 2026, seasons([]))).toBe(false);
   });
 });

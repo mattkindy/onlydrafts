@@ -34,16 +34,16 @@ export type RosterPosition =
  * What a fantasy roster drafts. DST is a team unit, not a player, so it
  * appears here and never as a RosterPosition.
  */
-export type FantasyPosition = "QB" | "RB" | "WR" | "TE" | "K" | "DST";
+type FantasyPosition = "QB" | "RB" | "WR" | "TE" | "K" | "DST";
 
-export type CoachRole = "HC" | "OC" | "DC";
+type CoachRole = "HC" | "OC" | "DC";
 
-export interface SeasonWeek {
+interface SeasonWeek {
   season: number;
   week: number;
 }
 
-export interface Span {
+interface Span {
   from: SeasonWeek;
   to?: SeasonWeek;
 }
@@ -61,7 +61,7 @@ export interface Team {
   name: string;
 }
 
-export interface Coach {
+interface Coach {
   id: string;
   name: string;
 }
@@ -80,7 +80,7 @@ export interface PlayerStint {
   span: Span;
 }
 
-export interface CoachStint {
+interface CoachStint {
   coachId: string;
   teamId: string;
   role: CoachRole;
@@ -104,7 +104,7 @@ export function compareSeasonWeek(a: SeasonWeek, b: SeasonWeek): number {
   return a.week - b.week;
 }
 
-export function spanContains(span: Span, at: SeasonWeek): boolean {
+function spanContains(span: Span, at: SeasonWeek): boolean {
   if (compareSeasonWeek(at, span.from) < 0) {
     return false;
   }
@@ -128,7 +128,7 @@ export function teamOf(
 }
 
 /** The coach in a given role for a team at a moment. */
-export function coachOf(
+function coachOf(
   graph: LeagueGraph,
   teamId: string,
   role: CoachRole,

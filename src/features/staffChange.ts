@@ -27,7 +27,7 @@ export const NO_CHANGE: StaffChange = {
   ocChanged: false, hcChanged: false, passShift: 0,
 };
 
-export type CoachOf = (team: string, season: number, role: string) => string | undefined;
+type CoachOf = (team: string, season: number, role: string) => string | undefined;
 
 export async function staffChangesFor(
   target: number,

@@ -5,7 +5,7 @@
  * observation, and the belief going into the next week is the old
  * belief and the new result weighed by how sure we were of each. A
  * team that has looked good for ten weeks moves less on an eleventh
- * than one we have only just met.
+ * than one we have only met this week.
  *
  * The betting total is kept separate on purpose. It says what this
  * particular game should look like, and the state says what the
@@ -13,14 +13,14 @@
  * a team improving.
  */
 
-export interface TeamBelief {
+interface TeamBelief {
   /** points a game above or below the league's offence */
   mean: number;
   /** how unsure we are of that, as a variance */
   variance: number;
 }
 
-export interface TeamStateSettings {
+interface TeamStateSettings {
   /** what an average offence's skill players score in a week */
   leagueMean: number;
   /** how far an offence wanders in a week */

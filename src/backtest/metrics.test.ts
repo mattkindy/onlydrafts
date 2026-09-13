@@ -63,7 +63,7 @@ describe("scoring a draft order rather than an ordering", () => {
     expect(gain(atTop, best)).toBeLessThan(gain(atBottom, best));
   });
 
-  it("counts a man below the waiver wire as worth nothing, not as a loss", () => {
+  it("counts a player below the waiver wire as worth nothing, not as a loss", () => {
     const was = [100, 80, -50, -20];
     const said = [100, 80, 10, 5];
 
@@ -71,7 +71,7 @@ describe("scoring a draft order rather than an ordering", () => {
     expect(caught(said, was, 4)).toBe(1);
   });
 
-  it("gives a board that took the worst men first close to nothing", () => {
+  it("gives a board that took the worst players first close to nothing", () => {
     const backwards = [0, 20, 40, 60, 80, 100];
 
     expect(caught(backwards, best, 3)).toBeLessThan(0.35);

@@ -20,7 +20,7 @@ const sides: [Side, Side] = [
 ];
 
 describe("linesFrom", () => {
-  it("credits a catch to the man and his passer at once", () => {
+  it("credits a catch to the player and his passer at once", () => {
     const game: PlayedGame = {
       points: { A: 7, B: 0 }, drives: { A: 1, B: 0 },
       possessions: [{
@@ -63,7 +63,7 @@ describe("linesFrom", () => {
     expect(lines.get("thrower")?.passYds ?? 0).toBe(0);
   });
 
-  it("hangs an interception on the man who threw it", () => {
+  it("hangs an interception on the player who threw it", () => {
     const game: PlayedGame = {
       points: { A: 0, B: 0 }, drives: { A: 1, B: 0 },
       possessions: [{

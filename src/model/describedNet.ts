@@ -7,7 +7,7 @@
  * he has been used, and the only thing learned is how to turn a
  * description into something the task can use.
  *
- * That leaves far less to fit, and it answers for a man nobody has
+ * That leaves far less to fit, and it answers for a player nobody has
  * seen: a rookie has a description on draft day, so he projects the
  * same way everyone else does rather than falling back on an average.
  */
@@ -23,7 +23,7 @@ export interface Task {
   of: (index: number) => number | undefined;
 }
 
-export interface DescribedSettings {
+interface DescribedSettings {
   width: number;
   hidden: number;
   passes: number;
@@ -41,7 +41,7 @@ export const DESCRIBED_DEFAULTS: DescribedSettings = {
   seed: 5,
 };
 
-export interface DescribedNet {
+interface DescribedNet {
   /** one projection per kind of entity, as [inputs][width] */
   project: Map<string, Float64Array[]>;
   toHidden: Float64Array[];

@@ -17,13 +17,13 @@ import { KICK_LENGTH } from "./drive.js";
 import type { FittedDrives } from "../features/driveRules.js";
 import type { Draws, PlayerLine } from "./playerWeek.js";
 import type { SituationalRole } from "./situationalWeek.js";
-import { ROLLS_UP_TO, situationOf } from "./situations.js";
+import { ROLLS_UP_TO, situationOf, type Situation } from "./situations.js";
 import { NOBODY, type Against } from "../features/defenceStrength.js";
 
 /** how often an average target is caught, when nobody's own rate is known */
-export const LEAGUE_CATCH_RATE = 0.64;
+const LEAGUE_CATCH_RATE = 0.64;
 
-export interface PlayerDrivePlay {
+interface PlayerDrivePlay {
   down: number;
   toGo: number;
   yardline: number;
@@ -35,13 +35,13 @@ export interface PlayerDrivePlay {
   scored: boolean;
 }
 
-export interface PlayerDrive {
+interface PlayerDrive {
   plays: PlayerDrivePlay[];
   ending: DriveEnd;
   handsOverAt: number;
 }
 
-/** one man, drawn in proportion to his share of this kind of work */
+/** one player, drawn in proportion to his share of this kind of work */
 function whoGetsIt(
   roster: SituationalRole[],
   available: boolean[],
@@ -78,7 +78,7 @@ function whoGetsIt(
 }
 
 /**
- * The league's yardage for this kind of play, stretched to the man who
+ * The league's yardage for this kind of play, stretched to the player who
  * made it.
  *
  * Drawing from the pool keeps the shape, which is the part that matters:
@@ -93,6 +93,59 @@ function stretch(drawn: number, ownRate: number, leagueRate: number): number {
   }
 
   return drawn * (ownRate / leagueRate);
+}
+
+interface Gain {
+  yards: number;
+  caught: boolean;
+}
+
+/** what a snap gained, and whether a throw was caught */
+function gainOnSnap(
+  player: SituationalRole | undefined,
+  type: PlayType,
+  situation: Situation,
+  state: { down: number; toGo: number; yardline: number },
+  rules: FittedDrives,
+  draws: Draws,
+): Gain {
+  const fromPool = () => rules.yardsFor(
+    type, state.down, state.toGo, state.yardline, draws.uniform,
+  );
+
+  if (!player) {
+    return { yards: fromPool(), caught: type === "run" };
+  }
+
+  if (type === "run") {
+    return {
+      yards: stretch(
+        fromPool(),
+        player.yardsPerCarry[situation] || rules.means.carry,
+        rules.means.carry,
+      ),
+      caught: true,
+    };
+  }
+
+  // The catch is decided here, so the yards have to come from the passes
+  // that were caught. Drawing from all of them would drop a third of the
+  // throws twice over.
+  const caught = draws.uniform() <
+    (player.catchRate[situation] || LEAGUE_CATCH_RATE);
+
+  return {
+    caught,
+    yards: caught
+      ? stretch(
+          rules.caughtYards(
+            state.down, state.toGo, state.yardline, draws.uniform,
+          ),
+          player.yardsPerCatch[situation] || rules.means.caught,
+          rules.means.caught,
+        )
+      : 0,
+  };
 }
 
 export function simulatePlayerDrive(
@@ -167,38 +220,15 @@ export function simulatePlayerDrive(
       draws,
     );
     const player = who === -1 ? undefined : roster[who];
-    let yards = 0;
-    let caught = type === "run";
-
-    if (!player) {
-      yards = rules.yardsFor(
-        type, state.down, state.toGo, state.yardline, draws.uniform,
-      );
-    } else if (type === "run") {
-      yards = stretch(
-        rules.yardsFor(type, state.down, state.toGo, state.yardline, draws.uniform),
-        player.yardsPerCarry[situation] || rules.means.carry,
-        rules.means.carry,
-      );
-    } else {
-      // The catch is decided here, so the yards have to come from the
-      // passes that were caught. Drawing from all of them would drop a
-      // third of the throws twice over.
-      caught = draws.uniform() <
-        (player.catchRate[situation] || LEAGUE_CATCH_RATE);
-      yards = caught
-        ? stretch(
-            rules.caughtYards(state.down, state.toGo, state.yardline, draws.uniform),
-            player.yardsPerCatch[situation] || rules.means.caught,
-            rules.means.caught,
-          )
-        : 0;
-    }
+    const { yards: gained, caught } =
+      gainOnSnap(player, type, situation, state, rules, draws);
 
     // and what the defence in front of him does to it
-    yards = Math.min(
+    const yards = Math.min(
       state.yardline,
-      Math.round(yards > 0 ? yards * (type === "run" ? against.run : against.pass) : yards),
+      Math.round(gained > 0
+        ? gained * (type === "run" ? against.run : against.pass)
+        : gained),
     );
     const scored = state.yardline - yards <= 0;
     plays.push({
@@ -232,7 +262,7 @@ export function simulatePlayerDrive(
  *
  * Nothing is decided here. Each snap already says who had it and what
  * he gained, so this only adds them up, which is the difference from
- * crediting a man afterwards for yards chosen without him.
+ * crediting a player afterwards for yards chosen without him.
  */
 export function linesFrom(
   drives: PlayerDrive[],

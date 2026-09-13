@@ -18,11 +18,11 @@ import { loadCompromisedWeeks, loadInjuryDetail } from "../data/injuries.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { spearman } from "../backtest/metrics.js";
 
-export const SEASON_POSITIONS = ["QB", "RB", "WR", "TE"];
-export const MIN_GAMES = 6;
+const SEASON_POSITIONS = ["QB", "RB", "WR", "TE"];
+const MIN_GAMES = 6;
 const MIN_GROUP = 25;
 
-export type Group =
+type Group =
   | "qb-stayer"
   | "qb-mover"
   | "skill-stayer-same-qb"
@@ -32,7 +32,7 @@ export type Group =
 export interface SeasonExample {
   playerId: string;
   /**
-   * What the season he was read from calls him. A man who missed last
+   * What the season he was read from calls him. A player who missed last
    * season is not in last season's summaries, so anyone naming him
    * from there gets his gsis id on the page instead.
    */
@@ -83,9 +83,9 @@ export interface SeasonExample {
   ownCapital: number;
   /** the best rival at his position on his team, by recent scoring */
   rivalPpg: number;
-  /** that room's best draft capital other than his own */
+  /** that position group's best draft capital other than his own */
   rivalCapital: number;
-  /** how much of the room's recent production belongs to him */
+  /** how much of the position group's recent production belongs to him */
   ownShare: number;
   /** preseason market rank for the target season, undefined when unlisted */
   adp?: number;
@@ -111,14 +111,14 @@ export interface SeasonData {
   softShadow: Map<string, number>;
 }
 
-export interface SeasonModelFit {
+interface SeasonModelFit {
   weight: number;
   ratios: Map<Group, number>;
   ridgeWeights: number[];
   gbm: GbmModel;
 }
 
-export const SEASON_RIDGE_FEATURES = [
+const SEASON_RIDGE_FEATURES = [
   "intercept",
   "isQB",
   "isRB",
@@ -146,7 +146,7 @@ export const SEASON_RIDGE_FEATURES = [
   "playedHurtShare",
   "clearBoost",
   "softShadowShare",
-  "roomShare",
+  "positionGroupShare",
   "rivalOverMe",
 ] as const;
 
@@ -255,7 +255,7 @@ export async function buildSeasonData(
   return data;
 }
 
-export function groupOf(
+function groupOf(
   position: string,
   moved: boolean,
   qbChanged: boolean,
@@ -271,7 +271,7 @@ export function groupOf(
   return qbChanged ? "skill-stayer-new-qb" : "skill-stayer-same-qb";
 }
 
-export interface RoomMate {
+interface PositionGroupPlayer {
   playerId: string;
   /** 0 to 1, higher for an earlier NFL draft pick */
   capital: number;
@@ -290,7 +290,7 @@ interface DraftContext {
   /** per team: share of last season's five most-used linemen still rostered */
   olRetention: Map<string, number>;
   /** per team and position: everyone competing there next season */
-  roomBy: Map<string, RoomMate[]>;
+  byPositionGroup: Map<string, PositionGroupPlayer[]>;
   ocChanged: Map<string, boolean>;
   hcChanged: Map<string, boolean>;
   coachOf: (team: string, season: number, role: string) => string | undefined;
@@ -413,7 +413,7 @@ async function draftContext(
     }
   }
 
-  const roomBy = new Map<string, RoomMate[]>();
+  const byPositionGroup = new Map<string, PositionGroupPlayer[]>();
   const prev2Summaries = prev2Summaries_;
 
   for (const appearance of rosterWeekOne) {
@@ -430,7 +430,7 @@ async function draftContext(
     const last = prev.summaries.get(appearance.playerId);
     const before = prev2Summaries?.get(appearance.playerId);
     const key = `${appearance.teamId}|${position}`;
-    const list = roomBy.get(key) ?? [];
+    const list = byPositionGroup.get(key) ?? [];
     list.push({
       playerId: appearance.playerId,
       capital:
@@ -443,7 +443,7 @@ async function draftContext(
           : (last?.pointsPerGame ?? 0),
       rookie: appearance.draftYear === target,
     });
-    roomBy.set(key, list);
+    byPositionGroup.set(key, list);
   }
 
   const staff = await staffChangesFor(target);
@@ -465,7 +465,7 @@ async function draftContext(
     weekOneTeam,
     projectedQb: projectedQbByTeam(rosterWeekOne, prev.summaries),
     prevQb: primaryQbByTeam(prev.stats),
-    roomBy,
+    byPositionGroup,
     olRetention,
     ocChanged,
     hcChanged,
@@ -537,7 +537,9 @@ export async function examplesForTransition(
       compromised: prev.compromised.get(playerId) ?? 0,
       clearPpg: prev.clearPpg.get(playerId),
       softShadow: prev.softShadow.get(playerId) ?? 0,
-      ...roomFeatures(context, playerId, targetTeam, was.position, was.pointsPerGame),
+      ...positionGroupFeatures(
+        context, playerId, targetTeam, was.position, was.pointsPerGame,
+      ),
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     });
@@ -575,7 +577,7 @@ function reunion(
 }
 
 
-function roomFeatures(
+function positionGroupFeatures(
   context: DraftContext,
   playerId: string,
   team: string,
@@ -587,9 +589,9 @@ function roomFeatures(
   rivalCapital: number;
   ownShare: number;
 } {
-  const room = context.roomBy.get(`${team}|${position}`) ?? [];
-  const me = room.find((r) => r.playerId === playerId);
-  const rivals = room.filter((r) => r.playerId !== playerId);
+  const group = context.byPositionGroup.get(`${team}|${position}`) ?? [];
+  const me = group.find((r) => r.playerId === playerId);
+  const rivals = group.filter((r) => r.playerId !== playerId);
   const totalPpg =
     rivals.reduce((s, r) => s + r.recentPpg, 0) + Math.max(ownPpg, 0);
 
@@ -610,7 +612,7 @@ function ageOf(
   return born === undefined ? undefined : target - born;
 }
 
-export function blended(example: SeasonExample, weight: number): number {
+function blended(example: SeasonExample, weight: number): number {
   if (example.prev2Ppg === undefined) {
     return example.prevPpg;
   }
@@ -649,7 +651,7 @@ function meanRatio(pairs: [number, number][]): number {
   return ratios.reduce((s, r) => s + r, 0) / ratios.length;
 }
 
-export function fitGroupRatios(
+function fitGroupRatios(
   examples: SeasonExample[],
   weight: number,
 ): Map<Group, number> {
@@ -728,7 +730,7 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
   ];
 }
 
-export function fitRatioModel(
+function fitRatioModel(
   examples: SeasonExample[],
   weight: number,
 ): number[] {
@@ -798,7 +800,7 @@ export function fitSeasonModel(examples: SeasonExample[]): SeasonModelFit {
   };
 }
 
-export function predictSeasonGbm(fit: SeasonModelFit, e: SeasonExample): number {
+function predictSeasonGbm(fit: SeasonModelFit, e: SeasonExample): number {
   return blended(e, fit.weight) * Math.exp(predictGbm(fit.gbm, seasonGbmRow(e)));
 }
 
@@ -812,7 +814,7 @@ export function predictSeasonBlend(
   return blended(e, fit.weight) * Math.exp((ridgeAdj + gbmAdj) / 2);
 }
 
-export function predictSeason(fit: SeasonModelFit, e: SeasonExample): number {
+function predictSeason(fit: SeasonModelFit, e: SeasonExample): number {
   return (
     blended(e, fit.weight) *
     Math.exp(predictRidge(fit.ridgeWeights, seasonRidgeRow(e)))
@@ -820,22 +822,22 @@ export function predictSeason(fit: SeasonModelFit, e: SeasonExample): number {
 }
 
 /**
- * How far back the board will reach for a man who did not play last
- * season. One season, so a man who spent a year on injured reserve
+ * How far back the board will reach for a player who did not play last
+ * season. One season, so a player who spent a year on injured reserve
  * still gets a row. Past that his numbers are too old to project from,
  * and the rookie path picks him up instead.
  */
 const STALE_SEASONS = 1;
 
-/** enough of a season to say what a man is */
+/** enough of a season to say what a player is */
 const ENOUGH_GAMES = 4;
 
 /**
- * Whether the board has a season of this man it can project from.
+ * Whether the board has a season of this player it can project from.
  *
- * False for a rookie, and false too for a man whose last season of
+ * False for a rookie, and false too for a player whose last season of
  * four games or more is older than the board reaches, or who has
- * never had one. Those men
+ * never had one. Those players
  * are projected from their draft slot and their side instead.
  */
 export function hasSeasonToRead(
@@ -856,10 +858,10 @@ export function hasSeasonToRead(
 }
 
 /**
- * The last season each man played, along with the season data it came
+ * The last season each player played, along with the season data it came
  * from, so the features that read his season read the right one.
  *
- * A man who missed all of last season used to have no row at all,
+ * A player who missed all of last season used to have no row at all,
  * because the board was built by walking last season's summaries. He
  * kept his roster spot and the model had three years of him on file,
  * and he still came out of the build as though he had retired.
@@ -897,7 +899,7 @@ function lastSeasonPlayed(
         continue;
       }
 
-      // Reaching past last season is only safe for a man somebody has
+      // Reaching past last season is only safe for a player somebody has
       // put on a roster this year. Without it the board fills up with
       // everyone who has ever retired.
       if (back > 1 && !context.weekOneTeam.has(playerId)) {
@@ -977,7 +979,9 @@ export async function projectDraftExamples(
       compromised: from.compromised.get(playerId) ?? 0,
       clearPpg: from.clearPpg.get(playerId),
       softShadow: from.softShadow.get(playerId) ?? 0,
-      ...roomFeatures(context, playerId, targetTeam, was.position, was.pointsPerGame),
+      ...positionGroupFeatures(
+        context, playerId, targetTeam, was.position, was.pointsPerGame,
+      ),
       adp: adp.get(`${normalizeName(was.playerName)}|${was.position}`)?.adp,
       passShift: context.passShift.get(targetTeam) ?? 0,
     };
@@ -988,7 +992,7 @@ export async function projectDraftExamples(
   return examples;
 }
 
-export async function projectDraftBoard(
+async function projectDraftBoard(
   target: number,
   data: Map<number, SeasonData>,
   fit: SeasonModelFit,

@@ -19,12 +19,12 @@ import {
   seasonRidgeRow, seasonGbmRow, type SeasonExample,
 } from "./seasonModel.js";
 
-export interface OnePart {
+interface OnePart {
   ridge: number[];
   trees: GbmModel;
 }
 
-export type PartsFit = Record<keyof StatParts, OnePart>;
+type PartsFit = Record<keyof StatParts, OnePart>;
 
 /** what he did last season, with two seasons blended when both exist */
 export function partBefore(
@@ -41,16 +41,16 @@ export function partBefore(
 }
 
 /**
- * A man's floor at each part, for when he has no history to scale.
+ * A player's floor at each part, for when he has no history to scale.
  *
- * A rookie and a man returning from a lost season both come in at
+ * A rookie and a player returning from a lost season both come in at
  * nothing, and a ratio to nothing is nothing forever, so the position
  * he plays supplies the starting point.
  */
 export function partsByPosition(
   examples: SeasonExample[],
 ): Map<string, StatParts> {
-  const totals = new Map<string, { parts: StatParts; men: number }>();
+  const totals = new Map<string, { parts: StatParts; players: number }>();
 
   for (const e of examples) {
     if (!e.actualParts) {
@@ -58,13 +58,13 @@ export function partsByPosition(
     }
 
     const seen = totals.get(e.position) ??
-      { parts: blankParts(), men: 0 };
+      { parts: blankParts(), players: 0 };
 
     for (const part of PART_NAMES) {
       seen.parts[part] += e.actualParts[part];
     }
 
-    seen.men++;
+    seen.players++;
     totals.set(e.position, seen);
   }
 
@@ -74,7 +74,7 @@ export function partsByPosition(
     const mean = blankParts();
 
     for (const part of PART_NAMES) {
-      mean[part] = seen.parts[part] / Math.max(1, seen.men);
+      mean[part] = seen.parts[part] / Math.max(1, seen.players);
     }
 
     out.set(position, mean);
@@ -119,7 +119,7 @@ export function fitPartsModel(examples: SeasonExample[]): PartsFit {
 /**
  * What he does in a game next season, part by part.
  *
- * A man with a history is his own last season moved by the model. One
+ * A player with a history is his own last season moved by the model. One
  * without enough to scale falls back to what his position does, since
  * the ratio has nothing to work on.
  */

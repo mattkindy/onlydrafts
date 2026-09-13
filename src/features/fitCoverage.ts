@@ -2,10 +2,10 @@
  * Who a side throws to depends on what the defence is playing.
  *
  * A receiver's slice of his own side's throws moves a long way with
- * the coverage: at the tenth percentile a man takes .70 of his zone
+ * the coverage: at the tenth percentile a player takes .70 of his zone
  * slice when it is man, at the ninetieth 1.59, and where he sits
  * lasts from one season to the next at .32. Nothing in the walk knew
- * this, so a man beat man coverage and zone coverage alike.
+ * this, so a player beat man coverage and zone coverage alike.
  *
  * The defence picks its look, so this fits two things: how often each
  * defence plays man, and how much each receiver's share moves when it
@@ -13,7 +13,7 @@
  * saying nothing rather than guessing.
  */
 
-export interface CoverageRow {
+interface CoverageRow {
   season: number;
   offence: string;
   defence: string;
@@ -32,7 +32,7 @@ export interface Coverage {
   learnedFrom: number;
 }
 
-/** a man needs this many looks of each kind before he is believed */
+/** a player needs this many looks of each kind before he is believed */
 const ENOUGH = 15;
 /** and his lean is pulled toward one by how many he has */
 const SETTLES_AT = Number(process.env["COVER_SETTLES"] ?? 60);
@@ -80,7 +80,7 @@ export function fitCoverage(rows: CoverageRow[]): Coverage {
 
     /**
      * His share under man against his share under zone, both taken
-     * over what his side threw under each, so a man on a side that
+     * over what his side threw under each, so a player on a side that
      * faced more man is not read as favoured by it.
      */
     const underMan = own.man / Math.max(1, leagueMan);

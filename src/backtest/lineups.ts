@@ -3,7 +3,7 @@
  * would win.
  *
  * A league's own matchups are too few to calibrate anything on, so the
- * bench draws seven man lineups out of the week's pool and pairs them.
+ * bench draws lineups of seven out of the week's pool and pairs them.
  * Each pair gives one Brier point and one implied against realised
  * spread, which is what says whether a set of draws is too confident.
  */
@@ -15,12 +15,12 @@
  */
 export type Chance = (mine: number[], theirs: number[]) => number;
 
-/** the seats a lineup fills, and what the flex will take */
-const SEATS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"];
+/** the slots a lineup fills, and what the flex will take */
+const SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"];
 const FLEX = ["RB", "WR", "TE"];
 
-/** all a man needs to be seated */
-export interface Seated {
+/** all a player needs to fill a lineup slot */
+export interface LineupCandidate {
   key: string;
   position: string;
 }
@@ -29,14 +29,14 @@ export interface Seated {
  * One legal lineup, or nothing when the pools cannot fill it without
  * playing somebody twice.
  */
-export function lineupFrom<T extends Seated>(
+function lineupFrom<T extends LineupCandidate>(
   pools: Map<string, T[]>, rand: () => number,
 ): T[] | null {
   const taken = new Set<string>();
   const out: T[] = [];
 
-  for (const seat of SEATS) {
-    const want = seat === "FLEX" ? FLEX[Math.floor(rand() * 3)]! : seat;
+  for (const slot of SLOTS) {
+    const want = slot === "FLEX" ? FLEX[Math.floor(rand() * 3)]! : slot;
     const pool = pools.get(want) ?? [];
 
     if (!pool.length) {
@@ -44,19 +44,19 @@ export function lineupFrom<T extends Seated>(
     }
 
     let tries = 0;
-    let man = pool[Math.floor(rand() * pool.length)]!;
+    let player = pool[Math.floor(rand() * pool.length)]!;
 
-    while (taken.has(man.key) && tries < 20) {
-      man = pool[Math.floor(rand() * pool.length)]!;
+    while (taken.has(player.key) && tries < 20) {
+      player = pool[Math.floor(rand() * pool.length)]!;
       tries++;
     }
 
-    if (taken.has(man.key)) {
+    if (taken.has(player.key)) {
       return null;
     }
 
-    taken.add(man.key);
-    out.push(man);
+    taken.add(player.key);
+    out.push(player);
   }
 
   return out;
@@ -78,8 +78,8 @@ export interface Tally {
   edges: { predicted: number; won: number; count: number }[];
 }
 
-export const BUCKETS = 10;
-export const EDGES = [0, 5, 10, 15, 20, 25];
+const BUCKETS = 10;
+const EDGES = [0, 5, 10, 15, 20, 25];
 
 export const emptyTally = (): Tally => ({
   buckets: Array.from({ length: BUCKETS }, () =>
@@ -115,7 +115,7 @@ const edgeOf = (margin: number) => {
 };
 
 /** one paired matchup added to a tally */
-export function record(
+function record(
   tally: Tally,
   mine: number[],
   theirs: number[],
@@ -161,7 +161,7 @@ export function record(
 }
 
 /** two tallies added, so shares of a run can be pooled */
-export function addTally(into: Tally, more: Tally): void {
+function addTally(into: Tally, more: Tally): void {
   into.brier += more.brier;
   into.logLoss += more.logLoss;
   into.pairs += more.pairs;

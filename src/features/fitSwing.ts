@@ -1,12 +1,12 @@
 /**
- * How far a man's yards swing about his own average, from his plays.
+ * How far a player's yards swing about his own average, from his plays.
  *
- * The model gave everybody 0.35. Men really swing 1.26 in the middle
+ * The model gave everybody 0.35. Players really swing 1.26 in the middle
  * and from 1.03 to 1.63 between the tenth and the ninetieth, so the
  * number was not a little wrong for a particular player, it was wrong
  * by three and a half times for all of them. It had been tuned until
  * hundred yard games came out right, which they did for the wrong
- * reason: the spread in how often a man touched it was covering for a
+ * reason: the spread in how often a player touched it was covering for a
  * play that never varied enough.
  */
 
@@ -15,14 +15,14 @@ import { join } from "node:path";
 import { parseCsv } from "../data/csv.js";
 import { RAW_DIR } from "../data/nflverse.js";
 
-/** what a position swings by, for a man with too few touches of his own */
+/** what a position swings by, for a player with too few touches of his own */
 export const BY_POSITION: Record<string, number> = {
   RB: 1.36, WR: 1.31, TE: 1.10, QB: 1.20,
 };
 
-export const TRUST_SWING_AFTER = 40;
+const TRUST_SWING_AFTER = 40;
 
-export async function fitSwings(
+async function fitSwings(
   season: number,
   positions: Map<string, string>,
 ): Promise<Map<string, number>> {

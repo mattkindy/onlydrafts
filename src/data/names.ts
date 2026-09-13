@@ -6,7 +6,7 @@
  */
 export function normalizeName(name: string): string {
   // accents come off before the letters are kept, so Estimé and Estime
-  // are one man rather than two spellings. The site's own copy of this
+  // are one player rather than two spellings. The site's own copy of this
   // has to agree, since it looks board keys up by the same rule.
   return name
     .normalize("NFD")

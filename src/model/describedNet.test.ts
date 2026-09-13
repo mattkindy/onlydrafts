@@ -56,7 +56,7 @@ describe("a network fed descriptions", () => {
     expect(heavy).toBeGreaterThan(light + 2);
   });
 
-  it("answers for a man it has never seen", () => {
+  it("answers for a player it has never seen", () => {
     // no identity anywhere, so a new description projects the same way
     const stranger = predict(net, [player(0.9, -0.8), spot(1)], "yards");
 

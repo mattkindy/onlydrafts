@@ -1,36 +1,36 @@
 /**
  * Missing games as a process rather than a discount.
  *
- * A season's absences arrive in spells: a man goes down with some
+ * A season's absences arrive in spells: a player goes down with some
  * weekly chance and stays down for a drawn stretch. Playing seasons
  * with that process in them prices availability exactly once, lets a
  * backup inherit the work for the weeks it lasts, and puts long
  * correlated absences into the season's spread, which a weekly coin
- * cannot do. Fitted from played weeks, not injury reports: a man with
+ * cannot do. Fitted from played weeks, not injury reports: a player with
  * a steady role who vanishes for three weeks was absent, whatever the
- * report said, and men without a steady role are left out since a
+ * report said, and players without a steady role are left out since a
  * healthy scratch looks identical to an injury from here.
  */
 
 import { loadPlayerStats } from "../data/nflverse.js";
 
-export interface Absence {
-  /** the chance a playing man starts a spell this week, by position */
+interface Absence {
+  /** the chance a playing player starts a spell this week, by position */
   hazardOf: (position: string) => number;
   /** a spell's length in weeks, drawn */
   spellOf: (position: string, uniform: () => number) => number;
   /**
-   * The same process scaled to one man: the league's hazard moved so
+   * The same process scaled to one player: the league's hazard moved so
    * his expected games match what the availability model says of him.
    */
   hazardFor: (position: string, expectedGames: number, playable: number) => number;
 }
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
-/** a man counts toward the fit once he averages this many touches */
+/** a player counts toward the fit once he averages this many touches */
 const STEADY = 5;
 
-export async function fitAbsence(seasons: number[]): Promise<Absence> {
+async function fitAbsence(seasons: number[]): Promise<Absence> {
   const spells = new Map<string, number[]>();
   const starts = new Map<string, number>();
   const playingWeeks = new Map<string, number>();

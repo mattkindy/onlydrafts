@@ -212,7 +212,7 @@ const scoresAtTheFour = async (cutsHisOwn: boolean) => {
   };
 };
 
-describe("a man's own draw near the goal", () => {
+describe("a player's own draw near the goal", () => {
   it("keeps the two backs apart, cut by the one factor the spot needs", async () => {
     const scores = await scoresAtTheFour(false);
 
@@ -290,7 +290,7 @@ const crossesFromTheThirty = async (tiltsTakeScores: boolean) => {
   return crossed / 4000;
 };
 
-describe("a man's own draw out in the field", () => {
+describe("a player's own draw out in the field", () => {
   it("keeps a sampled play that reached the goal line", async () => {
     expect(await crossesFromTheThirty(false)).toBeGreaterThan(0.45);
   });
@@ -341,14 +341,14 @@ const carriesAtMidfield = async (fromCalls: string | undefined) => {
 };
 
 describe("the level of who gets the ball", () => {
-  it("splits two men the projection prices the same evenly", async () => {
+  it("splits two players the projection prices the same evenly", async () => {
     const shares = await carriesAtMidfield(undefined);
 
     expect(shares.get("Busy")).toBeCloseTo(0.5, 2);
     expect(shares.get("Spare")).toBeCloseTo(0.5, 2);
   });
 
-  it("hands the busier man the difference with FROM_CALLS all the way up",
+  it("hands the busier player the difference with FROM_CALLS all the way up",
     async () => {
       const shares = await carriesAtMidfield("1");
 
@@ -404,7 +404,7 @@ const busyOverGames = async (width: string, games: number) => {
   return played;
 };
 
-describe("the cut a game hands a man", () => {
+describe("the cut a game hands a player", () => {
   it("is the same on the first snap and the last", async () => {
     for (const game of await busyOverGames("0.6", 12)) {
       expect(game.second).toBeCloseTo(game.first, 10);
@@ -437,7 +437,7 @@ describe("the cut a game hands a man", () => {
 
 /**
  * A league where tight ends take 40% of the throws from the three and
- * 20% of them at midfield, and receivers the rest. Two fresh men are
+ * 20% of them at midfield, and receivers the rest. Two fresh players are
  * then asked about, neither of whom has ever caught anything, so the
  * only thing that can separate them is what their positions do here.
  */
@@ -447,7 +447,7 @@ const throwAt = (yardline: number, player: string): PlayRow => ({
   touchdown: 0, player,
 });
 
-const freshMenAt = async (yardline: number, leansToPosition: boolean) => {
+const freshPlayersAt = async (yardline: number, leansToPosition: boolean) => {
   vi.resetModules();
 
   if (leansToPosition) {
@@ -467,7 +467,7 @@ const freshMenAt = async (yardline: number, leansToPosition: boolean) => {
   }
 
   const factors = loaded.fitPlayFactors(rows, loaded.FACTOR_DEFAULTS, {
-    // August prices the two fresh men the same
+    // August prices the two fresh players the same
     split: new Map([
       ["FreshTE", { carries: 0, targets: 0.2 }],
       ["FreshWR", { carries: 0, targets: 0.2 }],
@@ -485,10 +485,10 @@ const freshMenAt = async (yardline: number, leansToPosition: boolean) => {
   return factors.goesTo(state, "pass", ["FreshTE", "FreshWR"]);
 };
 
-describe("a man with no plays of his own leans the way his position does", () => {
+describe("a player with no plays of his own leans the way his position does", () => {
   it("hands the fresh tight end more of the throws from the three",
     async () => {
-      const shares = await freshMenAt(3, true);
+      const shares = await freshPlayersAt(3, true);
 
       expect(shares.get("FreshTE")!).toBeGreaterThan(0.55);
       expect(shares.get("FreshWR")!).toBeLessThan(0.45);
@@ -496,8 +496,8 @@ describe("a man with no plays of his own leans the way his position does", () =>
 
   it("hands him fewer of them at midfield, where his position is thinner",
     async () => {
-      const atGoal = await freshMenAt(3, true);
-      const atMidfield = await freshMenAt(60, true);
+      const atGoal = await freshPlayersAt(3, true);
+      const atMidfield = await freshPlayersAt(60, true);
 
       expect(atMidfield.get("FreshTE")!)
         .toBeLessThan(atGoal.get("FreshTE")!);
@@ -507,7 +507,7 @@ describe("a man with no plays of his own leans the way his position does", () =>
   it("splits them evenly at both spots when the leaning is turned off",
     async () => {
       for (const yardline of [3, 60]) {
-        const shares = await freshMenAt(yardline, false);
+        const shares = await freshPlayersAt(yardline, false);
 
         expect(shares.get("FreshTE")).toBeCloseTo(0.5, 6);
         expect(shares.get("FreshWR")).toBeCloseTo(0.5, 6);
@@ -516,7 +516,7 @@ describe("a man with no plays of his own leans the way his position does", () =>
 });
 
 /**
- * A league where the plays from the three all belong to two other men,
+ * A league where the plays from the three all belong to two other players,
  * so the tight cell says nothing about either of the pair being asked
  * about. Both are backs, both are priced the same in August and both
  * carried it the same number of times, so their positions and their
@@ -560,7 +560,7 @@ const redZoneBackAt = async (wideLean: string) => {
   );
 };
 
-describe("a thin cell rests on a man's own leaning at a wider one", () => {
+describe("a thin cell rests on a player's own leaning at a wider one", () => {
   it("splits the carries from the three evenly with the step off",
     async () => {
       const shares = await redZoneBackAt("0");
@@ -575,7 +575,7 @@ describe("a thin cell rests on a man's own leaning at a wider one", () => {
       // fifteen fill between them before it reaches midfield
       const shares = await redZoneBackAt("50");
 
-      // the man who carried it near the three, not the one at midfield
+      // the player who carried it near the three, not the one at midfield
       expect(shares.get("RedZone")! - shares.get("Midfield")!)
         .toBeGreaterThan(0.1);
     });

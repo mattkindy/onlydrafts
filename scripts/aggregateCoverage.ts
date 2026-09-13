@@ -5,7 +5,7 @@
  * Nobody publishes who was covering whom without charting it. But on
  * an incompletion the play-by-play names whoever knocked it down, and
  * on a completion it names whoever brought him down, and for a
- * defensive back on a passing play that is usually the man in
+ * defensive back on a passing play that is usually the player in
  * coverage. It is a proxy and it will miss zone hand-offs and any
  * completion tackled by someone else.
  *
@@ -43,11 +43,9 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // Only credit a corner. A safety who brings down a thirty yard
-    // completion is usually the last man rather than the one who was
-    // covering, and charging him for it put Minkah Fitzpatrick among
-    // the worst in the league. The depth chart separates the two where
-    // the roster's own label says DB for both.
+    // Only credit a corner: a safety on a thirty yard completion is
+    // usually the last player rather than the one covering, and charging
+    // him for it put Minkah Fitzpatrick among the worst in the league.
     const corners = new Set<string>();
     const safeties = new Set<string>();
 
@@ -87,7 +85,7 @@ async function main(): Promise<void> {
       const tackler = c[at["solo_tackle_1_player_id"]!] ?? "";
 
       // whoever the play names, in the order that most likely covered
-      // a break-up or a pick names the coverage man whoever he is; a
+      // a break-up or a pick names the coverage player whoever he is; a
       // tackle only counts it against a corner
       const covering = [picked, brokeItUp]
         .find((id) => id && id !== "NA" && (corners.has(id) || safeties.has(id)))

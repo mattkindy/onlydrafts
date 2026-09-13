@@ -56,7 +56,7 @@ export interface EndingRules {
   maxPlays: number;
 }
 
-export type PreSnapFlag = "offence" | "defence";
+type PreSnapFlag = "offence" | "defence";
 
 /**
  * Switched off, no snap is ever wiped out by a flag. The flags landed
@@ -121,12 +121,12 @@ export interface ClockRules {
   lastLength: (uniform: () => number) => number;
 }
 
-export const CLOCK_DEFAULTS: ClockRules = {
+const CLOCK_DEFAULTS: ClockRules = {
   isLast: 0.071,
   lastLength: (uniform) => 1 + Math.floor(uniform() * 12),
 };
 
-export interface FactorPlay {
+interface FactorPlay {
   state: PlayState;
   call: Call;
   player: string;
@@ -184,19 +184,19 @@ const IN_RANGE = 45;
 let chose: ((yardline: number, choice: string, toGo: number) => void) | undefined;
 
 /** how far a drive got, and whether it scored, for a check */
-export const reached: { best: number; td: boolean }[] = [];
+const reached: { best: number; td: boolean }[] = [];
 /** what a play gains, by where the ball was */
-export const gainedAt = new Map<string, { n: number; yards: number }>();
+const gainedAt = new Map<string, { n: number; yards: number }>();
 /** how often the sampled draw gives up, by where the ball is */
-export const gaveUpAt = new Map<string, { n: number; pooled: number }>();
+const gaveUpAt = new Map<string, { n: number; pooled: number }>();
 /** the fourth downs it went for, by the distance, and how many it made */
-export const wentFor = new Map<string, { n: number; made: number }>();
+const wentFor = new Map<string, { n: number; made: number }>();
 /** how gains on an early down and long are spread, by the call */
-export const spread = new Map<string, number>();
-export let watchReach = false;
-export const watchHowFar = () => { watchReach = true; };
+const spread = new Map<string, number>();
+let watchReach = false;
+const watchHowFar = () => { watchReach = true; };
 
-export const watchFourths = (fn: typeof chose) => { chose = fn; };
+const watchFourths = (fn: typeof chose) => { chose = fn; };
 
 /**
  * A side's day applied to one gain, put back on whole yards.
@@ -216,6 +216,45 @@ export function onTheDay(
   const whole = Math.floor(want);
 
   return whole + (uniform() < want - whole ? 1 : 0);
+}
+
+interface OwnPlay {
+  yards: number;
+  caught: boolean;
+}
+
+/**
+ * The opponent, heard on the sampled path.
+ *
+ * A player's own plays were made against every defence he faced, so
+ * this week's matchup bends them. A pass defence mostly moves whether
+ * the ball was caught rather than how far it went, so on a throw the
+ * bend moves catches, and everywhere else it scales yards.
+ *
+ * It moves them both ways. A strong defence used to turn a catch into
+ * an incompletion and a weak one never did the reverse, which took a
+ * fifth of a point off the completion rate for nothing.
+ */
+function bentByMatchup(
+  own: OwnPlay,
+  bend: number,
+  call: Call,
+  fromPool: () => number,
+  uniform: () => number,
+): OwnPlay {
+  if (call === "pass" && own.caught && bend < 1 && uniform() > bend) {
+    return { yards: 0, caught: false };
+  }
+
+  if (call === "pass" && !own.caught && bend > 1 && uniform() < bend - 1) {
+    return { yards: Math.max(1, Math.round(fromPool())), caught: true };
+  }
+
+  if (own.yards > 0) {
+    return { ...own, yards: Math.round(own.yards * Math.min(bend, 1.2)) };
+  }
+
+  return own;
 }
 
 export function walkDrive(
@@ -241,7 +280,7 @@ export function walkDrive(
     passLift?: number;
     /**
      * What this one game is doing to the whole side, near one, drawn
-     * once when the game starts. Every man on the side gets the same
+     * once when the game starts. Every player on the side gets the same
      * one, which is the point of it: a game plan, a matchup or an
      * afternoon of weather moves an offence together.
      */
@@ -411,7 +450,7 @@ export function walkDrive(
     /**
      * The two sides settle the snap before anything else happens. The
      * offence stands somewhere, the defence answers with a shell, and
-     * the call, the man it goes to and the yards are all asked of the
+     * the call, the player it goes to and the yards are all asked of the
      * pair. Drawing the formation after the call let a play be under
      * centre and thrown at the rate of one from the gun.
      */
@@ -430,14 +469,14 @@ export function walkDrive(
       : rules.turnoverRate(call);
 
     if (uniform() < givenAway) {
-      // an interception belongs to the man who threw it, and which
+      // an interception belongs to the player who threw it, and which
       // kind this was is knowable from the call
       thrownAway = call === "pass";
       return ended("turnover", 100 - state.yardline);
     }
 
     deepest = Math.min(deepest, state.yardline);
-    // who it goes to, from the men on the field at this state
+    // who it goes to, from the players on the field at this state
     const shares = factors.goesTo(state, call, among, snap);
     let left = uniform();
     let player = among[among.length - 1] ?? "";
@@ -457,33 +496,14 @@ export function walkDrive(
       ? factors.hisOwnPlay(state, call, player, uniform, sides.passer, snap)
       : undefined;
 
-    /**
-     * The opponent, heard on the sampled path. A man's own plays were
-     * made against every defence he faced, so this week's matchup
-     * bends them: a pass defence mostly moves whether the ball was
-     * caught rather than how far it went, so on a throw the bend moves
-     * catches, and everywhere else it scales yards.
-     *
-     * It moves them both ways. A strong defence used to turn a catch
-     * into an incompletion and a weak one never did the reverse, which
-     * took a fifth of a point off the completion rate for nothing.
-     */
     if (own && factors.matchup && sides.offence && sides.defence) {
-      const bend = factors.matchup(sides.offence, sides.defence, call);
-
-      if (call === "pass" && own.caught && bend < 1 && uniform() > bend) {
-        own = { yards: 0, caught: false };
-      } else if (call === "pass" && !own.caught && bend > 1 &&
-                 uniform() < bend - 1) {
-        own = {
-          yards: Math.max(1, Math.round(
-            factors.gains(state, call, player, uniform, snap),
-          )),
-          caught: true,
-        };
-      } else if (own.yards > 0) {
-        own = { ...own, yards: Math.round(own.yards * Math.min(bend, 1.2)) };
-      }
+      own = bentByMatchup(
+        own,
+        factors.matchup(sides.offence, sides.defence, call),
+        call,
+        () => factors.gains(state, call, player, uniform, snap),
+        uniform,
+      );
     }
     const drawn = own
       ? own.yards

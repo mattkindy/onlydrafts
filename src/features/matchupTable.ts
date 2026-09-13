@@ -3,7 +3,7 @@
  *
  * The walk bends a play by how many yards each side has managed at
  * that state, one side at a time. Two sides that never met come out
- * multiplied together as though they had, and a defence whose men have
+ * multiplied together as though they had, and a defence whose players have
  * changed is still judged on last year's numbers. The network reads both
  * sides from the players on the field, which is what it was built for
  * and where it beat the pooled version, .618 against .579.
@@ -25,7 +25,7 @@ import {
 } from "../model/interactionNet.js";
 import type { Call } from "../model/playFactors.js";
 
-export interface MatchupRequest {
+interface MatchupRequest {
   /** the seasons the network learns the pairing from */
   learn: number[];
   /** the season whose sides are being described and walked */
@@ -60,7 +60,7 @@ function pooled(rows: Float64Array[]): Float64Array {
   return out;
 }
 
-export interface MatchupTable {
+interface MatchupTable {
   /** what these two do to a play of this kind */
   bend: (offence: string, defence: string, call: Call) => number;
   /** the sides it could describe, so a caller can say what it missed */
@@ -111,8 +111,8 @@ export async function buildMatchupTable(
   const vectors = new Map<string, Float64Array>();
 
   for (const season of [...request.learn, request.scoreOn]) {
-    for (const [id, man] of await buildPlayerVectors(season - 1)) {
-      vectors.set(`${season}|${id}`, man.values);
+    for (const [id, player] of await buildPlayerVectors(season - 1)) {
+      vectors.set(`${season}|${id}`, player.values);
     }
   }
 
@@ -121,16 +121,16 @@ export async function buildMatchupTable(
     let known = 0;
 
     for (const id of ids) {
-      const man = vectors.get(`${season}|${id}`);
+      const player = vectors.get(`${season}|${id}`);
 
-      if (!man) {
+      if (!player) {
         continue;
       }
 
       known++;
 
       for (let i = 0; i < out.length; i++) {
-        out[i] = out[i]! + man[i]!;
+        out[i] = out[i]! + player[i]!;
       }
     }
 

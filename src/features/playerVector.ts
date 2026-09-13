@@ -2,14 +2,14 @@
  * A description of a player, built from what can be looked up rather
  * than learned from scratch.
  *
- * Learning twelve free numbers per man needs far more plays than four
+ * Learning twelve free numbers per player needs far more plays than four
  * seasons give, which is why the fitted vectors came out level with
  * adding the pieces up. Starting from his height, his draft pick, what
  * he ran at the combine and how he has been used leaves the model only
  * the job of working out how descriptions combine.
  *
  * It also fixes the awkward cases: a rookie has a description on draft
- * day, a man takes his to a new team, and a team's is whatever its
+ * day, a player takes his to a new team, and a team's is whatever its
  * current players add up to.
  */
 
@@ -37,7 +37,7 @@ export const ATTRIBUTES = [
   "kickAccuracy", "legStrength", "longRange", "returnYards",
 ] as const;
 
-export type Attribute = (typeof ATTRIBUTES)[number];
+type Attribute = (typeof ATTRIBUTES)[number];
 
 export interface PlayerVector {
   playerId: string;
@@ -92,7 +92,7 @@ const ageIn = (birth: string, season: number) => {
 /**
  * The combine file is keyed by name and position rather than the id
  * everything else uses, so this join is on a normalised name and will
- * miss the odd man.
+ * miss the odd player.
  */
 async function combineByName(): Promise<Map<string, Record<string, string>>> {
   const text = await readFile(join(RAW_DIR, "combine.csv"), "utf8").catch(() => "");
@@ -172,7 +172,7 @@ export async function buildPlayerVectors(
 }
 
 /**
- * The same description, from a man's last so many games rather than
+ * The same description, from a player's last so many games rather than
  * from a season.
  *
  * A season boundary is nothing to a player. Taking the games behind
@@ -180,7 +180,7 @@ export async function buildPlayerVectors(
  * in week six as well as in August, and a fit from it to what happens
  * next never sees the games it is being asked about.
  */
-export async function buildRollingVectors(
+async function buildRollingVectors(
   upTo: { season: number; week: number },
   games = 17,
 ): Promise<Map<string, PlayerVector>> {
@@ -197,7 +197,7 @@ export async function buildRollingVectors(
     }
   }
 
-  // newest first, then each man's last so many
+  // newest first, then each player's last so many
   every.sort((a, b) => b.season - a.season || b.week - a.week);
   const seen = new Map<string, number>();
   const kept: typeof every = [];
@@ -396,7 +396,7 @@ export function poolVectors(
   return pooled;
 }
 
-/** how alike two descriptions are, for finding a man's nearest match */
+/** how alike two descriptions are, for finding a player's nearest match */
 export function similarity(a: Float64Array, b: Float64Array): number {
   let dot = 0, left = 0, right = 0;
 

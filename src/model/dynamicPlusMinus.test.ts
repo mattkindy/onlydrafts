@@ -3,7 +3,7 @@ import { advance, emptyState, observe, DEFAULTS } from "./dynamicPlusMinus.js";
 import type { Snap } from "./plusMinus.js";
 import { seededRng } from "../sim/rng.js";
 
-/** a week of snaps drawn from whatever each man is actually worth now */
+/** a week of snaps drawn from whatever each player is actually worth now */
 function week(truth: Map<string, number>, rng: () => number, count: number): Snap[] {
   const ids = [...truth.keys()];
   const snaps: Snap[] = [];
@@ -94,7 +94,7 @@ describe("a player who comes back diminished", () => {
     expect(history.at(-1)!.mean).toBeLessThan(0.045);
   });
 
-  it("moves faster than a man who never left would have", () => {
+  it("moves faster than a player who never left would have", () => {
     const neverLeft = run(18, truthAt, () => false);
     const dropAfterReturn = history[5]!.mean - history[13]!.mean;
     const dropWithoutBreak = neverLeft[11]!.mean - neverLeft[13]!.mean;

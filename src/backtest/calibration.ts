@@ -11,7 +11,7 @@
 
 /**
  * How far a set of probabilities sat from what happened, summed over
- * every outcome it could have named. Nought is perfect and two is as
+ * every outcome it could have named. Zero is perfect and two is as
  * wrong as it gets, so a four way question and a two way one are not
  * comparable.
  */
@@ -28,7 +28,7 @@ export function logScore(said: number[], happened: number): number {
 
 /**
  * Where a real value landed inside a simulated distribution, as a
- * number between nought and one.
+ * number between zero and one.
  *
  * The samples are counts of plays and yards rather than a continuum,
  * so ties have to be broken by a coin or the answer piles up on the
@@ -62,14 +62,14 @@ export function randomisedPercentile(
  * Under .10 means the opposite, a simulator hedging wider than the
  * game ever gets.
  */
-export interface Flatness {
+interface Flatness {
   /** the share in each tenth, ten numbers that should all be .10 */
   deciles: number[];
   /** the share below .05 or above .95, which should be .10 */
   tails: number;
   /** the share between .40 and .60, which should be .20 */
   middle: number;
-  /** how far the deciles sit from flat, summed, nought when flat */
+  /** how far the deciles sit from flat, summed, zero when flat */
   drift: number;
 }
 
@@ -91,7 +91,7 @@ export function flatnessOf(percentiles: number[]): Flatness {
   };
 }
 
-export interface CalibrationRow {
+interface CalibrationRow {
   from: number;
   to: number;
   said: number;
@@ -102,7 +102,7 @@ export interface CalibrationRow {
 /**
  * What was said against what followed, in bands of what was said. The
  * bands are given rather than cut evenly, because the interesting ones
- * near nought are narrow and the ones above a half are empty.
+ * near zero are narrow and the ones above a half are empty.
  */
 export function calibrationTable(
   said: number[], happened: boolean[], edges: number[],

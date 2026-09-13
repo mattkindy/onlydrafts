@@ -1,5 +1,5 @@
 /**
- * How far downfield a man is thrown to, and what happens there.
+ * How far downfield a player is thrown to, and what happens there.
  *
  * Depth is chosen before the ball is caught and settles both halves of
  * the outcome at once. A checkdown gains nothing a quarter of the time
@@ -8,7 +8,7 @@
  * receiver and a deep threat need different pools, not the same pool
  * scaled, which no multiplier can do since scaling nothing leaves it.
  *
- * A man's own depth carries to the next season at .877, the steadiest
+ * A player's own depth carries to the next season at .877, the steadiest
  * thing measured on a player, so it is worth choosing for him.
  */
 
@@ -27,7 +27,7 @@ export const bandOf = (depth: number): number => {
   return 0;
 };
 
-export interface DepthRow {
+interface DepthRow {
   player: string;
   call: Call;
   /** how far downfield it went, absent on a carry */
@@ -35,36 +35,36 @@ export interface DepthRow {
 }
 
 export interface TargetDepth {
-  /** which band this man is thrown into, drawn from how he is used */
+  /** which band this player is thrown into, drawn from how he is used */
   bandFor: (player: string, uniform: () => number) => number;
   /**
-   * How much more often than the league this man is thrown into each
+   * How much more often than the league this player is thrown into each
    * band, so a situation's own mix can be tilted rather than replaced.
    * A goal line throw is short whoever catches it, and a deep threat
    * there is a deep threat being thrown a short one.
    */
   leaningOf: (player: string) => number[];
-  /** how many men we could say anything about */
-  knownMen: number;
+  /** how many players we could say anything about */
+  knownPlayers: number;
   /** what the league does, for reporting */
   leagueBands: number[];
 }
 
-export interface DepthSettings {
-  /** throws before a man's own mix is taken at face value */
+interface DepthSettings {
+  /** throws before a player's own mix is taken at face value */
   steadyAt: number;
 }
 
-export const DEPTH_DEFAULTS: DepthSettings = { steadyAt: 40 };
+const DEPTH_DEFAULTS: DepthSettings = { steadyAt: 40 };
 
 /**
- * Each man's mix of depths, pulled toward the league until he has been
+ * Each player's mix of depths, pulled toward the league until he has been
  * thrown at enough for his own to mean something.
  */
 export function fitTargetDepth(
   rows: DepthRow[], settings: DepthSettings = DEPTH_DEFAULTS,
 ): TargetDepth {
-  const byMan = new Map<string, number[]>();
+  const byPlayer = new Map<string, number[]>();
   const league = new Array<number>(BANDS.length).fill(0);
   let thrown = 0;
 
@@ -77,9 +77,9 @@ export function fitTargetDepth(
     }
 
     const band = bandOf(row.airYards);
-    const his = byMan.get(row.player) ?? new Array<number>(BANDS.length).fill(0);
+    const his = byPlayer.get(row.player) ?? new Array<number>(BANDS.length).fill(0);
     his[band]!++;
-    byMan.set(row.player, his);
+    byPlayer.set(row.player, his);
     league[band]!++;
     thrown++;
   }
@@ -87,7 +87,7 @@ export function fitTargetDepth(
   const leagueShare = league.map((count) => count / Math.max(1, thrown));
   const mixes = new Map<string, number[]>();
 
-  for (const [player, counts] of byMan) {
+  for (const [player, counts] of byPlayer) {
     const his = counts.reduce((a, b) => a + b, 0);
     const trust = his / (his + settings.steadyAt);
     mixes.set(
@@ -98,7 +98,7 @@ export function fitTargetDepth(
   }
 
   return {
-    knownMen: mixes.size,
+    knownPlayers: mixes.size,
     leagueBands: leagueShare,
     leaningOf: (player) => {
       const mix = mixes.get(player);

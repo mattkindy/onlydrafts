@@ -15,7 +15,7 @@ import { fitRidge, predictRidge } from "../backtest/ridge.js";
 import { weeklyRow } from "./weeklyModel.js";
 import type { WeeklyExample } from "./weekly.js";
 
-export const WEEKLY_LAMBDA = 25;
+const WEEKLY_LAMBDA = 25;
 
 const BASE_FEATURES = [
   "intercept",
@@ -48,7 +48,7 @@ function baseRow(e: WeeklyExample): number[] {
 }
 
 /** the menu a sweep draws on, wider than what any position asks for */
-export const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
+const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
   rushYdsRecent: (e) => e.rushYdsRecent,
   recYdsRecent: (e) => e.recYdsRecent,
   receptionsRecent: (e) => e.receptionsRecent,
@@ -74,18 +74,18 @@ export const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
   ocChangedPrev: (e) => (e.staff.ocChanged ? e.prevPpg : 0),
 };
 
-export const POSITION_EXTRAS: Record<string, readonly string[]> = {
+const POSITION_EXTRAS: Record<string, readonly string[]> = {
   QB: ["spread", "snapSpread"],
   RB: ["spread", "rushYdsRecent", "absence", "carriesExpected", "targetsExpected"],
   WR: ["absence", "targetsExpected"],
   TE: ["spread", "passTend", "absence"],
 };
 
-export function positionFeatures(position: string): string[] {
+function positionFeatures(position: string): string[] {
   return [...BASE_FEATURES, ...(POSITION_EXTRAS[position] ?? [])];
 }
 
-export function positionRow(
+function positionRow(
   position: string,
   e: WeeklyExample,
   extras: Record<string, readonly string[]> = POSITION_EXTRAS,

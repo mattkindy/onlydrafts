@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { parseCsv } from "./csv.js";
 import { RAW_DIR } from "./nflverse.js";
 
-export interface TeamTendency {
+interface TeamTendency {
   passRate: number;
   neutralPassRate: number;
 }
@@ -32,7 +32,7 @@ export async function loadTendencies(): Promise<Map<string, TeamTendency>> {
   return cached;
 }
 
-export interface WeekTendencyCounts {
+interface WeekTendencyCounts {
   neutralPlays: number;
   neutralPasses: number;
 }

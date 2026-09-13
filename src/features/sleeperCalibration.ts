@@ -8,7 +8,7 @@
  * see.
  *
  * It fixes the level and nothing else. Within a position a rising line keeps
- * every man where Sleeper put him, so the corrected number cannot win a
+ * every player where Sleeper put him, so the corrected number cannot win a
  * start/sit call the raw one lost. What it can move is the mix with our own
  * number, and on the pair bench that came out level.
  */
@@ -19,7 +19,7 @@ export interface CalibrationEntry {
   actual: number;
 }
 
-export interface CalibrationLine {
+interface CalibrationLine {
   intercept: number;
   slope: number;
 }
@@ -29,7 +29,7 @@ export const MIN_CALIBRATION_ROWS = 200;
 
 export const IDENTITY_LINE: CalibrationLine = { intercept: 0, slope: 1 };
 
-export type SleeperCalibration = Map<string, CalibrationLine>;
+type SleeperCalibration = Map<string, CalibrationLine>;
 
 function fitLine(rows: CalibrationEntry[]): CalibrationLine {
   const n = rows.length;
@@ -73,14 +73,14 @@ export function fitSleeperCalibration(
   return lines;
 }
 
-export interface CalibrationBand {
+interface CalibrationBand {
   name: string;
   min: number;
   max: number;
 }
 
 /** where a projection lands, which is what the bias is read against */
-export const CALIBRATION_BANDS: readonly CalibrationBand[] = [
+const CALIBRATION_BANDS: readonly CalibrationBand[] = [
   { name: "0-5", min: 0, max: 5 },
   { name: "5-10", min: 5, max: 10 },
   { name: "10-15", min: 10, max: 15 },
@@ -88,7 +88,7 @@ export const CALIBRATION_BANDS: readonly CalibrationBand[] = [
   { name: "20+", min: 20, max: Infinity },
 ];
 
-export interface BandMeans {
+interface BandMeans {
   weeks: number;
   projected: number;
   actual: number;

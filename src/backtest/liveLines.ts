@@ -1,5 +1,5 @@
 /**
- * A week's men as the site priced them before kickoff, cached.
+ * A week's players as the site priced them before kickoff, cached.
  *
  * The component line, the Sleeper blend and the residual quantiles come
  * off a fit over eight seasons, which no eval wants to repeat in every
@@ -13,7 +13,7 @@ export const LINE_COLUMNS = [
   "ours", "sleeper", "blend", "floor", "q1", "q3", "ceiling",
 ];
 
-export interface LiveLine {
+interface LiveLine {
   season: number;
   week: number;
   playerId: string;

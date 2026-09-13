@@ -30,8 +30,8 @@ function back(
   }));
 }
 
-function roomOf(...men: PlayerWeekStats[][]): Map<string, PlayerWeekStats[]> {
-  return new Map(men.map((rows) => [rows[0]!.playerId, rows]));
+function groupOf(...players: PlayerWeekStats[][]): Map<string, PlayerWeekStats[]> {
+  return new Map(players.map((rows) => [rows[0]!.playerId, rows]));
 }
 
 function noDepth(status: Map<string, WeekStatus> = new Map()): WeeklyAvailability {
@@ -69,15 +69,15 @@ const everyWeek = [...PLAYED_WEEKS, TARGET_WEEK];
 describe("buildWeeklyVolume", () => {
   const starter = back("starter", "DET", 20);
   const backup = back("backup", "DET", 4);
-  const room = roomOf(starter, backup);
+  const group = groupOf(starter, backup);
 
-  it("gives the absent starter's carries to the man behind him", () => {
+  it("gives the absent starter's carries to the player behind him", () => {
     const rosters = everyWeek.flatMap((week) => [
       onRoster("starter", "DET", week, "ACT"),
       onRoster("backup", "DET", week, "ACT"),
     ]);
     const volume = buildWeeklyVolume(
-      room,
+      group,
       noDepth(ruledOut("starter", TARGET_WEEK)),
       rosters,
     );
@@ -88,7 +88,7 @@ describe("buildWeeklyVolume", () => {
   });
 
   it("leaves everyone where he was when nobody is out", () => {
-    const volume = buildWeeklyVolume(room, noDepth());
+    const volume = buildWeeklyVolume(group, noDepth());
 
     for (const playerId of ["starter", "backup"]) {
       const recent = volume.recentFor(playerId, TARGET_WEEK);
@@ -100,7 +100,7 @@ describe("buildWeeklyVolume", () => {
     }
   });
 
-  it("counts a traded man as gone from the room he left", () => {
+  it("counts a traded player as gone from the group he left", () => {
     const rosters = [
       ...PLAYED_WEEKS.flatMap((week) => [
         onRoster("starter", "DET", week, "ACT"),
@@ -109,12 +109,12 @@ describe("buildWeeklyVolume", () => {
       onRoster("starter", "GB", TARGET_WEEK, "ACT"),
       onRoster("backup", "DET", TARGET_WEEK, "ACT"),
     ];
-    const volume = buildWeeklyVolume(room, noDepth(), rosters);
+    const volume = buildWeeklyVolume(group, noDepth(), rosters);
 
     expect(volume.expectedFor("backup", TARGET_WEEK).carries).toBeCloseTo(24);
   });
 
-  it("counts a man on reserve as out", () => {
+  it("counts a player on reserve as out", () => {
     const rosters = [
       ...PLAYED_WEEKS.flatMap((week) => [
         onRoster("starter", "DET", week, "ACT"),
@@ -123,7 +123,7 @@ describe("buildWeeklyVolume", () => {
       onRoster("starter", "DET", TARGET_WEEK, "RES"),
       onRoster("backup", "DET", TARGET_WEEK, "ACT"),
     ];
-    const volume = buildWeeklyVolume(room, noDepth(), rosters);
+    const volume = buildWeeklyVolume(group, noDepth(), rosters);
 
     expect(volume.isOut("starter", TARGET_WEEK)).toBe(true);
     expect(volume.expectedFor("backup", TARGET_WEEK).carries).toBeCloseTo(24);
@@ -141,7 +141,7 @@ describe("buildWeeklyVolume", () => {
       ...everyWeek.map((week) => onRoster("backup", "DET", week, "ACT")),
     ];
     const volume = buildWeeklyVolume(
-      roomOf(missed, cover),
+      groupOf(missed, cover),
       noDepth(),
       rosters,
     );
@@ -150,7 +150,7 @@ describe("buildWeeklyVolume", () => {
     const backupNow = volume.expectedFor("backup", TARGET_WEEK).carries;
 
     // the four-week window has him at 10 because it counts the two he
-    // missed, and the room only has so much work to hand out
+    // missed, and the group only has so much work to hand out
     expect(volume.recentFor("starter", TARGET_WEEK).carries).toBeCloseTo(10);
     expect(starterNow).toBeGreaterThan(12);
     expect(starterNow).toBeLessThan(20);

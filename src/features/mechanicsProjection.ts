@@ -1,5 +1,5 @@
 /**
- * A man's next season built from the parts of his play rather than from
+ * A player's next season built from the parts of his play rather than from
  * what those parts added up to.
  *
  * Each part keeps a different amount of itself, so each is pulled back
@@ -9,7 +9,7 @@
  * same pull to all of it and throws the difference away.
  */
 
-/** how much of each part a man takes into next season */
+/** how much of each part a player takes into next season */
 export const KEEPS = {
   targetsPerGame: 0.701,
   caughtShare: 0.600,
@@ -27,10 +27,10 @@ export const KEEPS = {
   afterContact: 0.439,
 } as const;
 
-export type Part = keyof typeof KEEPS;
+type Part = keyof typeof KEEPS;
 
 /**
- * A season is only worth so much evidence. A man with forty targets is
+ * A season is only worth so much evidence. A player with forty targets is
  * telling us less about himself than one with a hundred and sixty, and
  * the carryover above is what an ordinary season's worth earns.
  */
@@ -81,7 +81,7 @@ export function settle(
   return everyone + KEEPS[part] * trust * (his - everyone);
 }
 
-export interface Projected {
+interface Projected {
   targetsPerGame: number;
   caughtShare: number;
   beforeCatch: number;
@@ -108,10 +108,9 @@ export function projectFromMechanics(
   const targets = receiving.targets;
   const carries = running.carries;
 
-  // How often he gets it is measured over his games, not over his
-  // touches. A man who played a season and never carried it has told
-  // us plenty, and counting his carries as his evidence said the
-  // opposite and handed him the league average.
+  // Measured over his games, not his touches: a player who played a
+  // season and never carried it has told us plenty, and counting his
+  // carries as the evidence handed him the league average instead.
   const targetsPerGame = settle(
     "targetsPerGame",
     rate(targets, receiving.games, 0),

@@ -44,7 +44,7 @@ export async function loadCompromisedWeeks(
   return compromised;
 }
 
-export interface InjuryWeek {
+interface InjuryWeek {
   week: number;
   /** the report's own words, lowercased */
   kind: string;

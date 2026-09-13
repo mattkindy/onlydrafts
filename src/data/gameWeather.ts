@@ -3,13 +3,13 @@
  * off, pulled out of the games file.
  *
  * Only outdoor fixtures carry weather worth fitting, and a temperature
- * of nought means nobody wrote one down rather than a freezing
+ * of zero means nobody wrote one down rather than a freezing
  * afternoon, so both are dropped here instead of at each caller.
  */
 
 import type { Reading } from "../features/climate.js";
 
-export interface Kickoff {
+interface Kickoff {
   season: number;
   week: number;
   homeTeam: string;

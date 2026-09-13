@@ -36,7 +36,7 @@ const at = (down: number, toGo: number, yardline: number) =>
   ({ down, toGo, yardline, plays: 0 });
 
 describe("attributeDrives", () => {
-  it("gives a drive's yards to the men on it and invents none", () => {
+  it("gives a drive's yards to the players on it and invents none", () => {
     const roster = [player("back", 1, 0), player("wideout", 0, 1), player("qb", 0, 0)];
     const drives = [
       drive([
