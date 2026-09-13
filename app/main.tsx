@@ -28,8 +28,7 @@ import { PlayerSheet } from "./views/PlayerSheet.tsx";
 import { Reading } from "./views/Reading.tsx";
 import { EspnSheet } from "./views/EspnSheet.tsx";
 import { Roster } from "./views/Roster.tsx";
-import { DraftRating } from "./views/DraftRating.tsx";
-import { Keepers } from "./views/Keepers.tsx";
+import { DraftRating, MyDraftPicks } from "./views/DraftRating.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
 import { MyMatchup } from "./views/Matchup.tsx";
 import { Matchups } from "./views/Matchups.tsx";
@@ -174,19 +173,38 @@ const WEEK_VIEWS: View[] = ["matchup", "league", "players"];
 const STALE_AFTER = 2 * 60 * 1000;
 
 /**
- * How fresh the roster on screen is. It hangs off the refresh button
- * rather than taking a line of its own, since the button is where a
- * reader who cares about the time is already looking.
+ * Light, dark, or the phone's own setting, as one glyph. The word used to
+ * sit in the nav and take a pill's worth of a 390px row to say something
+ * a reader checks once a year.
  */
-function rosterRead(league: League): string {
-  if (!league.readAt) {
-    return "read, but the page did not note when";
+const THEME_GLYPH: Record<Theme, string> = {
+  system: "◐", light: "☀", dark: "☾",
+};
+
+/**
+ * Work that freezes the page until it is done, held back a frame so the
+ * tab you tapped paints first.
+ *
+ * The draft grades replay twelve rosters over six thousand drawn weeks,
+ * which is a second or so of a blocked main thread. Tapping league used to
+ * do nothing at all until that finished, so the tap read as dropped.
+ */
+function AfterPaint(
+  { saying, children }: { saying: string; children: ComponentChildren },
+) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const soon = requestAnimationFrame(() => setReady(true));
+
+    return () => cancelAnimationFrame(soon);
+  }, []);
+
+  if (!ready) {
+    return <Reading>{saying}</Reading>;
   }
 
-  const at = new Date(league.readAt)
-    .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-  return "read at " + at;
+  return <>{children}</>;
 }
 
 function App() {
@@ -201,6 +219,10 @@ function App() {
   const [posFilter, setPosFilter] = useState("ALL");
   const [theme, setTheme] = useState<Theme>(() => stored<Theme>("theme", "system"));
   const [query, setQuery] = useState("");
+  /** whether the longer answer behind the tab row's question mark is open */
+  const [asking, setAsking] = useState(false);
+  /** and whether your own draft is being replayed under your roster */
+  const [myDraft, setMyDraft] = useState(false);
   const [everyTeam, setEveryTeam] = useState(false);
   /**
    * The weeks he wins you leads, because ordering that way beat
@@ -548,6 +570,19 @@ function App() {
     }, 50);
   };
 
+  /**
+   * A man's sheet, opened off his key. The lineup views only ever have a
+   * key, and every name on the page opens the same sheet, so the lookup
+   * belongs here rather than in each of them.
+   */
+  const openKey = (key: string) => {
+    const p = byKey.get(key);
+
+    if (p) {
+      setShowing(p);
+    }
+  };
+
   const markKeeper = (p: Player) => {
     if (!active) {
       return;
@@ -589,6 +624,10 @@ function App() {
     }
   }, [drafting, view]);
 
+  // the answer belongs to the tab it was opened on, so moving off it
+  // closes it rather than carrying it over to a page it does not explain
+  useEffect(() => setAsking(false), [view]);
+
   /**
    * Whether this league keeps players. Sleeper and ESPN both say, but
    * an older saved league does not, and then the reader is asked once
@@ -607,33 +646,33 @@ function App() {
         <span class="brand" onClick={() => setView("leagues")}>
           only<b>drafts</b>
         </span>
-        {active && view !== "leagues" && (
-          <span id="crumb">
-            <button onClick={() => setView("leagues")}>all leagues</button>
-            <b>{active.name}</b>
-            <button
-              disabled={rereading}
-              title={"roster " + rosterRead(active)}
-              onClick={() => void reread(true)}
-            >
-              refresh roster
-            </button>
-            <span>you: {active.team}</span>
-            {/* what the numbers are scored by, since standard and a
-                board with no league connected look the same on screen */}
-            <span class="pays" title={scoringSettings(active.pays)}>
-              {SCORING_NAME[roomFor(active.pays)]}
-            </span>
-          </span>
-        )}
         <button
           class="theme"
+          aria-label={"theme: " + theme}
           title="light, dark, or whatever your phone is set to"
           onClick={() => setTheme(NEXT_THEME[theme])}
         >
-          {theme}
+          {THEME_GLYPH[theme]}
         </button>
       </nav>
+
+      {active && view !== "leagues" && (
+        <div id="crumb">
+          <button
+            class="back"
+            aria-label="all leagues"
+            onClick={() => setView("leagues")}
+          >
+            ‹
+          </button>
+          <b>{active.name}</b>
+          {/* what the numbers are scored by, since standard and a board
+              with no league connected look the same on screen */}
+          <span class="pays" title={scoringSettings(active.pays)}>
+            {SCORING_NAME[roomFor(active.pays)]}
+          </span>
+        </div>
+      )}
 
       {view !== "leagues" && (
         <div id="subnav">
@@ -646,18 +685,23 @@ function App() {
               {COPY[v][0].toLowerCase()}
             </button>
           ))}
+          {legend && (
+            <button
+              class={"whatis" + (asking ? " on" : "")}
+              aria-label="how this works"
+              aria-expanded={asking}
+              onClick={() => setAsking((on) => !on)}
+            >
+              ?
+            </button>
+          )}
         </div>
       )}
 
       <div id="explain">
-        <h1>{title}</h1>
+        {view === "leagues" && <h1>{title}</h1>}
         <p>{blurb}</p>
-        {legend && (
-          <details class="asked">
-            <summary>how this works</summary>
-            <p>{legend}</p>
-          </details>
-        )}
+        {legend && asking && <p class="legend">{legend}</p>}
       </div>
 
       {/* every other view leaves this bar with nothing in it, and an
@@ -709,7 +753,7 @@ function App() {
 
         {view === "draft" && (
           <>
-            <span id="posfilter">
+            <span class="chips">
               {POSITIONS.map((where) => (
                 <button
                   key={where}
@@ -838,19 +882,28 @@ function App() {
         {board && active && view === "team" && season && (
           <>
             <Roster
+              key={marks}
               byKey={byKey}
+              men={men}
               league={active}
               season={season}
               perTeam={perTeam}
               marked={marked}
+              readAt={active.readAt}
+              rereading={rereading}
+              onRefresh={() => void reread(true)}
               onMark={markKeeper}
               onMore={setShowing}
+              keeperLeague={keeperLeague}
+              keepersSay={KEEPERS_SAY}
+              onKeeperChange={() => setMarks((n) => n + 1)}
             />
 
             {active.keepers === undefined || active.keepers === null
               ? (
                 <p class="hint">
                   <button
+                    class="quiet"
                     onClick={() => {
                       keep(keeperKey(active), !keeperLeague);
                       setMarks((n) => n + 1);
@@ -864,20 +917,26 @@ function App() {
               )
               : null}
 
-            {keeperLeague && (
-              <>
-                <h2>keepers</h2>
-                <p class="hint">{KEEPERS_SAY}</p>
-                <Keepers
-                  key={marks}
-                  men={men}
+            <h2>your draft, pick by pick</h2>
+            {/* opened rather than collapsed, since replaying the draft is
+                a second of work nobody asked for on the way to a roster */}
+            <button
+              class="disclose"
+              aria-expanded={myDraft}
+              onClick={() => setMyDraft((on) => !on)}
+            >
+              <span class="chev">{myDraft ? "⌄" : "›"}</span>
+              how each of your picks read at the time
+            </button>
+            {myDraft && (
+              <AfterPaint saying="replaying your draft">
+                <MyDraftPicks
+                  board={men}
                   byKey={byKey}
                   league={active}
-                  perTeam={perTeam}
-                  onMore={setShowing}
-                  onChange={() => setMarks((n) => n + 1)}
+                  made={draft.made ?? []}
                 />
-              </>
+              </AfterPaint>
             )}
           </>
         )}
@@ -903,7 +962,6 @@ function App() {
             picked={week}
             onWeek={setWeek}
             slate={slate}
-            roster={active ? rosterKeys(active.myRoster) : null}
             games={games}
             rows={slateRows}
             men={men}
@@ -912,6 +970,7 @@ function App() {
             slots={active?.slots ?? null}
             pays={active?.pays ?? {}}
             status={gamesStatus || weekStatus}
+            onMore={openKey}
           />
         )}
 
@@ -932,32 +991,38 @@ function App() {
                   season={week.season}
                   week={week.week}
                   status={gamesStatus || weekStatus}
+                  onMore={openKey}
                   withoutMine
                 />
               )
               : <p class="hint">No week has been built yet.</p>}
 
             <h2>draft grades</h2>
-            <DraftRating
-              board={men}
-              byKey={byKey}
-              league={active}
-              made={draft.made ?? []}
-            />
+            <AfterPaint saying="rating every team's draft">
+              <DraftRating
+                board={men}
+                byKey={byKey}
+                league={active}
+                made={draft.made ?? []}
+              />
+            </AfterPaint>
           </>
         )}
 
         {board && active && view === "players" && (
           <Waivers
-              men={men}
-              league={active}
-              posFilter={posFilter}
-              onPosFilter={setPosFilter}
-              rows={slateRows}
-              games={games}
-              schedule={board.schedule ?? null}
-              season={week?.season ?? null}
-              week={week?.week ?? null}
+            men={men}
+            league={active}
+            posFilter={posFilter}
+            onPosFilter={setPosFilter}
+            rows={slateRows}
+            games={games}
+            schedule={board.schedule ?? null}
+            season={week?.season ?? null}
+            week={week?.week ?? null}
+            slate={slate}
+            roster={rosterKeys(active.myRoster)}
+            listed={listed}
             onMore={setShowing}
           />
         )}
