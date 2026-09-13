@@ -26,6 +26,98 @@ const ENDS_A_DRIVE = 20;
 const LAST_GASP = 10;
 const IN_RANGE = 45;
 
+/** the fourth quarter, and overtime, where the clock is already zero */
+const FOURTH_QUARTER = 900;
+
+/** inside five minutes, where a side in front starts killing the clock */
+const CLOCK_KILLING = 300;
+
+/** from here on the standings have settled and starters get a rest */
+const SETTLED_WEEK = 13;
+
+/** the week the engine assumes when nobody tells it which one this is */
+export const MID_SEASON_WEEK = 8;
+
+/** what one starter keeps of his snaps in a lopsided fourth quarter */
+interface Pull {
+  /** the chance he comes off for good on a snap in this band */
+  hazard: number;
+  /** and what he keeps of his share while he is still on the field */
+  scale: number;
+  /** which inside five minutes becomes this instead */
+  late?: number;
+}
+
+interface Band {
+  /** the chance a starter is already off when the band first comes up */
+  headStart: number;
+  /** what the hazards are multiplied by from week thirteen on */
+  rest: number;
+  back: Pull;
+  passer: Pull;
+  receiver: Pull;
+}
+
+const STAYS_ON: Pull = { hazard: 0, scale: 1 };
+
+/**
+ * What a lopsided fourth quarter takes off a side's starters.
+ *
+ * The numbers come from a probe of 2021 to 2025 play by play, which
+ * compared a side's touch shares in the fourth quarter against the same
+ * side earlier in the same game. Two bands either side of even: a margin
+ * of seventeen or more, where the top back and the quarterback come off
+ * for good, and nine to sixteen, where a side behind rests its back and
+ * its top receiver and a side in front only shifts work late.
+ *
+ * A side in front by seventeen takes its top receiver off too. A side behind
+ * by that much keeps him on but spreads its targets wider, which is the
+ * flat multiplier rather than a pull.
+ */
+const GARBAGE_TIME: Record<"up17" | "down17" | "up9" | "down9", Band> = {
+  up17: {
+    headStart: 0.2,
+    rest: 1.5,
+    back: { hazard: 0.055, scale: 1 },
+    passer: { hazard: 0.11, scale: 1 },
+    receiver: { hazard: 0.03, scale: 1 },
+  },
+  down17: {
+    headStart: 0.2,
+    rest: 1.5,
+    back: { hazard: 0.055, scale: 1 },
+    passer: { hazard: 0.11, scale: 1 },
+    receiver: { hazard: 0, scale: 0.8 },
+  },
+  up9: {
+    headStart: 0,
+    rest: 1,
+    back: { hazard: 0, scale: 1, late: 0.88 },
+    passer: { hazard: 0, scale: 1, late: 0.66 },
+    receiver: STAYS_ON,
+  },
+  down9: {
+    headStart: 0,
+    rest: 1,
+    back: { hazard: 0.03, scale: 1 },
+    passer: STAYS_ON,
+    receiver: { hazard: 0.02, scale: 1 },
+  },
+};
+
+/** which band this snap is in, off the margin the side with the ball sees */
+function bandOf(margin: number, clock: number): Band | null {
+  if (clock > FOURTH_QUARTER || Math.abs(margin) < 9) {
+    return null;
+  }
+
+  if (Math.abs(margin) >= 17) {
+    return margin > 0 ? GARBAGE_TIME.up17 : GARBAGE_TIME.down17;
+  }
+
+  return margin > 0 ? GARBAGE_TIME.up9 : GARBAGE_TIME.down9;
+}
+
 export interface RemainderState {
   home: string;
   away: string;
@@ -44,6 +136,11 @@ export interface RemainderState {
    * the key the slate gives him. Anyone left out keeps all of his.
    */
   shareScale?: Record<string, number>;
+  /**
+   * Which week of the season this is. Starters come off earlier once the
+   * standings have settled, so the engine needs to know.
+   */
+  week?: number;
 }
 
 /** what one draw gave a player, in whatever the league pays */
@@ -90,6 +187,15 @@ interface Loaded {
   shares: Uint8Array;
   /** one multiplier a player, where any of them has gone off */
   scale: Float64Array | null;
+  /** the busiest back and the busiest receiver, the two the fourth quarter hits */
+  topBack: number;
+  topReceiver: number;
+  /** one flag a player, set once he has come off for the rest of a draw */
+  pulled: Uint8Array;
+  /** whether the twenty percent already off has been rolled in this draw */
+  headStarted: boolean;
+  /** what each player keeps of his share at this snap, a draw's pulls included */
+  keeps: Float64Array;
   caught: Uint8Array;
   gains: Uint8Array[];
   lift: number;
@@ -151,6 +257,37 @@ function scalesFor(
   return scales.some((one) => one !== 1) ? scales : null;
 }
 
+/**
+ * The one player at a position with the most work in the side's shares.
+ *
+ * Adding a player's weight over every block puts the man a staff would
+ * take off first at the top, without asking the slate for a depth chart.
+ */
+function busiestAt(
+  men: { position: string }[], shares: Uint8Array, positions: string[],
+): number {
+  const totals = new Float64Array(men.length);
+
+  for (let at = 0; at < shares.length; at++) {
+    const i = at % men.length;
+    totals[i] = totals[i]! + (shares[at] ?? 0);
+  }
+
+  let best = -1;
+
+  for (let i = 0; i < men.length; i++) {
+    if (!positions.includes(men[i]!.position)) {
+      continue;
+    }
+
+    if (best < 0 || totals[i]! > totals[best]!) {
+      best = i;
+    }
+  }
+
+  return best;
+}
+
 function loadSide(
   tables: SimTables, team: string, against: string, lift: number,
   shareScale: Record<string, number> | undefined,
@@ -165,14 +302,20 @@ function loadSide(
   const row = tables.league.matchup[team];
   const at = order.indexOf(against);
   const bend = row && at >= 0 ? bytesOf(row) : null;
+  const shares = bytesOf(side.shares);
 
   return {
     team,
     players: side.men,
     passerAt: side.men.findIndex((player) => player.id === side.passer),
     runRate: bytesOf(side.runRate),
-    shares: bytesOf(side.shares),
+    shares,
     scale: scalesFor(side.men, shareScale),
+    topBack: busiestAt(side.men, shares, ["RB", "FB"]),
+    topReceiver: busiestAt(side.men, shares, ["WR", "TE"]),
+    pulled: new Uint8Array(side.men.length),
+    headStarted: false,
+    keeps: new Float64Array(side.men.length).fill(1),
     caught: bytesOf(side.caught),
     gains: side.men.flatMap((player) => [
       bytesOf(side.gains[`${player.id}|run`] ?? ""),
@@ -221,7 +364,74 @@ const runRateAt = (
  * leaving his teammates alone is what hands his snaps to them.
  */
 const shareAt = (side: Loaded, block: number, i: number) =>
-  (side.shares[block + i] ?? 0) * (side.scale ? side.scale[i] ?? 1 : 1);
+  (side.shares[block + i] ?? 0) * (side.scale ? side.scale[i] ?? 1 : 1) *
+  (side.keeps[i] ?? 1);
+
+/** the three men a lopsided fourth quarter moves, in a fixed order */
+const startersOf = (side: Loaded, band: Band): [number, Pull][] => [
+  [side.topBack, band.back],
+  [side.passerAt, band.passer],
+  [side.topReceiver, band.receiver],
+];
+
+/**
+ * Roll this snap's pulls and say what each starter keeps of his share.
+ *
+ * Called on every snap, because a margin that narrows again puts the
+ * flat multipliers back to one. A player already off stays off for the
+ * rest of the draw.
+ */
+function pullStarters(
+  side: Loaded, margin: number, clock: number, week: number,
+  uniform: () => number,
+): void {
+  const band = bandOf(margin, clock);
+
+  if (!band) {
+    for (let i = 0; i < side.keeps.length; i++) {
+      side.keeps[i] = side.pulled[i] ? 0 : 1;
+    }
+
+    return;
+  }
+
+  const rest = week >= SETTLED_WEEK ? band.rest : 1;
+  const opening = band.headStart > 0 && !side.headStarted;
+
+  if (opening) {
+    side.headStarted = true;
+  }
+
+  for (const [at, how] of startersOf(side, band)) {
+    if (at < 0) {
+      continue;
+    }
+
+    const comesOff = how.hazard <= 0
+      ? 0
+      : (opening ? band.headStart : how.hazard * rest);
+
+    if (!side.pulled[at] && comesOff > 0 && uniform() < comesOff) {
+      side.pulled[at] = 1;
+    }
+
+    const staysFor = clock <= CLOCK_KILLING && how.late !== undefined
+      ? how.late
+      : how.scale;
+    side.keeps[at] = side.pulled[at] ? 0 : staysFor;
+  }
+}
+
+/** nobody has come off yet, which is where every draw starts */
+function backOnTheField(side: Loaded): void {
+  side.pulled.fill(0);
+  side.headStarted = false;
+  side.keeps.fill(1);
+}
+
+/** whether the side's passer is still on to be paid for a throw */
+const passerOn = (side: Loaded) =>
+  side.passerAt >= 0 && side.keeps[side.passerAt] !== 0;
 
 /** who the ball goes to here, as an index into the side's players */
 function goesTo(
@@ -321,7 +531,7 @@ interface DriveOutcome {
 function playDrive(
   side: Loaded, league: LeagueTables, lines: Line[], uniform: () => number,
   startAt: number, margin: number, secondsLeft: number,
-  openDown: number | undefined, openToGo: number | undefined,
+  openDown: number | undefined, openToGo: number | undefined, week: number,
 ): DriveOutcome {
   let down = openDown ?? 1;
   let toGo = openToGo === undefined ? 10 : Math.min(openToGo, startAt);
@@ -397,6 +607,8 @@ function playDrive(
       continue;
     }
 
+    pullStarters(side, margin, clock, week, uniform);
+
     const call = uniform() <
       runRateAt(side, down, toGo, yardline, margin, clock) ? 0 : 1;
 
@@ -431,7 +643,9 @@ function playDrive(
       line.recYds += gained;
       if (scored) line.recTd++;
 
-      if (passerAt >= 0 && passerAt !== who) {
+      // a backup throwing is rarely anybody's fantasy starter, so once
+      // the passer is off nobody is paid for the throw
+      if (passerAt !== who && passerOn(side)) {
         const threw = lines[passerAt]!;
         threw.passYds += gained;
         if (scored) threw.passTd++;
@@ -527,7 +741,7 @@ function playOut(
 
     const drive = playDrive(
       withBall, league, into.get(withBall)!, uniform, startAt, margin,
-      secondsLeft, firstDown, firstToGo);
+      secondsLeft, firstDown, firstToGo, state.week ?? MID_SEASON_WEEK);
     firstDown = undefined;
     firstToGo = undefined;
     const took = Math.max(20, drive.took);
@@ -546,8 +760,8 @@ function playOut(
           scored = 8;
           into.get(withBall)![who]!.twoPointConversions++;
 
-          if (call === 1 && withBall.passerAt >= 0 &&
-              withBall.passerAt !== who) {
+          if (call === 1 && withBall.passerAt !== who &&
+              passerOn(withBall)) {
             into.get(withBall)![withBall.passerAt]!.twoPointConversions++;
           }
         }
@@ -556,7 +770,7 @@ function playOut(
       }
     }
 
-    if (drive.ending === 4 && drive.thrownAway && withBall.passerAt >= 0) {
+    if (drive.ending === 4 && drive.thrownAway && passerOn(withBall)) {
       into.get(withBall)![withBall.passerAt]!.interceptions++;
     }
 
@@ -636,6 +850,8 @@ export function remainderFor(
 
   for (let draw = 0; draw < draws; draw++) {
     for (const side of [home, away]) {
+      backOnTheField(side);
+
       for (const line of lines.get(side)!) {
         line.passYds = 0; line.passTd = 0; line.interceptions = 0;
         line.rushYds = 0; line.rushTd = 0; line.receptions = 0;

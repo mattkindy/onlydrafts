@@ -16,7 +16,7 @@ import { useEffect, useState } from "preact/hooks";
 
 import { gameStates, type GameState, type LiveSituation } from "../lib/matchups.ts";
 import {
-  gamesToPlay, remainderInWorker, simTablesFor,
+  gamesToPlay, REMAINDER_DRAWS, remainderInWorker, simTablesFor,
 } from "../lib/remainderDraws.ts";
 import type { Pays } from "../lib/scoring.ts";
 
@@ -135,7 +135,7 @@ export function useLiveWeek(
 
     simTablesFor(season)
       .then((tables) => tables
-        ? remainderInWorker(tables, situations, pays)
+        ? remainderInWorker(tables, situations, pays, REMAINDER_DRAWS, week)
         : new Map<string, number[]>())
       .then((played) => {
         if (!stale) {
@@ -145,7 +145,7 @@ export function useLiveWeek(
       .catch(() => undefined);
 
     return () => { stale = true; };
-  }, [situations, season, pays]);
+  }, [situations, season, week, pays]);
 
   return { states, remainder, read, live, trouble };
 }
