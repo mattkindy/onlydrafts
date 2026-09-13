@@ -27,6 +27,7 @@ import type { Pays, Player } from "../lib/scoring.ts";
 import type { SlateRow } from "../lib/slate.ts";
 import { Advice, nameOf, pct } from "./Advice.tsx";
 import { ManName } from "./ManName.tsx";
+import { Reading } from "./Reading.tsx";
 
 /** how often the scoreboard is read again while a game is on */
 const EVERY = 60_000;
@@ -274,13 +275,14 @@ export function Matchups(
 
   return (
     <>
-      <p class="hint">
-        Week {week}.{" "}
-        {read
-          ? "Scoreboard read at " + read.toLocaleTimeString() +
-            (live ? ", again every minute while a game is on." : ".")
-          : "Reading the scoreboard."}
-      </p>
+      {read
+        ? (
+          <p class="hint">
+            Week {week}. Scoreboard read at {read.toLocaleTimeString()}
+            {live ? ", again every minute while a game is on." : "."}
+          </p>
+        )
+        : <Reading>reading week {week}'s scoreboard...</Reading>}
 
       {(status || trouble) && <p class="hint">{status || trouble}</p>}
 

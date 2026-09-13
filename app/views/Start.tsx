@@ -24,6 +24,7 @@ import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
 import { Advice, nameOf } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
 import { ManName } from "./ManName.tsx";
+import { Reading } from "./Reading.tsx";
 import { useScoreboard } from "./scoreboard.ts";
 import { WeekRanks } from "./WeekRanks.tsx";
 
@@ -52,10 +53,16 @@ const signed = (gains: number) =>
 
 /** what a man is worth this week, as the seat headings and options read it */
 function Numbers(
-  { line, left }: {
+  { line, left, named }: {
     line: ReturnType<typeof lineFor>;
     /** how much of his game is still to play */
     left: number;
+    /**
+     * Whether to say the number is a projection. The seat's own heading
+     * has his points beside it and needs telling apart; a bench man's
+     * row has nothing to confuse it with.
+     */
+    named?: boolean;
   },
 ) {
   if (!line) {
@@ -64,7 +71,7 @@ function Numbers(
 
   return (
     <span class="seat-fig">
-      <b>{(line.blend * left).toFixed(1)}</b> proj{" "}
+      <b>{(line.blend * left).toFixed(1)}</b>{named ? " proj" : ""}{" "}
       <i>
         {line.spread.low.toFixed(1)} to {line.spread.high.toFixed(1)}
       </i>
@@ -148,7 +155,7 @@ function Seat(
           team={his.line?.team}
         />
         <span class="now">{choice.starter.points.toFixed(1)}</span>
-        <Numbers line={his.line} left={his.left} />
+        <Numbers line={his.line} left={his.left} named />
         <Office his={listed.get(choice.starter.key)} />
         {choice.locked && <span class="badge even">locked</span>}
       </h3>
@@ -282,7 +289,7 @@ export function Start(props: Props) {
           />
           <p class="hint">
             Against {ours.against.owner} this week. Each man is priced by
-            what starting him in that seat does to your chance of winning.
+            what starting him does to your chance of winning it.
           </p>
           <Lineup
             side={ours.side}
@@ -296,7 +303,7 @@ export function Start(props: Props) {
         </>
       )}
 
-      {ours && !states && <div class="empty">reading the scoreboard...</div>}
+      {ours && !states && <Reading>reading the scoreboard...</Reading>}
 
       {!ours && (
         <p class="hint">
