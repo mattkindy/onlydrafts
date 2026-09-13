@@ -27,10 +27,12 @@ export function pct(share: number): string {
   }
 
   // rounded toward the middle, so 99.97 says 99.9 and 0.04 says 0.1:
-  // only a settled game prints as 100 or 0
+  // only a settled game prints as 100 or 0. The tenths are snapped first
+  // because 0.001 * 1000 comes out a hair over 1 and ceiled to 0.2.
+  const inTenths = Math.round(percent * 1e8) / 1e7;
   const tenths = percent > 99
-    ? Math.floor(percent * 10) / 10
-    : Math.ceil(percent * 10) / 10;
+    ? Math.floor(inTenths) / 10
+    : Math.ceil(inTenths) / 10;
 
   return tenths.toFixed(1) + "%";
 }

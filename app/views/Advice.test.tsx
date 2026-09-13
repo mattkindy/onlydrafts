@@ -19,4 +19,11 @@ describe("pct", () => {
     expect(pct(1)).toBe("100%");
     expect(pct(0)).toBe("0%");
   });
+
+  it("says the same tenth from either side of the same game", () => {
+    expect(pct(0.999)).toBe("99.9%");
+    expect(pct(1 - 0.999)).toBe("0.1%");
+    expect(pct(0.9985)).toBe("99.8%");
+    expect(pct(1 - 0.9985)).toBe("0.2%");
+  });
 });
