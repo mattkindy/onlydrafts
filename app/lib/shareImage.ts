@@ -53,10 +53,10 @@ export const SITE = "onlydrafts";
 /** the export is a fixed width, so a phone and a laptop make the same picture */
 export const WIDTH = 1080;
 const PAD = 40;
-const HEAD = 132;
+const HEAD = 152;
 const FOOT = 72;
 const CARD_GAP = 20;
-const CARD_BASE = 150;
+const CARD_BASE = 212;
 const CARD_OWNER = 26;
 
 /** one side of one card, with everything already turned into words */
