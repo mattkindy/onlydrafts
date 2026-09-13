@@ -1,5 +1,5 @@
 /**
- * Plays the walk for a set of weeks once and writes what each man scored
+ * Plays the walk for a set of weeks once and writes what each player scored
  * to data/curated/walkWeekly.csv, so a bench can read the walk's numbers
  * without playing the games again.
  *
@@ -38,14 +38,14 @@ const RUNS = Number(process.env["RUNS"] ?? 40);
 const SHARES = Number(process.env["SHARES"] ?? 6);
 
 /**
- * Which walk to play. `component` takes each man's cut of the work from
+ * Which walk to play. `component` takes each player's cut of the work from
  * his trailing usage instead of August's projection, and writes its own
  * file so the bench can read both at once.
  */
 const VARIANT = process.env["VARIANT"] ?? "";
 const componentShares = VARIANT.includes("component");
 /**
- * `component-rates` adds the per-man reconciliation on top of the shares,
+ * `component-rates` adds the per-player reconciliation on top of the shares,
  * and `component-full` adds the pass-catcher fallback and the sacks. The
  * sacks come in through `POOL_WASTE`, which fitPlayFactors reads off the
  * environment once, so a share gets it when it is spawned rather than
@@ -122,7 +122,7 @@ async function oneWeek(season: number, week: number): Promise<WalkWeekRow[]> {
   }
 
   console.error(
-    `  ${season} week ${week}: ${walked.played} fixtures, ${rows.length} men`,
+    `  ${season} week ${week}: ${walked.played} fixtures, ${rows.length} players`,
   );
 
   return rows;

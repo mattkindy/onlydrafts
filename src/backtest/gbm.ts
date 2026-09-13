@@ -5,7 +5,7 @@
  * reproduce.
  */
 
-export interface GbmOptions {
+interface GbmOptions {
   trees: number;
   depth: number;
   rate: number;

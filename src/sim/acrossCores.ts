@@ -12,7 +12,7 @@
 import { spawn } from "node:child_process";
 import { cpus } from "node:os";
 
-export interface ShareRequest {
+interface ShareRequest {
   /** the script to run, which must read the two below out of its env */
   script: string;
   /** how many shares to cut the work into */
@@ -24,7 +24,7 @@ export interface ShareRequest {
 }
 
 /** how many shares to cut the work into, leaving room to breathe */
-export const roomFor = (): number => Math.max(1, cpus().length - 2);
+const workerCount = (): number => Math.max(1, cpus().length - 2);
 
 /**
  * What each share printed on its last line, in share order. A script
@@ -32,7 +32,7 @@ export const roomFor = (): number => Math.max(1, cpus().length - 2);
  * anything else it says goes to the caller's own error stream.
  */
 export async function acrossCores(request: ShareRequest): Promise<string[]> {
-  const shares = request.shares ?? roomFor();
+  const shares = request.shares ?? workerCount();
 
   return Promise.all(
     Array.from({ length: shares }, (_, share) =>

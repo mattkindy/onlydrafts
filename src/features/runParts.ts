@@ -23,7 +23,7 @@ const SAME_TEAM: Record<string, string> = {
   CRD: "ARI", RAV: "BAL", HTX: "HOU", CLT: "IND", OTI: "TEN",
 };
 
-export const asTeam = (team: string): string => SAME_TEAM[team] ?? team;
+const asTeam = (team: string): string => SAME_TEAM[team] ?? team;
 
 export interface RunParts {
   /**
@@ -43,15 +43,15 @@ export interface RunParts {
   keptCoordinator: (offence: string) => boolean;
   /** how much of what made a back different survives that coordinator going */
   keepsWithoutHim: number;
-  /** how many sides and men we could say anything about */
+  /** how many sides and players we could say anything about */
   knownSides: number;
   knownBacks: number;
 }
 
-export interface RunPartsRequest {
+interface RunPartsRequest {
   /** the season being walked; what is known comes from the ones before */
   season: number;
-  /** how many carries before a man's own number is taken at face value */
+  /** how many carries before a player's own number is taken at face value */
   steadyAt?: number;
   /**
    * How much of what made a back different survives his coordinator
@@ -81,10 +81,10 @@ const rateOf = (piece: Piece | undefined, fallback: number) =>
  *
  * A side keeps its own number only while its coordinator stays. When
  * he leaves there is nothing to carry forward: a back arriving under a
- * new coordinator is no better predicted by the men already there than
+ * new coordinator is no better predicted by the players already there than
  * by the league, so the league is what he gets.
  */
-export async function buildRunParts(
+async function buildRunParts(
   request: RunPartsRequest,
 ): Promise<RunParts> {
   const steadyAt = request.steadyAt ?? 120;
@@ -170,7 +170,7 @@ export async function buildRunParts(
     knownSides: sides.size,
     knownBacks: [...after.values()].filter((p) => p.carries >= 20).length,
     beforeFor: (offence) => sides.get(asTeam(offence)) ?? middleBefore,
-    // a man's own number on few carries says little, so it is pulled
+    // a player's own number on few carries says little, so it is pulled
     // toward the league until he has run enough
     afterFor: (player) => pulledToLeague(after.get(player), middleAfter),
   };

@@ -2,7 +2,7 @@
  * Which parts of a play last, and which are the afternoon.
  *
  * Yards a carry is two things added up: how far he got before anyone
- * touched him, which is mostly the men in front of him, and how far he
+ * touched him, which is mostly the players in front of him, and how far he
  * got afterwards, which is him. They should not last equally, and a
  * projection built on the total cannot tell them apart.
  *
@@ -19,7 +19,7 @@ type Row = Record<string, string>;
 
 const n = (r: Row, key: string) => Number(r[key]);
 
-/** a man needs this much of a season before his rates mean anything */
+/** a player needs this much of a season before his rates mean anything */
 const ENOUGH_CARRIES = 80;
 const ENOUGH_TARGETS = 45;
 
@@ -136,7 +136,7 @@ async function report(
   }
 }
 
-console.log("How much of a man is there next season, part by part.");
+console.log("How much of a player is there next season, part by part.");
 console.log("A defence manages about 0.20 whatever we ask of it.");
 
 await report("advstats_rush.csv", RUSHING, ENOUGH_CARRIES, (r) => n(r, "att"),

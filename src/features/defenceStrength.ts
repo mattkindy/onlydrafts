@@ -26,10 +26,10 @@ export interface AgainstSettings {
   most: number;
 }
 
-export const AGAINST_DEFAULTS: AgainstSettings = { most: 0.2 };
+const AGAINST_DEFAULTS: AgainstSettings = { most: 0.2 };
 
 /** the state a play is run from, as the network was fed it */
-export type SituationRow = (run: boolean) => Float64Array;
+type SituationRow = (run: boolean) => Float64Array;
 
 /**
  * Both sides at once, each measured against an average one.
@@ -80,7 +80,7 @@ export function matchup(
  * sides of the comparison. Superseded by the pairing above and kept
  * because one eval still scores against it.
  */
-export function againstDefence(
+function againstDefence(
   net: InteractionNet,
   defence: Float64Array,
   averageOffence: Float64Array,

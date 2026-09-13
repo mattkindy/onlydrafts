@@ -153,7 +153,7 @@ async function main(): Promise<void> {
   console.log(`fetched ${all.length} rows, wrote ${merged.length}`);
 
   /**
-   * A man who was quiet last run and has a number now must leave the
+   * A player who was quiet last run and has a number now must leave the
    * file, so the weeks fetched this run are rewritten whole rather than
    * merged key by key. Other weeks stay for the same reason as above.
    */

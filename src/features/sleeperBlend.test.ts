@@ -12,7 +12,7 @@ describe("blendPoints", () => {
   });
 });
 
-/** one slate where sleeper ranks the men correctly and ours does not */
+/** one slate where sleeper ranks the players correctly and ours does not */
 const sleeperIsRight: BlendEntry[] = [
   { ours: 20, sleeper: 5, actual: 5 },
   { ours: 5, sleeper: 20, actual: 25 },

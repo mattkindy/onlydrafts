@@ -1,9 +1,9 @@
 /**
- * Signals about a man's season that the availability model has never
+ * Signals about a player's season that the availability model has never
  * read: how many weeks his club left him on injured reserve, how many
  * he sat out fit, and what share of his side's snaps he took.
  *
- * Weeks on reserve say what a missing stat line cannot. A man with no
+ * Weeks on reserve say what a missing stat line cannot. A player with no
  * line for week nine was either hurt, benched, or rested, and those
  * three say different things about next season.
  */
@@ -164,7 +164,7 @@ export async function readSignals(season: number): Promise<SeasonSignals> {
  * Who his club had on reserve when the season opened.
  *
  * This reads the season being predicted rather than the one before it,
- * which is allowed because a drafter knows it too: a man on the reserve
+ * which is allowed because a drafter knows it too: a player on the reserve
  * or physically-unable-to-perform list in August is public. Only week
  * one is read. Counting reserve weeks across a finished season would be
  * reading the answer.

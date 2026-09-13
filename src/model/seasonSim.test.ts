@@ -52,7 +52,7 @@ describe("simulateSeason", () => {
     expect(spread(unsure)).toBeGreaterThan(spread(sure) * 1.5);
   });
 
-  it("counts a man who misses half the year as playing about half", () => {
+  it("counts a player who misses half the year as playing about half", () => {
     const [player] = run([back("a", { availability: 0.5 })]);
 
     expect(player!.gamesPlayed).toBeGreaterThan(6);

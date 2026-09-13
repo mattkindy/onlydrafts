@@ -10,7 +10,7 @@
  */
 
 /** how a play is labelled when the play-by-play is read */
-export const FINE_SITUATIONS = [
+const FINE_SITUATIONS = [
   "goalLine", "insideTen", "redZone",
   "thirdAndShort", "thirdAndMedium", "thirdAndLong", "fourthDown",
   "chasingLate", "aheadLate", "earlyAndLong", "earlyDown",
@@ -26,7 +26,7 @@ export const SITUATIONS = [
 export type Situation = (typeof SITUATIONS)[number];
 
 /**
- * Third down and the goal line stay separate because a man's share in
+ * Third down and the goal line stay separate because a player's share in
  * them predicts next season at .423 and .340 where his overall share
  * manages .241 and .138. The red zone at large does not, .579 against
  * .591, so it merges into what happens near the goal.

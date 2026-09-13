@@ -69,7 +69,7 @@ describe("drawing a week situation by situation", () => {
     expect(ninth).toBeGreaterThan(median * 1.6);
   });
 
-  it("hands a missing man's goal-line work to whoever is left", () => {
+  it("hands a missing player's goal-line work to whoever is left", () => {
     const starter = back("starter");
     const withHim = runWeeks([back("other"), starter], 1500)[0]!;
     const withoutHim = runWeeks(
@@ -79,7 +79,7 @@ describe("drawing a week situation by situation", () => {
     expect(mean(withoutHim)).toBeGreaterThan(mean(withHim));
   });
 
-  it("keeps a man who never plays off the field", () => {
+  it("keeps a player who never plays off the field", () => {
     const lines = simulateSituationalWeek(
       TEAM, [back("out", { availability: 0 })], drawsFrom(2));
 

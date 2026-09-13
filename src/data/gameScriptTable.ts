@@ -13,7 +13,7 @@ const CURATED = join(import.meta.dirname, "..", "..", "data", "curated");
  * fixture at 1.0, and reported the nothing it had done as a result.
  * The board would have done the same if the file went missing.
  */
-export async function loadGameScript(
+async function loadGameScript(
   season: number, warn: (said: string) => void = console.warn,
 ): Promise<Script> {
   let rows;

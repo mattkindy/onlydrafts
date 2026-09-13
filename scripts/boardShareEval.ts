@@ -5,7 +5,7 @@
  * that order half and half with where adp had them. The
  * share model was built and measured separately and never wired in.
  * This asks whether adding it to the mix beats the board as it
- * is, on the men the market actually priced. Everything is out of
+ * is, on the players the market actually priced. Everything is out of
  * sample: the regression trains on earlier seasons and who is on
  * which team comes from the target season's opening roster.
  *
@@ -45,7 +45,7 @@ import {
   projectShares,
   projectSplitShares,
   SHARING_POSITIONS,
-  type RosterMan,
+  type RosterPlayer,
 } from "../src/features/projectedShares.js";
 
 const RULES = presets.standard;
@@ -78,8 +78,8 @@ async function playCounts(): Promise<Map<string, number>> {
 }
 
 /** who was on each roster in the opening week, which a drafter knows */
-async function openingRoster(season: number): Promise<RosterMan[]> {
-  const seen = new Map<string, RosterMan>();
+async function openingRoster(season: number): Promise<RosterPlayer[]> {
+  const seen = new Map<string, RosterPlayer>();
 
   for (const row of await loadWeeklyRosters(season)) {
     if (row.week > 1 || seen.has(row.playerId)) {
@@ -101,8 +101,8 @@ async function openingRoster(season: number): Promise<RosterMan[]> {
 /**
  * Places, best first, leaving out anyone this opinion cannot see, then
  * moved onto the whole field's scale the way the board does it. An
- * opinion that only speaks for half the men numbers them 1 to half,
- * and adding that to one that numbered everybody pulls its men
+ * opinion that only speaks for half the players numbers them 1 to half,
+ * and adding that to one that numbered everybody pulls its players
  * forward.
  */
 function placeOf(values: (number | null)[]): (number | undefined)[] {
@@ -114,7 +114,7 @@ function placeOf(values: (number | null)[]): (number | undefined)[] {
   // hands the next thing along an array shorter than it expects
   const out = new Array<number | undefined>(values.length).fill(undefined);
 
-  // the places on the whole field that this opinion's men occupy
+  // the places on the whole field that this opinion's players occupy
   const sittingAt = seen.map((r) => r.i).sort((a, b) => a - b);
   order.forEach((row, rank) => { out[row.i] = sittingAt[rank]! + 1; });
 
@@ -133,12 +133,12 @@ interface Row {
   playerId: string;
   name: string;
   position: string;
-  /** where the market has him, absent for a man nobody is taking */
+  /** where the market has him, absent for a player nobody is taking */
   adp: number | null;
   model: number;
   /** what the played-out games say he scores, absent if they never saw him */
   walked: number | null;
-  /** and how often they handed it to him, which is the share seat's job */
+  /** and how often they handed it to him, which is the share slot's job */
   walkTouches: number | null;
   touches: number;
   /** those targets at what his own depth is worth a target */
@@ -148,10 +148,10 @@ interface Row {
   /** and at what he himself has scored on one */
   atHisOwn: number;
   points: number;
-  /** those points less what the last startable man at his position scored */
+  /** those points less what the last startable player at his position scored */
   overReplacement: number;
   games: number;
-  /** a man with no season behind him, priced by his draft slot */
+  /** a player with no season behind him, priced by his draft slot */
   rookie?: boolean;
 }
 
@@ -160,7 +160,7 @@ interface Row {
  *
  * A back and a receiver do not score the same on a touch, so ordering
  * the two together by touches alone puts every back above every
- * receiver. A man's own rate says more than that, and it is noisy on
+ * receiver. A player's own rate says more than that, and it is noisy on
  * few touches, so it is pulled toward what his position does.
  */
 function perTouch(
@@ -199,7 +199,7 @@ async function rowsFor(
   const experience = await experienceBefore(season);
   const shares = projectShares({ season, roster, past, picks, experience });
   const split = projectSplitShares({ season, roster, past, picks, experience });
-  const teamOf = new Map(roster.map((man) => [man.playerId, man.team]));
+  const teamOf = new Map(roster.map((player) => [player.playerId, player.team]));
   const adp = await loadAdp(season);
   const scored = new Map<string, number>();
   const played = new Map<string, number>();
@@ -216,14 +216,14 @@ async function rowsFor(
   }
 
   /**
-   * What a target is worth at each depth, and how deep each man is
+   * What a target is worth at each depth, and how deep each player is
    * thrown.
    *
-   * How far downfield a man is thrown carries to the next season at
+   * How far downfield a player is thrown carries to the next season at
    * .877, the surest thing known about a player, and it sets what a
    * target is worth: a checkdown makes five yards and a shot past
    * twenty-five makes thirteen. So volume from the share model and
-   * depth from the man should say more together than either alone.
+   * depth from the player should say more together than either alone.
    */
   const depthOf = new Map<string, { targets: number; depth: number }>();
   const worthAt = new Map<number, { throws: number; yards: number }>();
@@ -289,7 +289,7 @@ async function rowsFor(
     }
   }
 
-  // what the last startable man at each position scored, so a season
+  // what the last startable player at each position scored, so a season
   // can be judged the way a board is ordered
   const scoredAt = new Map<string, number[]>();
   const positionOf = new Map<string, string>();
@@ -344,7 +344,7 @@ async function rowsFor(
     const entry = name ? adp.get(`${normalizeName(name)}|${e.position}`) : undefined;
     const games = played.get(e.playerId) ?? 0;
 
-    // men nobody priced belong here too. Leaving them out was why
+    // players nobody priced belong here too. Leaving them out was why
     // this bench could not see an opinion go quiet, and an ordering
     // that put an undrafted quarterback ninth scored well on it.
     if (!name || games < MIN_GAMES) {
@@ -486,7 +486,7 @@ async function rowsFor(
 }
 
 /**
- * The joint model over a man's parts, taught on the seasons before the
+ * The joint model over a player's parts, taught on the seasons before the
  * first one being marked so it never sees an answer it is asked for.
  */
 async function scoredIn(season: number): Promise<Map<string, number>> {
@@ -555,13 +555,13 @@ async function main(): Promise<void> {
     jointFor.set(season, await learnJoint(season));
     console.log(
       `for ${season} the joint model learned on ` +
-      `${jointFor.get(season)!.learnedOn} seasons of men`,
+      `${jointFor.get(season)!.learnedOn} seasons of players`,
     );
   }
 
   console.log("");
   // two ways of being right: who scored the most, and who was worth
-  // the most over the man you could have had at his position instead
+  // the most over the player you could have had at his position instead
   const onPoints = new Map<string, number[]>();
   const onValue = new Map<string, number[]>();
   const onCaught = new Map<string, number[]>();
@@ -575,7 +575,7 @@ async function main(): Promise<void> {
     // his parts from the season before, which is what a drafter has
     const hisParts = await partsIn(season - 1);
     /**
-     * A man the advanced files never saw keeps his regression place,
+     * A player the advanced files never saw keeps his regression place,
      * the same courtesy the walk gets, rather than being ranked last
      * for being missing.
      */
@@ -587,7 +587,7 @@ async function main(): Promise<void> {
     const jointPlaces = placeOf(jointSays);
     const priced = rows.filter((r) => r.adp !== null).length;
     console.log(
-      `  ${season}: ${rows.length} men, ${priced} of them priced by adp, ` +
+      `  ${season}: ${rows.length} players, ${priced} of them priced by adp, ` +
       `${jointSays.filter((s) => s !== null).length} with parts behind them`,
     );
     const byAdp = placeOf(rows.map((r) => (r.adp === null ? null : -r.adp)));
@@ -597,7 +597,7 @@ async function main(): Promise<void> {
     const byOwn = placeOf(rows.map((r) => r.atHisOwn));
     const byDepth = placeOf(rows.map((r) => r.atHisDepth));
     /**
-     * A man the simulation never saw keeps his regression place in
+     * A player the simulation never saw keeps his regression place in
      * its vote, the way the board treats any silent opinion, rather
      * than being ranked last for the crime of being missing.
      */
@@ -609,8 +609,8 @@ async function main(): Promise<void> {
     seen.forEach((r, k) => { walk[r.i] = seenPlace[k]; });
 
     /**
-     * The same, for how often the walk handed him the ball. A man it
-     * never saw keeps the share model's place, since that is the seat
+     * The same, for how often the walk handed him the ball. A player it
+     * never saw keeps the share model's place, since that is the slot
      * this is trying to take and the comparison is only fair if the
      * two answer for the same people.
      */
@@ -638,7 +638,7 @@ async function main(): Promise<void> {
       const note = (label: string, value: number) =>
         into.set(label, [...(into.get(label) ?? []), value]);
       /**
-       * A man an opinion cannot see goes to the back of its list, and
+       * A player an opinion cannot see goes to the back of its list, and
        * in a mix its weight goes to the opinions that did speak. This
        * is what blendedPlace does on the board, and the bench used to
        * assume every opinion spoke for everybody.
@@ -665,7 +665,7 @@ async function main(): Promise<void> {
         );
 
       /**
-       * The walk counting for more the further down the board a man
+       * The walk counting for more the further down the board a player
        * is. It is flat at the top and grows with depth, so one weight
        * for the whole board is either too much early or too little
        * late.
@@ -733,9 +733,9 @@ async function main(): Promise<void> {
       }
 
       /**
-       * Nobody pricing a man is itself a strong thing to know, and the
+       * Nobody pricing a player is itself a strong thing to know, and the
        * blend throws it away: an opinion with nothing to say hands its
-       * weight to the others, so a man the market has never heard of
+       * weight to the others, so a player the market has never heard of
        * is ordered as though the question never came up. This asks
        * what he is worth if being unpriced counts against him.
        */
@@ -769,12 +769,12 @@ async function main(): Promise<void> {
       note("the board as it is", shy(boardPlaces, 0));
 
       for (const howFar of [20, 50, 100]) {
-        note(`the board, unpriced men set back ${howFar}`, shy(boardPlaces, howFar));
+        note(`the board, unpriced players set back ${howFar}`, shy(boardPlaces, howFar));
       }
 
       /**
-       * The rookies with their draft slot filling the seat the parts
-       * model leaves empty for them, since a man with no season still
+       * The rookies with their draft slot filling the place the parts
+       * model leaves empty for them, since a player with no season still
        * has a price the market paid for him in April.
        */
       const slotFilled = placeOf(rows.map((r, i) =>
@@ -798,7 +798,7 @@ async function main(): Promise<void> {
 
       note("set back 100, rookies at their slot", shy(slotBoard, 100));
 
-      // the shipped rookies-at-slot seat with the walk's weight raised,
+      // the shipped rookies at their draft slot, with the walk's weight raised,
       // which the sweeps below never combined
       for (const onWalk of [0.2, 0.25, 0.3, 0.4, 0.5, 0.65, 0.8, 1]) {
         const scale = (1 - onWalk) / (1 - 0.15);
@@ -826,7 +826,7 @@ async function main(): Promise<void> {
         );
       }
 
-      // the walk got better this week, so its seat is asked again with
+      // the walk got better this week, so its slot is asked again with
       // the set back on, which the earlier sweep never combined
       for (const onWalk of [0.15, 0.25, 0.35, 0.5]) {
         const scale = (1 - onWalk) / (1 - 0.15);
@@ -852,7 +852,7 @@ async function main(): Promise<void> {
       }
 
       /**
-       * The other two silences. The walk not seeing a man means he was
+       * The other two silences. The walk not seeing a player means he was
        * not on a roster it played, and his parts being missing means he
        * has never had a season. Both might be saying something about
        * him the way adp's silence was, or might be saying nothing.
@@ -877,8 +877,8 @@ async function main(): Promise<void> {
       }
 
       for (const howFar of [20, 50]) {
-        note(`and men the walk never saw back ${howFar}`, setBack(noWalk, howFar, 100));
-        note(`and men with no season back ${howFar}`, setBack(noParts, howFar, 100));
+        note(`and players the walk never saw back ${howFar}`, setBack(noWalk, howFar, 100));
+        note(`and players with no season back ${howFar}`, setBack(noParts, howFar, 100));
       }
 
       note("where adp had him", alone(byAdp));
@@ -888,11 +888,11 @@ async function main(): Promise<void> {
         mix([jointPlaces, byAdp], [0.5, 0.5]));
       note("the board's blend with his parts at 15%",
         mix([model, share, byAdp, jointPlaces], [0.09, 0.27, 0.49, 0.15]));
-      // it beats the regression on its own, so give it that seat
+      // it beats the regression on its own, so give it that slot
       // rather than a new one
-      note("his parts in the regression's seat",
+      note("his parts in the regression's slot",
         mix([jointPlaces, share, byAdp, walk], [0.106, 0.319, 0.425, 0.15]));
-      note("his parts in the regression's seat, at 20%",
+      note("his parts in the regression's slot, at 20%",
         mix([jointPlaces, share, byAdp, walk], [0.20, 0.28, 0.37, 0.15]));
       note("his parts and the regression sharing it",
         mix([model, jointPlaces, share, byAdp, walk],
@@ -900,30 +900,30 @@ async function main(): Promise<void> {
       note("the share model, in touches", alone(share));
       note("how often the walk handed it to him", alone(walkShare));
       /**
-       * The share seat is the board's second heaviest and the only
+       * The share slot is the board's second heaviest and the only
        * large one the walk has nothing to do with. The walk starts
        * from that same projection and then moves it by the situation,
        * so this asks whether the moving helped.
        */
       note("the shipped blend",
         mix([model, share, byAdp, walk], [0.1, 0.3, 0.4, 0.2]));
-      note("the shipped blend, the walk's touches in the share seat",
+      note("the shipped blend, the walk's touches in the share slot",
         mix([model, walkShare, byAdp, walk], [0.1, 0.3, 0.4, 0.2]));
       /**
        * Its touches and its points come out of the same simulation, so
-       * giving it both seats is really a heavier walk, and a heavier
+       * giving it both slots is really a heavier walk, and a heavier
        * walk has always won a whole season and lost the first round.
        * These two keep the projection's independent voice.
        */
-      note("the shipped blend, the share seat split between the two",
+      note("the shipped blend, the share slot split between the two",
         mix([model, share, walkShare, byAdp, walk],
           [0.1, 0.15, 0.15, 0.4, 0.2]));
-      note("the walk's touches in the share seat, its points cut to half",
+      note("the walk's touches in the share slot, its points cut to half",
         mix([model, walkShare, byAdp, walk], [0.1, 0.3, 0.5, 0.1]));
       note("touches at his position's points", alone(byGroup));
       note("touches at his own points", alone(byOwn));
       note("his carries and his targets, each at what they make", alone(byDepth));
-      note("the played out games, silent men at their regression", alone(walk));
+      note("the played out games, silent players at their regression", alone(walk));
 
       /**
        * The walk as a minority voice on top of the blend that already
@@ -945,11 +945,11 @@ async function main(): Promise<void> {
       note("regression and adp, the board today", mix([model, byAdp], [0.5, 0.5]));
 
       /**
-       * What the regression's own seat is worth.
+       * What the regression's own slot is worth.
        *
-       * The board gives it .106 and a man can be first on our own
+       * The board gives it .106 and a player can be first on our own
        * numbers and second on the board, which is what prompted this.
-       * The walk keeps its .15 and the rest of the room divides what is
+       * The walk keeps its .15 and the rest of the board divides what is
        * left in the ratio it has now, so only the regression's share
        * moves.
        */
@@ -983,7 +983,7 @@ async function main(): Promise<void> {
       }
     }
 
-    console.log(`${season}: ${rows.length} men adp priced`);
+    console.log(`${season}: ${rows.length} players adp priced`);
   }
 
   const report = (what: string, ways: Map<string, number[]>) => {
@@ -1002,7 +1002,7 @@ async function main(): Promise<void> {
   };
 
   report("a season's fantasy points", onPoints);
-  report("points over the last startable man at his position", onValue);
+  report("points over the last startable player at his position", onValue);
   report(
     `the share of the value in the first ${FIRST_FEW} picks it collected`,
     onCaught,

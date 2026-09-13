@@ -2,7 +2,7 @@
  * A season, simulated week by week, so a player's line comes out as a
  * distribution rather than a projection.
  *
- * Two kinds of doubt have to be kept apart. Within a season a man's
+ * Two kinds of doubt have to be kept apart. Within a season a player's
  * week wanders around his role, which the weekly draw handles already.
  * Between seasons the role itself is a guess: last year's goal-line
  * back may be this year's third of a committee. Drawing a role once
@@ -18,7 +18,7 @@ import {
   type SituationalRole, type SituationalTeam,
 } from "./situationalWeek.js";
 
-export interface SeasonSettings {
+interface SeasonSettings {
   weeks: number;
   runs: number;
   scoring: ScoringRules;
@@ -29,7 +29,7 @@ export interface SeasonSettings {
 /**
  * `roleDrift` of 0.9 is what makes an 80% band hold 79.6% of the weeks
  * that followed, fitted on 2024 and scored on 2025. It is a large
- * number and it is doing more than one job: some of it is genuine
+ * number and it is doing more than one job: some of it is true
  * doubt about a role, and some is standing in for what the model does
  * not yet carry, chiefly the opponent and how badly a knock hurts.
  */
@@ -40,7 +40,7 @@ export interface Spread {
   mean: number;
 }
 
-export interface PlayerSeason {
+interface PlayerSeason {
   playerId: string;
   /**
    * One week, over every week of every simulated season. This is what
@@ -62,7 +62,7 @@ function drawRole(role: SituationalRole, drift: number, draws: Draws): Situation
   const carryShare = { ...role.carryShare };
   const scoresPerCatch = { ...role.scoresPerCatch };
   const scoresPerCarry = { ...role.scoresPerCarry };
-  // one shock for the man, so a back who loses the job loses it in
+  // one shock for the player, so a back who loses the job loses it in
   // every situation rather than only at the goal line
   const his = Math.exp(draws.normal() * drift);
 

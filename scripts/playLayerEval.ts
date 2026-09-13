@@ -53,7 +53,7 @@ for (const r of every) {
   sideBefore.set(side, (sideBefore.get(side) ?? 0) + 1);
 }
 
-/** the men each side had, as the walk sees them */
+/** the players each side had, as the walk sees them */
 const among = new Map<string, string[]>();
 
 for (const team of new Set(plays.map((r) => r["offense"]!))) {
@@ -89,7 +89,7 @@ let targetBefore = 0;
 let sawBefore = 0;
 const nearGoal = new Map<string, {
   plays: number; onTop: number; said: number; onTopBefore: number;
-  onTopKnown: number; men: number;
+  onTopKnown: number; players: number;
 }>();
 /** who really took it inside the ten this season, as a ceiling */
 const nearOn = new Map<string, number>();
@@ -101,7 +101,7 @@ for (const r of plays) {
   }
 }
 
-/** how often each man took the ball for his side, over the season */
+/** how often each player took the ball for his side, over the season */
 const tookIt = new Map<string, number>();
 const sideTook = new Map<string, number>();
 /**
@@ -130,12 +130,12 @@ let gainOff = 0;
 let flatOff = 0;
 
 /**
- * Each man's plays, with what the walk expected of them and what they
- * made, and the actual yards split odd play from even. A man's own
+ * Each player's plays, with what the walk expected of them and what they
+ * made, and the actual yards split odd play from even. A player's own
  * average over a season is mostly noise, so the two halves are what
- * says how much of the spread between men is a thing about the men.
+ * says how much of the spread between players is a thing about the players.
  */
-const eachMan = new Map<string, {
+const eachPlayer = new Map<string, {
   n: number; said: number; was: number; runs: number;
   odd: number; oddN: number; even: number; evenN: number;
 }>();
@@ -169,11 +169,11 @@ for (const r of plays) {
   callBrier += (said - wasRun) ** 2;
   flatBrier += (leagueRate - wasRun) ** 2;
 
-  const men = among.get(r["offense"]!);
+  const players = among.get(r["offense"]!);
 
-  if (men && r["player"] && men.includes(r["player"])) {
+  if (players && r["player"] && players.includes(r["player"])) {
     const shares = world.factors.goesTo(
-      state, r["playType"] as "run" | "pass", men,
+      state, r["playType"] as "run" | "pass", players,
       { offence: r["offense"], defence: r["defense"] },
     );
     const his = shares.get(r["player"]) ?? 0;
@@ -203,7 +203,7 @@ for (const r of plays) {
      */
     if (state.yardline <= 10) {
       const near = nearGoal.get(r["playType"]!) ??
-        { plays: 0, onTop: 0, said: 0, onTopBefore: 0, onTopKnown: 0, men: 0 };
+        { plays: 0, onTop: 0, said: 0, onTopBefore: 0, onTopKnown: 0, players: 0 };
       near.plays++;
       near.said += his;
 
@@ -214,7 +214,7 @@ for (const r of plays) {
       let bestNear = "";
       let mostNear = -1;
 
-      for (const who of men) {
+      for (const who of players) {
         const had = tookBefore.get(`${who}|${r["playType"]}`) ?? 0;
 
         if (had > mostNear) {
@@ -229,14 +229,14 @@ for (const r of plays) {
 
       /**
        * And the most anyone could manage, which is what says whether
-       * a number is bad or the question is hard. There are five men
+       * a number is bad or the question is hard. There are five players
        * who can catch it and two who can run it, so naming one of
        * five right can never read like naming one of two.
        */
       let bestKnown = "";
       let mostKnown = -1;
 
-      for (const who of men) {
+      for (const who of players) {
         const had = nearOn.get(`${who}|${r["playType"]}`) ?? 0;
 
         if (had > mostKnown) {
@@ -249,14 +249,14 @@ for (const r of plays) {
         near.onTopKnown++;
       }
 
-      near.men += men.length;
+      near.players += players.length;
       nearGoal.set(r["playType"]!, near);
     }
 
     let bestFlat = "";
     let mostFlat = -1;
 
-    for (const who of men) {
+    for (const who of players) {
       const share = (tookIt.get(who) ?? 0) /
         Math.max(1, sideTook.get(r["offense"]!) ?? 1);
 
@@ -272,7 +272,7 @@ for (const r of plays) {
     let bestCall = "";
     let mostCall = -1;
 
-    for (const who of men) {
+    for (const who of players) {
       if (onCall(who) > mostCall) {
         mostCall = onCall(who);
         bestCall = who;
@@ -288,14 +288,14 @@ for (const r of plays) {
     // and the same off last season, which is what the walk knows too
     let allBefore = 0;
 
-    for (const who of men) {
+    for (const who of players) {
       allBefore += tookBefore.get(`${who}|${call}`) ?? 0;
     }
 
     let bestBefore = "";
     let mostBefore = -1;
 
-    for (const who of men) {
+    for (const who of players) {
       const had = tookBefore.get(`${who}|${call}`) ?? 0;
 
       if (had > mostBefore) {
@@ -339,7 +339,7 @@ for (const r of plays) {
     gainOff += Math.abs(drawn - was);
     flatOff += Math.abs((flat ? flat.yards / flat.n : 5) - was);
 
-    const own = eachMan.get(r["player"]) ?? {
+    const own = eachPlayer.get(r["player"]) ?? {
       n: 0, said: 0, was: 0, odd: 0, oddN: 0, even: 0, evenN: 0, runs: 0,
     };
     own.n++;
@@ -355,7 +355,7 @@ for (const r of plays) {
     }
 
     own.runs += r["playType"] === "run" ? 1 : 0;
-    eachMan.set(r["player"], own);
+    eachPlayer.set(r["player"], own);
   }
 }
 
@@ -365,7 +365,7 @@ console.log(
   `saying the league rate every time misses by ${(flatBrier / calls).toFixed(4)}`,
 );
 console.log(
-  `  who gets it     walk gives the man who got it ` +
+  `  who gets it     walk gives the player who got it ` +
   `${(100 * targetSaid / targets).toFixed(1)}% of the play, ` +
   `his own season share gives him ${(100 * targetFlat / targets).toFixed(1)}%`,
 );
@@ -392,7 +392,7 @@ for (const [call, near] of nearGoal) {
     `top ${(100 * near.onTop / near.plays).toFixed(1)}%, ` +
     `last season's counts ${(100 * near.onTopBefore / near.plays).toFixed(1)}%, ` +
     `the most anyone could ${(100 * near.onTopKnown / near.plays).toFixed(1)}% ` +
-    `over ${(near.men / near.plays).toFixed(1)} men`,
+    `over ${(near.players / near.plays).toFixed(1)} players`,
   );
 }
 console.log(
@@ -401,10 +401,10 @@ console.log(
 );
 
 /**
- * Does it tell one man from another, and by enough?
+ * Does it tell one player from another, and by enough?
  *
  * Half the point of playing a season out is that a good back gains
- * more than a poor one in the same place. If the walk's men are all
+ * more than a poor one in the same place. If the walk's players are all
  * near the league average, it is a situation model wearing a roster.
  */
 const spread = (of: number[]) => {
@@ -414,14 +414,14 @@ const spread = (of: number[]) => {
     of.reduce((sum, v) => sum + (v - mid) ** 2, 0) / Math.max(1, of.length),
   );
 };
-const enough = [...eachMan.values()].filter((m) => m.n >= ENOUGH_PLAYS &&
+const enough = [...eachPlayer.values()].filter((m) => m.n >= ENOUGH_PLAYS &&
   m.oddN > 0 && m.evenN > 0);
 
-console.log(`\na yard a touch, over men with ${ENOUGH_PLAYS} touches or more:`);
+console.log(`\na yard a touch, over players with ${ENOUGH_PLAYS} touches or more:`);
 
 /**
  * Split by what they are given, since a run is drawn from a pool of
- * runs and a throw from a pool at the man's own depth. Only the throw
+ * runs and a throw from a pool at the player's own depth. Only the throw
  * has the depth already in the draw, so only the throw can have it
  * counted a second time by his level on top.
  */
@@ -444,7 +444,7 @@ for (const [who, mine] of [
   const midEven = midOf(even);
   const midSaid = midOf(said);
   /**
-   * The two halves of a man's own season agree only on what is really
+   * The two halves of a player's own season agree only on what is really
    * his, so how far they move together is the spread worth having.
    * The spread of his whole season has a season of luck in it too.
    */
@@ -457,7 +457,7 @@ for (const [who, mine] of [
   ) / Math.max(1, odd.length)) / Math.max(1e-9, spread(said) ** 2);
 
   console.log(
-    `  ${who.padEnd(18)}${String(mine.length).padStart(4)} men  ` +
+    `  ${who.padEnd(18)}${String(mine.length).padStart(4)} players  ` +
     `walk spreads ${spread(said).toFixed(2)}, ` +
     `${truly.toFixed(2)} of theirs is real, ` +
     `orders ${spearman(said, was).toFixed(3)}, ` +

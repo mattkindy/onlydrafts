@@ -47,7 +47,7 @@ describe("pickLineup", () => {
 });
 
 describe("pickLineup in the three receiver format", () => {
-  it("starts both good backs and gives the flex to the poor man left over", () => {
+  it("starts both good backs and gives the flex to the poor player left over", () => {
     const starters = pickLineup(
       [
         candidate("qb1", "QB", 19),
@@ -73,7 +73,7 @@ describe("pickLineup in the three receiver format", () => {
     expect(starters).not.toContain("qb1");
   });
 
-  it("starts a man with no projection when nobody else covers his slot", () => {
+  it("starts a player with no projection when nobody else covers his slot", () => {
     const starters = pickLineup(
       [
         candidate("qb1", "QB", 19),
@@ -90,7 +90,7 @@ describe("pickLineup in the three receiver format", () => {
     );
 
     expect(starters).toContain("teUnknown");
-    // The flex is the fourth receiver, not the man nobody has a number for.
+    // The flex is the fourth receiver, not the player nobody has a number for.
     expect(starters).toContain("wr4");
     expect(starters).toHaveLength(startersNeeded(THREE_RECEIVER_FORMAT));
   });

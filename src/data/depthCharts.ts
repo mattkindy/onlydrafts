@@ -1,5 +1,5 @@
 /**
- * Where each man was listed before the season started.
+ * Where each player was listed before the season started.
  *
  * The share model works this out by ranking a team's players on what
  * they did last year. The league publishes it, and publishes it in
@@ -16,11 +16,11 @@ import { join } from "node:path";
 import { parseCsv } from "./csv.js";
 import { RAW_DIR } from "./nflverse.js";
 
-export interface DepthSpot {
+interface DepthSpot {
   playerId: string;
   team: string;
   position: string;
-  /** one for the starter, two for the man behind him */
+  /** one for the starter, two for the player behind him */
   rank: number;
 }
 
@@ -71,7 +71,7 @@ export async function loadDepthChart(season: number): Promise<Map<string, DepthS
       continue;
     }
 
-    // a man can be listed at more than one spot; keep the highest
+    // a player can be listed at more than one spot; keep the highest
     const already = spots.get(playerId);
 
     if (already && already.rank <= rank) {

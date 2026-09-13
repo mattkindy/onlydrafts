@@ -59,7 +59,7 @@ export interface PlayerWeekStats {
     airYards: number;
     sacksTaken: number;
   };
-  /** what a kicker and a return man did, which was also being dropped */
+  /** what a kicker and a return player did, which was also being dropped */
   kicking: {
     attempts: number;
     made: number;
@@ -115,7 +115,7 @@ export async function loadGames(): Promise<GameRow[]> {
       homeScore: toNumber(row["home_score"]),
       awayScore: toNumber(row["away_score"]),
       wind: toNumber(row["wind"]),
-      // an empty reading turns into nought, which is a freezing day in
+      // an empty reading turns into zero, which is a freezing day in
       // Miami rather than a missing one
       temp: toNumber(row["temp"]) || undefined,
       // A retractable ground is written as closed once it has been
@@ -205,19 +205,19 @@ export async function loadWeeklyRosters(
     }));
 }
 
-/** what the league says about a man rather than what he did */
-export const EXEMPT = "EXE";
+/** what the league says about a player rather than what he did */
+const EXEMPT = "EXE";
 
 /**
- * The men these files mark exempt, most recently first.
+ * The players these files mark exempt, most recently first.
  *
  * Not the source to reach for when the question is who can play today.
- * These files lag by weeks, so a man added this afternoon is not in
+ * These files lag by weeks, so a player added this afternoon is not in
  * them, and the code is not the same list every season: 2026 spells 28
  * rows E14, which is the international pathway. Ask Sleeper when the
  * question is today. This is here for looking backwards.
  */
-export async function exemptMen(
+async function exemptPlayers(
   season: number,
 ): Promise<Map<string, { name: string; team: string; lastWeek: number }>> {
   const found = new Map<string, { name: string; team: string; lastWeek: number }>();
@@ -302,7 +302,7 @@ export function hasPlayerStats(season: number): boolean {
   );
 }
 
-export interface TeamDefenceWeek {
+interface TeamDefenceWeek {
   season: number;
   week: number;
   teamId: string;
@@ -312,7 +312,7 @@ export interface TeamDefenceWeek {
 }
 
 /**
- * Every club's defensive week, added up from the men who played it.
+ * Every club's defensive week, added up from the players who played it.
  *
  * A fumble recovery is fumble_recovery_opp: def_fumbles is a defender
  * losing one of his own, about a tenth of a game, so reading that as
@@ -360,10 +360,9 @@ export async function loadTeamDefenceWeeks(
 export async function loadPlayerStats(
   season: number,
 ): Promise<PlayerWeekStats[]> {
-  // nflverse renamed this release and widened it at the same time: the
-  // new file has 150 columns where the old one has 53, and the kicking,
-  // defensive and after-catch numbers are only in the new one. Read
-  // that first and keep the old one as a fallback.
+  // nflverse renamed this release and widened it at the same time. The
+  // new file has 150 columns against 53, and the kicking, defensive and
+  // after-catch numbers are only there, so the old one is the fallback.
   const renamed = `stats_player_week_${season}.csv`;
   const legacy = `player_stats_${season}.csv`;
   const rows = await readRows(renamed).catch(() => readRows(legacy));
@@ -373,8 +372,8 @@ export async function loadPlayerStats(
     .map((row) => {
       const n = (key: string) => toNumber(row[key]) ?? 0;
       // A column the release renamed is absent under the other name and
-      // reads as nought, which is a number rather than a gap, so nothing
-      // downstream can tell it from a man who threw none.
+      // reads as zero, which is a number rather than a gap, so nothing
+      // downstream can tell it from a player who threw none.
       const either = (...keys: string[]) =>
         toNumber(keys.map((key) => row[key]).find((v) => v !== undefined)) ?? 0;
 

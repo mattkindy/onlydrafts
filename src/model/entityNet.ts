@@ -19,7 +19,7 @@ export interface Task {
   of: (index: number) => number | undefined;
 }
 
-export interface NetSettings {
+interface NetSettings {
   width: number;
   hidden: number;
   passes: number;
@@ -37,7 +37,7 @@ export const NET_DEFAULTS: NetSettings = {
   seed: 11,
 };
 
-export interface EntityNet {
+interface EntityNet {
   vector: Map<string, Float64Array>;
   /** hidden layer, as [width][hidden] */
   toHidden: Float64Array[];

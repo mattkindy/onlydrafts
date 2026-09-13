@@ -134,7 +134,7 @@ async function touchesIn(season: number): Promise<string[]> {
       continue;
     }
 
-    // The man the ball was meant for, whether or not he caught it, and
+    // The player the ball was meant for, whether or not he caught it, and
     // empty on a sack or a throwaway. Those have to stay: they are 8% of
     // passes and lose ground, so without them every drive gains too much.
     const named = type === "run"

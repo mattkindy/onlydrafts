@@ -20,9 +20,9 @@ import type { Call } from "../model/playFactors.js";
  * A throwaway loses nothing and a completion behind the line loses a
  * yard or two, so the line goes where only a sack falls.
  */
-export const SACK_BEHIND = 2;
+const SACK_BEHIND = 2;
 
-export interface RealPlay {
+interface RealPlay {
   call: Call;
   yards: number;
   /** who was credited, empty on a sack or a throwaway */
@@ -30,14 +30,14 @@ export interface RealPlay {
 }
 
 /** what a comparison is being made over */
-export type Whom =
+type Whom =
   /** every snap, sacks and all, which is what a drive is made of */
   | "every play"
   /** only the ones somebody was credited with, which is what a player did */
-  | "plays with a man on them";
+  | "plays with a player on them";
 
 /** whether this play belongs in a comparison of the given kind */
-export function realCounts(play: RealPlay, whom: Whom): boolean {
+function realCounts(play: RealPlay, whom: Whom): boolean {
   if (whom === "every play") {
     return true;
   }
@@ -48,11 +48,11 @@ export function realCounts(play: RealPlay, whom: Whom): boolean {
 /**
  * And the same question of a drawn gain, which has no name on it.
  *
- * The model is asked about a particular man and hands back yards, so
+ * The model is asked about a particular player and hands back yards, so
  * whether it drew a sack can only be told from how far back it went.
  * A pass losing more than a couple of yards is one.
  */
-export function drawnCounts(
+function drawnCounts(
   call: Call, gained: number, whom: Whom,
 ): boolean {
   if (whom === "every play") {

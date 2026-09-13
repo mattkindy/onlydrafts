@@ -42,18 +42,18 @@ describe("what a fixture does to a side's volume", () => {
   });
 });
 
-describe("what a fixture is worth to one man", () => {
+describe("what a fixture is worth to one player", () => {
   const script = scriptFrom(effects);
 
-  it("gives a man who only runs it the carries effect", () => {
+  it("gives a player who only runs it the carries effect", () => {
     expect(liftFor(script, "SF", 1)).toBeCloseTo(script.carries("SF"), 10);
   });
 
-  it("gives a man who only catches it the targets one", () => {
+  it("gives a player who only catches it the targets one", () => {
     expect(liftFor(script, "SF", 0)).toBeCloseTo(script.targets("SF"), 10);
   });
 
-  it("puts a man who does both between the two", () => {
+  it("puts a player who does both between the two", () => {
     const both = liftFor(script, "SF", 0.5);
 
     expect(both).toBeGreaterThan(script.carries("SF"));

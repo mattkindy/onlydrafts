@@ -18,13 +18,13 @@ import {
  * from weeks strictly before the target week, plus the previous season.
  *
  * Two windows are called recent here, and which one a feature uses
- * matters for a man who missed time. His own form is his last four
+ * matters for a player who missed time. His own form is his last four
  * games played, so a starter back from a month off is read at the level
  * he last played at rather than at zero. Anything measuring a cut of a
- * room is his club's last four game weeks, counting a week he missed as
- * nothing, because the men in the room have to be measured over the
- * same weeks for the shares to add up. Each field below says which one
- * it uses.
+ * position group is his club's last four game weeks, counting a week he
+ * missed as nothing, because the players in the group have to be
+ * measured over the same weeks for the shares to add up. Each field
+ * below says which one it uses.
  */
 export interface WeeklyExample {
   playerId: string;
@@ -47,16 +47,16 @@ export interface WeeklyExample {
   carriesRecent: number;
   /**
    * club game weeks those four games span beyond the four themselves,
-   * which is how many he missed. 0 for a man who has played every week,
+   * which is how many he missed. 0 for a player who has played every week,
    * and 4 for a starter who has been out a month.
    */
   gamesMissedRecent: number;
   /**
-   * the same two numbers after the men his club ruled out, put on
+   * the same two numbers after the players his club ruled out, put on
    * reserve, or moved off the roster hand their recent work to whoever
-   * is left in the room. Equal to the recent averages when nobody is
+   * is left in the group. Equal to the recent averages when nobody is
    * out, and computed over the games he played rather than every row,
-   * so a man coming back from a month off is not counted at zero.
+   * so a player coming back from a month off is not counted at zero.
    */
   targetsExpected: number;
   carriesExpected: number;
@@ -105,7 +105,7 @@ export interface WeeklyExample {
   /** he was limited in practice this week, or did not practice */
   limitedPractice: boolean;
   /**
-   * the cut of his own room's touches over the club's last four game
+   * the cut of his own position group's touches over the club's last four game
    * weeks that belongs to teammates his club ruled out this week. The
    * backup of an injured starter sees a number near one.
    */
@@ -155,31 +155,31 @@ function impliedFor(game: GameRow, home: boolean): number {
   return home ? half + game.spreadLine / 2 : half - game.spreadLine / 2;
 }
 
-export interface Rooms {
+interface PositionGroups {
   /**
-   * the cut of a room's workload over the club's last four game weeks
-   * that is owned by men ruled out this week
+   * the cut of a position group's workload over the club's last four game weeks
+   * that is owned by players ruled out this week
    */
   shareOut(teamId: string, position: string, week: number): number;
 }
 
 /**
- * A man's club and his room come from the last game he played before
- * the week in question, because a man who is out this week has no row
+ * A player's club and his group come from the last game he played before
+ * the week in question, because a player who is out this week has no row
  * of his own to read them from.
  *
- * Every man in the room is averaged over the club's last four game
+ * Every player in the group is averaged over the club's last four game
  * weeks, so a starter who missed two of them counts for half of what he
- * did when healthy and the room's totals add up over the same weeks.
+ * did when healthy and the group's totals add up over the same weeks.
  */
-function buildRooms(
+function buildPositionGroups(
   byPlayer: Map<string, PlayerWeekStats[]>,
   availability: WeeklyAvailability | undefined,
   calendar: ClubCalendar,
-): Rooms {
+): PositionGroups {
   const total = new Map<string, number>();
   const missing = new Map<string, number>();
-  const roomKey = (teamId: string, position: string, week: number) =>
+  const groupKey = (teamId: string, position: string, week: number) =>
     `${teamId}|${position}|${week}`;
 
   for (const [playerId, rows] of byPlayer) {
@@ -204,7 +204,7 @@ function buildRooms(
         before
           .filter((r) => r.week >= first)
           .reduce((s, r) => s + weeklyVolume(r), 0) / window.length;
-      const key = roomKey(last.teamId, last.position, week);
+      const key = groupKey(last.teamId, last.position, week);
       total.set(key, (total.get(key) ?? 0) + volume);
 
       if (availability?.status.get(`${playerId}|${week}`)?.out) {
@@ -215,19 +215,19 @@ function buildRooms(
 
   return {
     shareOut: (teamId, position, week) => {
-      const key = roomKey(teamId, position, week);
-      const room = total.get(key) ?? 0;
+      const key = groupKey(teamId, position, week);
+      const group = total.get(key) ?? 0;
 
-      if (room <= 0) {
+      if (group <= 0) {
         return 0;
       }
 
-      return (missing.get(key) ?? 0) / room;
+      return (missing.get(key) ?? 0) / group;
     },
   };
 }
 
-export interface TendencyInputs {
+interface TendencyInputs {
   weekCounts: Map<string, { neutralPlays: number; neutralPasses: number }>;
   priorSeasonRate: Map<string, number>;
   staff?: Map<string, StaffChange>;
@@ -293,7 +293,7 @@ export function buildWeeklyExamples(
   }
 
   // every carry and target a team gave its backs in a week, so one back's
-  // cut of the room can be read off it
+  // cut of the group can be read off it
   const backfieldTouches = new Map<string, number>();
 
   for (const row of stats) {
@@ -309,7 +309,7 @@ export function buildWeeklyExamples(
   }
 
   const calendar = clubCalendar([...byPlayer.values()].flat());
-  const rooms = buildRooms(byPlayer, availability, calendar);
+  const groups = buildPositionGroups(byPlayer, availability, calendar);
   const volume = buildWeeklyVolume(byPlayer, availability, rosters);
 
   // points allowed by each defense to each position, accumulated by week
@@ -420,7 +420,7 @@ export function buildWeeklyExamples(
       return undefined;
     }
 
-    // Everyone in a room has to be measured over the same weeks or their
+    // Everyone in a group has to be measured over the same weeks or their
     // shares do not add up, so a share reads the club's calendar and a
     // week he missed counts as no share at all.
     const clubWindow = recentClubWeeks(calendar, teamId, week);
@@ -448,7 +448,7 @@ export function buildWeeklyExamples(
 
     const status = availability?.status.get(`${playerId}|${week}`);
 
-    // a man his club ruled out is not on anyone's slate
+    // a player his club ruled out is not on anyone's slate
     if (status?.out) {
       return undefined;
     }
@@ -507,9 +507,9 @@ export function buildWeeklyExamples(
       staff: tendencies?.staff?.get(teamId) ?? NO_CHANGE,
       questionable: status?.questionable ?? false,
       limitedPractice: status?.limitedPractice ?? false,
-      absenceShare: rooms.shareOut(teamId, reference.position, week),
+      absenceShare: groups.shareOut(teamId, reference.position, week),
       qbAbsenceShare:
-        reference.position === "QB" ? 0 : rooms.shareOut(teamId, "QB", week),
+        reference.position === "QB" ? 0 : groups.shareOut(teamId, "QB", week),
       depthRank: depthRank ?? 0,
       depthKnown: availability?.depth.covered === true && depthRank !== undefined,
       teamId,

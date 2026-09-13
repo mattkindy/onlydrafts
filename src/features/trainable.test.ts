@@ -3,7 +3,7 @@ import { trainingComplaint } from "./trainable.js";
 import type { SeasonExample } from "./seasonModel.js";
 import { noParts } from "./boardSource.js";
 
-/** one man's season, with every part at the level given */
+/** one player's season, with every part at the level given */
 function example(level: number): SeasonExample {
   const parts = noParts();
   const was = noParts();

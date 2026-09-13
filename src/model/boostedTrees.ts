@@ -12,7 +12,7 @@
  * which needs a distribution of yards where this gives one number.
  */
 
-export interface TreeSettings {
+interface TreeSettings {
   /** how many trees, each correcting what the ones before it left */
   trees: number;
   /** how deep each may go, which caps how many things can interact */
@@ -86,7 +86,7 @@ const bucketOf = (value: number, edges: number[]): number => {
   return low;
 };
 
-export interface TreeInput {
+interface TreeInput {
   /** one row per play, each the same length as names */
   rows: number[][];
   target: number[];

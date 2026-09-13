@@ -2,7 +2,7 @@
  * Where the board's numbers come from.
  *
  * There are two answers and the board should not care which. The fitted
- * source predicts each stat with its own regression and spreads a man's
+ * source predicts each stat with its own regression and spreads a player's
  * season across his weeks with a multiplier. The walked source plays
  * every fixture and adds up what happened, so his attempts and his
  * yards move apart the way they do in a season anybody watched.
@@ -29,7 +29,7 @@ export interface SeasonLines {
   games: number;
 }
 
-export interface BoardSource {
+interface BoardSource {
   /** what to call it in a log and in the commit that switches it on */
   name: string;
   linesFor: (playerId: string) => SeasonLines | null;
@@ -43,7 +43,7 @@ const NOTHING: StatParts = {
 
 export const noParts = (): StatParts => ({ ...NOTHING });
 
-export const PART_KEYS = Object.keys(NOTHING) as (keyof StatParts)[];
+const PART_KEYS = Object.keys(NOTHING) as (keyof StatParts)[];
 
 export function addParts(into: StatParts, from: Partial<StatParts>): void {
   for (const part of PART_KEYS) {

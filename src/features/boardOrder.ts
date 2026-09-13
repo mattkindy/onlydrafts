@@ -3,18 +3,18 @@
  *
  * The regression asks what a player did and what changed around him.
  * The share model asks how much of his offence's work he wins against
- * the men competing with him. Adp says where he is being taken. The
+ * the players competing with him. Adp says where he is being taken. The
  * first two disagree about different players, so mixing both with adp
- * beats mixing either: over 2023 to 2025 on the men adp priced, .568
+ * beats mixing either: over 2023 to 2025 on the players adp priced, .568
  * on a season's points against .530 for adp alone and .516 for the
  * regression and adp, and .546 against .492 and .465 on points over
- * the last startable man at the position. It won every season on both.
+ * the last startable player at the position. It won every season on both.
  */
 
-export interface Opinion {
+interface Opinion {
   /**
    * His place by one model over all the parts of his play, absent for
-   * a man with no season behind him.
+   * a player with no season behind him.
    *
    * It knows nothing about passing, since the advanced stat files only
    * count carrying and catching, so it never speaks for a quarterback.
@@ -30,11 +30,11 @@ export interface Opinion {
   walk?: number;
 }
 
-export interface BoardLean {
+interface BoardLean {
   parts: number;
   model: number;
   /**
-   * How far back a man nobody has priced goes.
+   * How far back a player nobody has priced goes.
    *
    * A silent opinion hands its weight to the others, which is right
    * for the share model having nothing to say about a passer. It is
@@ -42,7 +42,7 @@ export interface BoardLean {
    * taking him. The blend was throwing that away, and it is the
    * difference between the board beating the market and tying it.
    *
-   * There is draft sense in it as well as arithmetic. A man the market
+   * There is draft sense in it as well as arithmetic. A player the market
    * has not priced will still be there two rounds later, so putting
    * him high only spends a pick early for something available late.
    */
@@ -56,7 +56,7 @@ export interface BoardLean {
  * Swept on a grid rather than fitted, and taken from the middle of the
  * plateau rather than its highest cell.
  *
- * The walk's seat is twenty percent because that is where the early
+ * The walk's slot is twenty percent because that is where the early
  * picks are, and the early picks are what a board is for: it takes
  * the first 24 by .007 and the first 36 by .012 against thirty, gives
  * back .004 on the first 72 and .005 on the first 120, and the two
@@ -70,7 +70,7 @@ export const BOARD_LEAN: BoardLean = {
 
 /**
  * Quarterbacks are ordered mostly by the walk. The parts model has
- * nothing to say about them, since it cannot see a throw, so the seat
+ * nothing to say about them, since it cannot see a throw, so the slot
  * it takes for everybody else goes back to the regression here.
  * Once sampled draws
  * could hear the opponent, the walk alone ordered the position better
@@ -138,34 +138,34 @@ export function blendedPlace(
   return opinion.adp === undefined ? said + lean.setBack : said;
 }
 
-/** each man's place by one measure, best first */
+/** each player's place by one measure, best first */
 export function placesBy<T>(
-  men: T[], keyOf: (man: T) => string, by: (man: T) => number | null,
+  players: T[], keyOf: (player: T) => string, by: (player: T) => number | null,
 ): Map<string, number> {
-  const ranked = men
-    .filter((man) => by(man) !== null)
+  const ranked = players
+    .filter((player) => by(player) !== null)
     .sort((a, b) => by(b)! - by(a)!);
 
-  return new Map(ranked.map((man, i) => [keyOf(man), i + 1]));
+  return new Map(ranked.map((player, i) => [keyOf(player), i + 1]));
 }
 
 /**
  * An opinion's places, moved onto the board's own scale.
  *
- * An opinion ranks only the men it can see, so its places run 1 to
+ * An opinion ranks only the players it can see, so its places run 1 to
  * however many that is. Adding those to another opinion's places only
- * works when both see the same men, and they do not: adp prices the
+ * works when both see the same players, and they do not: adp prices the
  * front of the board, the parts model speaks for whoever had a season
  * last year, and those are different shapes.
  *
- * So take the board positions of the men this opinion can see, in
- * order, and hand its best man the first of them, its second the
+ * So take the board positions of the players this opinion can see, in
+ * order, and hand its best player the first of them, its second the
  * second, and so on. An opinion covering the front of the board comes
- * out unchanged. One covering scattered men gets stretched to match.
+ * out unchanged. One covering scattered players gets stretched to match.
  */
 export function spreadOver(
   places: Map<string, number>,
-  /** where each man sits on the board by something that saw everybody */
+  /** where each player sits on the board by something that saw everybody */
   reference: Map<string, number>,
 ): Map<string, number> {
   const seen = [...places.keys()].filter((key) => reference.has(key));

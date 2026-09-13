@@ -1,7 +1,7 @@
 /**
- * A man's floor and ceiling for a week, and where they came from.
+ * A player's floor and ceiling for a week, and where they came from.
  *
- * The pooled residuals give two men with the same projection the same
+ * The pooled residuals give two players with the same projection the same
  * band, because that is all a projection-and-position lookup can know.
  * The walk plays his week forty times, so it has a band of his own.
  * Where the walk played him, his own games win; where it did not, we
@@ -15,7 +15,7 @@
 import { DEALT_WIDER } from "./walkWeek.js";
 import type { RunSpread } from "./runSpread.js";
 
-export interface Band {
+interface Band {
   floor: number;
   ceiling: number;
   from: "walk" | "pooled";

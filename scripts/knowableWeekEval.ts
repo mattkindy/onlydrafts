@@ -78,7 +78,7 @@ async function playsIn(seasons: number[]): Promise<Play[]> {
       const average = his.points / his.games;
       const where = setting.get(`${season}|${r.week}|${r.teamId}`);
 
-      // a man needs a season behind him before his average means anything
+      // a player needs a season behind him before his average means anything
       if (his.games < 8 || average < 4 || !where) {
         continue;
       }

@@ -13,7 +13,7 @@
  * nobody one.
  */
 
-export interface DriveState {
+interface DriveState {
   down: number;
   toGo: number;
   /** yards from the opponent's goal line */
@@ -86,7 +86,7 @@ export const KICK_LENGTH = (yardline: number) => yardline + 17;
  * the real number is 25%, because independent short gains stack up far
  * more often than they do when an offence has found something.
  */
-export interface DriveForm {
+interface DriveForm {
   /** multiplies each gain; one is an ordinary drive */
   going: number;
 }

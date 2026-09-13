@@ -3,7 +3,7 @@
  *
  * Both are handed the same checkpoints out of a played season and asked
  * what the rest of the game is worth. The two sides' remaining points
- * and each man's remaining points are compared, so a table that has
+ * and each player's remaining points are compared, so a table that has
  * lost something shows up as a gap in one or the other.
  *
  * Run: npx tsx scripts/simAgreement.ts [season] [week] [checkpoints]
@@ -61,17 +61,17 @@ async function main(): Promise<void> {
   const byKey = new Map<string, string>();
 
   for (const side of Object.values(tables.teams)) {
-    for (const man of side.men) {
-      byKey.set(man.id, man.key);
+    for (const player of side.men) {
+      byKey.set(player.id, player.key);
     }
   }
 
   let teamGap = 0;
   let teamBias = 0;
   let teamN = 0;
-  let manGap = 0;
-  let manBias = 0;
-  let manN = 0;
+  let playerGap = 0;
+  let playerBias = 0;
+  let playerN = 0;
   let started = Date.now();
   let nodeMillis = 0;
   let browserMillis = 0;
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
 
     const nodeTeam: Record<string, number[]> =
       { [stop.home]: [], [stop.away]: [] };
-    const nodeMen = new Map<string, number[]>();
+    const nodePlayers = new Map<string, number[]>();
     started = Date.now();
 
     for (let run = 0; run < RUNS; run++) {
@@ -117,8 +117,8 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const his = nodeMen.get(key) ?? (new Array(RUNS).fill(0) as number[]);
-        nodeMen.set(key, his);
+        const his = nodePlayers.get(key) ?? (new Array(RUNS).fill(0) as number[]);
+        nodePlayers.set(key, his);
         his[run] = fantasyPoints(line, presets.ppr);
       }
     }
@@ -146,26 +146,26 @@ async function main(): Promise<void> {
       teamN++;
     }
 
-    for (const [key, its] of nodeMen) {
-      const theirs = played.men.get(key);
+    for (const [key, its] of nodePlayers) {
+      const theirs = played.players.get(key);
 
       if (!theirs) {
         continue;
       }
 
       const gap = mean(theirs) - mean(its);
-      manGap += Math.abs(gap);
-      manBias += gap;
-      manN++;
+      playerGap += Math.abs(gap);
+      playerBias += gap;
+      playerN++;
     }
   }
 
   console.log(`${stops.length} checkpoints, ${RUNS} runs each`);
   console.log(`team points: mean gap ${(teamGap / (teamN || 1)).toFixed(2)}, ` +
     `browser less node ${(teamBias / (teamN || 1)).toFixed(2)}`);
-  console.log(`per man: mean gap ${(manGap / (manN || 1)).toFixed(2)}, ` +
-    `browser less node ${(manBias / (manN || 1)).toFixed(2)}, ` +
-    `over ${manN} men`);
+  console.log(`per player: mean gap ${(playerGap / (playerN || 1)).toFixed(2)}, ` +
+    `browser less node ${(playerBias / (playerN || 1)).toFixed(2)}, ` +
+    `over ${playerN} players`);
   console.log(`node ${(nodeMillis / (stops.length || 1)).toFixed(0)} ms a ` +
     `game, browser ${(browserMillis / (stops.length || 1)).toFixed(0)} ms`);
 }

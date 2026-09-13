@@ -13,7 +13,7 @@
 /** the rows for one season, in the order the play file gave them */
 export type SeasonRows = Map<number, string[]>;
 
-export interface Merge {
+interface Merge {
   /** every season the file should contain, in any order */
   seasons: number[];
   /** the seasons this run tried to derive */
@@ -22,7 +22,7 @@ export interface Merge {
   derived: SeasonRows;
 }
 
-export interface Merged {
+interface Merged {
   rows: string[];
   /** asked seasons whose play file gave nothing, so the old rows stand */
   kept: number[];

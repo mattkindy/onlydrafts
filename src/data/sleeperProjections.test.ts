@@ -70,7 +70,7 @@ describe("joinProjectionsToGsis", () => {
     ]);
   });
 
-  it("splits a week into the projected men and the quiet ones", () => {
+  it("splits a week into the projected players and the quiet ones", () => {
     const joined = joinProjectionsToGsis(
       2024,
       3,

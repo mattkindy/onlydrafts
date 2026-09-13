@@ -5,7 +5,7 @@ import { RAW_DIR } from "./nflverse.js";
 
 const API = "https://api.sleeper.app/v1";
 
-export interface SleeperPlayer {
+interface SleeperPlayer {
   name: string;
   position: string;
 }
@@ -80,7 +80,7 @@ async function loadPlayerIdCrosswalk(): Promise<Record<string, string>[]> {
  *
  * Sleeper's own player file has a gsis_id field, but it is empty for
  * anyone who came into the league in the last few years, which is a third
- * of the men we care about. The DynastyProcess crosswalk covers them, so
+ * of the players we care about. The DynastyProcess crosswalk covers them, so
  * it goes first and Sleeper's own field fills whatever it misses.
  */
 export async function fetchSleeperGsisIds(): Promise<Map<string, string>> {
@@ -105,7 +105,7 @@ export async function fetchSleeperGsisIds(): Promise<Map<string, string>> {
   return ids;
 }
 
-export interface LeagueRoster {
+interface LeagueRoster {
   ownerName: string;
   playerIds: string[];
 }

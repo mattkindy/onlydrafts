@@ -40,7 +40,7 @@ export interface FittedDrives extends DriveRules {
   plays: number;
   /**
    * A pass that was caught, on its own. The ordinary pass pool has the
-   * incompletions in it, a third of the plays at nought yards, so
+   * incompletions in it, a third of the plays at zero yards, so
    * anything that decides the catch for itself has to draw from this
    * one instead or it drops the ball twice.
    */
@@ -62,7 +62,7 @@ export interface FittedDrives extends DriveRules {
 type Row = Record<string, string>;
 
 /** the curated plays for these seasons, read once */
-export async function loadDrivePlays(
+async function loadDrivePlays(
   seasons: number[],
   /** in season, the weeks of the current year already played */
   current?: { season: number; beforeWeek: number },
@@ -141,11 +141,9 @@ export function rulesFrom(rows: Row[], fallback?: FittedDrives): FittedDrives {
     }
   }
 
-  // fourth downs, for the decision and the kicking
-  // Fourth down, keyed by where they are and how far they need, since
-  // a yard on the opponent's thirty and a yard on their own thirty are
-  // different decisions. Guessing a multiplier for short yardage put
-  // twice as many drives on downs as really end that way.
+  // Fourth down, keyed by where they are and how far they need: a yard
+  // on the opponent's thirty and a yard on their own are different
+  // decisions, and a short-yardage multiplier doubled drives on downs.
   const fourths = rows.filter((r) => Number(r["down"]) === 4);
   const goes = new Map<string, { went: number; all: number }>();
 

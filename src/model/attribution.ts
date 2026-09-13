@@ -4,7 +4,7 @@
  * The drive walk decides what happens: a nine yard gain on second and
  * six, then an incompletion, then a punt. It does not say who carried
  * it or who it was thrown to, so nothing it produces can become a stat
- * line. This puts a man on each play.
+ * line. This puts a player on each play.
  *
  * The drive's yardage is left alone. It came from what such plays
  * really gain and it is what moved the chains, so changing it here
@@ -27,13 +27,13 @@ const BLANK: StatLine = {
  * or the clock, which only decide between two labels that both roll up
  * to open field, so nothing turns on the placeholders.
  */
-export function situationForPlay(play: DrivePlay): Situation {
+function situationForPlay(play: DrivePlay): Situation {
   return ROLLS_UP_TO[
     situationOf(play.state.down, play.state.toGo, play.state.yardline, 0, 3600)
   ];
 }
 
-/** one man, drawn in proportion to his share of this kind of work */
+/** one player, drawn in proportion to his share of this kind of work */
 function whoGetsIt(
   roster: SituationalRole[],
   active: boolean[],
@@ -69,7 +69,7 @@ function whoGetsIt(
   return -1;
 }
 
-export interface AttributionSettings {
+interface AttributionSettings {
   /** who is under centre, since the passing goes to him */
   quarterback: string;
 }

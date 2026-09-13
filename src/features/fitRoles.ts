@@ -4,7 +4,7 @@
  * different way. Two evals doing that is how the goal-line snap count
  * came to be halved in one of them and not the other.
  *
- * Rates are shrunk toward the league's, hard when a man has few touches
+ * Rates are shrunk toward the league's, hard when a player has few touches
  * in a situation. A back with three goal-line carries and two scores
  * has not shown he converts two thirds of them.
  */
@@ -19,7 +19,7 @@ import {
 import type { SituationalRole } from "../model/situationalWeek.js";
 import { BY_POSITION } from "./fitSwing.js";
 
-/** what an average man does, for anything we have little evidence about */
+/** what an average player does, for anything we have little evidence about */
 const LEAGUE = {
   catchRate: 0.64,
   yardsPerCatch: 10.4,
@@ -29,7 +29,7 @@ const LEAGUE = {
 };
 
 /**
- * How many touches it takes before a man's own rate is believed over
+ * How many touches it takes before a player's own rate is believed over
  * the league's, fitted against how often the real weeks were big,
  * quiet, or ended in the end zone.
  *
@@ -37,23 +37,23 @@ const LEAGUE = {
  * brings the average and the 100 yard games into line, .25 taking
  * yardage from +6% to +2% and big games from +27% to +16%, but it
  * flattens his ordinary weeks and adds to the quiet ones. Shrinking
- * his scoring at all costs the men who genuinely finish, so it barely
+ * his scoring at all costs the players who really finish, so it barely
  * shrinks.
  */
-export const TRUST_AFTER = { usage: 25, scoring: 2 };
+const TRUST_AFTER = { usage: 25, scoring: 2 };
 
-/** what a man swings by before anything is known about him */
-export const LEAGUE_SWING = 1.3;
+/** what a player swings by before anything is known about him */
+const LEAGUE_SWING = 1.3;
 
 /**
  * How much of his own long play rate to believe, in touches.
  *
  * The same shrinking as everywhere else: forty touches is enough to
- * tell a man who breaks them from one who does not, and fewer is not.
+ * tell a player who breaks them from one who does not, and fewer is not.
  */
-export const TRUST_SWING_AFTER = 40;
+const TRUST_SWING_AFTER = 40;
 
-export interface FittedSeason {
+interface FittedSeason {
   /** the roster of each team, ready to simulate */
   byTeam: Map<string, SituationalRole[]>;
   /** plays a game each offence gets in each situation */
@@ -151,19 +151,17 @@ export async function fitRoles(
       yardsPerCarry: zeroBySituation(),
       scoresPerCatch: zeroBySituation(),
       scoresPerCarry: zeroBySituation(),
-      // From his own plays where he has enough of them, and from what
-      // his position does where he has not. This took 0.35 for
-      // everybody, and men really swing 1.26 in the middle, so a
-      // simulated play never varied anything like enough.
+      // His own plays where he has enough of them, his position where
+      // he has not. A flat 0.35 for everybody against the 1.26 players
+      // really swing left a simulated play barely varying at all.
       yardSwing: swings?.get(id) ??
         BY_POSITION[positions.get(id) ?? "WR"] ?? LEAGUE_SWING,
       availability: Math.min(1, (gamesPlayed.get(id) ?? 0) / weeks),
     };
 
-    // His share is of the plays that happened while he was out there.
-    // Dividing by the team's whole season instead made a man who
-    // played ten games look like a part-timer twice over, once in the
-    // share and again in his availability.
+    // His share is of the plays run while he was out there. Dividing by
+    // the team's whole season made a player who played ten games look
+    // like a part-timer twice, in the share and in his availability.
     const hisGames = Math.max(1, gamesPlayed.get(id) ?? weeks);
 
     for (const s of SITUATIONS) {

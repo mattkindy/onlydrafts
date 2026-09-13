@@ -33,7 +33,7 @@ export interface SeasonPlayer {
   gamesPool: number[];
 }
 
-export interface SeasonProjection {
+interface SeasonProjection {
   playerId: string;
   name: string;
   position: string;
@@ -57,14 +57,14 @@ export interface SeasonProjection {
 /**
  * How many games he plays this time, keeping the pool's shape.
  *
- * The pool is what men like him have done, and it is moved to his own
+ * The pool is what players like him have done, and it is moved to his own
  * expectation. Scaling the games he plays and then capping at a full
  * season took the cap off the top only, which pulled the average down
  * by more than two games for anyone durable and by nothing at all for
  * anyone fragile, squashing the difference the model exists to find.
  *
  * Scaling the games he misses has no such edge. Missing nothing is
- * already the best case, so shrinking a man's missed games toward zero
+ * already the best case, so shrinking a player's missed games toward zero
  * cannot push him past a full season, and his average comes out where
  * the availability model put it.
  */
@@ -105,7 +105,7 @@ export function simulatePlayerSeasons(
   gameSamples?: Map<string, number[]>,
 ): SeasonProjection[] {
   /**
-   * Each man's week as his own quantile, from the games the walk
+   * Each player's week as his own quantile, from the games the walk
    * dealt him, stretched the calibrated amount and hung on whatever
    * the week's prediction says. The pooled residual bands speak for
    * anyone without enough dealt games.
@@ -167,7 +167,7 @@ export function simulatePlayerSeasons(
       }
 
       // the weeks his side is on the field, which is a season less the
-      // bye. Drawing from every week instead lost a man his bye week
+      // bye. Drawing from every week instead lost a player his bye week
       // roughly one season in seventeen.
       const his = playableWeeks.get(player.teamId) ?? weekNumbers;
       const target = drawGames(player, his.length, rng);

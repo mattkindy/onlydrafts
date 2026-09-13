@@ -1,7 +1,7 @@
 /**
  * Streams the participation files and writes one row per matchup:
  * which offence faced which front, how many drop-backs, how many of
- * them were pressured, and how many men the defence kept in the box.
+ * them were pressured, and how many players the defence kept in the box.
  *
  * Run: npx tsx scripts/aggregatePressure.ts
  */

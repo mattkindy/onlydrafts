@@ -1,5 +1,5 @@
 /**
- * What the man throwing it is worth, as a lift on his side's throws.
+ * What the player throwing it is worth, as a lift on his side's throws.
  *
  * The walk's passer is a name: his receivers' pools do the work, and a
  * pool shared with last year's passer says nothing about this one.
@@ -21,7 +21,7 @@ const SETTLES_AT = 300;
 /** how much of the gap to the middle a throw actually keeps */
 const KEEPS = Number(process.env["PASSER_KEEPS"] ?? 0.5);
 
-export type PasserLift = (passerId: string) => number;
+type PasserLift = (passerId: string) => number;
 
 export async function fitPasserQuality(before: number[]): Promise<PasserLift> {
   const of = new Map<string, {

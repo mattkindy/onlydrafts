@@ -1,5 +1,5 @@
 /**
- * One row per play with the twenty two men who were on the field.
+ * One row per play with the twenty two players who were on the field.
  *
  * plays.csv says what the two sides lined up in, as a grouping and a
  * shell. That is enough to ask what 11 personnel gains and not enough

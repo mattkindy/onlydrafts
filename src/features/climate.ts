@@ -15,7 +15,7 @@
 
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
 
-export interface Where {
+interface Where {
   latitude: number;
   /** grounds that close a roof, which take the weather out of it */
   indoors?: boolean;

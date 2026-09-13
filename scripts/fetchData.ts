@@ -55,7 +55,7 @@ function injuriesUrl(season: number): string {
   return `https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_${season}.csv`;
 }
 
-/** where each club had a man on its own chart that week */
+/** where each club had a player on its own chart that week */
 function depthChartsUrl(season: number): string {
   return `https://github.com/nflverse/nflverse-data/releases/download/depth_charts/depth_charts_${season}.csv`;
 }

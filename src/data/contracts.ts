@@ -1,5 +1,5 @@
 /**
- * What a team paid, which is the only thing that says whether a man was
+ * What a team paid, which is the only thing that says whether a player was
  * brought in to play or to sit.
  *
  * The model does well on players who stayed where they were and badly
@@ -17,7 +17,7 @@ import { parseCsv } from "./csv.js";
 import { normalizeName } from "./names.js";
 import { RAW_DIR } from "./nflverse.js";
 
-export interface Contract {
+interface Contract {
   name: string;
   position: string;
   team: string;
@@ -29,7 +29,7 @@ export interface Contract {
 }
 
 /** keyed by normalized name and position, newest signing first */
-export async function loadContracts(): Promise<Map<string, Contract[]>> {
+async function loadContracts(): Promise<Map<string, Contract[]>> {
   const rows = parseCsv(await readFile(join(RAW_DIR, "contracts.csv"), "utf8"));
   const byPlayer = new Map<string, Contract[]>();
 
@@ -57,7 +57,7 @@ export async function loadContracts(): Promise<Map<string, Contract[]>> {
 }
 
 /** the deal he was playing under in a given season */
-export function dealFor(
+function dealFor(
   contracts: Map<string, Contract[]>,
   name: string,
   position: string,

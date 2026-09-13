@@ -4,7 +4,7 @@
  * No source here carries the commissioner's exempt list. The weekly
  * roster files lag by weeks and spell 2026 exemptions E14, which is the
  * international pathway and not that list. Sleeper does not name it
- * either: a man on it reads DNR with a body part beside it. DNR is the
+ * either: a player on it reads DNR with a body part beside it. DNR is the
  * closest proxy for cannot play, and it says nothing about why or for
  * how long, so the shares below are assumptions and are meant to be
  * argued with.
@@ -13,7 +13,7 @@
  */
 
 /**
- * How much of a season is left of a man, by why he is out. A knee with
+ * How much of a season is left of a player, by why he is out. A knee with
  * surgery behind it is not a hamstring and neither is a suspension, so
  * the body part moves it where the reason alone is too blunt.
  */
@@ -27,20 +27,20 @@ export const STILL_WORTH: Record<string, number> = {
 const LONG_ONES = ["ACL", "Achilles", "Lisfranc", "Torn"];
 
 export function leftOf(
-  man: { status?: string | null; injury_status?: string | null;
+  player: { status?: string | null; injury_status?: string | null;
     injury_body_part?: string | null; injury_notes?: string | null },
 ): { keeps: number; why: string } {
-  const why = STILL_WORTH[man.injury_status ?? ""] !== undefined
-    ? man.injury_status!
-    : STILL_WORTH[man.status ?? ""] !== undefined
-    ? man.status!
+  const why = STILL_WORTH[player.injury_status ?? ""] !== undefined
+    ? player.injury_status!
+    : STILL_WORTH[player.status ?? ""] !== undefined
+    ? player.status!
     : "";
 
   if (!why) {
     return { keeps: 1, why: "" };
   }
 
-  const hurt = `${man.injury_body_part ?? ""} ${man.injury_notes ?? ""}`;
+  const hurt = `${player.injury_body_part ?? ""} ${player.injury_notes ?? ""}`;
   const long = LONG_ONES.some((one) =>
     hurt.toLowerCase().includes(one.toLowerCase()));
 
@@ -63,7 +63,7 @@ const found = Object.values(players)
   .sort((a, b) => a.keeps - b.keeps);
 
 console.log(
-  `${found.length} men who start somewhere and cannot play, ` +
+  `${found.length} players who start somewhere and cannot play, ` +
   `most missed first:\n`,
 );
 
@@ -77,7 +77,7 @@ for (const { m, keeps, why } of found) {
 }
 
 console.log(
-  "\nNobody here is marked exempt, because no source says so. A man on " +
+  "\nNobody here is marked exempt, because no source says so. A player on " +
   "that list reads DNR, which is also what a groin reads, so the two " +
   "cannot be told apart from here.",
 );

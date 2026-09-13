@@ -5,7 +5,7 @@ import { hasSeasonToRead, type SeasonData } from "./seasonModel.js";
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 
 /**
- * How many seasons since a man entered the league this model will still
+ * How many seasons since a player entered the league this model will still
  * speak for him. Its features are his draft slot, his age and his
  * side, which is all anybody has on a second year back who spent his
  * first year hurt. A thirty year old fullback who has never been
@@ -15,7 +15,7 @@ const POSITIONS = ["QB", "RB", "WR", "TE"];
  */
 const STILL_A_PROSPECT = 3;
 
-export interface RookieExample {
+interface RookieExample {
   playerId: string;
   name: string;
   position: string;
@@ -29,21 +29,21 @@ export interface RookieExample {
   age: number;
   /** his team's points per game the season before */
   teamPointsPg: number;
-  /** false for a man taken in an earlier draft who has yet to play */
+  /** false for a player taken in an earlier draft who has yet to play */
   rookie: boolean;
   /** rookie-year points per game, once the season has happened */
   actualPpg?: number;
   actualGames: number;
 }
 
-export interface RookieOptions {
+interface RookieOptions {
   /**
-   * Also take the men on the week-1 roster the board has no season to
-   * read: a second year back who spent his first year hurt, a man cut
-   * and re-signed after two quiet seasons. Nothing here reads a man's
+   * Also take the players on the week-1 roster the board has no season to
+   * read: a second year back who spent his first year hurt, a player cut
+   * and re-signed after two quiet seasons. Nothing here reads a player's
    * own history, so the same model works for them as for a rookie.
    *
-   * Off while training, so the fit stays on men in their first season.
+   * Off while training, so the fit stays on players in their first season.
    */
   alsoUnread?: boolean;
 }

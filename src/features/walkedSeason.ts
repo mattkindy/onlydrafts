@@ -3,7 +3,7 @@
  *
  * The walk already plays a game: two sides, their fitted play
  * behaviour, drives that end where drives end. This runs the published
- * schedule through it enough times that each man's week settles down,
+ * schedule through it enough times that each player's week settles down,
  * and adds up what he did.
  *
  * Nothing here decides anything about a player. How often he runs it comes from
@@ -33,10 +33,10 @@ export interface Fixture {
   awayRest: number;
 }
 
-export interface WalkSettings {
+interface WalkSettings {
   /** how many times to play the whole season */
   runs: number;
-  /** how many games each man is expected to be available for */
+  /** how many games each player is expected to be available for */
   gamesFor: (playerId: string) => number;
   climate?: Climate;
 }
@@ -166,7 +166,7 @@ export function walkSeason(
 }
 
 /** the ground and the day, for a kicker who cares where he is standing */
-export function venueOf(fixture: Fixture, climate: Climate | undefined, rng: () => number) {
+function venueOf(fixture: Fixture, climate: Climate | undefined, rng: () => number) {
   const where = HOME[fixture.homeTeam];
 
   if (fixture.indoors || where?.indoors) {

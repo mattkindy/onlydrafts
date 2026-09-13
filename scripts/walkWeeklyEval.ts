@@ -4,7 +4,7 @@
  * The weekly view is a ridge over recent form and the matchup, and the
  * walk has never been asked the same question. Each tested week
  * rebuilds the world as it looked that Tuesday, plays that week's
- * fixtures, and averages each man's box scores into a projection. The
+ * fixtures, and averages each player's box scores into a projection. The
  * score is Spearman against the points really scored that week, pooled
  * across weeks, next to the answer "every week is his average so far",
  * which is the same yardstick the weekly ridge was proven against.
@@ -51,7 +51,7 @@ interface PlayerWeek {
   /** and the touchdowns, the loudest part of conversion */
   walkTd: number;
   wasTd: number;
-  /** what the weekly ridge says for the same man, when it has a row */
+  /** what the weekly ridge says for the same player, when it has a row */
   ridge?: number;
 }
 
@@ -156,7 +156,7 @@ async function oneWeek(season: number, week: number): Promise<PlayerWeek[]> {
   }
 
   if (!asShare) {
-    console.error(`  ${season} week ${week}: ${played} fixtures, ${out.length} men`);
+    console.error(`  ${season} week ${week}: ${played} fixtures, ${out.length} players`);
   }
 
   return out;
@@ -181,7 +181,7 @@ if (!asShare) {
     const walk = spearman(rows.map((r) => r.walk), rows.map((r) => r.was));
     const avg = spearman(rows.map((r) => r.average), rows.map((r) => r.was));
     console.log(
-      `${label.padEnd(6)} ${String(rows.length).padStart(5)} weeks of a man: ` +
+      `${label.padEnd(6)} ${String(rows.length).padStart(5)} weeks of a player: ` +
       `walk ${walk.toFixed(3)}  his average ${avg.toFixed(3)}`,
     );
   };
@@ -193,13 +193,13 @@ if (!asShare) {
   }
 
   /**
-   * The men a lineup decision is about. Sorting starters above men who
+   * The players a lineup decision is about. Sorting starters above players who
    * barely play is easy and flatters every column, so the hard
-   * question is asked apart: among men averaging double digits, who
+   * question is asked apart: among players averaging double digits, who
    * has the better week?
    */
   const starters = pooled.filter((r) => r.average >= 10);
-  console.log("men averaging ten or more:");
+  console.log("players averaging ten or more:");
   score(starters, "all");
 
   for (const position of POSITIONS) {
@@ -237,7 +237,7 @@ if (!asShare) {
   /**
    * The two as places on one list, mixed, which is how the board
    * treats its voices. The ratio bend above cannot carry the ridge's
-   * ordering, since most of its edge is in how it places men against
+   * ordering, since most of its edge is in how it places players against
    * each other rather than against their own averages.
    */
   console.log("the walk and the ridge as mixed places:");
@@ -270,8 +270,8 @@ if (!asShare) {
     }
   }
 
-  // the ridge the weekly view used before the walk, on the same men
-  console.log("against the weekly ridge, the men it also priced:");
+  // the ridge the weekly view used before the walk, on the same players
+  console.log("against the weekly ridge, the players it also priced:");
 
   for (const position of ["all", ...POSITIONS]) {
     const rows = starters.filter((r) =>
@@ -291,7 +291,7 @@ if (!asShare) {
 
   // the volume half alone: does the walk know who gets the ball,
   // apart from what they do with it?
-  console.log("their touches, same men:");
+  console.log("their touches, same players:");
 
   for (const position of ["RB", "WR", "TE"]) {
     const rows = starters.filter((r) => r.position === position);
@@ -310,7 +310,7 @@ if (!asShare) {
     );
   }
 
-  console.log("their touchdowns, same men:");
+  console.log("their touchdowns, same players:");
 
   for (const position of ["RB", "WR", "TE"]) {
     const rows = starters.filter((r) => r.position === position);

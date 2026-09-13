@@ -4,7 +4,7 @@
  * A back's share of his side's carries barely moves week to week. How
  * many carries there are to take does, because chasing a good side
  * means throwing and leading a poor one means running the clock down.
- * The weekly model works on a man's points, so it has nowhere to put
+ * The weekly model works on a player's points, so it has nowhere to put
  * that. The walk tracks the score and picks its calls off it, so this
  * takes the effect out of the walk and hands it to the weekly view.
  *
@@ -50,11 +50,11 @@ export function scriptFrom(effects: Effect[]): Script {
 }
 
 /**
- * What a fixture is worth to one man, given how much of his work is
+ * What a fixture is worth to one player, given how much of his work is
  * running and how much is catching.
  *
  * A back who never catches it takes the whole of the carries effect. A
- * receiver takes the targets one. Most men are somewhere between and
+ * receiver takes the targets one. Most players are somewhere between and
  * the two pull against each other, which is why this is a blend rather
  * than a pick.
  */

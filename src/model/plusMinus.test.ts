@@ -34,7 +34,7 @@ describe("fitPlusMinus", () => {
 
   const fit = fitPlusMinus(synthetic(truth, seededRng(9), 20000), 40);
 
-  it("ranks the men in the order they actually are", () => {
+  it("ranks the players in the order they actually are", () => {
     const order = ["star", "good", "fine", "poor", "awful"];
 
     for (let i = 1; i < order.length; i++) {
@@ -52,7 +52,7 @@ describe("fitPlusMinus", () => {
     expect(fit.baseline).toBeCloseTo(0.3, 1);
   });
 
-  it("counts how often it saw each man", () => {
+  it("counts how often it saw each player", () => {
     expect(fit.snaps.get("star")).toBeGreaterThan(1000);
   });
 
@@ -63,7 +63,7 @@ describe("fitPlusMinus", () => {
     expect(strongVsWeak).toBeGreaterThan(weakVsStrong);
   });
 
-  it("moves a man's contribution with him to a new side", () => {
+  it("moves a player's contribution with him to a new side", () => {
     // the same eleven, except the star swaps sides
     const withHim = expectedOutcome(fit, ["star", "fine"], ["a", "b"]);
     const againstHim = expectedOutcome(fit, ["awful", "fine"], ["a", "b"]);
@@ -71,7 +71,7 @@ describe("fitPlusMinus", () => {
     expect(withHim).toBeGreaterThan(againstHim);
   });
 
-  it("holds a man it barely saw near zero rather than guessing", () => {
+  it("holds a player it barely saw near zero rather than guessing", () => {
     const withRare = [
       ...synthetic(truth, seededRng(3), 4000),
       { forIt: ["rare"], against: ["a"], outcome: 5 },

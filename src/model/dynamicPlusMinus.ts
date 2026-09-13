@@ -3,7 +3,7 @@
  * from scratch each season.
  *
  * Each player has a running estimate and a running uncertainty. Every
- * week both drift a little, and a week a man does not play drifts his
+ * week both drift a little, and a week a player does not play drifts his
  * uncertainty further, because nothing was learned about him while he
  * was out. Then the week's snaps pull the estimates around, and a
  * player we are unsure about moves further on the same evidence.
@@ -15,27 +15,27 @@
 
 import type { Snap } from "./plusMinus.js";
 
-export interface Belief {
+interface Belief {
   /** what we think he adds, above an average player */
   mean: number;
   /** how unsure we are, as a variance */
   variance: number;
 }
 
-export interface DynamicState {
+interface DynamicState {
   players: Map<string, Belief>;
   /** the outcome when nobody's effect is counted */
   baseline: number;
 }
 
-export interface DynamicSettings {
+interface DynamicSettings {
   /** how far ability wanders in a week he plays */
   drift: number;
   /** how far it wanders in a week he does not, which is further */
   driftWhileOut: number;
   /** how noisy one snap is */
   snapNoise: number;
-  /** what we assume about a man before we have seen him */
+  /** what we assume about a player before we have seen him */
   priorVariance: number;
   /** cap on how unsure we let ourselves get */
   maxVariance: number;
@@ -78,8 +78,8 @@ export function advance(
 /**
  * Fold a week of snaps in. This is ridge again, except each player is
  * pulled toward what we already believed rather than toward zero, and
- * how hard depends on how sure we were. A man we know well barely
- * moves; a man back from six weeks out moves a long way.
+ * how hard depends on how sure we were. A player we know well barely
+ * moves; a player back from six weeks out moves a long way.
  */
 export function observe(
   state: DynamicState,

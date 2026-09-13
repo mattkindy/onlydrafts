@@ -5,7 +5,7 @@ import { drawWeekOutcomes, type PlayerWeek } from "./season.js";
 import { pickLineup } from "./lineup.js";
 import type { SeasonPlayer } from "./playerSeason.js";
 
-export interface LeagueResult {
+interface LeagueResult {
   /** per team: regular season wins in each simulated season */
   winsPerSim: number[][];
   /** per team: simulated seasons reaching the four-team playoff */
@@ -34,7 +34,7 @@ function pairings(week: number, teams: number): [number, number][] {
  * correlations shape the wins; lineups start the highest projected
  * available player each week.
  */
-export function simulatePreseasonLeague(
+function simulatePreseasonLeague(
   playersById: Map<string, SeasonPlayer>,
   rosters: string[][],
   season: number,

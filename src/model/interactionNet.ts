@@ -22,7 +22,7 @@ export interface Task {
   of: (index: number) => number | undefined;
 }
 
-export interface InteractionSettings {
+interface InteractionSettings {
   /** how many numbers each kind is projected down to */
   width: number;
   hidden: number;
@@ -76,7 +76,7 @@ function pairsOf(kinds: string[]): [number, number][] {
   return pairs;
 }
 
-export function inputWidth(settings: InteractionSettings, kinds: number): number {
+function inputWidth(settings: InteractionSettings, kinds: number): number {
   return settings.width * (kinds + (kinds * (kinds - 1)) / 2);
 }
 
@@ -112,7 +112,7 @@ function forward(net: InteractionNet, on: Described[]) {
     }
   }
 
-  // a kind with several men in it is their average, so a team with more
+  // a kind with several players in it is their average, so a team with more
   // players described does not weigh more for that reason alone
   for (let s = 0; s < slots.length; s++) {
     const count = Math.max(1, seen[s]!);

@@ -1,5 +1,5 @@
 /**
- * One model over all of a man's parts, against pulling each part back
+ * One model over all of a player's parts, against pulling each part back
  * on its own, against pulling the total back.
  *
  * Volume and efficiency each say something about the other's future, so
@@ -30,20 +30,20 @@ const recRows = parseCsv(await readFile(
 const rushRows = parseCsv(await readFile(
   join(import.meta.dirname, "..", "data", "raw", "advstats_rush.csv"), "utf8"));
 
-interface Man {
+interface Player {
   position: string;
   age: number;
   receiving: Receiving;
   running: Running;
 }
 
-const blank = (position: string): Man => ({
+const blank = (position: string): Player => ({
   position, age: 0,
   receiving: { games: 0, targets: 0, receptions: 0, beforeCatch: 0, afterCatch: 0, drops: 0 },
   running: { games: 0, carries: 0, beforeContact: 0, afterContact: 0 },
 });
 
-const bySeason = new Map<number, Map<string, Man>>();
+const bySeason = new Map<number, Map<string, Player>>();
 
 for (const [rows, which] of [[recRows, "rec"], [rushRows, "rush"]] as [Row[], string][]) {
   for (const r of rows) {
@@ -54,24 +54,24 @@ for (const [rows, which] of [[recRows, "rec"], [rushRows, "rush"]] as [Row[], st
       continue;
     }
 
-    const table = bySeason.get(season) ?? new Map<string, Man>();
-    const man = table.get(who) ?? blank(r["pos"] ?? "");
-    man.position = r["pos"] ?? man.position;
-    man.age = n(r, "age") || man.age;
+    const table = bySeason.get(season) ?? new Map<string, Player>();
+    const player = table.get(who) ?? blank(r["pos"] ?? "");
+    player.position = r["pos"] ?? player.position;
+    player.age = n(r, "age") || player.age;
 
     if (which === "rec") {
-      man.receiving = {
+      player.receiving = {
         games: n(r, "g"), targets: n(r, "tgt"), receptions: n(r, "rec"),
         beforeCatch: n(r, "ybc"), afterCatch: n(r, "yac"), drops: n(r, "drop"),
       };
     } else {
-      man.running = {
+      player.running = {
         games: n(r, "g"), carries: n(r, "att"),
         beforeContact: n(r, "ybc"), afterContact: n(r, "yac"),
       };
     }
 
-    table.set(who, man);
+    table.set(who, player);
     bySeason.set(season, table);
   }
 }
@@ -79,7 +79,7 @@ for (const [rows, which] of [[recRows, "rec"], [rushRows, "rush"]] as [Row[], st
 function leagueIn(season: number, position: string): League {
   const its = [...(bySeason.get(season)?.values() ?? [])]
     .filter((m) => m.position === position);
-  const mean = (of: (m: Man) => number) =>
+  const mean = (of: (m: Player) => number) =>
     its.reduce((s, m) => s + of(m), 0) / Math.max(1, its.length);
 
   return {
@@ -101,8 +101,8 @@ function leagueIn(season: number, position: string): League {
 const per = (top: number, bottom: number) => (bottom > 0 ? top / bottom : 0);
 
 /** everything one season says about him, for a model that sees it all at once */
-function columns(man: Man): number[] {
-  const r = man.receiving;
+function columns(player: Player): number[] {
+  const r = player.receiving;
   const g = Math.max(1, r.games);
 
   return [
@@ -114,21 +114,24 @@ function columns(man: Man): number[] {
     per(r.beforeCatch, r.receptions),
     per(r.afterCatch, r.receptions),
     per(r.drops, r.targets),
-    per(man.running.carries, Math.max(1, man.running.games)),
-    man.age / 30,
+    per(player.running.carries, Math.max(1, player.running.games)),
+    player.age / 30,
     Math.min(17, r.games) / 17,
   ];
 }
 
-const recYdsPerGame = (man: Man) =>
-  per(man.receiving.beforeCatch + man.receiving.afterCatch, Math.max(1, man.receiving.games));
+const recYdsPerGame = (player: Player) =>
+  per(
+    player.receiving.beforeCatch + player.receiving.afterCatch,
+    Math.max(1, player.receiving.games),
+  );
 
 const WHOLE_KEEPS = 0.62;
 
-function projectWhole(man: Man, league: League): number {
-  const his = recYdsPerGame(man);
+function projectWhole(player: Player, league: League): number {
+  const his = recYdsPerGame(player);
   const theirs = (league.receiving.beforeCatch + league.receiving.afterCatch) / 17;
-  const trust = man.receiving.targets / (man.receiving.targets + 70);
+  const trust = player.receiving.targets / (player.receiving.targets + 70);
 
   return theirs + WHOLE_KEEPS * trust * (his - theirs);
 }
@@ -153,18 +156,18 @@ function casesIn(seasons: number[], position: string, enough: number): Case[] {
 
     const league = leagueIn(season, position);
 
-    for (const [who, man] of before) {
+    for (const [who, player] of before) {
       const next = after.get(who);
 
-      if (!next || man.position !== position ||
-          man.receiving.targets < enough || next.receiving.games < 6) {
+      if (!next || player.position !== position ||
+          player.receiving.targets < enough || next.receiving.games < 6) {
         continue;
       }
 
       out.push({
-        columns: columns(man),
-        parts: projectFromMechanics(man.receiving, man.running, league).recYds,
-        whole: projectWhole(man, league),
+        columns: columns(player),
+        parts: projectFromMechanics(player.receiving, player.running, league).recYds,
+        whole: projectWhole(player, league),
         was: recYdsPerGame(next),
       });
     }

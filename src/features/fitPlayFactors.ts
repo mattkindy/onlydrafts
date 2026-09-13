@@ -53,7 +53,7 @@ export interface PlayRow {
   afterCatch?: number;
 }
 
-export interface FactorSettings {
+interface FactorSettings {
   /** plays needed before a state speaks for itself */
   least: number;
   /**
@@ -69,8 +69,8 @@ export interface FactorSettings {
    * score, so the call never moved with the game.
    */
   leastForCall: number;
-  /** touches needed before a man's own share at a state is believed */
-  leastForMan: number;
+  /** touches needed before a player's own share at a state is believed */
+  leastForPlayer: number;
   /** plays needed before one side's own numbers are believed */
   leastForSide: number;
   /**
@@ -94,7 +94,7 @@ export interface FactorSettings {
 }
 
 export const FACTOR_DEFAULTS: FactorSettings = {
-  least: 300, leastForCall: 80, leastForMan: 40, leastForSide: 60,
+  least: 300, leastForCall: 80, leastForPlayer: 40, leastForSide: 60,
   leastWithRoom: 60,
   /**
    * Swept over the drive shape. Beyond the five the touchdowns land
@@ -107,13 +107,13 @@ export const FACTOR_DEFAULTS: FactorSettings = {
 };
 
 /** what somebody managed over a set of plays, at whatever scope */
-export interface Rate {
+interface Rate {
   touches: number;
   yards: number;
   /** and how many of them went for twenty or more */
   long: number;
   /**
-   * and what those long ones made, so a man's level can be worked out
+   * and what those long ones made, so a player's level can be worked out
    * on his ordinary touches. Whether this is one of his long ones is
    * already decided before the level is applied, so a level with the
    * long ones still in it counts them twice.
@@ -138,7 +138,7 @@ const addTo = (into: Map<string, Rate>, key: string, yards: number): void => {
 };
 
 /** everything counted at one state, plus who touched it there */
-export interface Counted extends StateCell {
+interface Counted extends StateCell {
   byPlayer: Map<string, {
     touches: number; yards: number; scores: number;
     /** and how often he breaks a long one, which is his own and lasts */
@@ -218,7 +218,7 @@ const drawWeighted = (pool: Weighted, uniform: () => number): number => {
 
 /**
  * Which depth this throw goes to, from what happens here tilted by how
- * this man is used.
+ * this player is used.
  *
  * Taking his own mix straight would throw deep at the goal line
  * because that is what he does over a season. The situation says what
@@ -301,7 +301,7 @@ const gainsAtDepth = (cell: Counted, band: number, room = 0): Drawable => {
  * Kept in the order they were counted, so the yards and where they
  * came from line up.
  */
-const roomFor = (cell: Counted, yardline: number): Drawable => {
+const drawableForYardline = (cell: Counted, yardline: number): Drawable => {
   const found: Drawable = { yards: [], from: [] };
 
   for (let i = 0; i < cell.yards.length; i++) {
@@ -325,24 +325,24 @@ const countIn = (rate: Rate, yards: number): void => {
 };
 
 /**
- * What share of his offence's work each man is expected to take.
+ * What share of his offence's work each player is expected to take.
  *
- * Left out, the factors divide the work by what each man did before,
+ * Left out, the factors divide the work by what each player did before,
  * which is the weakest way we have of guessing a share: .596 against
  * .747 for working it out from who he is competing with. Passed in,
- * that model sets how much a man gets and the history only says where
+ * that model sets how much a player gets and the history only says where
  * he gets it.
  */
-export type ProjectedShares = Map<string, number>;
+type ProjectedShares = Map<string, number>;
 
 /**
- * The same, with the two halves of a man's work kept apart.
+ * The same, with the two halves of a player's work kept apart.
  *
  * One combined share lets a receiver's target volume leak onto run
  * plays. With the halves separate, a carry is divided by who competes
  * for carries and a throw by who competes for targets.
  */
-export type SplitProjected = Map<string, { carries: number; targets: number }>;
+type SplitProjected = Map<string, { carries: number; targets: number }>;
 
 /**
  * What these two sides together do to a play, against what an average
@@ -351,9 +351,9 @@ export type SplitProjected = Map<string, { carries: number; targets: number }>;
  * The counts below ask each side on its own, so an offence that has
  * gained a lot and a defence that has given up little multiply
  * together as though neither had met the other. They also cannot see a
- * defence whose men have changed since those plays.
+ * defence whose players have changed since those plays.
  */
-export type Pairing = (offence: string, defence: string, call: Call) => number;
+type Pairing = (offence: string, defence: string, call: Call) => number;
 
 export type { RunParts } from "./runParts.js";
 
@@ -364,12 +364,12 @@ export type { PlayLevel } from "./playLevel.js";
  * The plays themselves, kept whole, so an outcome can be drawn as a
  * package instead of assembled from parts.
  *
- * A man's play carries its yards and its catch together, correlated
+ * A player's play carries its yards and its catch together, correlated
  * the way reality correlated them, and drawing his own play needs no
  * multiplier, no catch table and no centring, because nothing is a
- * ratio. The pooled path stays for the men too thin to sample.
+ * ratio. The pooled path stays for the players too thin to sample.
  */
-export interface PlayStore {
+interface PlayStore {
   /** what a throw to nobody costs, and where it was thrown from */
   wasted: { yardline: number; yards: number }[];
   /** by tens of the yardline, since one throw in seven is wasted inside the ten */
@@ -382,7 +382,7 @@ export interface PlayStore {
   /** how many seasons before the latest each play happened */
   age: Int8Array;
   /** `${player}|${call}` to the rows that were his */
-  ofMan: Map<string, number[]>;
+  ofPlayer: Map<string, number[]>;
   /** `${player}|${passer}` to the throws between exactly those two */
   ofPair: Map<string, number[]>;
 }
@@ -395,19 +395,19 @@ export interface PlayStore {
  */
 const NEAR_GOAL = Number(process.env["NEAR_GOAL"] ?? 30);
 /**
- * How much nearer the goal a borrowed play may have been made. A man
+ * How much nearer the goal a borrowed play may have been made. A player
  * standing on the eighteen was drawing his own plunges from the two,
  * and they pulled the 11 to 30 bands 8 to 13% short of what plays
  * there gain, which is where drives stalled into field goals.
  */
 const CLOSER = Number(process.env["CLOSER"] ?? 8);
 /** the same guard past the thirty, where forty yards of slack let a
- * man at midfield draw plays whose gains the goal line had capped */
+ * player at midfield draw plays whose gains the goal line had capped */
 const FIELD_CLOSER = Number(process.env["FIELD_CLOSER"] ?? 40);
 /**
  * How much a play a season old counts against one from the latest
- * season, in a man's own pool. Drawing all four seasons evenly gave a
- * man his old form: Taylor drew 5.0 a carry off seasons he has not
+ * season, in a player's own pool. Drawing all four seasons evenly gave a
+ * player his old form: Taylor drew 5.0 a carry off seasons he has not
  * run since, while Bijan's climb to 5.4 was watered to 4.7.
  */
 const RECENT_FADE = Number(process.env["RECENT_FADE"] ?? 0.7);
@@ -417,7 +417,7 @@ const FORM_FADE = Number(process.env["FORM_FADE"] ?? 0.7);
 const FORM_FADES = [0, 1, 2, 3, 4, 5].map((b) => Math.pow(FORM_FADE, b));
 
 /**
- * Three switches for asking how much of a man the walk is using, all
+ * Three switches for asking how much of a player the walk is using, all
  * off where they sit, and none of them paying on the board yet.
  *
  * HOW_FAR raises his level to a power, 0 turning it off. NO_LONG_SHAPE
@@ -438,45 +438,45 @@ const FROM_COUNTS = Number(process.env["FROM_COUNTS"] ?? 0);
 const FROM_CALLS = Number(process.env["FROM_CALLS"] ?? 0);
 
 /**
- * How much of the level of who gets the ball comes off what a man has
+ * How much of the level of who gets the ball comes off what a player has
  * been taking lately rather than off the August projection, 1 being
  * all of it.
  *
  * FROM_COUNTS reads the same level off the state-conditioned counts,
- * which pool every season at the same weight and so say what a man was
+ * which pool every season at the same weight and so say what a player was
  * two seasons ago. This asks the plays season by season instead. It
- * puts the right man top of the list a point more often, 35.6% against
+ * puts the right player top of the list a point more often, 35.6% against
  * 34.8%, and gives a week back: .317 at a quarter and .311 at a half
  * against .345 for standing the leaning down on its own. Off.
  */
 const RECENT_LEVEL = Number(process.env["RECENT_LEVEL"] ?? 0);
 /**
- * How many of a man's own plays in a cell it takes before his leaning
+ * How many of a player's own plays in a cell it takes before his leaning
  * is believed. 0 believes every leaning however thin, which is how it
  * shipped until September 2026.
  *
  * The leaning is the ratio of two thin shares, and off three or four
  * plays it can be ten to one either way. Shrinking it by his own count
  * in the cell, not the cell's total, because a cell of four hundred
- * plays says nothing about a man who took three of them, puts the
- * right man top of the list 35% of the time against 29.6% over 2023 to
+ * plays says nothing about a player who took three of them, puts the
+ * right player top of the list 35% of the time against 29.6% over 2023 to
  * 2025 and reads .344 a week against .319, tight ends included. On a
  * season the first sixty picks order at .545 against .503 for 2025 and
  * .437 against .336 for 2024, while the whole list gives back about
- * .008 because the leaning was ordering the deep, unpriced men. Five
+ * .008 because the leaning was ordering the deep, unpriced players. Five
  * and twenty were worse than sixty for quarterbacks, so the setting is
  * not smooth in the middle.
  */
 const LEAN_K = Number(process.env["LEAN_K"] ?? 60);
 
 /**
- * What a man's leaning is pulled toward while his own count is thin:
+ * What a player's leaning is pulled toward while his own count is thin:
  * his position's leaning at the same spot, rather than no view at all.
  *
  * Where a tight end gets the ball is a fact about tight ends before it
  * is a fact about him. They took 27 to 31% of the throws inside the
  * five and 20 to 23% past the forty in each of 2021 to 2025, and backs
- * went the other way. Pulling toward one left every man on his
+ * went the other way. Pulling toward one left every player on his
  * season-wide share exactly where the cells are thinnest.
  *
  * His own leaning still says something his position has not, so the
@@ -486,8 +486,8 @@ const LEAN_K = Number(process.env["LEAN_K"] ?? 60);
 const POSITION_LEAN = !process.env["NO_POSITION_LEAN"];
 /**
  * And how many plays of its own a position needs at a spot before that
- * leaning is believed, the same shrinking LEAN_K does to a man. Far
- * smaller, because a position has ten to thirty times the plays a man
+ * leaning is believed, the same shrinking LEAN_K does to a player. Far
+ * smaller, because a position has ten to thirty times the plays a player
  * has in the same cell: inside the ten a tight end's position has
  * about eleven of the forty five the cell asks for, and the sampling
  * error on that is about the size of the spread the yardline really
@@ -501,37 +501,37 @@ const POSITION_LEAN = !process.env["NO_POSITION_LEAN"];
 const POSITION_K = Number(process.env["POSITION_K"] ?? 10);
 
 /**
- * How many plays a man is asked for in the pool he rests on, against
+ * How many plays a player is asked for in the pool he rests on, against
  * the forty he is asked for in the one he is scored on. 0 leaves him
  * resting straight on his position, which is how it ships.
  *
- * Cells are thin everywhere, not only near the goal: the middle man
+ * Cells are thin everywhere, not only near the goal: the middle player
  * has four of the plays inside the five. Splitting a season odd and
  * even, his own leaning inside the twenty predicts his leaning inside
  * the five at .27 where his position predicts it at .00, and it wins
  * again two scores down late and on third and short. His position
  * wins only on throws near the goal, so it stays underneath. At 400
- * the goal line puts the right man top 52.5% and 45.9% against 51.5%
+ * the goal line puts the right player top 52.5% and 45.9% against 51.5%
  * and 44.0%, and the whole layer is level on 2024.
  */
 const WIDE_LEAN = Number(process.env["WIDE_LEAN"] ?? 0);
 /**
  * And how many of his own plays that wider pool needs before its
  * leaning is believed over his position's. Larger than POSITION_K
- * because it is one man's count again, not a whole position's.
+ * because it is one player's count again, not a whole position's.
  */
 const WIDE_K = Number(process.env["WIDE_K"] ?? 60);
 
 /**
- * How far a man's cut of the work moves from one game to the next,
+ * How far a player's cut of the work moves from one game to the next,
  * beyond the coin flips inside a single game, as a fraction of his
  * own cut. A run and a throw move differently, so there are two.
  *
- * The walk handed a man the same cut on every snap of every game, so a
+ * The walk handed a player the same cut on every snap of every game, so a
  * game plan, a hot hand or a blowout moved nothing. A back's cut of
  * the carries swings 0.34 of itself game to game once the flips are
  * taken out, where the walk managed 0.07; a receiver's swings 0.19.
- * Both settings are about twice that, because one man's draw is then
+ * Both settings are about twice that, because one player's draw is then
  * normalised over everyone on the field, which takes half back out.
  */
 const GAME_SHARE_RUN = Number(process.env["GAME_SHARE_RUN"] ?? 0.65);
@@ -563,18 +563,18 @@ const DEPTH_ROOM_UPTO = Number(process.env["DEPTH_ROOM_UPTO"] ?? 25);
 export const POOL_WASTE = Boolean(process.env["POOL_WASTE"]);
 
 /**
- * Where the goal line starts, and how many plays a man is asked for
+ * Where the goal line starts, and how many plays a player is asked for
  * there against the forty he is asked for anywhere else.
  *
  * Five reads .343 a week where forty reads .331, and puts the right
- * man top of the list inside the ten 45.1% of the time on a run where
+ * player top of the list inside the ten 45.1% of the time on a run where
  * forty manages 42.1%. Tighter still keeps helping the goal line and
  * starts costing receivers, .260 at two against .280 at five.
  */
 const LINE_IS_NEAR = Number(process.env["LINE_IS_NEAR"] ?? 10);
 const GOAL_LEAST = Number(process.env["GOAL_LEAST"] ?? 5);
 /**
- * A run and a throw ask separately. There are two men who can run it
+ * A run and a throw ask separately. There are two players who can run it
  * from the three and five who can catch it, so a tight cell says much
  * more about the run than about the throw, and one number for both was
  * either loose for the run or tight for the throw.
@@ -612,16 +612,16 @@ const GOAL_LIFT = !process.env["NO_GOAL_LIFT"];
 const GOAL_LIFT_CALLS: Record<Call, boolean> = { run: false, pass: true };
 
 /**
- * Puts back the cut that held a man to his own crossing share.
+ * Puts back the cut that held a player to his own crossing share.
  *
- * Cutting a man by his own share pins every one of them to the league
+ * Cutting a player by his own share pins every one of them to the league
  * rate from above and leaves the ones below it where they are, so the
- * men come out flatter than they are and the whole thing lands under
+ * players come out flatter than they are and the whole thing lands under
  * the rate it settles to: inside the ten the sampled throws crossed
- * 30.7% where the spot's own rate on throws that reached a man is
+ * 30.7% where the spot's own rate on throws that reached a player is
  * 34.9%. Cutting everybody by the one factor the yardline needs puts
  * the sampled throws at 33.2% and keeps a goal line tight end above a
- * receiver. Set it to cut a man by his own share again, which takes
+ * receiver. Set it to cut a player by his own share again, which takes
  * about a point and a half off drives that reach the ten.
  */
 const GOAL_CUT_HIS_OWN = Boolean(process.env["GOAL_CUT_HIS_OWN"]);
@@ -631,7 +631,7 @@ const GOAL_CUT_HIS_OWN = Boolean(process.env["GOAL_CUT_HIS_OWN"]);
  * line, out beyond the twenty where the goal line settling does not
  * reach.
  *
- * A man's own play that the end zone cut off gained exactly the yards
+ * A player's own play that the end zone cut off gained exactly the yards
  * to the line, and the tilts land either side of one, so about half
  * of those draws came back short of the goal. Between the 21 and the
  * 40, throws crossed on 2.8% of the walk's draws where those same
@@ -662,7 +662,7 @@ export interface GoalSample {
  * Where a draw near the goal ends up, given how often the pool it came
  * from crosses and how often sides really score from here.
  *
- * Cutting alone, which is what this did, leaves a man whose pool
+ * Cutting alone, which is what this did, leaves a player whose pool
  * crosses more often than sides score here short of the line every
  * time, and throws inside the ten then scored 29% where sides score
  * 39%. So a draw that crossed is kept as often as sides score, and a
@@ -697,7 +697,7 @@ export const settleAtGoal = (
 };
 
 /**
- * Whether a man's level leaves his long gains out of both sides of it.
+ * Whether a player's level leaves his long gains out of both sides of it.
  *
  * It is the right shape, since whether this is one of his long ones is
  * already settled before the level is applied. It orders backs by what
@@ -711,11 +711,11 @@ export const settleAtGoal = (
 const ORDINARY_LEVEL = Boolean(process.env["ORDINARY_LEVEL"]);
 
 /**
- * How much of a man's level is said, a run and a throw apart.
+ * How much of a player's level is said, a run and a throw apart.
  *
  * A throw is already drawn from the pool at his own depth and from the
  * long end at his own rate of breaking one, so his level is a third
- * helping of the same man: the walk spreads receivers by what would
+ * helping of the same player: the walk spreads receivers by what would
  * have to be .29 times as far to be right. Halving it reads .344 a
  * week against .343, with passers, backs and receivers all up.
  */
@@ -743,7 +743,7 @@ export function storePlays(rows: PlayRow[]): PlayStore {
   const yardline = new Int8Array(kept.length);
   const yards = new Int16Array(kept.length);
   const caught = new Uint8Array(kept.length);
-  const ofMan = new Map<string, number[]>();
+  const ofPlayer = new Map<string, number[]>();
   const ofPair = new Map<string, number[]>();
   /**
    * The sacks and the balls thrown away, which belong to no receiver
@@ -780,7 +780,7 @@ export function storePlays(rows: PlayRow[]): PlayStore {
     caught[i] = r.call === "run" || r.caught ? 1 : 0;
     age[i] = r.season ? latest - r.season : 0;
     const key = `${r.player}|${r.call}`;
-    ofMan.set(key, [...(ofMan.get(key) ?? []), i]);
+    ofPlayer.set(key, [...(ofPlayer.get(key) ?? []), i]);
 
     if (r.call === "pass" && r.passer) {
       const pair = `${r.player}|${r.passer}`;
@@ -789,7 +789,7 @@ export function storePlays(rows: PlayRow[]): PlayStore {
   });
 
   return {
-    down, toGo, yardline, yards, caught, age, ofMan, ofPair,
+    down, toGo, yardline, yards, caught, age, ofPlayer, ofPair,
     wasted: nobody.map((r) => ({ yardline: r.yardline, yards: r.yards })),
     wastedShareAt: (yardline) => {
       const band = wastedBand(yardline);
@@ -803,13 +803,13 @@ export function storePlays(rows: PlayRow[]): PlayStore {
  * How the afternoon is going for the side with the ball, which
  * changes who gets it.
  *
- * A team down two scores throws to different men than one protecting
+ * A team down two scores throws to different players than one protecting
  * a lead, and a third and long is a different play from a first down.
  * The full state cells know this but never have enough plays to say
- * so about one man, so the same question is asked again in six coarse
+ * so about one player, so the same question is asked again in six coarse
  * buckets where everybody has hundreds.
  */
-export const scriptOf = (margin: number, down: number, toGo: number) => {
+const scriptOf = (margin: number, down: number, toGo: number) => {
   const how = margin <= -9 ? "chasing" : margin >= 9 ? "ahead" : "level";
   const mustThrow = down >= 3 && toGo >= 4;
 
@@ -822,13 +822,13 @@ export const scriptOf = (margin: number, down: number, toGo: number) => {
  * this is the second half of that draw rather than another way of
  * asking the same question.
  */
-export const formationBandOf = (
+const formationBandOf = (
   call: Call, shotgun: boolean, yardline: number,
 ) =>
   `${call}|${shotgun ? "gun" : "centre"}|` +
   `${yardline <= 20 ? "close" : yardline <= 60 ? "middle" : "back"}`;
 
-export const atFormation = (
+const atFormation = (
   shotgun: boolean, down: number, toGo: number, yardline: number,
   /**
    * And how the game stands, because the pooled call reads both and
@@ -863,7 +863,7 @@ export interface CountedPlays {
   againstLook: Map<string, { plays: number; yards: number; dry: number }>;
   byOffence: Map<string, Counted>;
   byDefence: Map<string, Counted>;
-  byMan: Map<string, Rate>;
+  byPlayer: Map<string, Rate>;
   leagueOn: Map<string, Rate>;
   /** `${script}|${call}|${player}` to how often he took it there */
   inScript: Map<string, number>;
@@ -879,8 +879,8 @@ export interface CountedPlays {
 }
 
 /** everything the factors can be handed beyond the plays themselves */
-export interface FactorExtras {
-  /** each man's expected share of the work, one number for all of it */
+interface FactorExtras {
+  /** each player's expected share of the work, one number for all of it */
   projected?: ProjectedShares;
   /** the same with the two halves kept apart, which wins if both given */
   split?: SplitProjected;
@@ -891,17 +891,17 @@ export interface FactorExtras {
   runParts?: RunParts;
   /**
    * One model for the level with everybody on the play at once. Given
-   * it, the per-man and per-side multipliers stand down.
+   * it, the per-player and per-side multipliers stand down.
    */
   playLevel?: PlayLevel;
-  /** how far downfield each man is thrown, which picks his pool */
+  /** how far downfield each player is thrown, which picks his pool */
   depth?: TargetDepth;
   /**
-   * What each man plays, so a man too thin at a spot can lean the way
+   * What each player plays, so a player too thin at a spot can lean the way
    * his position leans there instead of the way he leans everywhere.
    */
   positions?: Map<string, string>;
-  /** the men on that defence this week, and the quarterback */
+  /** the players on that defence this week, and the quarterback */
   people?: {
     defenceNow?: (defence: string, season: number, week: number, call: Call) => number;
     passing?: (receiver: string, passer: string) => number;
@@ -919,35 +919,35 @@ export interface FactorExtras {
   coverage?: Coverage;
   /** and what it puts on the field against a formation */
   look?: Look;
-  /** what each man makes once the ball is his, near one */
+  /** what each player makes once the ball is his, near one */
   afterCatch?: AfterCatch;
   /**
-   * Who resembles whom, nearest first, so a man too thin to sample
-   * borrows plays from men like him before falling to the crowd. A
+   * Who resembles whom, nearest first, so a player too thin to sample
+   * borrows plays from players like him before falling to the crowd. A
    * possession receiver widens to possession receivers.
    */
   alike?: Map<string, string[]>;
   /**
-   * What each man's own per-touch history says, as a multiple of his
+   * What each player's own per-touch history says, as a multiple of his
    * position's average. Given it, a drawn gain and a drawn score for
-   * that man are pulled to the rate the component line reads instead of
+   * that player are pulled to the rate the component line reads instead of
    * to the rate his three seasons of plays read.
    */
-  perMan?: Map<string, PerManLevel>;
+  perPlayer?: Map<string, PerPlayerLevel>;
   /**
-   * Who a man too thin to sample borrows plays from: the men on his own
+   * Who a player too thin to sample borrows plays from: the players on his own
    * side who have the trailing usage, busiest first. `alike` reaches
-   * across the league for men who resemble him, which still leaves a
+   * across the league for players who resemble him, which still leaves a
    * throw to a fourth receiver drawn from the crowd.
    */
   standIn?: Map<string, string[]>;
 }
 
 /**
- * A man's shrunk per-touch rates as a multiple of his position's, one
+ * A player's shrunk per-touch rates as a multiple of his position's, one
  * number per call for the yards and one for the scores.
  */
-export interface PerManLevel {
+export interface PerPlayerLevel {
   runYards: number;
   runScore: number;
   passYards: number;
@@ -987,17 +987,17 @@ export function countPlays(
   const byOffence = new Map<string, Counted>();
   const byDefence = new Map<string, Counted>();
   /**
-   * And each man over everything he did on a call, with the league
+   * And each player over everything he did on a call, with the league
    * beside him for comparison.
    *
    * Asking for his forty touches inside one widened state never found
    * them. The widening stops when the state has three hundred plays,
-   * and the busiest man in such a state has thirty. So every carry and
+   * and the busiest player in such a state has thirty. So every carry and
    * every catch came out at the league's yards and no player differed
    * from any other, which is most of why the model moved a team game
    * by one point where what happened moves by ten.
    */
-  const byMan = new Map<string, Rate>();
+  const byPlayer = new Map<string, Rate>();
   const leagueOn = new Map<string, Rate>();
   /**
    * How often a throw for this many yards was caught.
@@ -1008,7 +1008,7 @@ export function countPlays(
    * plays rather than asserted.
    */
   const caughtAt = new Map<number, { threw: number; caught: number }>();
-  // how much of the ball each man took overall, so his usage at one
+  // how much of the ball each player took overall, so his usage at one
   // state can be read as a leaning rather than a level
   const overall = new Map<string, number>();
   const inScript = new Map<string, number>();
@@ -1045,7 +1045,7 @@ export function countPlays(
     if (row.player) {
       overall.set(row.player, (overall.get(row.player) ?? 0) + 1);
       everyTouch++;
-      addTo(byMan, `${row.player}|${row.call}`, row.yards);
+      addTo(byPlayer, `${row.player}|${row.call}`, row.yards);
       addTo(leagueOn, row.call, row.yards);
 
       const script = scriptOf(row.margin, row.down, row.toGo);
@@ -1118,10 +1118,9 @@ export function countPlays(
   }
 
   for (const row of rows) {
-    // Keyed by the call as well. A run and a pass from the same spot
-    // gain differently, 4.5 yards against 6.1 with a far fatter tail,
-    // and go to different men. Pooling them meant the call decided
-    // nothing at all.
+    // Keyed by the call as well: a run and a pass from the same spot
+    // gain 4.5 yards against 6.1 and go to different players, so
+    // pooling them meant the call decided nothing at all.
     const at = `${row.call}|` + stateKey(
       row.down, row.toGo, row.yardline, row.secondsLeft, row.margin,
     );
@@ -1130,9 +1129,8 @@ export function countPlays(
     const loose = `${row.call}|${Math.min(4, row.down)}|${Math.min(40, row.toGo)}` +
       `|${Math.min(99, row.yardline)}|any`;
     // and once more without the call, because how often a side runs has
-    // to come from one cell counting both. Widening a run pool and a
-    // pass pool separately until each has enough finds eighty of each
-    // wherever it must, and the answer is fifty percent every time.
+    // to come from one cell counting both. Widening the two pools apart
+    // finds eighty of each wherever it must, and comes out at fifty.
     const eitherWay = stateKey(
       row.down, row.toGo, row.yardline, row.secondsLeft, row.margin,
     );
@@ -1264,7 +1262,7 @@ export function countPlays(
     }
   }
   return {
-    cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
+    cells, byOffence, byDefence, byPlayer, leagueOn, caughtAt, overall,
     everyTouch, inScript, scriptPlays, onCall, callPlays, fromFormation,
     yardsFromFormation,
     againstLook,
@@ -1278,10 +1276,10 @@ export function fitPlayFactors(
 ): PlayFactors {
   const {
     projected, split, lately, pairing, playLevel, depth, people, plays,
-    alike, formation, coverage, look, afterCatch, positions, perMan, standIn,
+    alike, formation, coverage, look, afterCatch, positions, perPlayer, standIn,
   } = extras;
   const {
-    cells, byOffence, byDefence, byMan, leagueOn, caughtAt, overall,
+    cells, byOffence, byDefence, byPlayer, leagueOn, caughtAt, overall,
     everyTouch, inScript, scriptPlays, onCall, callPlays,
     fromFormation = new Map<string, { plays: number; runs: number }>(),
     yardsFromFormation = new Map<
@@ -1293,7 +1291,7 @@ export function fitPlayFactors(
   } = extras.counted ?? countPlays(rows, !pairing);
 
   /**
-   * What this game is doing to each man's cut, drawn the first time he
+   * What this game is doing to each player's cut, drawn the first time he
    * is asked for and held until the next game starts. Nothing is drawn
    * outside a game, so a caller asking about a single snap gets the
    * projected cut on its own.
@@ -1314,7 +1312,7 @@ export function fitPlayFactors(
     }
 
     const width = call === "run" ? GAME_SHARE_RUN : GAME_SHARE_PASS;
-    // centred so a man's cut over many games still averages what the
+    // centred so a player's cut over many games still averages what the
     // projection said, since the exponential would otherwise lift it
     const drawn = Math.exp(width * standardNormal(gameDraw) - (width * width) / 2);
     gameTilt.set(key, drawn);
@@ -1392,7 +1390,7 @@ export function fitPlayFactors(
   /**
    * What he makes once the ball is his. A catch is near enough half
    * throw and half after it, and the two are different skills, so
-   * only the second half moves with the man.
+   * only the second half moves with the player.
    */
   const afterCatchTilt = (call: Call, player: string) => {
     if (!afterCatch || call !== "pass" || !player) {
@@ -1434,13 +1432,13 @@ export function fitPlayFactors(
   };
 
   /**
-   * How much more of the work a man takes when the game is going this
+   * How much more of the work a player takes when the game is going this
    * way than he takes on that call in general.
    *
    * Trailing teams throw to their best receiver and stop handing off,
    * and a third and long belongs to whoever can win it. His own
    * numbers are pulled toward taking no view until he has been in the
-   * situation enough, since a man with nine catches while behind
+   * situation enough, since a player with nine catches while behind
    * should not have his afternoon decided by them.
    */
   const scriptLeaning = (player: string, call: Call, state: PlayState) => {
@@ -2027,16 +2025,16 @@ export function fitPlayFactors(
   };
 
   /**
-   * The yardline's score rate over the throws that reached a man.
+   * The yardline's score rate over the throws that reached a player.
    *
    * The cells count a sack as a throw that did not score, and neither
-   * the pool nor a man's own record keeps the sacks, so a draw made
+   * the pool nor a player's own record keeps the sacks, so a draw made
    * out of throws that reached somebody has to be settled against the
    * rate over those throws. Reading the rate over every throw cut a
    * pooled throw inside the ten to 34.8% where those plays scored
    * 39.3%.
    */
-  const scoreRateToAMan = (
+  const scoreRateToAPlayer = (
     state: PlayState, call: Call,
   ): number | undefined => {
     const found = scoreRateAt(state, call);
@@ -2088,7 +2086,7 @@ export function fitPlayFactors(
     const crossShare = crossed / drawn;
     const found = POOL_WASTE
       ? scoreRateAt(state, call)
-      : scoreRateToAMan(state, call);
+      : scoreRateToAPlayer(state, call);
     const sample: GoalSample = {
       crossShare,
       gainfulShare: gainful / drawn,
@@ -2224,7 +2222,7 @@ export function fitPlayFactors(
   /**
    * How much more of the work this position takes here than it takes
    * anywhere, believed in proportion to how much of the spot is its
-   * own. This is where a man with too few plays of his own is left.
+   * own. This is where a player with too few plays of his own is left.
    */
   const positionLeaning = (
     player: string, call: Call, itsCells: Counted[], here: number,
@@ -2255,12 +2253,12 @@ export function fitPlayFactors(
   };
 
   /**
-   * Where a man is left while his own count in this cell is too thin
+   * Where a player is left while his own count in this cell is too thin
    * to say, in two steps: his position's leaning here, and then his
    * own leaning over a pool several times the size.
    *
    * The wider pool is the same spot with the reach let out, so it is
-   * still the goal line or the third down and not his season. A man's
+   * still the goal line or the third down and not his season. A player's
    * own leaning inside the twenty says more about what he does inside
    * the five than his position does, so the position only catches him
    * when the wide pool has nothing of his either.
@@ -2296,13 +2294,13 @@ export function fitPlayFactors(
   /**
    * What the level averages over the touches it is put on.
    *
-   * A man's level is his yards against the league's, and the men who
+   * A player's level is his yards against the league's, and the players who
    * get the ball are better than the average of everyone who ever
    * touched it, so the levels average above one and every play comes
    * out long. Asked about the plays a season really had, the walk
    * gained 4.66 on a carry against the 4.50 sides managed and 7.68 on
    * a throw against 7.32. Dividing by what it averages puts the level
-   * back where it belongs and leaves what separates two men alone.
+   * back where it belongs and leaves what separates two players alone.
    */
   const centreOf = new Map<string, number>();
 
@@ -2318,8 +2316,8 @@ export function fitPlayFactors(
     let weighted = 0;
     let touches = 0;
 
-    for (const [key, his] of byMan) {
-      if (!key.endsWith(`|${call}`) || his.touches < settings.leastForMan) {
+    for (const [key, his] of byPlayer) {
+      if (!key.endsWith(`|${call}`) || his.touches < settings.leastForPlayer) {
         continue;
       }
 
@@ -2339,13 +2337,13 @@ export function fitPlayFactors(
 
   /**
    * How often anybody's play reaches the goal once it is moved here
-   * the way a man's own plays are, counted over the same window his
+   * the way a player's own plays are, counted over the same window his
    * draw uses.
    *
    * Moving a play in from further out is what makes a draw cross too
    * often: five yards gained at the nine is a touchdown at the four.
    * That happens to everybody's plays alike, so it is the number a
-   * man's own crossing share has to be read against. His share on its
+   * player's own crossing share has to be read against. His share on its
    * own says both what the move did and what kind of player he is,
    * and cutting him against it throws the second away.
    */
@@ -2370,7 +2368,7 @@ export function fitPlayFactors(
     if (!rows) {
       rows = [];
 
-      for (const [who, his] of plays.ofMan) {
+      for (const [who, his] of plays.ofPlayer) {
         if (who.endsWith(`|${call}`)) {
           rows.push(...his);
         }
@@ -2420,16 +2418,16 @@ export function fitPlayFactors(
    * run is asked of the pool the same way the pooled path asks it.
    */
   /**
-   * What a touch of this call comes to for a position, over every man
-   * the pools have. This is the sim's own baseline for a man, and it is
-   * what a reconciled rate has to be expressed against: `perMan` says
-   * how a man compares with his position, so the sim's side of the
+   * What a touch of this call comes to for a position, over every player
+   * the pools have. This is the sim's own baseline for a player, and it is
+   * what a reconciled rate has to be expressed against: `perPlayer` says
+   * how a player compares with his position, so the sim's side of the
    * comparison has to be scoped the same way or every tight end moves.
    */
   const positionMeans = new Map<string, { yards: number; touches: number }>();
 
-  if (perMan && positions) {
-    for (const [key, rate] of byMan) {
+  if (perPlayer && positions) {
+    for (const [key, rate] of byPlayer) {
       const at = key.lastIndexOf("|");
       const position = positions.get(key.slice(0, at));
 
@@ -2453,7 +2451,7 @@ export function fitPlayFactors(
 
   /** his own history against his position's, for the yards on this call */
   const wantedYards = (player: string, call: Call) => {
-    const his = perMan?.get(player);
+    const his = perPlayer?.get(player);
 
     if (!his) {
       return 1;
@@ -2477,7 +2475,7 @@ export function fitPlayFactors(
     }
 
     const throwing = call === "pass" && passer
-      ? perMan?.get(passer)?.throwYards ?? 1
+      ? perPlayer?.get(passer)?.throwYards ?? 1
       : 1;
 
     return withinBand(wantedYards(player, call) * throwing) * (mine / league);
@@ -2489,10 +2487,10 @@ export function fitPlayFactors(
    * what they say.
    */
   const reconciledSample = (player: string, call: Call, passer?: string) => {
-    const his = byMan.get(`${player}|${call}`);
+    const his = byPlayer.get(`${player}|${call}`);
     const mine = positionMean(player, call);
     const throwing = call === "pass" && passer
-      ? perMan?.get(passer)?.throwYards ?? 1
+      ? perPlayer?.get(passer)?.throwYards ?? 1
       : 1;
     const wanted = withinBand(wantedYards(player, call) * throwing);
 
@@ -2511,7 +2509,7 @@ export function fitPlayFactors(
   };
 
   /**
-   * A drawn gain moved onto the goal line, or off it, so that the man
+   * A drawn gain moved onto the goal line, or off it, so that the player
    * crosses as often as his own touchdown rate says. Only inside the
    * twenty: further out a score is a broken long gain, which the long
    * end of the pool already decides, and promoting draws out there
@@ -2521,14 +2519,14 @@ export function fitPlayFactors(
     state: PlayState, call: Call, player: string, gained: number,
     uniform: () => number, passer?: string,
   ) => {
-    const his = perMan?.get(player);
+    const his = perPlayer?.get(player);
 
     if (!his || state.yardline > 20) {
       return gained;
     }
 
     const throwing = call === "pass" && passer
-      ? perMan?.get(passer)?.throwScore ?? 1
+      ? perPlayer?.get(passer)?.throwScore ?? 1
       : 1;
     const wants = withinBand(
       (call === "run" ? his.runScore : his.passScore) * throwing,
@@ -2549,7 +2547,7 @@ export function fitPlayFactors(
     return gained;
   };
 
-  /** widened play lists, one per man and call, built once */
+  /** widened play lists, one per player and call, built once */
   const pooled = new Map<string, number[]>();
 
   const hisOwnDraw = plays
@@ -2582,7 +2580,7 @@ export function fitPlayFactors(
         }
 
         /**
-         * A throw between these exact two men first, when they have
+         * A throw between these exact two players first, when they have
          * enough between them. The pairing the multiplier interface
          * could never carry comes out of joint sampling instead: what
          * Chase does with Burrow throwing is what those plays were.
@@ -2596,11 +2594,11 @@ export function fitPlayFactors(
             : [];
           his = together.length >= 25
             ? together
-            : plays.ofMan.get(`${player}|${call}`) ?? [];
+            : plays.ofPlayer.get(`${player}|${call}`) ?? [];
 
           if (his.length < 25 && alike) {
             for (const twin of alike.get(player) ?? []) {
-              his = his.concat(plays.ofMan.get(`${twin}|${call}`) ?? []);
+              his = his.concat(plays.ofPlayer.get(`${twin}|${call}`) ?? []);
 
               if (his.length >= 60) {
                 break;
@@ -2609,15 +2607,15 @@ export function fitPlayFactors(
           }
 
           /**
-           * And the men on his own side who have the trailing usage,
+           * And the players on his own side who have the trailing usage,
            * busiest first, for whoever `alike` could not fill either.
            * The alternative is the pooled draw, which gains 4.62 where
            * a targeted throw gains 7.33, so a fourth receiver is better
-           * off borrowing from the men his side actually throws to.
+           * off borrowing from the players his side actually throws to.
            */
           if (his.length < 25 && standIn) {
             for (const busy of standIn.get(player) ?? []) {
-              his = his.concat(plays.ofMan.get(`${busy}|${call}`) ?? []);
+              his = his.concat(plays.ofPlayer.get(`${busy}|${call}`) ?? []);
 
               if (his.length >= 60) {
                 break;
@@ -2711,7 +2709,7 @@ export function fitPlayFactors(
             const crossShare = GOAL_CUT_HIS_OWN
               ? crossedWeight / weight
               : anyoneCrossesAt(call, state.yardline, room);
-            const found = scoreRateToAMan(state, call);
+            const found = scoreRateToAPlayer(state, call);
             const sample = {
               crossShare,
               gainfulShare: (weight - dryWeight) / weight,
@@ -2809,11 +2807,11 @@ export function fitPlayFactors(
 
   /**
    * The same draw with his own rates put back on it. His plays are three
-   * seasons deep and unshrunk, so a man who broke two long ones in a
+   * seasons deep and unshrunk, so a player who broke two long ones in a
    * thin sample keeps making them; the component line reads four games
-   * and last season and pulls a thin man toward his position.
+   * and last season and pulls a thin player toward his position.
    */
-  const hisOwnPlay = hisOwnDraw && perMan
+  const hisOwnPlay = hisOwnDraw && perPlayer
     ? (
         state: PlayState, call: Call, player: string, uniform: () => number,
         passer?: string,
@@ -2847,7 +2845,7 @@ export function fitPlayFactors(
     /**
      * The snap settled before the call, which is how football works
      * and measures worse: every drawn layer adds variance, and a
-     * week of a man's scoring orders at .314 this way against .343
+     * week of a player's scoring orders at .314 this way against .343
      * with the side's habit applied to the gain and nothing drawn.
      * Behind SNAP_CHAIN until something makes the layers pay.
      */
@@ -2929,7 +2927,7 @@ export function fitPlayFactors(
             /**
              * As a leaning it is better calibrated and orders worse:
              * it asks 41.2% where the plays were 41.8% against 40.5%
-             * for the rate, and a week of a man reads .327 against
+             * for the rate, and a week of a player reads .327 against
              * .336. Pulling toward the pooled level takes the
              * formation back out of the call.
              */
@@ -2970,7 +2968,7 @@ export function fitPlayFactors(
       /**
        * The model's own read of the call, where it has one. The pools
        * see the down, the distance and the spot; the model can also
-       * see the staff calling it and the men the defence has on the
+       * see the staff calling it and the players the defence has on the
        * field, and both are things a run rate really turns on.
        */
       const said = playLevel?.runsHere && sides
@@ -3035,21 +3033,21 @@ export function fitPlayFactors(
       }
 
       // seeded off the game's own stream, so the same fixture played
-      // twice moves the same men, and drawn only when a width is set
+      // twice moves the same players, and drawn only when a width is set
       // so that turning both off leaves every other draw where it was
       gameDraw = seededRng(Math.floor(uniform() * 2 ** 31));
     },
     goesTo: (state, call, among, sides) => {
       /**
        * Near the line a cell is asked for less, because asking for
-       * forty plays a man out of a spot that thin reaches the twenty
-       * three and the thirty eight to fill itself, and the man who
-       * gets it from the three is not the man who gets it from the
+       * forty plays a player out of a spot that thin reaches the twenty
+       * three and the thirty eight to fill itself, and the player who
+       * gets it from the three is not the player who gets it from the
        * thirty eight. Everywhere else the reach costs nothing.
        */
       const wants = (state.yardline <= LINE_IS_NEAR
         ? (call === "run" ? GOAL_LEAST_RUN : GOAL_LEAST_PASS)
-        : settings.leastForMan) * Math.max(1, among.length);
+        : settings.leastForPlayer) * Math.max(1, among.length);
       const itsCells = atCells(state, wants, call);
       let here = 0;
 
@@ -3059,7 +3057,7 @@ export function fitPlayFactors(
 
       /**
        * The same spot asked of a pool several times the size, which is
-       * where a man is left while his count in the tight one is thin.
+       * where a player is left while his count in the tight one is thin.
        */
       const wideCells = WIDE_LEAN > 0
         ? atCells(state, WIDE_LEAN * Math.max(1, among.length), call)
@@ -3087,7 +3085,7 @@ export function fitPlayFactors(
         }
 
         // How much more of this call he takes here than he takes of it
-        // anywhere. A man used on third down leans that way whatever his
+        // anywhere. A player used on third down leans that way whatever his
         // overall share turns out to be next season.
         const hisOverall = POSITION_LEAN
           ? (onCall.get(`${player}|${call}`) ?? 0) /
@@ -3109,21 +3107,22 @@ export function fitPlayFactors(
         /**
          * What this defence is likely playing, and how much of his
          * usual share he takes against it. His slice moves .70 to
-         * 1.59 across men and where he sits lasts to the next season
+         * 1.59 across players and where he sits lasts to the next season
          * at .32, and nothing in the walk knew it.
          */
         const facing = call === "pass" && coverage && sides?.defence
           ? (() => {
-              const man = coverage.manRate(sides.defence);
+              const chanceOfMan = coverage.manRate(sides.defence);
 
-              return man * coverage.underMan(player) + (1 - man);
+              return chanceOfMan * coverage.underMan(player) +
+                (1 - chanceOfMan);
             })()
           : 1;
         /**
          * The projection says how big a share he wins, and RECENT_LEVEL
-         * moves that toward what he has been taking lately. A man the
+         * moves that toward what he has been taking lately. A player the
          * projection does not price at all is left alone, so this only
-         * changes how big a share the men on the field win and never
+         * changes how big a share the players on the field win and never
          * which of them are eligible for one.
          */
         const shownLately = lately?.get(player);
@@ -3183,12 +3182,12 @@ export function fitPlayFactors(
        * Scaling every draw by what he averages gives a possession
        * receiver and a deep threat the same shape when they average the
        * same. Breaking a twenty runs from 1.5% of touches to 14.7%
-       * across men, lasts from season to season at .755, and is mostly
+       * across players, lasts from season to season at .755, and is mostly
        * not what his average already says, .684 of it surviving once
        * the average is taken out.
        */
       /**
-       * On a throw, the man's own depth picks which pool.
+       * On a throw, the player's own depth picks which pool.
        *
        * How far downfield he is thrown carries to the next season at
        * .877, so it is the surest thing we know about him, and it
@@ -3230,7 +3229,7 @@ export function fitPlayFactors(
       const hadRoom = atDepth || state.yardline <= settings.roomBeyond ||
         state.yardline > settings.roomUpTo || process.env["NO_ROOM"]
         ? undefined
-        : roomFor(cell, state.yardline);
+        : drawableForYardline(cell, state.yardline);
       const drawFrom = atDepth && atDepth.yards.length >= 20 ? atDepth
         : hadRoom && hadRoom.yards.length >= settings.leastWithRoom ? hadRoom
         : pool;
@@ -3240,7 +3239,7 @@ export function fitPlayFactors(
       /**
        * What this pool makes on an ordinary touch, counted while it is
        * being split so it costs nothing. On a throw the pool is the one
-       * at this man's own depth, and that is what his level has to be
+       * at this player's own depth, and that is what his level has to be
        * measured against: a deep threat is already being dealt deep
        * throws, so measuring him against every throw in the league
        * credits him for the depth a second time.
@@ -3303,13 +3302,13 @@ export function fitPlayFactors(
        * At this state when he has been here enough, otherwise over
        * everything he did on this call. The two have to be compared at
        * the same scope: his season average against a goal line average
-       * would make every man look twice as good near the line.
+       * would make every player look twice as good near the line.
        */
-      const wide = byMan.get(`${player}|${call}`);
-      const atState = own && own.touches >= settings.leastForMan
+      const wide = byPlayer.get(`${player}|${call}`);
+      const atState = own && own.touches >= settings.leastForPlayer
         ? { his: own, league: cell.named }
         : undefined;
-      const found = atState ?? (wide && wide.touches >= settings.leastForMan
+      const found = atState ?? (wide && wide.touches >= settings.leastForPlayer
         ? { his: wide, league: leagueOn.get(call) }
         : undefined);
       const hisLong = found?.league && found.league.touches > 0 && found.league.long > 0
@@ -3325,11 +3324,11 @@ export function fitPlayFactors(
       /**
        * What his own per-touch history says, when a caller has handed
        * the rates in. It replaces the level below rather than stacking
-       * on it: both say how good a man is at this, the level off three
+       * on it: both say how good a player is at this, the level off three
        * unshrunk seasons and the history off four games and last season
        * pulled toward his position.
        */
-      const reconciled = perMan
+      const reconciled = perPlayer
         ? reconciledLevel(player, call, sides?.passer)
         : undefined;
 
@@ -3350,9 +3349,9 @@ export function fitPlayFactors(
        *
        * Whether this is one of his long ones was settled above, from
        * how often he breaks them, so a level worked out over all his
-       * touches counts a big play man's long ones a second time. That
+       * touches counts a big play player's long ones a second time. That
        * used to be undone by dividing by the square root of his rate
-       * of breaking them, which blows up on a man with one long gain
+       * of breaking them, which blows up on a player with one long gain
        * in sixty touches and cost more than the level was worth: it
        * ordered backs by what they make of a touch at .14, where
        * having no level at all manages .22.
@@ -3390,7 +3389,7 @@ export function fitPlayFactors(
        * How much of his level to say, which is not the same on a run
        * as on a throw. A throw is already drawn from the pool at his
        * own depth and from the long end at his own rate of breaking
-       * one, so his level is a third helping of the same man and the
+       * one, so his level is a third helping of the same player and the
        * walk spreads receivers three times as far as it should. A run
        * is drawn from a pool that knows nothing about him, so his
        * level is all he has.
@@ -3469,7 +3468,7 @@ export function fitPlayFactors(
       settleAtGoal(state, call, gained, uniform, goalSample(state, call)),
   };
 
-  if (perMan) {
+  if (perPlayer) {
     const drawnFromThePool = built.gains;
     built.gains = (state, call, player, uniform, sides) =>
       atHisScoreRate(

@@ -103,7 +103,7 @@ export async function buildPreseasonWorld(
   const bucketOf = (gamesPrev: number) =>
     gamesPrev >= 14 ? "durable" : gamesPrev >= 9 ? "spotty" : "thin";
   /**
-   * How many games a man plays, from men like him last year.
+   * How many games a player plays, from players like him last year.
    *
    * Rookies were one pool, and most rookies never play, so a first
    * round back came out at three games. Where he was drafted says
@@ -251,7 +251,7 @@ export async function buildPreseasonWorld(
   }
 
   /**
-   * How many games each man is likely to be available for.
+   * How many games each player is likely to be available for.
    *
    * Four buckets of last season's games gave everyone in a bucket the
    * same answer. A fitted model reads his last three seasons, his age,
@@ -307,7 +307,7 @@ export async function buildPreseasonWorld(
      *
      * Without this he shipped no parts at all, and a page that scores
      * the parts itself fell back to the played out games, which barely
-     * know a man who has never taken a snap: Jeremiyah Love came out
+     * know a player who has never taken a snap: Jeremiyah Love came out
      * at a third of a point a game where the model has him at thirteen.
      */
     const says = predictRookie(rookieWeights, r);

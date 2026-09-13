@@ -28,7 +28,7 @@ const PLAYS_PER_TOTAL_POINT = 0.24;
 const WIND_THRESHOLD = 8;
 const PER_WIND_MPH = 0.0025;
 
-export interface TeamHabit {
+interface TeamHabit {
   /** the team's own pass share, before the game's own circumstances */
   passShare: number;
   /** plays a game it usually runs */

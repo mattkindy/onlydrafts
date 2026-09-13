@@ -2,7 +2,7 @@
  * A week built situation by situation rather than as one pool of
  * touches split up.
  *
- * A man's targets and his hand-offs are drawn separately, because the
+ * A player's targets and his hand-offs are drawn separately, because the
  * data says how many of each he got and guessing between them from his
  * position was throwing two fifths of a receiver's work on the ground.
  * Yards per catch and yards per carry are likewise his own numbers in
@@ -37,14 +37,14 @@ export const FIRMNESS: Record<Situation, number> = {
 };
 
 /** how much the count of snaps in a situation swings week to week */
-export const PLAY_SWING = 0.3;
+const PLAY_SWING = 0.3;
 
-export interface WeekSettings {
+interface WeekSettings {
   firmness: Record<Situation, number>;
   playSwing: number;
 }
 
-export const DEFAULT_WEEK: WeekSettings = {
+const DEFAULT_WEEK: WeekSettings = {
   firmness: FIRMNESS,
   playSwing: PLAY_SWING,
 };
@@ -116,13 +116,13 @@ export function forGame(team: SituationalTeam, game: GameContext): SituationalTe
 }
 
 /**
- * A multiplier that swings as far as a man really does without moving
+ * A multiplier that swings as far as a player really does without moving
  * what he averages.
  *
  * The plain form, one plus a normal, goes negative and gets clipped,
  * and the clipping lifts the mean: at a swing of 1.3 a fifth of draws
  * are cut off and the average comes out 17% high. That is why the
- * swing had been set to 0.35, which kept the mean honest by making the
+ * swing had been set to 0.35, which kept the mean right by making the
  * play never vary. Dividing by what the clipped draw averages lets the
  * spread be right and the level stay put.
  */
@@ -184,7 +184,7 @@ export function simulateSituationalWeek(
       continue;
     }
 
-    // the throwing and the running are separate pools, and the men in
+    // the throwing and the running are separate pools, and the players in
     // each compete only with the others in that one
     for (const kind of ["target", "carry"] as const) {
       const own = (p: SituationalRole) =>

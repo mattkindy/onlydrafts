@@ -71,7 +71,7 @@ describe("a drive made of what its players did", () => {
     expect(good / ordinary).toBeGreaterThan(1.05);
   });
 
-  it("credits the man who had it, not whoever comes to hand", () => {
+  it("credits the player who had it, not whoever comes to hand", () => {
     const roster = [back("bell", 5), back("cow", 5)];
     roster[1]!.carryShare = {
       openField: 0, thirdAndShort: 0, thirdAndLong: 0, nearGoal: 0,

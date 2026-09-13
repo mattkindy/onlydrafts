@@ -144,7 +144,7 @@ async function componentPriors(season: number): Promise<Map<string, Rates>> {
 
 /**
  * The component line through week 4 and the season-anchored ridge line
- * from week 5, which is the split the weekly bench settled. A man with no
+ * from week 5, which is the split the weekly bench settled. A player with no
  * history behind him would come out at nothing, so he keeps the ridge.
  */
 function earlyWeekLine(
@@ -166,11 +166,11 @@ function earlyWeekLine(
 }
 
 /**
- * One row a man, in the slate file the app reads. `ours` is our
+ * One row a player, in the slate file the app reads. `ours` is our
  * per-position ridge and `sleeper` is Sleeper's number, null when they
- * have no row for him. A man Sleeper listed without a number is a backup
- * or a man who is out, so he gets a Sleeper 0 and an average of 0; a
- * man Sleeper never listed keeps ours alone. Otherwise `average` is the
+ * have no row for him. A player Sleeper listed without a number is a backup
+ * or a player who is out, so he gets a Sleeper 0 and an average of 0; a
+ * player Sleeper never listed keeps ours alone. Otherwise `average` is the
  * two averaged, and the file is sorted by it. `floor` and
  * `ceiling` are the tenth and ninetieth of the outcome around that
  * average. `snaps` is a whole percent; `gamesMissed` is out of his last
@@ -192,8 +192,8 @@ function slateRow(
   const sleeper = projection
     ? sleeperPointsUnder(projection, scoring().receptions)
     : quiet ? 0 : undefined;
-  // Sleeper leaves a man blank when he is not going to play, and a
-  // half of our number would still rank him over men who will
+  // Sleeper leaves a player blank when he is not going to play, and a
+  // half of our number would still rank him over players who will
   const average =
     sleeper === undefined
       ? ours
@@ -201,7 +201,7 @@ function slateRow(
         ? 0
         : blendPoints(
           ours, debiasedSleeper(e.position, sleeper), SHIPPED_BLEND_WEIGHT);
-  // a man who is not playing has no week to draw around
+  // a player who is not playing has no week to draw around
   const quantile = (q: number) =>
     average === 0 ? 0 : outcomeQuantile(residuals, e.position, average, q);
 
@@ -466,14 +466,14 @@ async function writeSlate(path: string, slate: Slate): Promise<void> {
 }
 
 /**
- * Each man's place by one model over the parts of his play. A man the
+ * Each player's place by one model over the parts of his play. A player the
  * advanced stat files have never seen is left out rather than guessed
  * at, and the blend gives his weight to the opinions that do have
  * something, which is how a rookie is handled.
  */
 async function partsSays<T extends { position: string }>(
   board: T[],
-  keyOf: (man: T) => string,
+  keyOf: (player: T) => string,
   idOf: Map<string, string>,
   season: number,
 ): Promise<Map<string, number>> {
@@ -515,20 +515,20 @@ async function partsSays<T extends { position: string }>(
   const lastYear = await partsIn(season - 1);
   const said = new Map<string, number>();
 
-  for (const man of board) {
-    const id = idOf.get(keyOf(man));
+  for (const player of board) {
+    const id = idOf.get(keyOf(player));
     const his = id === undefined ? undefined : lastYear.get(id);
 
     if (his) {
-      said.set(keyOf(man), fitted.says(his, man.position));
+      said.set(keyOf(player), fitted.says(his, player.position));
     }
   }
 
   /**
    * A rookie has no parts, and he has a draft slot, which orders first
    * seasons at 0.607 on its own. His slot's expected points fill the
-   * seat, fitted on the rookies of the seasons this build may see, so
-   * the parts opinion stops being silent about exactly the men the
+   * slot, fitted on the rookies of the seasons this build may see, so
+   * the parts opinion stops being silent about exactly the players the
    * market prices well.
    */
   const slotRows: number[][] = [];
@@ -574,10 +574,10 @@ async function partsSays<T extends { position: string }>(
   let slotted = 0;
 
   if (slotFit) {
-    for (const man of board) {
-      const id = idOf.get(keyOf(man));
+    for (const player of board) {
+      const id = idOf.get(keyOf(player));
 
-      if (said.has(keyOf(man)) || id === undefined) {
+      if (said.has(keyOf(player)) || id === undefined) {
         continue;
       }
 
@@ -589,7 +589,7 @@ async function partsSays<T extends { position: string }>(
       }
 
       said.set(
-        keyOf(man),
+        keyOf(player),
         Math.max(0, predictRidge(slotFit, columnsAt(pick.pick, pick.position))),
       );
       slotted++;
@@ -598,12 +598,12 @@ async function partsSays<T extends { position: string }>(
 
   console.log(
     `his parts speak for ${said.size} of ${board.length} on the board, ` +
-    `taught on ${learn.length} seasons of men, ${slotted} rookies at their slot`,
+    `taught on ${learn.length} seasons of players, ${slotted} rookies at their slot`,
   );
 
   return placesBy(
-    board.filter((man) => said.has(keyOf(man))), keyOf,
-    (man) => said.get(keyOf(man)) ?? null,
+    board.filter((player) => said.has(keyOf(player))), keyOf,
+    (player) => said.get(keyOf(player)) ?? null,
   );
 }
 
@@ -762,7 +762,7 @@ async function main(): Promise<void> {
   const format = argOf("--scoring", "");
   // The draft board has to match the draft. A point a catch moves
   // receivers up the order, so a standard league needs the standard
-  // mocks or every alternative it prices is the wrong man.
+  // mocks or every alternative it prices is the wrong player.
   let adpFormat: AdpFormat = "ppr";
 
   if (leagueId) {
@@ -836,7 +836,7 @@ async function main(): Promise<void> {
     ? parseCsv(await readFile(
         join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"))
     : [];
-  /** each walked week's points per man, for the weekly mix below */
+  /** each walked week's points per player, for the weekly mix below */
   const weekWalked = new Map<number, Map<string, number>>();
   const priors = await componentPriors(season);
   const prevStats = await loadPlayerStats(season - 1);
@@ -844,7 +844,7 @@ async function main(): Promise<void> {
     ? await loadPlayerStats(season)
     : [];
   /**
-   * What each man had behind him going into each of the first four
+   * What each player had behind him going into each of the first four
    * weeks. Before a season is played that is his previous one alone,
    * which is what the 2026 week 1 slate is built from.
    */
@@ -1069,10 +1069,10 @@ async function main(): Promise<void> {
     const mocks = await loadAdp(
       season, (named === "ppr" ? "ppr" : "standard") as AdpFormat,
     ).catch(() => new Map());
-    const room = await loadSleeperAdp(season, named).catch(() => new Map());
+    const sleeperAdp = await loadSleeperAdp(season, named).catch(() => new Map());
 
-    for (const key of new Set([...room.keys(), ...mocks.keys()])) {
-      const his = room.get(key);
+    for (const key of new Set([...sleeperAdp.keys(), ...mocks.keys()])) {
+      const his = sleeperAdp.get(key);
       const mocked = mocks.get(key);
       const at = his?.adp ?? mocked?.adp;
 
@@ -1100,11 +1100,11 @@ async function main(): Promise<void> {
   }
 
   /**
-   * How much of his offence each man is projected to touch.
+   * How much of his offence each player is projected to touch.
    *
    * The regression asks what a player did and what has changed around
    * him. This asks a different question: of the work his position
-   * group has to give out, how much does he win against the men he is
+   * group has to give out, how much does he win against the players he is
    * competing with. The two disagree about different players, which
    * is why mixing both with the market beats mixing either.
    */
@@ -1138,12 +1138,12 @@ async function main(): Promise<void> {
       experience: await experienceBefore(season),
     });
 
-    for (const man of roster) {
-      const share = shares.get(man.playerId);
+    for (const player of roster) {
+      const share = shares.get(player.playerId);
 
       if (share !== undefined) {
         touchesFor.set(
-          man.playerId, share * (ranPlays.get(`${season - 1}|${man.team}`) ?? 1000),
+          player.playerId, share * (ranPlays.get(`${season - 1}|${player.team}`) ?? 1000),
         );
       }
     }
@@ -1164,7 +1164,7 @@ async function main(): Promise<void> {
    *
    * It orders players worse than the season model, .72 against .788,
    * so the level stays where it is and only the shape is taken. Each
-   * man's simulated spread is scaled to sit around his projection.
+   * player's simulated spread is scaled to sit around his projection.
    */
   const shapeOf = new Map<
     string, { q1: number; mid: number; q3: number; low: number; high: number }
@@ -1184,11 +1184,9 @@ async function main(): Promise<void> {
     const draws = { uniform: rng, normal: () => normalDraw(rng) };
 
     for (const [team, roster] of byTeam) {
-      // No role drift here. The card says middle half of games, which
-      // is a statement about his weeks given the role he has, not
-      // about our doubt over what that role will be. Pooling across
-      // role draws made a receiver's middle half twice as wide as any
-      // receiver's really is.
+      // No role drift: the card's middle half is about his weeks in the
+      // role he has, not our doubt about the role. Pooling role draws
+      // made a receiver's middle half twice as wide as it really is.
       const simulated = simulateSeason(
         { plays: playsByTeam.get(team)! }, roster,
         { ...DEFAULT_SEASON, runs: 400, roleDrift: 0, scoring: scoring() }, draws,
@@ -1202,7 +1200,7 @@ async function main(): Promise<void> {
         }
 
         // as a share of his own mean, since the projection it is hung
-        // on is a mean; a thin man's median can be a tenth of his mean
+        // on is a mean; a thin player's median can be a tenth of his mean
         shapeOf.set(player.playerId, {
           q1: player.weekly.p25 / mean,
           mid: player.weekly.median / mean,
@@ -1220,10 +1218,10 @@ async function main(): Promise<void> {
 
   /**
    * The walk's own spread wins over the role simulation's wherever
-   * the walk has dealt a man enough games: the kept season file
+   * the walk has dealt a player enough games: the kept season file
    * records every game he was handed, so his band is his, from the
    * same engine that made his projection. The role simulation stays
-   * for the men the walk never played.
+   * for the players the walk never played.
    */
   const dealtGames = new Map<string, number[]>();
 
@@ -1266,7 +1264,7 @@ async function main(): Promise<void> {
   }
 
   /**
-   * Each man's weeks from the weekly model rather than from his
+   * Each player's weeks from the weekly model rather than from his
    * season average times a blunted opponent. The two order a week
    * about equally well, but this one is the model that was measured,
    * and it says what it thinks of a matchup rather than what a
@@ -1457,12 +1455,9 @@ async function main(): Promise<void> {
           : null,
         plus: f.plus,
         minus: f.minus,
-        // A week as a multiple of his own average, since points here
-        // would be points under one league's scoring. The weekly model
-        // was fitted on points, so every part of his line moves together.
-        // A man projected at nothing has no average to be a multiple of,
-        // and saying his every week is a flat one is closer than saying
-        // he scores nothing in all of them.
+        // A multiple of his own average, since points here would be
+        // points under one league's scoring. A player projected at
+        // nothing has no average, so a flat one beats zero everywhere.
         weeks: (weeklyByPlayer.get(p.playerId) ?? [])
           .map((w) => ({
             w: w.week,
@@ -1499,7 +1494,7 @@ async function main(): Promise<void> {
 
   /**
    * Who is on each defence this year, so last season's work follows
-   * the man rather than the shirt. A club that lost its pass rush
+   * the player rather than the shirt. A club that lost its pass rush
    * should not be projected to rush the passer.
    */
   const playsFor = new Map<string, string>();
@@ -1683,7 +1678,7 @@ async function main(): Promise<void> {
         made: his.parts[`fgm_${band.name}`] ?? 0,
       })),
       // leaned toward what every kicker makes until he has taken
-      // enough of them, the same way his field goals are. A man who
+      // enough of them, the same way his field goals are. A player who
       // went thirty from thirty is not a certainty next year.
       extraPointRate: extraPointRateOf(
         his.parts["xpm"] ?? 0, his.parts["xpmiss"] ?? 0,
@@ -1761,7 +1756,7 @@ async function main(): Promise<void> {
       : "pts_allow_35p";
 
   for (const [team, its] of defended) {
-    // a season's work from the men who play there now, over a season
+    // a season's work from the players who play there now, over a season
     const games = 17;
     const gave = allowed.get(team)?.points ?? [];
     const made: Record<string, number> = Object.fromEntries(
@@ -1787,7 +1782,7 @@ async function main(): Promise<void> {
 
   /**
    * The games played out, when a season of them has been kept. Absent
-   * men keep their weight with the other opinions, the way every
+   * players keep their weight with the other opinions, the way every
    * silent opinion is treated.
    */
   const playedFile = await readFile(
@@ -1811,7 +1806,7 @@ async function main(): Promise<void> {
   const keyOf = (p: (typeof board)[number]) => p.key;
   /**
    * The regression is the reference the others are measured against
-   * because it is the only one with something to say about every man.
+   * because it is the only one with something to say about every player.
    * Each opinion then goes onto the board's scale, since adp prices
    * the front 200 and the walk sees 700 and their places do not mean
    * the same thing until they are moved onto one.
@@ -1828,9 +1823,9 @@ async function main(): Promise<void> {
   /**
    * The walk's totals are raw points, and raw points put every good
    * quarterback above every back, which is true and useless: the board
-   * orders by what a man is worth over the one you could have had, so
+   * orders by what a player is worth over the one you could have had, so
    * the walk's opinion is taken the same way. The bar per position is
-   * the last man a twelve team league starts.
+   * the last player a twelve team league starts.
    */
   const walkSaid = new Map<string, number>();
 
@@ -1846,12 +1841,12 @@ async function main(): Promise<void> {
   const STARTS = { QB: 12, RB: 34, WR: 26, TE: 12 } as Record<string, number>;
   const walkBar = new Map<string, number>();
 
-  for (const [position, seats] of Object.entries(STARTS)) {
+  for (const [position, slots] of Object.entries(STARTS)) {
     const theirs = board
       .filter((p) => p.position === position && walkSaid.has(p.key))
       .map((p) => walkSaid.get(p.key)!)
       .sort((a, b) => b - a);
-    walkBar.set(position, theirs[Math.min(seats - 1, theirs.length - 1)] ?? 0);
+    walkBar.set(position, theirs[Math.min(slots - 1, theirs.length - 1)] ?? 0);
   }
 
   const walkPlace = onBoard(placesBy(board, keyOf, (p) => {
@@ -1876,7 +1871,7 @@ async function main(): Promise<void> {
   /**
    * Divided by the games the walk really dealt him, not the fixtures
    * on the calendar. The absences live inside the season now, so a
-   * calendar divisor diluted a fragile man's game and his expected
+   * calendar divisor diluted a fragile player's game and his expected
    * games then priced the missing weeks a second time.
    */
   const walkSampled = new Map<string, number>(
@@ -1915,7 +1910,7 @@ async function main(): Promise<void> {
   );
 
   /**
-   * Who each side plays each week, so the page can move the men in one
+   * Who each side plays each week, so the page can move the players in one
    * game together: the two quarterbacks, and a defence against the
    * offence it is facing.
    */

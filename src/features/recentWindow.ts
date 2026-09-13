@@ -2,12 +2,12 @@
  * The weeks each club played, and the last few of them before a given
  * week.
  *
- * A man's rows in the weekly file skip the weeks he missed, so reading
+ * A player's rows in the weekly file skip the weeks he missed, so reading
  * four rows back reaches over an absence as though it never happened. A
- * share or a room total read that way mixes weeks he played with weeks
- * he did not, and comes out too high for him and too low for the men
- * who covered. Counting from the club's calendar gives every man in the
- * room the same weeks, and a man who missed one counts as nothing.
+ * share or a position group total read that way mixes weeks he played with weeks
+ * he did not, and comes out too high for him and too low for the players
+ * who covered. Counting from the club's calendar gives every player in the
+ * group the same weeks, and a player who missed one counts as nothing.
  *
  * Everything needing a recent window asks here, so there is one way of
  * counting it.
@@ -46,7 +46,7 @@ export function recentClubWeeks(
 }
 
 /**
- * How many club game weeks a man's own last few games span, over and
+ * How many club game weeks a player's own last few games span, over and
  * above the games themselves. For a starter who has not played since
  * week 3 this counts every week he has been out.
  */

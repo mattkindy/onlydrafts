@@ -1,10 +1,10 @@
 /**
- * What a draft price says about a man's coming share of the work.
+ * What a draft price says about a player's coming share of the work.
  *
  * The counts cannot tell a star back from a lost season apart from
- * the men who covered for him, and every August draft room can: he
+ * the players who covered for him, and every August draft room can: he
  * goes eighth overall and they go undrafted. This turns that price
- * into the share men at that price have gone on to take, fitted on
+ * into the share players at that price have gone on to take, fitted on
  * earlier seasons, so a projection can lean toward the market's level
  * rather than only reordering its own.
  */
@@ -18,14 +18,14 @@ const BANDS = [12, 24, 48, 96, 160, 999];
 
 const bandOf = (adp: number) => BANDS.findIndex((edge) => adp <= edge);
 
-export interface AdpShare {
-  /** the shares men at this price and position have taken, per half */
+interface AdpShare {
+  /** the shares players at this price and position have taken, per half */
   impliedShare: (
     position: string, adp: number,
   ) => { carry: number; target: number } | undefined;
 }
 
-export async function fitAdpShare(
+async function fitAdpShare(
   seasons: number[],
   teamPlaysOf: (season: number, team: string) => number,
 ): Promise<AdpShare> {

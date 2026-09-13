@@ -38,7 +38,7 @@ export interface StatParts {
   receptions: number; recYds: number; recTd: number;
   /**
    * How often he got the ball, which no league pays for and which a
-   * reader wants anyway. A man keeps far more of his volume from one
+   * reader wants anyway. A player keeps far more of his volume from one
    * season to the next than of what he does with it, so these are the
    * steadiest numbers on his card.
    */

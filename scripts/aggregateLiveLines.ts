@@ -1,5 +1,5 @@
 /**
- * Every man's week as the site would have priced it before kickoff: the
+ * Every player's week as the site would have priced it before kickoff: the
  * component line blended with Sleeper, and the five figures the residual
  * model gives it.
  *
@@ -30,8 +30,8 @@ import { LINE_COLUMNS } from "../src/backtest/liveLines.js";
 
 const SEASONS = (process.argv[2] ?? "2024,2025").split(",").map(Number);
 const TRAIN = [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023];
-const SEATED = ["QB", "RB", "WR", "TE"];
-/** a man under this is nobody's starter, so lineups are drawn above it */
+const STARTING_POSITIONS = ["QB", "RB", "WR", "TE"];
+/** a player under this is nobody's starter, so lineups are drawn above it */
 const LOW_BAR = 5;
 
 const games = await loadGames();
@@ -57,7 +57,7 @@ for (const season of SEASONS) {
   const rows = [LINE_COLUMNS.join(",")];
 
   for (const e of await weeklyExamplesForSeason(season, games)) {
-    if (!e.teamId || !e.opponent || !SEATED.includes(e.position)) {
+    if (!e.teamId || !e.opponent || !STARTING_POSITIONS.includes(e.position)) {
       continue;
     }
 
@@ -88,5 +88,5 @@ for (const season of SEASONS) {
 
   const out = join(RAW_DIR, "..", "curated", `liveLines-${season}.csv`);
   await writeFile(out, rows.join("\n") + "\n");
-  console.log(`${season}: ${rows.length - 1} men`);
+  console.log(`${season}: ${rows.length - 1} players`);
 }

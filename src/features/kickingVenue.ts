@@ -20,7 +20,7 @@ export interface Venue {
   wind?: number;
 }
 
-export interface KickingVenue {
+interface KickingVenue {
   /** what to multiply a make probability by, given the yard line */
   bend: (yardline: number, venue: Venue) => number;
   /** and how often an extra point goes over there */

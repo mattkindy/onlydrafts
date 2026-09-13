@@ -1,7 +1,7 @@
 /**
  * Everything needed to play out a week of football.
  *
- * The cast, who throws, how the work splits between the men, the
+ * The cast, who throws, how the work splits between the players, the
  * fitted play, clock and fourth down behaviour, and the sampled
  * plays themselves. The evaluation and the week report both play the
  * same games, so they build the world the same way.
@@ -29,7 +29,7 @@ import { normalizeName } from "../data/names.js";
 import { fitEndings } from "./fitEndings.js";
 import {
   fitPlayFactors, countPlays, storePlays, FACTOR_DEFAULTS,
-  type PerManLevel, type PlayRow,
+  type PerPlayerLevel, type PlayRow,
 } from "./fitPlayFactors.js";
 import { fitFourthDown, climbTo, type FourthRow } from "./fitFourthDown.js";
 import { fitPlayClock, timeBetween } from "./fitPlayClock.js";
@@ -61,7 +61,7 @@ export interface PlayedWorld {
   ticking: ReturnType<typeof fitPlayClock>;
   /** who throws for each side */
   throwsFor: Map<string, string>;
-  /** every man on each side, by team */
+  /** every player on each side, by team */
   onTeam: Map<string, { playerId: string; position: string }[]>;
   /** the fitted play behaviour, for asking about single plays */
   factors: ReturnType<typeof fitPlayFactors>;
@@ -69,18 +69,18 @@ export interface PlayedWorld {
   raw: ReturnType<typeof parseCsv>;
 }
 
-/** an empty history, for a man this season has never seen on the field */
+/** an empty history, for a player this season has never seen on the field */
 const noHistory = (): History => ({
   trailing: emptyBox(), trailingGames: 0, prev: emptyBox(), prevGames: 0,
 });
 
 /**
- * Each man's share of his side's carries and of its targets, from the
+ * Each player's share of his side's carries and of its targets, from the
  * trailing usage the component line reads. August's projection orders
- * men well and splits them flatly: a side's five busiest take 59.9% of
+ * players well and splits them flatly: a side's five busiest take 59.9% of
  * its throws where a side gives them 74.2%. Trailing usage is the
  * sharper number, and it is what the weekly bench's best line already
- * predicts a man's touches from.
+ * predicts a player's touches from.
  */
 async function componentPieces(
   season: number,
@@ -89,7 +89,7 @@ async function componentPieces(
   positions: Map<string, string>,
 ): Promise<{
   split: Map<string, { carries: number; targets: number }>;
-  perMan: Map<string, PerManLevel>;
+  perPlayer: Map<string, PerPlayerLevel>;
   standIn: Map<string, string[]>;
 }> {
   const histories = historiesForWeek(
@@ -102,7 +102,7 @@ async function componentPieces(
    * The shrink target, over the two seasons before this one. This
    * season is left out because a week of it is what the walk is being
    * asked about, and a league average that includes the answer is a
-   * leak, however small a man's own part of it is.
+   * leak, however small a player's own part of it is.
    */
   const priors = positionRatePriors(
     [
@@ -114,8 +114,8 @@ async function componentPieces(
   const split = new Map<string, { carries: number; targets: number }>();
   const standIn = new Map<string, string[]>();
 
-  for (const men of onTeam.values()) {
-    const his = men.map((p) => ({
+  for (const players of onTeam.values()) {
+    const his = players.map((p) => ({
       playerId: p.playerId,
       position: p.position,
       usage: componentUsage(histories.get(p.playerId) ?? noHistory()),
@@ -146,7 +146,7 @@ async function componentPieces(
     }
   }
 
-  const perMan = new Map<string, PerManLevel>();
+  const perPlayer = new Map<string, PerPlayerLevel>();
   const over = (mine: number, base: number) => (base > 0 ? mine / base : 1);
 
   for (const [playerId, history] of histories) {
@@ -157,7 +157,7 @@ async function componentPieces(
     }
 
     const rates = componentRates(history, prior);
-    perMan.set(playerId, {
+    perPlayer.set(playerId, {
       runYards: over(rates.ypc, prior.ypc),
       runScore: over(rates.rushTdRate, prior.rushTdRate),
       passYards: over(rates.ypt, prior.ypt),
@@ -167,23 +167,23 @@ async function componentPieces(
     });
   }
 
-  return { split, perMan, standIn };
+  return { split, perPlayer, standIn };
 }
 
-export interface WorldOptions {
+interface WorldOptions {
   /**
-   * Take each man's cut of the work from his trailing usage rather than
+   * Take each player's cut of the work from his trailing usage rather than
    * from August's projection pulled toward the season.
    */
   componentShares?: boolean;
   /**
-   * Pull each man's drawn yards and drawn scores toward the per-touch
+   * Pull each player's drawn yards and drawn scores toward the per-touch
    * rates his own recent history says, shrunk to his position, instead
    * of leaving them where three seasons of his plays put them.
    */
   componentRates?: boolean;
   /**
-   * Let a man too thin to sample borrow the plays of the busy men on
+   * Let a player too thin to sample borrow the plays of the busy players on
    * his own side before he falls back to the crowd.
    */
   standIn?: boolean;
@@ -249,7 +249,7 @@ export async function buildWorld(
 
   /**
    * The week's injury report, which anyone setting a lineup has read.
-   * A man ruled Out or Doubtful leaves the cast; a Questionable man
+   * A player ruled Out or Doubtful leaves the cast; a Questionable player
    * stays, since most of them play. Only the live walk reads it: in
    * August nobody knows who will be hurt in December.
    */
@@ -326,7 +326,7 @@ export async function buildWorld(
   );
 
   /**
-   * Each man's carries and targets, won against the men who compete
+   * Each player's carries and targets, won against the players who compete
    * for that half of the work rather than for all of it at once.
    */
   const teamPlays = new Map<string, number>();
@@ -338,8 +338,8 @@ export async function buildWorld(
     }
   }
 
-  const roster = [...onTeam.entries()].flatMap(([team, men]) =>
-    men
+  const roster = [...onTeam.entries()].flatMap(([team, players]) =>
+    players
       .filter((p) => SHARING_POSITIONS.includes(p.position))
       .map((p) => ({ playerId: p.playerId, position: p.position, team })),
   );
@@ -497,7 +497,7 @@ export async function buildWorld(
     readsTheScript: !process.env["NO_SCRIPT"],
   }, {
     split, lately, pairing: pairing.bend, counted, positions,
-    perMan: options.componentRates ? component?.perMan : undefined,
+    perPlayer: options.componentRates ? component?.perPlayer : undefined,
     standIn: options.standIn ? component?.standIn : undefined,
     /**
      * Where a side stands before the snap. It says nothing about the
@@ -506,7 +506,7 @@ export async function buildWorld(
      */
     /**
      * What the defence plays and who a side throws to against it.
-     * Coverage is only recorded from 2023, so a man without enough of
+     * Coverage is only recorded from 2023, so a player without enough of
      * both looks behind him moves nothing.
      */
     /**
@@ -532,7 +532,7 @@ export async function buildWorld(
           })))
       : undefined,
     /**
-     * What each man makes once the ball is his, which lasts to the
+     * What each player makes once the ball is his, which lasts to the
      * next season at .689 where the walk drew it as part of one
      * number.
      */
@@ -572,8 +572,8 @@ export async function buildWorld(
       ? undefined
       : await (async () => {
           /**
-           * Nearest men of the same position by the attribute vectors,
-           * so a thin man samples from his own kind. Rookies have no
+           * Nearest players of the same position by the attribute vectors,
+           * so a thin player samples from his own kind. Rookies have no
            * vector yet and stay on the pooled path.
            */
           const described = await buildPlayerVectors(SCORE_ON - 1);
@@ -657,7 +657,7 @@ export async function buildWorld(
 
   const throwsFor = new Map<string, string>();
 
-  for (const [team, men] of onTeam) {
+  for (const [team, players] of onTeam) {
     if (live) {
       const lately = [...(threwLately.get(team) ?? [])]
         .sort((a, b) => b[1] - a[1])[0];
@@ -668,7 +668,7 @@ export async function buildWorld(
       }
     }
 
-    const quarterbacks = men.filter((p) => p.position === "QB");
+    const quarterbacks = players.filter((p) => p.position === "QB");
     const priced = quarterbacks
       .map((p) => ({
         playerId: p.playerId,
@@ -765,7 +765,7 @@ export async function buildWorld(
   }
 
   /**
-   * A man listed questionable gets less of the work, and his
+   * A player listed questionable gets less of the work, and his
    * teammates take the rest.
    *
    * Over 2025, a questionable skill player took the field 57% of the
@@ -787,22 +787,22 @@ export async function buildWorld(
   }
 
   const sideFor = (team: string): Side | undefined => {
-    const men = onTeam.get(team);
+    const players = onTeam.get(team);
 
-    if (!men) {
+    if (!players) {
       return undefined;
     }
 
     const passer = throwsFor.get(team);
     /**
-     * Only the men who would see the field. The whole roster put 27
+     * Only the players who would see the field. The whole roster put 27
      * skill players in the cast where a side dresses about 11, and a
-     * fifth of the walk's throws went to men nobody throws to, drawn
+     * fifth of the walk's throws went to players nobody throws to, drawn
      * from the pooled fallback that gains 4.62 where a targeted throw
      * gains 7.33. The projected shares already say who plays, rookies
      * included, so the cast is the twelve largest of them.
      */
-    const skill = men
+    const skill = players
       .filter((p) => SHARING_POSITIONS.includes(p.position))
       .map((p) => ({
         playerId: p.playerId,
@@ -815,8 +815,8 @@ export async function buildWorld(
       .sort((a, b) => b.share - a.share);
     const anyShare = skill.some((p) => p.share > 0);
     /**
-     * On trailing usage a man with none of it has not been thrown to or
-     * handed the ball, so he is not one of the men who can be, and the
+     * On trailing usage a player with none of it has not been thrown to or
+     * handed the ball, so he is not one of the players who can be, and the
      * cast is whoever has usage rather than a fixed dozen.
      */
     const used = options.componentShares

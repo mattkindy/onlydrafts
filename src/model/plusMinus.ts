@@ -1,5 +1,5 @@
 /**
- * Learns what each man contributes from nothing but who was on the
+ * Learns what each player contributes from nothing but who was on the
  * field and what happened.
  *
  * Every snap names eleven players a side and one outcome. Nobody says
@@ -9,7 +9,7 @@
  * with the credit once everyone he shared a field with is accounted
  * for. The schedule does the untangling.
  *
- * A team is then whatever its current men add up to, so a line that
+ * A team is then whatever its current players add up to, so a line that
  * loses three starters is a different line, without anyone saying so.
  */
 
@@ -20,12 +20,12 @@ export interface Snap {
   outcome: number;
 }
 
-export interface PlusMinus {
-  /** each man's effect on the outcome, relative to a replacement */
+interface PlusMinus {
+  /** each player's effect on the outcome, relative to a replacement */
   effects: Map<string, number>;
   /** the outcome with nobody's effect counted */
   baseline: number;
-  /** snaps each man was seen for, so callers can ignore thin evidence */
+  /** snaps each player was seen for, so callers can ignore thin evidence */
   snaps: Map<string, number>;
 }
 
@@ -77,7 +77,7 @@ export function fitPlusMinus(snaps: Snap[], penalty = 400): PlusMinus {
     return out;
   };
 
-  /** X transposed times a vector: hand each snap's value back to its men */
+  /** X transposed times a vector: hand each snap's value back to its players */
   const backward = (residual: Float64Array): Float64Array => {
     const out = new Float64Array(size);
 
@@ -150,7 +150,7 @@ function dot(a: Float64Array, b: Float64Array): number {
   return total;
 }
 
-/** what to expect when these men line up against those men */
+/** what to expect when these players line up against those players */
 export function expectedOutcome(
   fit: PlusMinus,
   forIt: string[],

@@ -7,7 +7,7 @@
  * asked here on a grid and the answers are written out as bytes.
  *
  * The grid throws away two things. What a side lines up in no longer
- * moves what it then calls, and a man's gains are sampled at one spot
+ * moves what it then calls, and a player's gains are sampled at one spot
  * and scaled to the rest of the field.
  *
  * Run: npx tsx scripts/buildSimTables.ts [season] [week]
@@ -127,9 +127,9 @@ async function main(): Promise<void> {
     fitSeason, fitWeek, true, positions, { componentShares: true });
   const positionOf = new Map<string, string>(positions);
 
-  for (const men of world.onTeam.values()) {
-    for (const man of men) {
-      positionOf.set(man.playerId, man.position);
+  for (const players of world.onTeam.values()) {
+    for (const player of players) {
+      positionOf.set(player.playerId, player.position);
     }
   }
 
@@ -315,7 +315,7 @@ async function main(): Promise<void> {
       return null;
     }
 
-    const men = side.among.filter((id, at) => side.among.indexOf(id) === at);
+    const players = side.among.filter((id, at) => side.among.indexOf(id) === at);
     const runRate: number[] = [];
 
     for (let down = 0; down < 4; down++) {
@@ -338,10 +338,10 @@ async function main(): Promise<void> {
       for (const down of [1, 3]) {
         for (let field = 0; field < FIELD_BANDS; field++) {
           const state = stateAt(down, down === 1 ? 2 : 1, field, 3, 0);
-          const split = side.factors.goesTo(state, call, men, { offence: team });
-          const total = men.reduce((sum, id) => sum + (split.get(id) ?? 0), 0);
+          const split = side.factors.goesTo(state, call, players, { offence: team });
+          const total = players.reduce((sum, id) => sum + (split.get(id) ?? 0), 0);
 
-          for (const id of men) {
+          for (const id of players) {
             shares.push(clampByte(((split.get(id) ?? 0) / (total || 1)) * 255));
           }
         }
@@ -354,7 +354,7 @@ async function main(): Promise<void> {
       DOWNS[neutral.down]!, neutral.dist, neutral.field, neutral.margin,
       neutral.time);
 
-    for (const id of men) {
+    for (const id of players) {
       for (const call of ["run", "pass"] as Call[]) {
         const drawn: number[] = [];
         let completions = 0;
@@ -384,7 +384,8 @@ async function main(): Promise<void> {
 
     return {
       passer: side.passer ?? "",
-      men: men.map((id) => ({
+      // the field is spelled "men" in the file the browser reads
+      men: players.map((id) => ({
         id,
         key: normalizeName(nameOf.get(id) ?? id),
         position: positionOf.get(id) ?? "",
@@ -400,7 +401,7 @@ async function main(): Promise<void> {
   // work each of them saw
   const castsForNewSeason = (castWeek: number) => {
     const histories = historiesForWeek(thisYear, lastYear, WEEK, presets.ppr);
-    const usageOfMan = (playerId: string) => componentUsage(
+    const usageOfPlayer = (playerId: string) => componentUsage(
       histories.get(playerId) ??
       { trailing: emptyBox(), trailingGames: 0, prev: emptyBox(), prevGames: 0 });
     const out = new Map<string, { among: string[]; passer: string }>();
@@ -411,16 +412,16 @@ async function main(): Promise<void> {
         .map((row) => ({
           playerId: row.playerId,
           position: positions.get(row.playerId) ?? row.rawPosition,
-          usage: usageOfMan(row.playerId),
+          usage: usageOfPlayer(row.playerId),
         }))
-        .filter((man) => man.position === "QB" ||
-          SHARING_POSITIONS.includes(man.position));
+        .filter((player) => player.position === "QB" ||
+          SHARING_POSITIONS.includes(player.position));
       const throwers = onIt
-        .filter((man) => man.position === "QB")
+        .filter((player) => player.position === "QB")
         .sort((a, b) => b.usage.passAtt - a.usage.passAtt);
       const cast = onIt
-        .filter((man) => man.position !== "QB" &&
-          man.usage.carries + man.usage.targets > 0)
+        .filter((player) => player.position !== "QB" &&
+          player.usage.carries + player.usage.targets > 0)
         .sort((a, b) =>
           (b.usage.carries + b.usage.targets) -
           (a.usage.carries + a.usage.targets))
@@ -428,7 +429,7 @@ async function main(): Promise<void> {
       const passer = throwers[0]?.playerId ?? "";
 
       out.set(team, {
-        among: [...cast.map((man) => man.playerId), ...(passer ? [passer] : [])],
+        among: [...cast.map((player) => player.playerId), ...(passer ? [passer] : [])],
         passer,
       });
     }

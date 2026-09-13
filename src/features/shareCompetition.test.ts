@@ -13,7 +13,7 @@ describe("dividing a position's work", () => {
     expect(total).toBeCloseTo(0.3, 6);
   });
 
-  it("makes the same man worth less behind a better one", () => {
+  it("makes the same player worth less behind a better one", () => {
     const behindGood = divideAmong(
       [{ playerId: "him", standing: 0.08 }, { playerId: "star", standing: 0.25 }], 0.33,
     );
@@ -24,7 +24,7 @@ describe("dividing a position's work", () => {
     expect(at(behindGood, "him")).toBeLessThan(at(behindPlain, "him"));
   });
 
-  it("gives a man on his own the lot, whatever he has shown", () => {
+  it("gives a player on his own the lot, whatever he has shown", () => {
     const shares = divideAmong([{ playerId: "only", standing: 0.01 }], 0.25);
 
     expect(at(shares, "only")).toBeCloseTo(0.25, 6);
@@ -38,7 +38,7 @@ describe("dividing a position's work", () => {
     expect(at(shares, "good") / at(shares, "poor")).toBeCloseTo(2, 3);
   });
 
-  it("can be told to favour the better man beyond that", () => {
+  it("can be told to favour the better player beyond that", () => {
     const shares = divideAmong(
       [{ playerId: "good", standing: 0.2 }, { playerId: "poor", standing: 0.1 }], 0.3,
       { sharpness: 2, floor: 0.004 },

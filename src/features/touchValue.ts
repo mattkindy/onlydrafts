@@ -11,7 +11,7 @@
  * itself, smoothed only as far as the counts require.
  */
 
-export interface TouchState {
+interface TouchState {
   down: number;
   toGo: number;
   /** yards from the opponent's goal line */
@@ -19,7 +19,7 @@ export interface TouchState {
   type: "run" | "pass";
 }
 
-export interface TouchValue {
+interface TouchValue {
   /** how often a touch from here ends in the end zone */
   scores: (state: TouchState) => number;
   /** what it gains */
@@ -86,7 +86,7 @@ function around(
   return total;
 }
 
-export interface TouchRow {
+interface TouchRow {
   down: number;
   toGo: number;
   yardline: number;
@@ -95,7 +95,7 @@ export interface TouchRow {
   touchdown: number;
 }
 
-export function fitTouchValue(rows: TouchRow[], least = 400): TouchValue {
+function fitTouchValue(rows: TouchRow[], least = 400): TouchValue {
   const cells = new Map<string, Cell>();
 
   for (const row of rows) {

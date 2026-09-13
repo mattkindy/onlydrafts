@@ -10,7 +10,7 @@
  * target and the gain are asked of the pair.
  */
 
-export interface LookRow {
+interface LookRow {
   offence: string;
   defence: string;
   down: number;

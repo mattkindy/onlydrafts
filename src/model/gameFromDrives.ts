@@ -28,14 +28,14 @@ import {
 /** one side of a game, and everything needed to walk its drives */
 export interface Side {
   team: string;
-  /** the men who can be given the ball */
+  /** the players who can be given the ball */
   among: string[];
   factors: PlayFactors;
   /** who is throwing, when anyone knows */
   passer?: string;
   /** the market's read on this side's afternoon, near one */
   lift?: number;
-  /** what the man throwing it is worth, applied to throws alone */
+  /** what the player throwing it is worth, applied to throws alone */
   passLift?: number;
   /**
    * This side's own drive behaviour, fitted from its drives with the
@@ -45,7 +45,7 @@ export interface Side {
   drives?: Partial<EndingRules>;
 }
 
-export interface GameRules {
+interface GameRules {
   rules: EndingRules;
   fourth: FourthDown;
   clock: ClockRules;
@@ -56,7 +56,7 @@ export interface GameRules {
   afterTouchdown?: AfterTouchdown;
 }
 
-export interface GameSettings {
+interface GameSettings {
   /** seconds in a game, and in a half */
   length: number;
   half: number;
@@ -127,13 +127,13 @@ export const GAME_DEFAULTS: GameSettings = {
 };
 
 /** who went for two after a touchdown, and what came of it */
-export interface TwoPointTry {
+interface TwoPointTry {
   call: Call;
   player: string;
   converted: boolean;
 }
 
-export interface Possession {
+interface Possession {
   team: string;
   drive: FactorDrive;
   /** the score for this side when the drive began */
@@ -151,7 +151,7 @@ export interface PlayedGame {
 }
 
 /**
- * The stat lines a played game produced, one per man who appeared.
+ * The stat lines a played game produced, one per player who appeared.
  *
  * Nothing is decided here: each play already says who had it, whether
  * it was caught and what it made, so this only adds them up. The
@@ -224,7 +224,7 @@ export function linesFrom(
       lineOf(passer).interceptions++;
     }
 
-    // the try is not one of the drive's own plays, so the man who
+    // the try is not one of the drive's own plays, so the player who
     // carried or caught it, and the passer behind a caught one, are
     // credited here instead
     if (one.twoPointTry?.converted && one.twoPointTry.player) {
@@ -303,7 +303,7 @@ const AT_HOME = Number(process.env["AT_HOME"] ?? 1.024);
 
 /**
  * How far a whole side's afternoon moves, as a fraction of its yards a
- * play. Off, because the swing it adds is shared by every man on the
+ * play. Off, because the swing it adds is shared by every player on the
  * side and so never averages out of an ordering: at its fitted 0.044 it
  * costs the board's first 24 picks .7147 against .7128. The scoreboard
  * has the rest. Zero restores every draw exactly.
@@ -313,7 +313,7 @@ const SIDE_DAY = Number(process.env["SIDE_DAY"] ?? 0);
 /**
  * What this game is doing to one side, near one. Centred so a side's
  * afternoons still average what its fitted plays say, the same way a
- * man's own tilt is.
+ * player's own tilt is.
  */
 export function sideDay(uniform: () => number): number {
   if (SIDE_DAY <= 0) {
@@ -538,11 +538,11 @@ export function playGame(
     }
 
     secondsLeft = Math.max(0, secondsLeft - took);
-    // rounded, because the counts are kept against whole yard lines
-    // and a start of 52.47 matches none of them, so every lookup
-    // widens past the spot it was asked about
     // a score means the other side receives a kickoff, not a spot
     const kickedOff = scored > 0 || gaveUp !== undefined;
+    // rounded, because the counts are kept against whole yard lines and
+    // a start of 52.47 matches none of them, so every lookup widens
+    // past the spot it was asked about
     startAt = kickedOff
       ? kickedTo()
       : Math.max(1, Math.min(99, Math.round(drive.handsOverAt)));

@@ -3,7 +3,7 @@
  *
  * Two voices or three, the mix is a weighted average of the point totals,
  * and the shares are chosen the way the weekly bench scores: over every
- * pair of men on a slate, how often the higher number outscored the other.
+ * pair of players on a slate, how often the higher number outscored the other.
  * Whoever is mixing decides what the parts are and in what order; this only
  * weighs them.
  */
@@ -26,7 +26,7 @@ export function mixPoints(parts: number[], weights: number[]): number {
   return total;
 }
 
-export function mixPairRate(slates: MixEntry[][], weights: number[]): number {
+function mixPairRate(slates: MixEntry[][], weights: number[]): number {
   const tally = emptyTally();
 
   for (const slate of slates) {

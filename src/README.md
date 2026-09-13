@@ -8,7 +8,7 @@ a factor rather than at a rule about drives.
 
 ## The levels, and what is decided at each
 
-**A play** is a call, a man it goes to, and what he gains. Each is
+**A play** is a call, a player it goes to, and what he gains. Each is
 conditioned on the same state: down, distance, field position, the
 clock and the score. `playFactors.ts` says what the factors are and
 `fitPlayFactors.ts` counts them against the exact state, widening only
@@ -30,9 +30,9 @@ market ranks a side at .28 and a belief starting from nothing manages
 .26, and from the belief thereafter, which ranks at .33 by week seven
 against the market's .24.
 
-**A player's share** is what he wins against the men he plays with, not
+**A player's share** is what he wins against the players he plays with, not
 something he owns and carries between teams. `shareCompetition.ts`
-divides a position group's work by what each man has shown, a rookie
+divides a position group's work by what each player has shown, a rookie
 counting for what his draft round usually brings.
 
 **A player's rates** come from his own plays where he has enough of
@@ -51,11 +51,11 @@ ending within a point or two. A game is two sides taking turns against
 a shared clock in `gameFromDrives.ts`, so how many drives each gets,
 where they start and the score during play all come out rather than
 being handed in. `linesFrom` turns a played game into stat lines,
-with the passing credited to the man who threw it.
+with the passing credited to the player who threw it.
 
 **Sideways** is one thing against another at the same level, and the
 parts that pay are wired. The competition for the ball divides each
-man's carries and targets separately (`projectedShares.ts`,
+player's carries and targets separately (`projectedShares.ts`,
 `shareCompetition.ts`). The pairing of two sides is in the walk
 through `matchupTable.ts`. A quarterback's ground habit is his own
 rather than won from anybody.
@@ -79,15 +79,15 @@ reaches the plays.
 
 Everything shrinks toward something, and what it shrinks toward is
 fitted rather than picked. A constant in a per player slot is an error
-the moment it meets a particular man: `yardSwing` sat at 0.35 for
-everybody where men really swing 1.26.
+the moment it meets a particular player: `yardSwing` sat at 0.35 for
+everybody where players really swing 1.26.
 
 A quantity is asked about at the level it lives at. Team strength is a
 team and a season. A share is a roster. A yardage is a play.
 
 A ratio has no reason to average one, so anything that multiplies a
 draw is centred on what it averages over the touches it is put on.
-The men who get the ball are better than the average of everyone who
+The players who get the ball are better than the average of everyone who
 ever touched it, and before centring, that alone put two points a
 game on the board that nobody scored.
 
@@ -97,7 +97,7 @@ things moved. And nothing under a fifth of a point is quoted off one
 seed: the season eval moves about .03 of ordering between two seeds
 of the same code.
 
-A description of a man comes from his last so many games, crossing
+A description of a player comes from his last so many games, crossing
 seasons where it has to, so it is right in week six as well as in
 August and so a fit from it can never contain the answer.
 
@@ -113,16 +113,16 @@ when you want to measure it again.
 
 | The constant or decision | Where it lives | What measured it |
 | --- | --- | --- |
-| `DEALT_WIDER`, how much wider a man's week runs than the walk deals it | `features/walkWeek.ts` | `scripts/walkBandEval.ts` |
+| `DEALT_WIDER`, how much wider a player's week runs than the walk deals it | `features/walkWeek.ts` | `scripts/walkBandEval.ts` |
 | `SLEEPER_QB_BIAS`, and the blend weight beside it | `features/sleeperBlend.ts` | the Sleeper blend finding in `scripts/README.md` |
 | The two point and extra point tables | `features/afterTouchdown.ts` | `scripts/twoPointEval.ts` |
 | Which board source ships, the fitted one or the walked one | `features/boardSource.ts` | `scripts/sourceCompare.ts` |
 | Which parts of a week's setting survive, the roof and the kickoff time | `features/weekSetting.ts` | `scripts/knowableWeekEval.ts` |
-| `KEEPS`, how much of each mechanic a man takes into next season | `features/mechanicsProjection.ts` | `scripts/mechanicsCarryEval.ts` |
+| `KEEPS`, how much of each mechanic a player takes into next season | `features/mechanicsProjection.ts` | `scripts/mechanicsCarryEval.ts` |
 | The walk's weekly numbers being cached on disk at all | `features/walkWeeklyCache.ts` | written by `scripts/walkWeekCache.ts` |
 | `COMPONENT_THROUGH_WEEK`, where the component line hands over to the ridge | `features/componentWeek.ts` | the component week finding in `scripts/README.md` |
 | The game script effects being pooled over a side's fixtures | `features/gameScript.ts` | `scripts/aggregateGameScript.ts` |
-| Fitting every part of a man's season in one model | `features/jointParts.ts` | `scripts/jointProjectionEval.ts` |
+| Fitting every part of a player's season in one model | `features/jointParts.ts` | `scripts/jointProjectionEval.ts` |
 | `HOW_FAR`, `NO_LONG_SHAPE` and `FROM_COUNTS`, all off | `features/fitPlayFactors.ts` | `scripts/playLayerEval.ts` |
 | `GAME_LOADING` and the QB loading beside it | `sim/season.ts` | `scripts/estimateCorrelation.ts` |
 | Sleeper being the source for who is exempt today | `data/nflverse.ts` | `scripts/exemptCheck.ts` |

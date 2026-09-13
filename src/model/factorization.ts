@@ -17,7 +17,7 @@ export interface Example {
   target: number;
 }
 
-export interface Factorization {
+interface Factorization {
   bias: number;
   /** the target is fitted standardised, and put back on scale here */
   scale: number;
@@ -29,7 +29,7 @@ export interface Factorization {
   rank: number;
 }
 
-export interface FitSettings {
+interface FitSettings {
   rank: number;
   passes: number;
   rate: number;

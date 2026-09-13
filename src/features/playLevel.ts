@@ -2,7 +2,7 @@
  * How many yards this play should be worth, with everyone on it.
  *
  * The walk has been bending a draw by one multiplier at a time: the
- * man's own yards, then the two sides pooled, then the pairing from
+ * player's own yards, then the two sides pooled, then the pairing from
  * the network. Each was fitted on its own and each could only see its
  * own term, so nothing could say that a defence costs a good receiver
  * more than a poor one, which it does, by half a yard a throw.
@@ -21,7 +21,7 @@ import { buildDefenceOnField, type DefenceOnField } from "./defenceOnField.js";
 import type { Call, PlayState } from "../model/playFactors.js";
 
 /** who is playing, beyond the two sides */
-export interface PlaySides {
+interface PlaySides {
   offence?: string;
   defence?: string;
   /** who is throwing it, which the walk had no idea about */
@@ -60,7 +60,7 @@ export interface PlayLevel {
   learnedOn: number;
 }
 
-export interface PlayLevelSettings {
+interface PlayLevelSettings {
   /** how far the level may move a play either way */
   most: number;
   trees: number;
@@ -69,15 +69,15 @@ export interface PlayLevelSettings {
 
 /**
  * The clamp is what the measurements support rather than what the
- * model will say. The men on a defence move a throw by about 1.3
+ * model will say. The players on a defence move a throw by about 1.3
  * yards out of 6.1, so a fifth, and a drive is a chain of plays where
  * a per-play error compounds into points.
  */
-export const LEVEL_DEFAULTS: PlayLevelSettings = {
+const LEVEL_DEFAULTS: PlayLevelSettings = {
   most: Number(process.env["LEVEL_MOST"] ?? 0.15), trees: 150, depth: 4,
 };
 
-export interface PlayLevelRequest {
+interface PlayLevelRequest {
   learn: number[];
   scoreOn: number;
   settings?: PlayLevelSettings;
@@ -127,7 +127,7 @@ interface Play {
 
 /** what was known going into a season, from every one before it */
 interface Known {
-  byMan: Map<string, Tally>;
+  byPlayer: Map<string, Tally>;
   byPasser: Map<string, Tally>;
   byOffence: Map<string, Tally>;
   byDefence: Map<string, Tally>;
@@ -140,7 +140,7 @@ interface Known {
 function knownBefore(
   plays: Play[], upTo: number, coaches: Map<string, string>,
 ): Known {
-  const byMan = new Map<string, Tally>();
+  const byPlayer = new Map<string, Tally>();
   const byPasser = new Map<string, Tally>();
   const byOffence = new Map<string, Tally>();
   const byDefence = new Map<string, Tally>();
@@ -164,7 +164,7 @@ function knownBefore(
     }
 
     if (play.player) {
-      add(byMan, `${play.player}|${play.call}`, play.yards);
+      add(byPlayer, `${play.player}|${play.call}`, play.yards);
       teamOf.set(play.player, play.offence);
     }
 
@@ -180,7 +180,7 @@ function knownBefore(
   const passing = league.get("pass");
 
   return {
-    byMan, byPasser, byOffence, byDefence, byCoordinator, teamOf, middleOn,
+    byPlayer, byPasser, byOffence, byDefence, byCoordinator, teamOf, middleOn,
     middlePass: passing && passing.plays > 0 ? passing.yards / passing.plays : 6.5,
   };
 }
@@ -192,7 +192,7 @@ function rowFor(
   call: Call, player: string, sides: PlaySides, season: number,
 ): number[] {
   const middle = known.middleOn(call);
-  const his = known.byMan.get(`${player}|${call}`);
+  const his = known.byPlayer.get(`${player}|${call}`);
   const before = coaches.get(`${sides.offence}|${season - 1}|OC`) ?? "";
   const now = coaches.get(`${sides.offence}|${season}|OC`) ?? "";
 
@@ -218,7 +218,7 @@ const NAMES = [
   "down", "to go", "yards to the goal", "the score", "seconds left",
   "his own yards", "how often he breaks a long one", "his quarterback's yards",
   "this offence's yards", "this defence's yards", "his touches behind him",
-  "the men on that defence this week", "his coordinator's own yards",
+  "the players on that defence this week", "his coordinator's own yards",
   "the coordinator before him",
 ];
 
@@ -252,7 +252,7 @@ export async function buildPlayLevel(
   /**
    * Whether the call is a run, over both calls at once. The pools
    * answer this off the down, the distance and the spot; this can
-   * also see the staff calling it and the men the defence has on the
+   * also see the staff calling it and the players the defence has on the
    * field, which is where a run rate ought to move.
    */
   const callRows: number[][] = [];

@@ -42,7 +42,7 @@ export interface Spread {
   high: number;
 }
 
-export interface KickerSeason {
+interface KickerSeason {
   /** one game of his, in the categories a league pays for */
   parts: Record<string, number>;
   /** what he scores in a game, and how those vary */
@@ -117,7 +117,7 @@ function dayAt(
 /** a whole number of kicks this week, around the rate his side produces */
 function howManyKicks(rate: number, rng: () => number): number {
   // Poisson by the usual product of uniforms, which is fast enough at
-  // a rate near two and keeps the shape right at nought and at four
+  // a rate near two and keeps the shape right at zero and at four
   const limit = Math.exp(-rate);
   let n = 0;
   let p = rng();

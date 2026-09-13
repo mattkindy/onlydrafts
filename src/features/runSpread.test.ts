@@ -3,7 +3,7 @@ import { quantileOf, spreadOf } from "./runSpread.js";
 
 const ramp = Array.from({ length: 41 }, (_, i) => i);
 
-describe("what a man's dealt games looked like", () => {
+describe("what a player's dealt games looked like", () => {
   it("reads the percentiles off the sorted runs", () => {
     const his = spreadOf([...ramp].reverse());
 
@@ -35,7 +35,7 @@ describe("what a man's dealt games looked like", () => {
     expect(spreadOf([0, 10]).sd).toBe(5);
   });
 
-  it("says nothing about a man nobody dealt", () => {
+  it("says nothing about a player nobody dealt", () => {
     const his = spreadOf([]);
 
     expect(his.runs).toBe(0);

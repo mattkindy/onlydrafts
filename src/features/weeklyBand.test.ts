@@ -7,7 +7,7 @@ const pooled = { floor: 4, ceiling: 18 };
 const dealt = (runs: number): RunSpread =>
   spreadOf(Array.from({ length: runs }, (_, i) => 5 + i / 2));
 
-describe("which band a man gets", () => {
+describe("which band a player gets", () => {
   it("takes the walk's own games when it played him", () => {
     const walk = dealt(40);
     const band = bandFor(walk, pooled, 1);
@@ -31,7 +31,7 @@ describe("which band a man gets", () => {
     expect(bandFor(walk, pooled, 3).floor).toBe(0);
   });
 
-  it("falls back to the pooled band for a man the walk never played", () => {
+  it("falls back to the pooled band for a player the walk never played", () => {
     expect(bandFor(undefined, pooled)).toEqual({ ...pooled, from: "pooled" });
   });
 
@@ -40,7 +40,7 @@ describe("which band a man gets", () => {
     expect(bandFor(dealt(ENOUGH_RUNS), pooled).from).toBe("walk");
   });
 
-  it("falls back for a man the walk scored at nothing", () => {
+  it("falls back for a player the walk scored at nothing", () => {
     expect(bandFor(spreadOf(new Array(40).fill(0)), pooled).from).toBe("pooled");
   });
 });

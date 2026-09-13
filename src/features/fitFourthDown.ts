@@ -14,7 +14,7 @@
 import { holdsDistance, marginBand, timeBand } from "../model/playFactors.js";
 import type { PlayState } from "../model/playFactors.js";
 
-export type FourthChoice = "go" | "kick" | "punt";
+type FourthChoice = "go" | "kick" | "punt";
 
 /**
  * How far along the field to reach for more plays.

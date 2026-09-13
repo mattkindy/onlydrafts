@@ -13,7 +13,7 @@
  */
 
 /** what a game is priced at, as the two sides see it */
-export interface Line {
+interface Line {
   /** points the game is expected to reach */
   total: number;
   /** points this team is favoured by, negative as an underdog */
@@ -31,7 +31,7 @@ export function impliedFor(line: Line): number {
 /**
  * How much to move a projection built without knowing the game.
  *
- * The walk already produces a man's ordinary week, so this says how
+ * The walk already produces a player's ordinary week, so this says how
  * much better or worse than ordinary this particular week looks. A
  * floor keeps a team priced for nothing from zeroing out its players.
  */

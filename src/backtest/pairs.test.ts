@@ -28,7 +28,7 @@ describe("addPairs", () => {
     expect(pairRate(tally, "all")).toBe(0);
   });
 
-  it("splits the credit when both men scored the same", () => {
+  it("splits the credit when both players scored the same", () => {
     const tally = tallyOf([
       { predicted: 10, actual: 7 },
       { predicted: 5, actual: 7 },

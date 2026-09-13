@@ -21,7 +21,7 @@ const receiver = (over: Partial<Receiving> = {}): Receiving => ({
 });
 
 describe("pulling one part back toward the league", () => {
-  it("leaves a man at the league when he is the league", () => {
+  it("leaves a player at the league when he is the league", () => {
     expect(settle("beforeCatch", 8, 8, 200, 70)).toBeCloseTo(8, 10);
   });
 
@@ -55,7 +55,7 @@ describe("a season built from the parts", () => {
     );
   });
 
-  it("gives a man thrown at more the more catches", () => {
+  it("gives a player thrown at more the more catches", () => {
     const busy = projectFromMechanics(receiver({ targets: 160, receptions: 105 }),
       noRunning, league);
     const quiet = projectFromMechanics(receiver({ targets: 60, receptions: 40 }),
@@ -65,7 +65,7 @@ describe("a season built from the parts", () => {
     expect(busy.recYds).toBeGreaterThan(quiet.recYds);
   });
 
-  it("keeps a deep man deep and a short one short", () => {
+  it("keeps a deep player deep and a short one short", () => {
     const deep = projectFromMechanics(receiver({ beforeCatch: 1200 }), noRunning, league);
     const short = projectFromMechanics(receiver({ beforeCatch: 240 }), noRunning, league);
 
@@ -77,7 +77,7 @@ describe("a season built from the parts", () => {
    * unknown quantity, and giving him a back's carries because he has
    * none of his own is how the league average leaks into everybody.
    */
-  it("does not hand a man carries because he has never had any", () => {
+  it("does not hand a player carries because he has never had any", () => {
     // his own position group, where nobody runs it much either
     const receivers: League = {
       ...league,
@@ -89,7 +89,7 @@ describe("a season built from the parts", () => {
     expect(said.rushYds).toBeLessThan(2);
   });
 
-  it("falls back to the league for a man with no season at all", () => {
+  it("falls back to the league for a player with no season at all", () => {
     const nobody = projectFromMechanics(
       { games: 0, targets: 0, receptions: 0, beforeCatch: 0, afterCatch: 0, drops: 0 },
       { games: 0, carries: 0, beforeContact: 0, afterContact: 0 },

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { parseCsv } from "../data/csv.js";
 import { RAW_DIR } from "../data/nflverse.js";
 
-export interface Endings {
+interface Endings {
   /** how often a kick from this yard line goes over */
   kickSucceeds: (yardline: number) => number;
   /** how often a drive is the last of a half */

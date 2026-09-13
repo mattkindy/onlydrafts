@@ -216,7 +216,7 @@ async function main(): Promise<void> {
 
   if (split.length > 5) {
     console.log(
-      `${split.length - 5} more men split by three points or more, Sleeper the higher of the two on ${split.slice(5).filter((r) => r.sleeper! > r.ours).length} of them.`,
+      `${split.length - 5} more players split by three points or more, Sleeper the higher of the two on ${split.slice(5).filter((r) => r.sleeper! > r.ours).length} of them.`,
     );
   }
 

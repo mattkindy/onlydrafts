@@ -9,7 +9,7 @@ import { seededRng } from "../sim/rng.js";
  * it hands back, since those are where a season quietly goes missing.
  */
 describe("adding up what a walk produced", () => {
-  it("starts a man at nothing in every category", () => {
+  it("starts a player at nothing in every category", () => {
     const parts = noParts();
 
     for (const value of Object.values(parts)) {
@@ -55,7 +55,7 @@ describe("adding up what a walk produced", () => {
     expect(share[1]).toEqual({ w: 2, opp: "@ CHI", of: 0.8 });
   });
 
-  it("gives a man with no scoring a flat season rather than a divide by nothing", () => {
+  it("gives a player with no scoring a flat season rather than a divide by nothing", () => {
     const share = weeklyShare(
       {
         perGame: noParts(), games: 17,

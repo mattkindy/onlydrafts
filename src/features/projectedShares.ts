@@ -1,15 +1,15 @@
 /**
- * What share of his offence's plays a man is going to get.
+ * What share of his offence's plays a player is going to get.
  *
  * A share is touches over the plays his team ran, so it says how much
  * of the work he took without saying how much work there was. Volume
- * is most of what a fantasy season is: giving every man the touches
+ * is most of what a fantasy season is: giving every player the touches
  * his position usually gets, at the league's yards, ranks a season at
- * .888, and adding each man's own efficiency only reaches .898.
+ * .888, and adding each player's own efficiency only reaches .898.
  *
- * The projection has two parts. What a man has shown, and then the
+ * The projection has two parts. What a player has shown, and then the
  * competition: a position group has a budget of its offence to give
- * out and the men there divide it between them.
+ * out and the players there divide it between them.
  */
 
 import { loadPlayerStats, loadWeeklyRosters } from "../data/nflverse.js";
@@ -19,8 +19,8 @@ import { divideAmong, type CompetitionSettings } from "./shareCompetition.js";
 /** the positions that compete for touches; a quarterback does not */
 export const SHARING_POSITIONS = ["RB", "WR", "TE"];
 
-/** a season a man already has behind him */
-export interface PastYear {
+/** a season a player already has behind him */
+interface PastYear {
   playerId: string;
   position: string;
   team: string;
@@ -36,13 +36,13 @@ export interface PastYear {
 }
 
 /** who is expected to be where, going into the season being projected */
-export interface RosterMan {
+export interface RosterPlayer {
   playerId: string;
   position: string;
   team: string;
 }
 
-export interface ShareSettings {
+interface ShareSettings {
   /**
    * How the seasons behind him are weighted, most recent first. Swept
    * on 2025, where one season alone ranked .747 and three at these
@@ -50,9 +50,9 @@ export interface ShareSettings {
    */
   weights: number[];
   /**
-   * How far a priced man's standing moves toward the share his draft
+   * How far a priced player's standing moves toward the share his draft
    * price implies. Measured null to worse at every strength on the
-   * split bench, whether or not unpriced men lean down too, so it
+   * split bench, whether or not unpriced players lean down too, so it
    * stays at nothing: the market's star knowledge does its work in
    * the board's blend, not in here.
    */
@@ -62,15 +62,15 @@ export interface ShareSettings {
   /**
    * Whether the group divides its own team's budget or the league's.
    * A passing offence has more to give its receivers, which is worth
-   * about .004 on the men a draft is about.
+   * about .004 on the players a draft is about.
    */
   ownBudget: boolean;
-  /** whether a man past his prime is marked down for it */
+  /** whether a player past his prime is marked down for it */
   byAge: boolean;
   competition?: CompetitionSettings;
 }
 
-export const SHARE_DEFAULTS: ShareSettings = {
+const SHARE_DEFAULTS: ShareSettings = {
   weights: [1, 0.55, 0.3],
   ownBudget: true,
   byAge: true,
@@ -147,7 +147,7 @@ export async function pastShares(
   return out;
 }
 
-/** how many years each man had behind him going into the season */
+/** how many years each player had behind him going into the season */
 export async function experienceBefore(
   season: number,
 ): Promise<Map<string, number>> {
@@ -174,10 +174,10 @@ function budgetsFrom(
   for (const s of looking) {
     const byTeam = new Map<string, Map<string, number>>();
 
-    for (const man of past.get(s)!.values()) {
-      const team = byTeam.get(man.team) ?? new Map<string, number>();
-      team.set(man.position, (team.get(man.position) ?? 0) + partOf(man));
-      byTeam.set(man.team, team);
+    for (const player of past.get(s)!.values()) {
+      const team = byTeam.get(player.team) ?? new Map<string, number>();
+      team.set(player.position, (team.get(player.position) ?? 0) + partOf(player));
+      byTeam.set(player.team, team);
     }
 
     for (const [team, took] of byTeam) {
@@ -202,7 +202,7 @@ function budgetsFrom(
 }
 
 /**
- * What men taken in each round have gone on to take, so a rookie with
+ * What players taken in each round have gone on to take, so a rookie with
  * nothing behind him can be placed at all.
  */
 function rookieStandings(
@@ -210,16 +210,16 @@ function rookieStandings(
 ): (position: string, round: number) => number {
   const seen = new Map<string, number[]>();
 
-  for (const [season, men] of past) {
-    for (const man of men.values()) {
-      const pick = picks.get(man.playerId);
+  for (const [season, players] of past) {
+    for (const player of players.values()) {
+      const pick = picks.get(player.playerId);
 
       if (!pick || pick.season !== season) {
         continue;
       }
 
-      const key = `${man.position}|${Math.min(pick.round, 5)}`;
-      seen.set(key, [...(seen.get(key) ?? []), man.share]);
+      const key = `${player.position}|${Math.min(pick.round, 5)}`;
+      seen.set(key, [...(seen.get(key) ?? []), player.share]);
     }
   }
 
@@ -244,35 +244,35 @@ function pastPrime(position: string, years: number): number {
   return years > over ? Math.pow(0.88, years - over) : 1;
 }
 
-export interface ShareRequest {
+interface ShareRequest {
   /** the season being projected */
   season: number;
   /** who is where going into it */
-  roster: RosterMan[];
+  roster: RosterPlayer[];
   /** the seasons behind it, from pastShares */
   past: Map<number, Map<string, PastYear>>;
   picks: Map<string, DraftPick>;
-  /** years behind each man, from experienceBefore */
+  /** years behind each player, from experienceBefore */
   experience: Map<string, number>;
   /**
-   * The share the market's price implies for a man, on the same scale
+   * The share the market's price implies for a player, on the same scale
    * as whatever partOf reads, for the lean toward it.
    */
   implied?: Map<string, number>;
-  /** each priced man's August draft position, for the room's order */
+  /** each priced player's August draft position, for the room's order */
   priced?: Map<string, number>;
   settings?: ShareSettings;
 }
 
 /**
- * Each man's projected share of his offence's plays.
+ * Each player's projected share of his offence's plays.
  *
  * Shares within a position group add up to what that group takes, so
- * a man alone at his position gets all of it and a man behind two
+ * a player alone at his position gets all of it and a player behind two
  * better ones gets little however good his last season was.
  */
-/** the two halves of a man's work, each won against his own rivals */
-export interface SplitShare {
+/** the two halves of a player's work, each won against his own rivals */
+interface SplitShare {
   carries: number;
   targets: number;
 }
@@ -287,7 +287,7 @@ export interface SplitShare {
  */
 export function projectSplitShares(
   request: ShareRequest & {
-    /** each priced man's implied carry and target share, if leaned on */
+    /** each priced player's implied carry and target share, if leaned on */
     market?: Map<string, { carry: number; target: number }>;
   },
 ): Map<string, SplitShare> {
@@ -305,10 +305,10 @@ export function projectSplitShares(
   );
   const out = new Map<string, SplitShare>();
 
-  for (const man of request.roster) {
-    out.set(man.playerId, {
-      carries: carries.get(man.playerId) ?? 0,
-      targets: targets.get(man.playerId) ?? 0,
+  for (const player of request.roster) {
+    out.set(player.playerId, {
+      carries: carries.get(player.playerId) ?? 0,
+      targets: targets.get(player.playerId) ?? 0,
     });
   }
 
@@ -357,17 +357,17 @@ export function projectShares(
       : shown;
   };
 
-  const byTeam = new Map<string, RosterMan[]>();
+  const byTeam = new Map<string, RosterPlayer[]>();
 
-  for (const man of roster) {
-    byTeam.set(man.team, [...(byTeam.get(man.team) ?? []), man]);
+  for (const player of roster) {
+    byTeam.set(player.team, [...(byTeam.get(player.team) ?? []), player]);
   }
 
   const said = new Map<string, number>();
 
-  for (const [team, men] of byTeam) {
+  for (const [team, players] of byTeam) {
     for (const position of SHARING_POSITIONS) {
-      const group = men.filter((m) => m.position === position);
+      const group = players.filter((m) => m.position === position);
 
       if (!group.length) {
         continue;
@@ -379,18 +379,18 @@ export function projectShares(
         : league;
       /**
        * The market's read, where it has one. The counts cannot tell a
-       * star back from a lost season apart from the men who covered
+       * star back from a lost season apart from the players who covered
        * for him, and every August draft room can: his standing moves
-       * toward the share men at his price have gone on to take.
+       * toward the share players at his price have gone on to take.
        */
-      const owns = group.map((man) => {
-        const own = standing(man.playerId, man.position);
+      const owns = group.map((player) => {
+        const own = standing(player.playerId, player.position);
         const lean =
           Number(process.env["ROOM_ADP_LEAN"] ?? settings.adpLean ?? 0);
-        const market = request.implied?.get(man.playerId);
+        const market = request.implied?.get(player.playerId);
 
         return {
-          playerId: man.playerId,
+          playerId: player.playerId,
           standing: lean > 0 && market !== undefined
             ? (1 - lean) * own + lean * market
             : own,
@@ -399,7 +399,7 @@ export function projectShares(
 
       /**
        * The market settles the room's pecking order where it has one.
-       * A star back from a lost season and the men who covered for
+       * A star back from a lost season and the players who covered for
        * him hold near even claims in the counts, and every August
        * draft room can tell them apart: eighth overall and pick 149.
        * Relative to the room's best price only, so a room the market
@@ -411,7 +411,7 @@ export function projectShares(
 
       if (order > 0 && priced) {
         const best = Math.min(...group
-          .map((man) => priced.get(man.playerId) ?? Infinity));
+          .map((player) => priced.get(player.playerId) ?? Infinity));
 
         if (Number.isFinite(best)) {
           for (const o of owns) {

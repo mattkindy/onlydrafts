@@ -3,8 +3,8 @@
  * not say: who his club ruled out this week, who is questionable, and
  * where the club listed him on its depth chart.
  *
- * A man ruled Out or Doubtful is treated as not playing, the same call
- * the played world makes when it builds a week. Questionable men stay,
+ * A player ruled Out or Doubtful is treated as not playing, the same call
+ * the played world makes when it builds a week. Questionable players stay,
  * because most of them play.
  *
  * The depth chart release changed shape in 2025: dated snapshots with
@@ -35,7 +35,7 @@ function statusKey(playerId: string, week: number): string {
   return `${playerId}|${week}`;
 }
 
-/** every listed man, week by week, keyed by player and week */
+/** every listed player, week by week, keyed by player and week */
 export async function loadWeeklyInjuryStatus(
   season: number,
 ): Promise<Map<string, WeekStatus>> {
@@ -73,7 +73,7 @@ export async function loadWeeklyInjuryStatus(
   return byWeek;
 }
 
-export interface WeeklyDepth {
+interface WeeklyDepth {
   /** false when the season has no depth chart file to read */
   covered: boolean;
   /** where he was listed at his own position, one for the starter */
@@ -87,7 +87,7 @@ function emptyDepth(): WeeklyDepth {
 }
 
 /**
- * A man can be listed at more than one spot, on returns as well as on
+ * A player can be listed at more than one spot, on returns as well as on
  * offence, so his highest standing wins.
  */
 function keepBest(ranks: Map<string, number>, key: string, rank: number): void {
@@ -100,7 +100,7 @@ function keepBest(ranks: Map<string, number>, key: string, rank: number): void {
   ranks.set(key, rank);
 }
 
-export async function loadWeeklyDepthRanks(
+async function loadWeeklyDepthRanks(
   season: number,
 ): Promise<WeeklyDepth> {
   const text = await readFile(

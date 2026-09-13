@@ -6,7 +6,7 @@
  * ids, so every row has to be joined to a gsis id before anything here
  * can use it. A player Sleeper has no gsis id for is dropped: he cannot
  * be matched to a weekly example, and guessing by name would quietly
- * pair up the wrong men. A player who matches but has no points goes to
+ * pair up the wrong players. A player who matches but has no points goes to
  * the quiet file instead, so a reader can tell the two cases apart.
  *
  * The points column is full PPR, and catches let another scoring take
@@ -27,8 +27,8 @@ export const SLEEPER_WEEKLY_PATH = join(
 );
 
 /**
- * The men Sleeper listed for a week and gave no points to. They are the
- * backups and the men who are out, and the slate reads a man here as
+ * The players Sleeper listed for a week and gave no points to. They are the
+ * backups and the players who are out, and the slate reads a player here as
  * Sleeper expecting nothing of him.
  */
 export const SLEEPER_QUIET_PATH = join(
@@ -92,21 +92,21 @@ export function sleeperPointsUnder(
   return projection.points + (perCatch - 1) * projection.catches;
 }
 
-/** a man Sleeper lists for the week but publishes no points for */
+/** a player Sleeper lists for the week but publishes no points for */
 export interface SleeperQuiet {
   season: number;
   week: number;
   gsisId: string;
 }
 
-export interface JoinedProjections {
+interface JoinedProjections {
   projected: SleeperProjection[];
   /**
    * Sleeper returns its whole pool and gives points to the couple
-   * of hundred it expects to play, so the rest are backups and men who
+   * of hundred it expects to play, so the rest are backups and players who
    * are out. Keeping them apart from the players nobody could match to
    * a gsis id is what lets the slate say Sleeper expects nothing of a
-   * man rather than saying Sleeper has never heard of him.
+   * player rather than saying Sleeper has never heard of him.
    */
   quiet: SleeperQuiet[];
 }

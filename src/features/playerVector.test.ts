@@ -35,7 +35,7 @@ describe("pooling a group", () => {
     expect([...poolVectors([])].every((v) => v === 0)).toBe(true);
   });
 
-  it("changes when the men change, which is the point", () => {
+  it("changes when the players change, which is the point", () => {
     const before = poolVectors([describePlayer({ speed: 2 }), describePlayer({ speed: 2 })]);
     const after = poolVectors([describePlayer({ speed: 2 }), describePlayer({ speed: -2 })]);
 
@@ -45,7 +45,7 @@ describe("pooling a group", () => {
 });
 
 describe("comparing two descriptions", () => {
-  it("puts a man closest to himself", () => {
+  it("puts a player closest to himself", () => {
     const one = describePlayer({ height: 1, speed: -1, targetsPerGame: 2 });
 
     expect(similarity(one.values, one.values)).toBeCloseTo(1, 10);
@@ -58,7 +58,7 @@ describe("comparing two descriptions", () => {
     expect(similarity(fast.values, heavy.values)).toBeLessThan(-0.9);
   });
 
-  it("says nothing about a man it knows nothing about", () => {
+  it("says nothing about a player it knows nothing about", () => {
     expect(similarity(describePlayer().values, describePlayer({ speed: 1 }).values))
       .toBe(0);
   });
