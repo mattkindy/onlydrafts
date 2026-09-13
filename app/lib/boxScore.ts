@@ -166,17 +166,9 @@ const passingSays = (line: StatLine) =>
 const rushingSays = (line: StatLine) =>
   `${line.carries} car, ${line.rushYds} yds` + scored(line.rushTd);
 
-const caughtSays = (line: StatLine) =>
-  `${line.receptions} rec, ${line.recYds} yds` + scored(line.recTd);
-
-/**
- * Targets belong to the player a card is watching for them, so they show
- * for a receiver and stay off a running back's receiving line.
- */
 const receivingSays = (line: StatLine) =>
-  `${line.receptions} rec` +
-  (line.targets > 0 ? ` (${line.targets} tgt)` : "") +
-  `, ${line.recYds} yds` + scored(line.recTd);
+  `${line.receptions}/${line.targets} rec, ${line.recYds} yds` +
+  scored(line.recTd);
 
 const threwAtAll = (line: StatLine) => line.passAtt > 0;
 
@@ -220,7 +212,7 @@ const quarterbackSays = (line: StatLine) => withFumbles([
 
 const runnerSays = (line: StatLine) => withFumbles([
   carriedAtAll(line) ? rushingSays(line) : null,
-  caughtAtAll(line) ? caughtSays(line) : null,
+  caughtAtAll(line) ? receivingSays(line) : null,
 ], line);
 
 const catcherSays = (line: StatLine) => withFumbles([
