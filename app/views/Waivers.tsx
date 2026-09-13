@@ -587,9 +587,8 @@ export function Waivers(props: Props) {
       {adds.length === 0 && (
         <p class="hint">
           {span === "week"
-            ? "Nobody on the waiver wire changes your win probability this " +
-              "week. Try rest of season."
-            : "Nobody here matches that."}
+            ? "No add moves your win % this week."
+            : "No matches."}
         </p>
       )}
 
@@ -629,8 +628,7 @@ export function Waivers(props: Props) {
 
       {!best && (
         <p class="hint">
-          No add is worth it right now: every move on the board costs you
-          more than it brings.
+          No add is worth a drop right now.
         </p>
       )}
 
@@ -639,20 +637,15 @@ export function Waivers(props: Props) {
           {best.paid.drop
             ? (
               <>
-                Add <b>{best.row.p.name}</b>, drop{" "}
-                <b>{best.paid.drop.name}</b>: your weekly win probability
-                goes from <b>{pct(best.paid.before)}</b> to{" "}
-                <b>{pct(best.paid.after)}</b>, so{" "}
-                <b>{signed(best.paid.net)}</b> a week.
+                Best move: add <b>{best.row.p.name}</b>, drop{" "}
+                <b>{best.paid.drop.name}</b>. Win %{" "}
+                {pct(best.paid.before)} to {pct(best.paid.after)}.
               </>
             )
             : (
               <>
-                You have a roster spot open, so <b>{best.row.p.name}</b> can
-                be added without dropping anybody. Your weekly win probability
-                goes from <b>{pct(best.paid.before)}</b> to{" "}
-                <b>{pct(best.paid.after)}</b>, so{" "}
-                <b>{signed(best.paid.net)}</b> a week.
+                Best move: add <b>{best.row.p.name}</b> to your open spot.
+                Win % {pct(best.paid.before)} to {pct(best.paid.after)}.
               </>
             )}
         </p>

@@ -221,17 +221,15 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
 
       {picks.length === 1 && (
         <p class="hint">
-          Now pick another {picks[0]!.position} to compare against{" "}
-          {picks[0]!.name}.
+          Pick another {picks[0]!.position} to compare with {picks[0]!.name}.
         </p>
       )}
 
       {slate && (
         <>
           <p class="hint">
-            A row in amber is one our number and Sleeper's disagree
-            about by {SPLIT_AT} points or more. Tap two men at the same
-            position to compare them.
+            Amber: we differ from Sleeper by {SPLIT_AT}+ points. Tap two
+            players at a position to compare.
           </p>
 
           <div class="scroll">

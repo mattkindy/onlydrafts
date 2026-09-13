@@ -223,7 +223,7 @@ export function Matchups(
 ) {
   const lines = useMemo(
     () => new Map(men.map((p) => [p.key, p])), [men]);
-  const { states, remainder, read, live, trouble } =
+  const { states, remainder, read, trouble } =
     useLiveWeek(season, week, pays);
 
   /**
@@ -244,8 +244,7 @@ export function Matchups(
       {read
         ? (
           <p class="hint">
-            Week {week}. Scoreboard read at {read.toLocaleTimeString()}
-            {live ? ", again every minute while a game is on." : "."}
+            Week {week}, scores as of {read.toLocaleTimeString()}
           </p>
         )
         : <Reading>reading week {week}'s scoreboard...</Reading>}

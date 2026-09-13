@@ -317,8 +317,7 @@ export function MyMatchup(props: Props) {
 
       {slate?.preseason && (
         <p class="hint">
-          Nobody has played a game yet, so these come from last season's
-          per-game rates over this season's schedule.
+          Preseason: projections are based on last season.
         </p>
       )}
 
@@ -334,8 +333,7 @@ export function MyMatchup(props: Props) {
             onMore={onMore}
           />
           <p class="hint">
-            Against {ours.against.owner} this week. Each player is priced by
-            what starting him does to your win probability.
+            vs {ours.against.owner}
           </p>
           <Lineup
             side={ours.side}
@@ -367,8 +365,7 @@ export function MyMatchup(props: Props) {
 
       {!ours && (
         <p class="hint">
-          You have no game this week, so there is no lineup to set. The
-          whole week ranked is under <b>players</b>, on the rankings tab.
+          No game this week. Rankings are under <b>players</b>.
         </p>
       )}
     </>

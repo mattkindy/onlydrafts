@@ -71,35 +71,34 @@ const COPY: Record<View, [string, string, string]> = {
   ],
   matchup: [
     "My matchup",
-    "Your lineup for the week, and the game you are setting it for.",
-    "Every bench player is priced by what starting him would do to your win probability, and only the swaps that gain you something are listed. Win probability counts the part of each game still to play, so a lead with everybody done is the whole thing.",
+    "",
+    "Win % is your chance of beating this week's opponent. Bench players show up only when starting them would raise it.",
   ],
   league: [
     "League",
-    "The standings, every other game this week, and how the draft went.",
-    "Each game's win probability comes from the week's projections for whatever is still to play. The draft grades rate a team by what it took rather than by where it picked, so the team with the third pick is not rewarded for having it.",
+    "",
+    "Draft grades compare what each team got to what its picks were worth.",
   ],
   players: [
     "Players",
-    "Free agents worth adding, and what dropping one of yours costs.",
-    "This week prices each move against the lineup you would set and the team you actually play. Rest of season runs a year of simulated weeks against an average opponent, which is why a bench player can cost nothing this week and something over the season.",
+    "",
+    "This week: what each add does to your win % in this week's game. Rest of season: the same over a full season of simulated weeks.",
   ],
   team: [
     "My team",
-    "Your roster, with this season's projection for each player.",
-    "Before a keeper draft this is last season's roster until the league clears it. Tap a player for his season outlook and to mark a keeper.",
+    "",
+    "Tap a player for his season outlook. In keeper leagues, tap keep to price him.",
   ],
   draft: [
     "Draft",
-    "Live board for draft night, ranked by what your roster still needs.",
-    "It watches your league's draft and takes players off the board as they go. The order leads with what a player adds to the weeks you win, given the roster you would end up with.",
+    "",
+    "Follows your league's draft live. Ranked by how much each player adds to your roster as it stands.",
   ],
 };
 
 /** what the keeper section is called, since it has its own heading */
 const KEEPERS_SAY =
-  "Keeping a player costs you that pick, so he is worth it only if he " +
-  "beats whoever you would draft there.";
+  "A keeper costs you that pick. Keep him if he beats what you would draft there.";
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF", "ROOKIES"];
 
@@ -700,7 +699,7 @@ function App() {
 
       <div id="explain">
         {view === "leagues" && <h1>{title}</h1>}
-        <p>{blurb}</p>
+        {blurb && <p>{blurb}</p>}
         {legend && asking && <p class="legend">{legend}</p>}
       </div>
 
