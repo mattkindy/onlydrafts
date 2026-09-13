@@ -19,6 +19,14 @@ import {
   type SimTables,
 } from "./simTables.ts";
 import { payFor, type Pays } from "./scoring.ts";
+import { normalizeName } from "./store.ts";
+
+/**
+ * A defence under the key a lineup gives it. Sleeper and ESPN both call a
+ * defence by its team code, and a lineup keys a player off his name, so
+ * the code run through the same normalizing is the key to use here.
+ */
+export const defenceKeyOf = (team: string) => normalizeName(team);
 
 /** what playing at home is worth, as the Node game applies it */
 const AT_HOME = 1.024;
@@ -169,7 +177,11 @@ export interface RemainderState {
 
 /** what one draw gave a player, in whatever the league pays */
 export interface RemainderDraws {
-  /** by the slate's key for a player, one number a draw */
+  /**
+   * By the slate's key for a player, one number a draw. Each side's
+   * defence is in here too, under the normalized team code a league
+   * gives it, since a defence is scored off the same draws.
+   */
   players: Map<string, Float64Array>;
   /** and the two sides' remaining points, for anyone checking the game */
   teamPoints: Record<string, Float64Array>;
@@ -553,6 +565,95 @@ interface DriveOutcome {
   thrownAway: boolean;
 }
 
+/** the ending that hands the ball over, which is what a defence is paid for */
+const TURNOVER = 4;
+
+/** what a defence saw over one draw, in the events a league pays it for */
+interface Takeaways {
+  /** drives faced, which is what the per drive rates are scaled by */
+  drives: number;
+  int: number;
+  fumRec: number;
+}
+
+const blankTakeaways = (): Takeaways => ({ drives: 0, int: 0, fumRec: 0 });
+
+/**
+ * What a defence does per drive it faces, beyond the takeaways the drive
+ * loop hands it.
+ *
+ * Fitted from the curated weekly defence file against the drive file:
+ * 2.38 sacks, 0.12 defensive touchdowns, 0.025 safeties and 0.058
+ * blocked kicks a team a game, over 10.7 drives faced a game. A drive
+ * that ends on a missed kick is a miss rather than a block, so blocks
+ * are drawn here as well.
+ *
+ * A defensive touchdown drawn this way pays the defence without putting
+ * the seven on the scoreboard. Eight a season a side is rare enough that
+ * feeding it back into the score would move nothing else.
+ */
+const PER_DRIVE: Record<string, number> = {
+  sack: 0.222, def_td: 0.0114, safe: 0.0024, blk_kick: 0.0054,
+};
+
+/** the top of each points allowed bucket, in the order a league steps them */
+const PTS_ALLOW: [number, string][] = [
+  [0, "pts_allow_0"], [6, "pts_allow_1_6"], [13, "pts_allow_7_13"],
+  [20, "pts_allow_14_20"], [27, "pts_allow_21_27"], [34, "pts_allow_28_34"],
+];
+
+const PTS_ALLOW_WORST = "pts_allow_35p";
+
+const bucketFor = (allowed: number): string =>
+  PTS_ALLOW.find(([top]) => allowed <= top)?.[1] ?? PTS_ALLOW_WORST;
+
+/** what a league pays for holding a side to this many points */
+const bucketPay = (allowed: number, pays: Pays) =>
+  payFor({ [bucketFor(allowed)]: 1 }, pays);
+
+/** Knuth's draw, which is quick enough while the mean stays under one */
+function poisson(mean: number, uniform: () => number): number {
+  if (mean <= 0) {
+    return 0;
+  }
+
+  const floor = Math.exp(-mean);
+  let product = uniform();
+  let count = 0;
+
+  while (product > floor) {
+    product *= uniform();
+    count++;
+  }
+
+  return count;
+}
+
+/**
+ * What a defence has left to come, in whatever the league pays.
+ *
+ * The provider's running total already prices the points allowed bucket
+ * at the current score, which is why a defence looks like a shutout
+ * at kickoff. So the bucket at the score this draw finishes on comes in
+ * and the bucket at the current score comes back out, and what is left
+ * is the sacks and takeaways still to happen. Whatever the provider has
+ * paid for those already stays where it is.
+ */
+function defencePoints(
+  saw: Takeaways, allowedSoFar: number, allowedToCome: number, pays: Pays,
+  uniform: () => number,
+): number {
+  const parts: Record<string, number> = { int: saw.int, fum_rec: saw.fumRec };
+
+  for (const [event, rate] of Object.entries(PER_DRIVE)) {
+    parts[event] = poisson(rate * saw.drives, uniform);
+  }
+
+  return payFor(parts, pays) +
+    bucketPay(allowedSoFar + allowedToCome, pays) -
+    bucketPay(allowedSoFar, pays);
+}
+
 /**
  * One drive. The caller keeps the score and the clock, so this only
  * says where the ball ends up, how long it took, and what each player did.
@@ -780,6 +881,25 @@ interface Playing {
   league: LeagueTables;
   into: Map<Loaded, Line[]>;
   week: number;
+  /** what each side's defence saw, by team, over the draw being played */
+  saw: Record<string, Takeaways>;
+}
+
+/** one more drive faced, and the turnover where the drive ended in one */
+function defenceFaced(saw: Takeaways, drive: DriveOutcome): void {
+  saw.drives++;
+
+  if (drive.ending !== TURNOVER) {
+    return;
+  }
+
+  if (drive.thrownAway) {
+    saw.int++;
+
+    return;
+  }
+
+  saw.fumRec++;
 }
 
 /** where an overtime period picks up */
@@ -846,6 +966,7 @@ function playOvertime(
       chargeThrownAway(withBall, lines);
     }
 
+    defenceFaced(game.saw[against.team]!, drive);
     secondsLeft = leftAfter;
     had++;
 
@@ -890,11 +1011,16 @@ function playExtraTime(
   }
 }
 
-/** one replay of the rest of a game, adding each player's line into `into` */
+/**
+ * One replay of the rest of a game, adding each player's line into `into`.
+ *
+ * The two sides' scores come back, and with them what each defence saw,
+ * since the drives it faced are what its own line is drawn off.
+ */
 function playOut(
   home: Loaded, away: Loaded, league: LeagueTables, state: RemainderState,
   uniform: () => number, into: Map<Loaded, Line[]>,
-): Record<string, number> {
+): { points: Record<string, number>; saw: Record<string, Takeaways> } {
   const points: Record<string, number> = {
     [home.team]: state.points[home.team] ?? 0,
     [away.team]: state.points[away.team] ?? 0,
@@ -919,8 +1045,12 @@ function playOut(
   let warningLeft = state.warningLeft;
   let secondHalf = state.secondHalf;
   let drives = 0;
+  const saw: Record<string, Takeaways> = {
+    [home.team]: blankTakeaways(),
+    [away.team]: blankTakeaways(),
+  };
   const game: Playing = {
-    home, away, league, into, week: state.week ?? MID_SEASON_WEEK,
+    home, away, league, into, week: state.week ?? MID_SEASON_WEEK, saw,
   };
   const overtimeLeft = state.overtimeLeft ?? 0;
 
@@ -934,7 +1064,7 @@ function playOut(
       toGo: firstToGo, had,
     });
 
-    return points;
+    return { points, saw };
   }
 
   while (secondsLeft > 0 && drives < 40) {
@@ -975,6 +1105,7 @@ function playOut(
     }
 
     points[withBall.team] = points[withBall.team]! + scored;
+    defenceFaced(game.saw[against.team]!, drive);
     drives++;
 
     if (secondHalf && secondsLeft <= 300 && margin > 0 &&
@@ -1000,7 +1131,7 @@ function playOut(
     playExtraTime(game, points, timeouts, uniform);
   }
 
-  return points;
+  return { points, saw };
 }
 
 /**
@@ -1037,6 +1168,10 @@ export function remainderFor(
     }
   }
 
+  for (const team of [state.home, state.away]) {
+    players.set(defenceKeyOf(team), new Float64Array(draws));
+  }
+
   const lines = new Map<Loaded, Line[]>([
     [home, home.players.map(blankLine)],
     [away, away.players.map(blankLine)],
@@ -1054,11 +1189,18 @@ export function remainderFor(
     }
 
     const uniform = mulberry32(seed + draw * 104729);
-    const points = playOut(home, away, league, state, uniform, lines);
+    const { points, saw } = playOut(home, away, league, state, uniform, lines);
 
     for (const team of [state.home, state.away]) {
       teamPoints[team]![draw] =
         (points[team] ?? 0) - (state.points[team] ?? 0);
+    }
+
+    for (const team of [state.home, state.away]) {
+      const against = team === state.home ? state.away : state.home;
+      players.get(defenceKeyOf(team))![draw] = defencePoints(
+        saw[team]!, state.points[against] ?? 0, teamPoints[against]![draw]!,
+        pays, uniform);
     }
 
     for (const side of [home, away]) {
