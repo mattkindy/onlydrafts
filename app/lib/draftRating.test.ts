@@ -6,7 +6,7 @@ import {
 import type { Player } from "./scoring.ts";
 import { normalizeName } from "./store.ts";
 
-const man = (
+const player = (
   name: string, position: string, adp: number | null, vor: number,
 ): Player => ({
   name, key: name.toLowerCase(), position, team: "ANY",
@@ -15,7 +15,7 @@ const man = (
 
 /** a board where the room and the numbers agree, best first */
 const board = Array.from({ length: 120 }, (_, i) =>
-  man(`man${i + 1}`, ["RB", "WR", "TE", "QB"][i % 4]!, i + 1, 120 - i));
+  player(`player${i + 1}`, ["RB", "WR", "TE", "QB"][i % 4]!, i + 1, 120 - i));
 
 const SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX"];
 
@@ -32,22 +32,22 @@ describe("the market curve", () => {
   });
 
   it("says nothing when nobody is priced", () => {
-    expect(worthAt(marketCurve([man("a", "RB", null, 9)]), 1)).toBe(0);
+    expect(worthAt(marketCurve([player("a", "RB", null, 9)]), 1)).toBe(0);
   });
 });
 
-describe("what a man is worth", () => {
+describe("what a player is worth", () => {
   it("goes on where he is drafted, not on what we think of him", () => {
     const curve = marketCurve(board);
     // our own numbers adore him, the market does not, and the market wins
-    const loved = man("loved", "RB", 100, 118);
-    const priced = man("priced", "RB", 2, 118);
+    const loved = player("loved", "RB", 100, 118);
+    const priced = player("priced", "RB", 2, 118);
     expect(worthOf(priced, curve)).toBeGreaterThan(worthOf(loved, curve));
   });
 
-  it("prices a man nobody drafted at the bottom of the curve", () => {
+  it("prices a player nobody drafted at the bottom of the curve", () => {
     const curve = marketCurve(board);
-    expect(worthOf(man("nobody", "RB", null, 42), curve))
+    expect(worthOf(player("nobody", "RB", null, 42), curve))
       .toBe(worthAt(curve, curve.length));
   });
 });
@@ -56,7 +56,7 @@ describe("filling a lineup", () => {
   it("starts only what the league starts and benches the rest", () => {
     const curve = marketCurve(board);
     const five = ["RB", "RB", "RB", "RB", "RB"].map((pos, i) =>
-      man(`back${i}`, pos, i + 1, 50 - i));
+      player(`back${i}`, pos, i + 1, 50 - i));
     const filled = fillLineup(five, SLOTS, curve);
     const asBacks = filled.starters.filter((s) => s.slot === "RB");
     expect(asBacks).toHaveLength(2);
@@ -65,16 +65,16 @@ describe("filling a lineup", () => {
     expect(filled.bench).toHaveLength(2);
   });
 
-  it("counts a bench man for less than a starter", () => {
+  it("counts a bench player for less than a starter", () => {
     const curve = marketCurve(board);
-    const one = fillLineup([man("a", "RB", 1, 50)], SLOTS, curve);
+    const one = fillLineup([player("a", "RB", 1, 50)], SLOTS, curve);
     const two = fillLineup(
-      [man("a", "RB", 1, 50), man("b", "RB", 2, 50), man("c", "RB", 3, 50),
-       man("d", "RB", 4, 50)],
+      [player("a", "RB", 1, 50), player("b", "RB", 2, 50), player("c", "RB", 3, 50),
+       player("d", "RB", 4, 50)],
       SLOTS, curve,
     );
     const each = (two.worth - one.worth) / 3;
-    expect(each).toBeLessThan(worthOf(man("a", "RB", 1, 50), curve));
+    expect(each).toBeLessThan(worthOf(player("a", "RB", 1, 50), curve));
   });
 });
 
@@ -85,7 +85,7 @@ describe("rating teams", () => {
       owner: `t${picks[0]}`,
       took: picks.map((n) => ({ at: n, p: board[n - 1]! })),
     });
-    // both take exactly the men the room says go at their slots
+    // both take exactly the players the room says go at their slots
     const rated = rateTeams([at([1, 24, 25]), at([12, 13, 36])], SLOTS, curve);
 
     for (const team of rated) {
@@ -99,7 +99,7 @@ describe("rating teams", () => {
       owner: "even",
       took: [{ at: 40, p: board[39]! }, { at: 41, p: board[40]! }],
     };
-    // the same slots, but it came away with two of the best men
+    // the same slots, but it came away with two of the best players
     const stole = {
       owner: "stole",
       took: [{ at: 40, p: board[0]! }, { at: 41, p: board[1]! }],
@@ -111,7 +111,7 @@ describe("rating teams", () => {
 });
 
 describe("rating one draft's picks", () => {
-  it("says how far a man fell past ADP, and a minus means you reached", () => {
+  it("says how far a player fell past ADP, and a minus means you reached", () => {
     const curve = marketCurve(board);
     const [fell, reached] = ratePicks(
       [{ at: 40, p: board[9]! }, { at: 10, p: board[59]! }], curve,
@@ -122,9 +122,9 @@ describe("rating one draft's picks", () => {
     expect(reached!.fell).toBe(-50);
   });
 
-  it("leaves a man nobody priced without a verdict on falling", () => {
+  it("leaves a player nobody priced without a verdict on falling", () => {
     const curve = marketCurve(board);
-    const [only] = ratePicks([{ at: 90, p: man("free", "K", null, 0) }], curve);
+    const [only] = ratePicks([{ at: 90, p: player("free", "K", null, 0) }], curve);
     expect(only!.fell).toBeNull();
   });
 });
@@ -133,14 +133,14 @@ describe("rating one draft's picks", () => {
 /**
  * The bar was the smoothed curve read at the pick number, and it
  * charged a team for owning an early pick: at the third pick the best
- * man left is priced about third, so the ceiling is nothing, while at
- * the hundredth a man can fall eighty places. Over one real draft that
+ * player left is priced about third, so the ceiling is nothing, while at
+ * the hundredth a player can fall eighty places. Over one real draft that
  * read minus 6.3 a pick in the first two rounds against plus 5.2 in
  * the middle. The bar now comes from what the room paid at each slot.
  */
 describe("what a pick at each place bought", () => {
   const curve = marketCurve(board);
-  /** a room that took the men the market said, slot for slot */
+  /** a room that took the players the market said, slot for slot */
   const asExpected = Array.from({ length: 110 }, (_, i) =>
     ({ at: i + 1, p: board[i]! }));
 
@@ -180,7 +180,7 @@ describe("what a pick at each place bought", () => {
 });
 
 /**
- * A man kept costs the pick he is kept at and is nearly always cheaper
+ * A player kept costs the pick he is kept at and is nearly always cheaper
  * than one drafted there, so measuring both against one bar made
  * keeping look good for every side and drafting look bad for nine of
  * twelve. The bar is asked about the slot and about which it was.
@@ -231,7 +231,7 @@ describe("finding a provider's pick on the board", () => {
     expect(key("D'Andre Swift")).toBe("dandreswift");
   });
 
-  it("knows the spellings the providers use for a man the board spells another way", () => {
+  it("knows the spellings the providers use for a player the board spells another way", () => {
     expect(key("Joshua Palmer")).toBe("joshpalmer");
     expect(key("Hollywood Brown")).toBe("marquisebrown");
     expect(key("Zonovan Knight", "RB")).toBe("bamknight");

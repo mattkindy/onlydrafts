@@ -67,15 +67,15 @@ describe.skipIf(!existsSync(PATH))("the rest of a game, played in the browser", 
   it("answers the same twice off the same seed", () => {
     const first = remainderFor(tables, league, atHalf, 100, PPR, 7)!;
     const again = remainderFor(tables, league, atHalf, 100, PPR, 7)!;
-    const key = [...first.men.keys()][0]!;
+    const key = [...first.players.keys()][0]!;
 
-    expect([...again.men.get(key)!]).toEqual([...first.men.get(key)!]);
+    expect([...again.players.get(key)!]).toEqual([...first.players.get(key)!]);
   });
 
-  it("gives a side's men between them about what the side scores", () => {
+  it("gives a side's players between them about what the side scores", () => {
     const played = remainderFor(tables, league, atHalf, 400, PPR, 3)!;
     const his = tables.teams[home]!.men
-      .map((man) => mean(played.men.get(man.key) ?? new Float64Array(1)))
+      .map((player) => mean(played.players.get(player.key) ?? new Float64Array(1)))
       .reduce((sum, points) => sum + points, 0);
 
     expect(his).toBeGreaterThan(mean(played.teamPoints[home]!));

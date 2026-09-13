@@ -1,7 +1,7 @@
 /**
- * What the week has to get right: a man on the bench costs nothing to drop
- * this week, a man in a seat costs whoever would fill it behind him, and a
- * newcomer is priced in the seat he would actually take.
+ * What the week has to get right: a player on the bench costs nothing to drop
+ * this week, a player in a slot costs whoever would fill it behind him, and a
+ * newcomer is priced in the slot he would actually take.
  */
 
 import { describe, expect, it } from "vitest";
@@ -38,7 +38,7 @@ const row = (
 });
 
 /** everybody either side of this week's game, and what the week says of them */
-const MEN = [
+const PLAYERS = [
   row("qb", "QB", 20), row("rb1", "RB", 16), row("rb2", "RB", 12),
   row("wr1", "WR", 15), row("wr2", "WR", 13), row("te", "TE", 9),
   row("flex", "WR", 10), row("k", "K", 8), row("def", "DEF", 7),
@@ -51,18 +51,18 @@ const MEN = [
   row("bigWr", "WR", 18, "SF", "SEA"), row("poorWr", "WR", 3, "SF", "SEA"),
 ];
 
-const ROWS = new Map(MEN.map((r) => [r.name, r]));
+const ROWS = new Map(PLAYERS.map((r) => [r.name, r]));
 
 const STATES = new Map<string, GameState>();
 
 const LINES: Lines = new Map();
 
 const aSide = (
-  owner: string, seated: [string, string][], bench: string[],
+  owner: string, inLineup: [string, string][], bench: string[],
 ): Side => ({
   owner,
   points: 0,
-  starters: seated.map(([key, slot]) => ({ key, slot, points: 0 })),
+  starters: inLineup.map(([key, slot]) => ({ key, slot, points: 0 })),
   bench: bench.map((key) => ({ key, points: 0 })),
 });
 
@@ -99,7 +99,7 @@ const aMan = (key: string, position: string): Player =>
   ({ name: key, key, position }) as Player;
 
 describe("dropping one of yours this week", () => {
-  it("costs nothing for a man who is not in the lineup", () => {
+  it("costs nothing for a player who is not in the lineup", () => {
     const week = weekPricesFor(aRoom(), []);
     const his = week.drops.get("benchWr")!;
 
@@ -110,7 +110,7 @@ describe("dropping one of yours this week", () => {
     expect(his.before).toBe(his.after);
   });
 
-  it("names the seat and who takes it for a man who starts", () => {
+  it("names the slot and who takes it for a player who starts", () => {
     const week = weekPricesFor(aRoom(), []);
     const his = week.drops.get("wr1")!;
 
@@ -120,7 +120,7 @@ describe("dropping one of yours this week", () => {
     expect(his.costs).toBeGreaterThan(0);
   });
 
-  it("leaves a seat nobody can fill empty", () => {
+  it("leaves a slot nobody can fill empty", () => {
     const week = weekPricesFor(aRoom(), []);
     const his = week.drops.get("k")!;
 
@@ -129,7 +129,7 @@ describe("dropping one of yours this week", () => {
     expect(his.takes).toBeGreaterThan(0);
   });
 
-  it("costs more to drop the better of two men in the same seat", () => {
+  it("costs more to drop the better of two players in the same slot", () => {
     const week = weekPricesFor(aRoom(), []);
 
     expect(week.drops.get("rb1")!.costs)
@@ -137,8 +137,8 @@ describe("dropping one of yours this week", () => {
   });
 });
 
-describe("adding a man off the wire this week", () => {
-  it("puts a better man in the seat of the one he beats", () => {
+describe("adding a player off the wire this week", () => {
+  it("puts a better player in the slot of the one he beats", () => {
     const week = weekPricesFor(
       aRoom(), [{ p: aMan("bigWr", "WR"), drop: null }]);
     const his = week.adds.get("bigWr")!;
@@ -149,7 +149,7 @@ describe("adding a man off the wire this week", () => {
     expect(his.added).toBeGreaterThan(0);
   });
 
-  it("leaves a man nobody would start out of the lineup", () => {
+  it("leaves a player nobody would start out of the lineup", () => {
     const week = weekPricesFor(
       aRoom(), [{ p: aMan("poorWr", "WR"), drop: null }]);
     const his = week.adds.get("poorWr")!;
@@ -160,7 +160,7 @@ describe("adding a man off the wire this week", () => {
     expect(his.added).toBe(0);
   });
 
-  it("says nothing about a man the week has no line on", () => {
+  it("says nothing about a player the week has no line on", () => {
     const week = weekPricesFor(
       aRoom(), [{ p: aMan("nobody", "WR"), drop: null }]);
 
@@ -179,7 +179,7 @@ describe("the whole move", () => {
       .toBeCloseTo(week.adds.get("bigWr")!.added, 10);
   });
 
-  it("pays nothing this week for dropping a man off the bench", () => {
+  it("pays nothing this week for dropping a player off the bench", () => {
     const week = weekPricesFor(
       aRoom(), [{ p: aMan("bigWr", "WR"), drop: aMan("benchWr", "WR") }]);
     const paid = week.nets.get("bigWr")!;
@@ -188,7 +188,7 @@ describe("the whole move", () => {
     expect(paid.net).toBeGreaterThan(0);
   });
 
-  it("gives the dropped man's seat to the newcomer where he fits it", () => {
+  it("gives the dropped player's slot to the newcomer where he fits it", () => {
     const week = weekPricesFor(
       aRoom(), [{ p: aMan("bigWr", "WR"), drop: aMan("wr2", "WR") }]);
     const paid = week.nets.get("bigWr")!;
@@ -197,7 +197,7 @@ describe("the whole move", () => {
     expect(paid.net).toBeGreaterThan(0);
   });
 
-  it("costs more than it pays when a starter goes for a worse man", () => {
+  it("costs more than it pays when a starter goes for a worse player", () => {
     const week = weekPricesFor(
       aRoom(), [{ p: aMan("poorWr", "WR"), drop: aMan("wr1", "WR") }]);
 

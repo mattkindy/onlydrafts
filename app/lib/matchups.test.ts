@@ -60,7 +60,7 @@ describe("oddsFor", () => {
     expect(theirs).toBe(0);
   });
 
-  it("keeps a big lead with one man left to play", () => {
+  it("keeps a big lead with one player left to play", () => {
     const rows = rowsFor(row("done", "BUF", 12), row("late", "LA", 14));
     const matchup: Matchup = {
       sides: [
@@ -84,7 +84,7 @@ describe("oddsFor", () => {
     expect(mine).toBeGreaterThan(0.9);
   });
 
-  it("adds a scaled draw to what a man in a live game has already", () => {
+  it("adds a scaled draw to what a player in a live game has already", () => {
     const rows = rowsFor(row("playing", "KC", 20));
     const totals = sideTotals(
       side("me", 8, [{ key: "playing", slot: "WR", points: 8 }]),
@@ -111,7 +111,7 @@ describe("oddsFor", () => {
     expect(mean(totals)).toBeLessThan(5 + 10);
   });
 
-  it("scores a man in no stock position on his points alone", () => {
+  it("scores a player in no stock position on his points alone", () => {
     const totals = sideTotals(
       side("me", 5, [{ key: "nobody", slot: "WR", points: 5 }]),
       new Map(),
@@ -196,16 +196,16 @@ describe("alternativesFor", () => {
       DEN: { where: "pre", left: 1 }, LA: { where: "pre", left: 1 } }),
   );
 
-  it("gives one section per seat, in lineup order", () => {
+  it("gives one section per slot, in lineup order", () => {
     expect(choices.map((c) => c.slot)).toEqual(["QB", "WR"]);
   });
 
-  it("only offers men the seat takes", () => {
+  it("only offers players the slot takes", () => {
     expect(choices[0]!.options).toEqual([]);
     expect(choices[1]!.options.map((o) => o.key)).toEqual(["stud", "scrub"]);
   });
 
-  it("puts the man who helps most first, and prices him above nought", () => {
+  it("puts the player who helps most first, and prices him above zero", () => {
     expect(choices[1]!.options[0]!.gains).toBeGreaterThan(0);
     expect(choices[1]!.options[1]!.gains).toBeLessThan(0);
   });
@@ -214,7 +214,7 @@ describe("alternativesFor", () => {
     const close = rowsFor(
       row("near", "DEN", 12), row("alike", "LA", 11.4),
       row("keeper", "SEA", 11, "QB"));
-    const seat: Side = {
+    const slot: Side = {
       owner: "me",
       points: 0,
       starters: [
@@ -230,7 +230,7 @@ describe("alternativesFor", () => {
       bench: [],
     };
     const calls = alternativesFor(
-      seat, level, ["QB", "WR"], close, states({}));
+      slot, level, ["QB", "WR"], close, states({}));
     const why = calls[1]!.options[0]!.why!;
 
     expect(why.points + why.spread + why.opponent + why.ownLineup)
@@ -239,7 +239,7 @@ describe("alternativesFor", () => {
       .toBeUndefined();
   });
 
-  it("marks a man whose game has kicked off as locked", () => {
+  it("marks a player whose game has kicked off as locked", () => {
     const shut = alternativesFor(
       mySide, them, ["QB", "WR"], rows,
       states({ KC: { where: "in", left: 0.5 } }),
@@ -285,18 +285,18 @@ describe("liveDraws", () => {
     KC: { where: "pre", left: 1 },
     DEN: { where: "pre", left: 1 },
   });
-  const men = ["qb", "wr", "def", "far"].map((key) => ({ key, points: 0 }));
+  const players = ["qb", "wr", "def", "far"].map((key) => ({ key, points: 0 }));
 
-  it("moves two men in the same game together and leaves two games apart", () => {
-    const live = liveDraws(men, stack, toPlay, 4000);
+  it("moves two players in the same game together and leaves two games apart", () => {
+    const live = liveDraws(players, stack, toPlay, 4000);
 
     expect(corr(live.toCome("qb"), live.toCome("wr"))).toBeGreaterThan(0.3);
     expect(Math.abs(corr(live.toCome("qb"), live.toCome("far"))))
       .toBeLessThan(0.05);
   });
 
-  it("leaves a man's own week where it was before anybody shared a factor", () => {
-    const live = liveDraws(men, stack, toPlay, 8000);
+  it("leaves a player's own week where it was before anybody shared a factor", () => {
+    const live = liveDraws(players, stack, toPlay, 8000);
     const his = live.toCome("wr");
     const alone = weeksFromSpread(
       { ev: 18, mid: 18, low: 7.2, high: 32.4, q1: 12.6, q3: 25.2 },
@@ -311,7 +311,7 @@ describe("liveDraws", () => {
     }
   });
 
-  it("lifts a teammate and sinks the other defence when a man runs hot", () => {
+  it("lifts a teammate and sinks the other defence when a player runs hot", () => {
     const half = states({
       BUF: { where: "in", left: 0.5 },
       MIA: { where: "in", left: 0.5 },
@@ -330,7 +330,7 @@ describe("liveDraws", () => {
   });
 });
 
-describe("a man the slate leaves out", () => {
+describe("a player the slate leaves out", () => {
   const board = new Map([["buf", {
     name: "BUF",
     key: "buf",
@@ -353,7 +353,7 @@ describe("a man the slate leaves out", () => {
     expect(mean(totals)).toBeLessThan(12);
   });
 
-  it("says nothing about a man neither the week nor the board has", () => {
+  it("says nothing about a player neither the week nor the board has", () => {
     expect(starterState({ key: "nobody" }, new Map(), states({}), board))
       .toBeNull();
     expect(starterState({ key: "buf" }, new Map(), states({}), board))
@@ -376,7 +376,7 @@ describe("bestLineupFor", () => {
   });
   const them = side("you", 0, [{ key: "kept", slot: "WR", points: 0 }]);
 
-  it("starts the better man off the bench", () => {
+  it("starts the better player off the bench", () => {
     const mine: Side = {
       owner: "me",
       points: 0,

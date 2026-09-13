@@ -88,9 +88,9 @@ export function DraftRating(props: Props) {
   const drafted = new Map<string, Took[]>();
   const kept: Took[] = [];
   /**
-   * The picks the board has no man for, so a reader knows a team was
+   * The picks the board has no player for, so a reader knows a team was
    * rated on fewer picks than it made. Left silent, a side that took a
-   * man the board spells differently was rated as if it had skipped
+   * player the board spells differently was rated as if it had skipped
    * the turn.
    */
   const unmatched: Pick[] = [];
@@ -112,7 +112,7 @@ export function DraftRating(props: Props) {
   }
 
   const teams = drafted.size > 0
-    ? [...drafted.entries()].map(([owner, men]) => ({ owner, took: men }))
+    ? [...drafted.entries()].map(([owner, players]) => ({ owner, took: players }))
     : league.allRosters.map((r) => ({
         owner: r.owner,
         took: r.keys
@@ -138,7 +138,7 @@ export function DraftRating(props: Props) {
     const rated = shareTeams(teams, board, league.slots, room);
     const draftedWins = new Map(rated.map((t) => [t.owner, t.wins]));
     /**
-     * A man kept off the board today was never assigned a turn, so he
+     * A player kept off the board today was never assigned a turn, so he
      * is priced as if taken one pick past the last one anybody made.
      */
     const lastPick = Math.max(0, ...everyPick.map((t) => t.at)) + 1;

@@ -4,7 +4,7 @@
  * The build writes a file per week and lists them in the index. Reading
  * them is the only place that knows those file names and field names.
  *
- * Two numbers arrive for every man: ours, from the weekly model, and
+ * Two numbers arrive for every player: ours, from the weekly model, and
  * Sleeper's. They mostly agree. Where they do not, the gap is worth
  * showing, because the pair bench says the wider gaps are the ones that
  * decide a matchup.
@@ -188,7 +188,7 @@ export function slateUnder(slate: Slate, perCatch: number): Slate {
     return slate;
   }
 
-  // a Sleeper nought means he is not expected to play, so it stays nought
+  // a Sleeper zero means he is not expected to play, so it stays zero
   const moved = (row: SlateRow, points: number | null | undefined) =>
     points === null || points === undefined || points === 0
       ? points
@@ -210,25 +210,25 @@ export function slateUnder(slate: Slate, perCatch: number): Slate {
   };
 }
 
-/** every points figure on a row, for a man who is not going to play */
+/** every points figure on a row, for a player who is not going to play */
 const NOTHING = {
   ours: 0, sleeper: 0, blend: 0, floor: 0, q1: 0, q3: 0, ceiling: 0,
 };
 
 /**
- * The week's rows with the men the league office has ruled out set to
- * nought.
+ * The week's rows with the players the injury report has ruled out set to
+ * zero.
  *
- * A row of noughts draws a flat nought week instead of his usual ladder.
+ * A row of zeros draws a flat zero week instead of his usual ladder.
  * What he put up before he limped off is counted separately from the
- * draws, so a man hurt at halftime keeps his half.
+ * draws, so a player hurt at halftime keeps his half.
  *
- * A man the weekly model does not cover has no row to zero, and a kicker
+ * A player the weekly model does not cover has no row to zero, and a kicker
  * or a defence is always one of those. Left alone he would fall through
- * to his season game or the position's stock week, so a row of noughts is
+ * to his season game or the position's stock week, so a row of zeros is
  * written for him instead.
  */
-export function withOutMenZeroed(
+export function withOutPlayersZeroed(
   rows: Map<string, SlateRow>, listed: Map<string, Listed>,
 ): Map<string, SlateRow> {
   const sat: [string, SlateRow][] = [];
@@ -289,7 +289,7 @@ export const SPLIT_AT = 3;
 export const SLEEPER_WINS_SPLITS = 55;
 
 /**
- * A Sleeper nought is Sleeper saying he is a backup or he is out, not a
+ * A Sleeper zero is Sleeper saying he is a backup or he is out, not a
  * projection that disagrees with ours, so it is not a split.
  */
 export const splitBy = (row: SlateRow) =>
@@ -314,13 +314,13 @@ export const STARTER_OUT_AT = 0.2;
 
 export interface Verdict {
   gap: number;
-  /** the man to start, or null when it is a coin flip */
+  /** the player to start, or null when it is a coin flip */
   start: SlateRow | null;
   says: string;
 }
 
 /**
- * Which of two men to start, and how often that answer has been right.
+ * Which of two players to start, and how often that answer has been right.
  *
  * The three bands come from the pair bench: under two points every
  * method landed on about 54%, two to five on 66%, and five or more on
@@ -357,9 +357,9 @@ export function verdict(a: SlateRow, b: SlateRow): Verdict {
   };
 }
 
-/** the men on your team, under the same normalized name the board uses */
-export const rosterKeys = (men: { name: string }[]) =>
-  new Set(men.map((m) => normalizeName(m.name)));
+/** the players on your team, under the same normalized name the board uses */
+export const rosterKeys = (players: { name: string }[]) =>
+  new Set(players.map((m) => normalizeName(m.name)));
 
 export const onRoster = (roster: Set<string> | null, row: SlateRow) =>
   Boolean(roster && roster.has(normalizeName(row.name)));

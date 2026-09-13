@@ -27,10 +27,10 @@ export type Schedule = Record<string, (string | null)[]>;
 export interface SeasonAsk {
   ask: "season";
   /** the board in this league's terms */
-  men: Player[];
+  players: Player[];
   /**
    * The drawn weeks need to know who each side plays, and the board is
-   * the only thing that says. Without it the men in a game stop moving
+   * the only thing that says. Without it the players in a game stop moving
    * together and a side's week comes out far too narrow.
    */
   schedule: Schedule | null;
@@ -77,13 +77,13 @@ export interface Kept {
 export function priceSeason(
   ask: SeasonAsk,
 ): { answer: SeasonAnswer; kept: Kept } {
-  const byKey = new Map(ask.men.map((p) => [p.key, p]));
+  const byKey = new Map(ask.players.map((p) => [p.key, p]));
   const ours = (keys: string[]) => keys
     .map((key) => byKey.get(key))
     .filter((p): p is Player => Boolean(p));
   const mine = ours(ask.mine);
   const room = roomFor(
-    ask.men, ask.slots, ask.teams, ask.draws, ask.rosters);
+    ask.players, ask.slots, ask.teams, ask.draws, ask.rosters);
   const adds = addsFor(mine, ours(ask.pool), ask.slots, room);
 
   return {

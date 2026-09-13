@@ -1,7 +1,7 @@
 /**
  * The board as it ships, read into what the page works with.
  *
- * The file says what each man does in a game and where rooms draft
+ * The file says what each player does in a game and where rooms draft
  * him, and nothing about scoring. Reading it is the only place that
  * knows the file's field names.
  */

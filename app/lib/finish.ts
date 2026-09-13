@@ -1,5 +1,5 @@
 /**
- * Where a man could finish among his own position, rather than what he
+ * Where a player could finish among his own position, rather than what he
  * scores in a game.
  *
  * A drafter thinks in finishes. Twelve points a game means nothing on
@@ -39,8 +39,8 @@ const seasonOf = (p: Player, at: "low" | "ev" | "high"): number | null => {
  * when a whole position moves at once needs draws the board does not
  * ship.
  */
-export function finishRange(p: Player, men: Player[]): Finish | null {
-  // a man too thin to have a spread has no range to give, and reading
+export function finishRange(p: Player, players: Player[]): Finish | null {
+  // a player too thin to have a spread has no range to give, and reading
   // one off his average alone says he could finish exactly where he is
   if (!p.game?.["ev"]) {
     return null;
@@ -56,7 +56,7 @@ export function finishRange(p: Player, men: Player[]): Finish | null {
     return null;
   }
 
-  const rivals = men
+  const rivals = players
     .filter((o) => o.position === p.position && o.key !== p.key)
     .map((o) => seasonOf(o, "ev"))
     .filter((n): n is number => n !== null)

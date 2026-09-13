@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { factorsOf, type Mix } from "../app/lib/copula.ts";
-import { chanceWith, explainSwap, type Seat } from "../app/lib/explain.ts";
+import { chanceWith, explainSwap, type Opening } from "../app/lib/explain.ts";
 import { liveDraws, sideTotals, spreadOf } from "../app/lib/matchups.ts";
 import type { Side } from "../app/lib/providers.ts";
 import { readSlate, type SlateRow } from "../app/lib/slate.ts";
@@ -177,7 +177,7 @@ function swapIn(
   const factorsFor = (men: { key: string }[]) => factorsOf(
     men.map((one) => live.drawingOf(one.key)?.mix)
       .filter((mix): mix is Mix => mix != null));
-  const seat: Seat = {
+  const seat: Opening = {
     others: Array.from({ length: draws }, (_, i) =>
       mine.starters.reduce((sum, one) =>
         one.key === seated ? sum : sum + live.toCome(one.key)[i]!, 0)),

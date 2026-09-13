@@ -58,8 +58,8 @@ export interface CardProps {
 }
 
 /** one scale for every season card on screen, so the bars compare */
-export const seasonScale = (men: Player[]) =>
-  Math.max(12, ...men.map((p) => (p.game?.["high"] ?? p.ppg) ?? 0)) * 1.02;
+export const seasonScale = (players: Player[]) =>
+  Math.max(12, ...players.map((p) => (p.game?.["high"] ?? p.ppg) ?? 0)) * 1.02;
 
 export function ordinal(n: number) {
   if (n % 100 >= 11 && n % 100 <= 13) {
@@ -72,10 +72,10 @@ export function ordinal(n: number) {
 /**
  * Where the room takes him against where we have him, both on a scale
  * of picks. The one thing a drafter wants at his turn is whether the
- * man will still be there next time, and that is the room's range and
+ * player will still be there next time, and that is the room's range and
  * not his points.
  *
- * The window is this man's own, not the board's, because a bar scaled
+ * The window is this player's own, not the board's, because a bar scaled
  * to fifteen rounds shows nothing about a first-rounder.
  */
 function OnTheBoard(
@@ -132,7 +132,7 @@ function Spread({ range, max }: { range: Range; max: number }) {
   return (
     <>
       {/* The middle half sits inside the tenth to ninetieth, because on
-          its own it reads as a steady player: it covers 0.72 of a man's
+          its own it reads as a steady player: it covers 0.72 of a player's
           own average where his weeks actually run 1.27 across. */}
       <div class="range">
         {tailLow !== undefined && tailHigh !== undefined && (
@@ -301,7 +301,7 @@ function Facts({ p, teams, costs, aside, slim }: {
         </span>
       )}
       {/* what reconciles the rate with the season value beside it: a
-          man who plays more games is worth more at the same rate */}
+          player who plays more games is worth more at the same rate */}
       {p.games !== undefined && (
         <span
           class="f"
@@ -321,7 +321,7 @@ function Facts({ p, teams, costs, aside, slim }: {
         Math.abs(p.ownVor - p.vor) >= 10 && (
         <span
           class="f"
-          title="what his own projection says he is worth over a season, before ADP and the touches and the walk are mixed in. The bigger number is what a pick at his place in our ranking is worth."
+          title="what his own projection says he is worth over a season, before ADP and the touches and the simulation are mixed in. The bigger number is what a pick at his place in our ranking is worth."
         >
           <i>ours alone</i>{p.ownVor.toFixed(0)}
         </span>
@@ -334,12 +334,12 @@ function Facts({ p, teams, costs, aside, slim }: {
 /**
  * What he does, in the categories a box score uses. Both rows are here
  * because they answer different questions: a season is what anybody
- * weighing two men wants, and a game is what you check the season
+ * weighing two players wants, and a game is what you check the season
  * against when it looks too big.
  */
 function StatLine({ p }: { p: Player }) {
-  // the walk's line leads, since the walk is the model the board
-  // trusts most; the regression speaks only for men it never saw
+  // the simulation's line leads, since it is the model the board trusts
+  // most; the regression speaks only for players it never saw
   const parts = p.simulated ?? p.projected;
   const moved = movedBy(p);
   const season = lineOver(parts, p.position, p.games ?? 17, moved);
@@ -392,12 +392,8 @@ export function SeasonCard(
   const ours = p.rank ? asRound(p.rank, teams) : null;
   const room = p.adpRank ? asRound(p.adpRank, teams) : null;
 
-  /**
-   * Whatever the list is sorted by leads, since a reader going down the
-   * page is reading that. Ordering by the weeks a man wins you while
-   * the card led with his place on our board put Puka Nacua top of the
-   * list with 1.08 beside him, which reads as a broken sort.
-   */
+  // whatever the list is sorted by leads, since a reader going down the
+  // page is reading that; leading with something else reads as a broken sort
   const leading = props.lead === "war" && props.wins
     ? { label: "weeks won", value: props.wins }
     : props.lead === "adp"

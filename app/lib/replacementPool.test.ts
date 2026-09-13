@@ -2,7 +2,7 @@
  * The bar a kicker and a defence are measured against.
  *
  * What makes these two different from a back is that you replace them
- * during the season rather than keeping them, so the man you are really
+ * during the season rather than keeping them, so the player you are really
  * weighing them against is on the wire and not on a bench.
  */
 
@@ -79,7 +79,7 @@ describe("what the wire gives you", () => {
   });
 
   /**
-   * At a seat your own men cannot fill, how many are already gone is the
+   * At a slot your own players cannot fill, how many are already gone is the
    * whole question. Twelve teams keep a kicker each, so the wire kicker
    * is the thirteenth. They start twenty nine backs between them, and
    * counting one a team there would put somebody's second back on the
@@ -99,12 +99,12 @@ describe("what the wire gives you", () => {
   });
 
   /**
-   * A back is kept, so the last man the league starts is who you would
+   * A back is kept, so the last player the league starts is who you would
    * play instead of him. Only the streamed two are moved off that.
    */
   it("leaves every other position on the last starter", () => {
     const bar = replacementBar({
-      men: [...defences, ...kickers],
+      players: [...defences, ...kickers],
       teams: 12,
       rosters: null,
       lastStarter: { QB: 14, RB: 9, WR: 8, TE: 6, K: 8.8, DEF: 2.4 },

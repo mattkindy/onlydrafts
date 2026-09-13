@@ -1,5 +1,5 @@
 /**
- * What a man adds to your chance of winning a week.
+ * What a player adds to your chance of winning a week.
  *
  * Value over replacement asks how many points he beats a baseline by,
  * and the game is beating one other team on Sunday. The two come apart
@@ -9,7 +9,7 @@
  * byes and injuries mean he starts some weeks.
  *
  * So a week is drawn for everybody, the best legal lineup is filled,
- * and a man is worth the change in how often it beats a typical side.
+ * and a player is worth the change in how often it beats a typical side.
  */
 
 import { factorFor, mixFor, PASS_CATCHERS, type Mix } from "./copula.ts";
@@ -19,15 +19,15 @@ import { DRAWS, streamFor, weeksFromNormals } from "./spread.ts";
 const WHERE = ["QB", "RB", "WR", "TE", "K", "DEF"];
 
 /**
- * Who is in a seat: what you expect of him and what he scored. A man off
- * waivers is marked, because you play your own man over a pickup when
+ * Who is in a slot: what you expect of him and what he scored. A player off
+ * waivers is marked, because you play your own player over a pickup when
  * the two of them are as good as each other.
  */
 export interface Held {
   expect: number;
   score: number;
   wire?: boolean;
-  /** his key, so a page can name the man a newcomer pushes out */
+  /** his key, so a page can name the player a newcomer pushes out */
   who?: string;
 }
 
@@ -35,55 +35,55 @@ export interface Baseline {
   /** what your lineup scores in each drawn week */
   total: number[];
   /**
-   * The man a newcomer at each position would push out, week by week:
+   * The player a newcomer at each position would push out, week by week:
    * what you expect of him, which is what decides who you start, and
    * what he actually scored, which is what you give up by benching him.
    *
-   * Both, because a lineup is set on Thursday. Seating whoever turns
+   * Both, because a lineup is set on Thursday. Starting whoever turns
    * out best is a start and sit nobody gets to make, and it paid a
    * second kicker two and a half points of win chance for the weeks he
    * happened to beat the first.
    */
   displaced: Record<string, Held[]>;
-  /** how many drawn weeks each man was in the lineup, by his key */
+  /** how many drawn weeks each player was in the lineup, by his key */
   started: Record<string, number>;
   /**
-   * How many of those weeks he spent in each seat, by his key and then
-   * by the seat's name. A back who plays the flex half the time and the
+   * How many of those weeks he spent in each slot, by his key and then
+   * by the slot's name. A back who plays the flex half the time and the
    * second back the other half has two entries, so a page naming one
-   * seat has to pick the commonest.
+   * slot has to pick the commonest.
    */
-  seated: Record<string, Record<string, number>>;
+  startedIn: Record<string, Record<string, number>>;
 }
 
-/** the seat he was in most of the weeks he started, if he started at all */
-export function seatOf(
-  filled: Pick<Baseline, "seated">, key: string,
+/** the slot he was in most of the weeks he started, if he started at all */
+export function slotOf(
+  filled: Pick<Baseline, "startedIn">, key: string,
 ): string | null {
-  const his = filled.seated[key];
+  const his = filled.startedIn[key];
 
   if (!his) {
     return null;
   }
 
-  let seat: string | null = null;
+  let slot: string | null = null;
 
   for (const [where, weeks] of Object.entries(his)) {
-    if (seat === null || weeks > his[seat]!) {
-      seat = where;
+    if (slot === null || weeks > his[slot]!) {
+      slot = where;
     }
   }
 
-  return seat;
+  return slot;
 }
 
-/** The season is this many weeks, and every man has a bye in one of them. */
+/** The season is this many weeks, and every player has a bye in one of them. */
 export const SEASON_WEEKS = 18;
 
 /**
- * Which week of the season a drawn week is. Every man's draws share
- * the count, so two men with the same bye miss the same draws, and a
- * roster that stacks a bye week feels it instead of each man missing
+ * Which week of the season a drawn week is. Every player's draws share
+ * the count, so two players with the same bye miss the same draws, and a
+ * roster that stacks a bye week feels it instead of each player missing
  * a week of his own.
  */
 export function weekOfDraw(i: number): number {
@@ -98,13 +98,13 @@ let topCatchers: Set<string> | null = null;
 
 /**
  * Who each team's first pass catcher is, which decides the sign he takes
- * the split factor with. A draw cannot see a man's teammates, so the
+ * the split factor with. A draw cannot see a player's teammates, so the
  * board says once, here, and the weeks drawn before it spoke are thrown
  * away because they were drawn without it.
  *
  * The split factor only has two signs, so the first pass catcher comes
  * out uncorrelated with each of the others, and any two of the others
- * pick up about 0.42 between them where the measurement says nought.
+ * pick up about 0.42 between them where the measurement says zero.
  */
 export function notePassCatchers(
   players: Player[], opponents: OpponentOf | null = null,
@@ -130,7 +130,7 @@ export function notePassCatchers(
 }
 
 /**
- * What a man's week in one drawn week is loaded on. The fixture changes
+ * What a player's week in one drawn week is loaded on. The fixture changes
  * from week to week, so the loadings are worked out per drawn week and
  * kept, since filling a lineup asks for them over and over.
  */
@@ -154,7 +154,7 @@ function mixAt(p: Player, i: number): Mix {
 
 let mixes = new Map<string, Mix>();
 
-/** a man's loadings for one week, with the factor draws already found */
+/** a player's loadings for one week, with the factor draws already found */
 interface Loaded {
   terms: { load: number; its: number[] }[];
   own: number;
@@ -162,7 +162,7 @@ interface Loaded {
 }
 
 /**
- * The normal behind each of a man's draws.
+ * The normal behind each of a player's draws.
  *
  * His loadings change with the fixture and nothing else, so there are
  * eighteen sets of them however many weeks are drawn. Looking them up
@@ -195,9 +195,9 @@ function normalsFor(p: Player, draws: number): number[] {
 }
 
 /**
- * A man's weeks, zeroed where he does not play: his bye, and the games
+ * A player's weeks, zeroed where he does not play: his bye, and the games
  * he is expected to miss. How many games he is expected to play already
- * prices his injury history and his age, so a fragile man misses weeks
+ * prices his injury history and his age, so a fragile player misses weeks
  * here rather than being marked down evenly.
  */
 export function weeksOf(p: Player, draws = DRAWS): number[] {
@@ -221,8 +221,8 @@ export function weeksOf(p: Player, draws = DRAWS): number[] {
 }
 
 /**
- * Kept per man, because scoring a board the exact way fills a roster
- * once for every candidate and drew every man's weeks again each time.
+ * Kept per player, because scoring a board the exact way fills a roster
+ * once for every candidate and drew every player's weeks again each time.
  * The arrays are shared, so nobody writes into one.
  */
 let drawn = new WeakMap<Player, Map<number, number[]>>();
@@ -255,52 +255,52 @@ function drawWeeks(p: Player, draws: number): number[] {
   });
 }
 
-interface Seat {
+interface Slot {
   where: string[];
   /** what to call it on a page, which for a flex is not a position */
   slot: string;
   taken: Held | null;
 }
 
-/** every starting seat this league has, the named ones then the flexes */
-function seatsOf(slots: string[] | null | undefined): Seat[] {
-  const { named, flex } = lineupOf(slots);
-  const seats: Seat[] = [];
+/** every starting slot this league has, the named ones then the flexes */
+function slotsOf(slotNames: string[] | null | undefined): Slot[] {
+  const { named, flex } = lineupOf(slotNames);
+  const slots: Slot[] = [];
 
   for (const [where, count] of Object.entries(named)) {
     for (let i = 0; i < count; i++) {
-      seats.push({ where: [where], slot: where, taken: null });
+      slots.push({ where: [where], slot: where, taken: null });
     }
   }
 
   for (let i = 0; i < flex; i++) {
-    seats.push({ where: FLEX_POSITIONS, slot: "FLEX", taken: null });
+    slots.push({ where: FLEX_POSITIONS, slot: "FLEX", taken: null });
   }
 
-  return seats;
+  return slots;
 }
 
-/** one man of a roster, in the order the fill takes them */
-interface Sat {
+/** one player of a roster, in the order the lineup takes them */
+interface InOrder {
   p: Player;
   its: number[];
   expect: number;
 }
 
 /**
- * Your lineup drawn week by week, kept as who sat in which seat.
+ * Your lineup drawn week by week, kept as who sat in which slot.
  *
- * A baseline reads its totals and its displaced seats off this. The
- * waiver page reads something else off it: with the seating in hand,
- * what dropping one man costs is the men below him shuffling up a
- * seat, which is a short walk rather than the whole season filled
- * again.
+ * A baseline reads its totals and its displaced slots off this. The
+ * waiver page reads something else off it: with the lineup in hand,
+ * what dropping one player costs is the players below him shuffling up a
+ * slot, which is a short pass over the lineup rather than the whole
+ * season filled again.
  */
-export interface Seating {
-  seats: Seat[];
+export interface SeasonLineup {
+  slots: Slot[];
   /**
-   * What each seat is worth off the wire in a week nobody on the roster
-   * fills it. A seat your roster cannot fill is not worth nothing: you
+   * What each slot is worth off the wire in a week nobody on the roster
+   * fills it. A slot your roster cannot fill is not worth nothing: you
    * start whoever the wire gives you there, and a newcomer has to beat
    * him.
    *
@@ -311,74 +311,74 @@ export interface Seating {
    */
   offWire: number[];
   /** the roster best expected first, since that is how a lineup is set */
-  order: Sat[];
-  /** the seats each position can go in, as a bit per seat */
+  order: InOrder[];
+  /** the slots each position can go in, as a bit per slot */
   fits: Record<string, number>;
-  /** which seat each man took, by draw and then by his place in the order */
+  /** which slot each player took, by draw and then by his place in the order */
   at: Int8Array;
   /** the first drawn week this covers, since a caller can ask for a run */
   from: number;
   total: number[];
   started: Record<string, number>;
-  seated: Record<string, Record<string, number>>;
+  startedIn: Record<string, Record<string, number>>;
 }
 
-export function seatingFor(
-  roster: Player[], slots: string[] | null | undefined, draws = DRAWS,
+export function seasonLineupFor(
+  roster: Player[], slotNames: string[] | null | undefined, draws = DRAWS,
   wire: Record<string, number> = {}, only: [number, number] = [0, draws],
-): Seating {
-  const seats = seatsOf(slots);
+): SeasonLineup {
+  const slots = slotsOf(slotNames);
   const order = roster
     .map((p) => ({ p, its: weeksOf(p, draws), expect: p.ppg ?? 0 }))
     .sort((a, b) => b.expect - a.expect);
   const fits: Record<string, number> = {};
 
   for (const where of WHERE) {
-    fits[where] = seats.reduce(
-      (mask, seat, s) => seat.where.includes(where) ? mask | (1 << s) : mask, 0);
+    fits[where] = slots.reduce(
+      (mask, slot, s) => slot.where.includes(where) ? mask | (1 << s) : mask, 0);
   }
 
-  const offWire = seats.map((seat) => seat.where.reduce(
+  const offWire = slots.map((slot) => slot.where.reduce(
     (best, where) => Math.max(best, wire[where] ?? 0), 0));
-  const men = order.length;
-  const full = (1 << seats.length) - 1;
-  const at = new Int8Array((only[1] - only[0]) * men).fill(-1);
+  const players = order.length;
+  const full = (1 << slots.length) - 1;
+  const at = new Int8Array((only[1] - only[0]) * players).fill(-1);
   const total: number[] = [];
   const started: Record<string, number> = {};
-  const seated: Record<string, Record<string, number>> = {};
+  const startedIn: Record<string, Record<string, number>> = {};
 
   for (let i = only[0]; i < only[1]; i++) {
-    const row = (i - only[0]) * men;
+    const row = (i - only[0]) * players;
     let open = full;
     let sum = 0;
 
-    for (let m = 0; m < men; m++) {
-      const man = order[m]!;
-      const score = man.its[i]!;
+    for (let m = 0; m < players; m++) {
+      const player = order[m]!;
+      const score = player.its[i]!;
 
-      // only among the men who are playing at all
+      // only among the players who are playing at all
       if (score <= 0) {
         continue;
       }
 
-      const could = open & (fits[man.p.position] ?? 0);
+      const could = open & (fits[player.p.position] ?? 0);
 
       if (!could) {
         continue;
       }
 
-      // the first seat he fits, which is the lowest bit still set
+      // the first slot he fits, which is the lowest bit still set
       const s = 31 - Math.clz32(could & -could);
       open &= ~(1 << s);
       at[row + m] = s;
       sum += score;
-      started[man.p.key] = (started[man.p.key] ?? 0) + 1;
-      const his = seated[man.p.key] ??= {};
-      const slot = seats[s]!.slot;
+      started[player.p.key] = (started[player.p.key] ?? 0) + 1;
+      const his = startedIn[player.p.key] ??= {};
+      const slot = slots[s]!.slot;
       his[slot] = (his[slot] ?? 0) + 1;
     }
 
-    for (let s = 0; s < seats.length; s++) {
+    for (let s = 0; s < slots.length; s++) {
       if (open & (1 << s)) {
         sum += offWire[s]!;
       }
@@ -387,7 +387,7 @@ export function seatingFor(
     total.push(sum);
   }
 
-  return { seats, offWire, order, fits, at, from: only[0], total, started, seated };
+  return { slots, offWire, order, fits, at, from: only[0], total, started, startedIn };
 }
 
 /**
@@ -395,31 +395,31 @@ export function seatingFor(
  * position would have to beat to get into it.
  *
  * The second half is what makes scoring a whole board affordable. Once
- * the worst man he could push out is known, what he adds that week is
+ * the worst player he could push out is known, what he adds that week is
  * one subtraction, and nobody has the lineup filled again for them.
  */
 export function baselineFor(
   roster: Player[], slots: string[] | null | undefined, draws = DRAWS,
   wire: Record<string, number> = {}, only: [number, number] = [0, draws],
 ): Baseline {
-  const seating = seatingFor(roster, slots, draws, wire, only);
+  const lineup = seasonLineupFor(roster, slots, draws, wire, only);
 
   return {
-    total: seating.total,
-    displaced: displacedIn(seating),
-    started: seating.started,
-    seated: seating.seated,
+    total: lineup.total,
+    displaced: displacedIn(lineup),
+    started: lineup.started,
+    startedIn: lineup.startedIn,
   };
 }
 
-/** who is in each seat in one drawn week, by his place in the order */
-function inSeats(seating: Seating, i: number, into: Int8Array): void {
-  const men = seating.order.length;
-  const row = i * men;
+/** who is in each slot in one drawn week, by his place in the order */
+function inLineup(lineup: SeasonLineup, i: number, into: Int8Array): void {
+  const players = lineup.order.length;
+  const row = i * players;
   into.fill(-1);
 
-  for (let m = 0; m < men; m++) {
-    const s = seating.at[row + m]!;
+  for (let m = 0; m < players; m++) {
+    const s = lineup.at[row + m]!;
 
     if (s >= 0) {
       into[s] = m;
@@ -428,30 +428,30 @@ function inSeats(seating: Seating, i: number, into: Int8Array): void {
 }
 
 /** what a newcomer at each position would have to beat, week by week */
-function displacedIn(seating: Seating): Record<string, Held[]> {
+function displacedIn(lineup: SeasonLineup): Record<string, Held[]> {
   const displaced: Record<string, Held[]> = {};
 
   for (const where of WHERE) {
     displaced[where] = [];
   }
 
-  const nSeats = seating.seats.length;
-  const who = new Int8Array(nSeats);
+  const slotCount = lineup.slots.length;
+  const who = new Int8Array(slotCount);
 
-  for (let i = 0; i < seating.total.length; i++) {
-    inSeats(seating, i, who);
+  for (let i = 0; i < lineup.total.length; i++) {
+    inLineup(lineup, i, who);
 
     for (const where of WHERE) {
-      const mask = seating.fits[where] ?? 0;
+      const mask = lineup.fits[where] ?? 0;
       let worst: Held | null = null;
       let open = mask === 0;
 
-      for (let s = 0; s < nSeats && !open; s++) {
+      for (let s = 0; s < slotCount && !open; s++) {
         if (!(mask & (1 << s))) {
           continue;
         }
 
-        const held = heldIn(seating, who[s]!, s, i);
+        const held = heldIn(lineup, who[s]!, s, i);
 
         if (!held) {
           open = true;
@@ -468,69 +468,69 @@ function displacedIn(seating: Seating): Record<string, Held[]> {
   return displaced;
 }
 
-/** whoever is in a seat that week: a man of yours, the wire, or nobody */
+/** whoever is in a slot that week: a player of yours, the wire, or nobody */
 function heldIn(
-  seating: Seating, m: number, s: number, i: number,
+  lineup: SeasonLineup, m: number, s: number, i: number,
 ): Held | null {
   if (m >= 0) {
-    const man = seating.order[m]!;
+    const player = lineup.order[m]!;
 
     return {
-      expect: man.expect, score: man.its[i + seating.from]!, who: man.p.key,
+      expect: player.expect, score: player.its[i + lineup.from]!, who: player.p.key,
     };
   }
 
-  const off = seating.offWire[s]!;
+  const off = lineup.offWire[s]!;
 
   return off > 0 ? { expect: off, score: off, wire: true } : null;
 }
 
-/** what your lineup scores each week once one man is gone, and who steps up */
+/** what your lineup scores each week once one player is gone, and who steps up */
 export interface Without {
   total: number[];
-  /** how many more weeks each man is in the lineup, by his key */
+  /** how many more weeks each player is in the lineup, by his key */
   gained: Record<string, number>;
 }
 
 /**
- * The same season with one man off the roster, worked out from the
- * seating rather than filled again.
+ * The same season with one player off the roster, worked out from the
+ * lineup rather than filled again.
  *
- * A man you never started costs you nothing. In a week he did start,
- * his leaving opens his seat, and the fill below him is the same one it
- * was except that the first man who fits that seat and was in a later
- * one moves up into it, which opens the one he came from. The walk ends
- * when a man who was not starting takes it, or the wire fills it.
+ * A player you never started costs you nothing. In a week he did start,
+ * his leaving opens his slot, and the fill below him is the same one it
+ * was except that the first player who fits that slot and was in a later
+ * one moves up into it, which opens the one he came from. The shuffle
+ * ends when a player who was not starting takes it, or the wire fills it.
  */
-export function withoutFor(seating: Seating, key: string): Without {
-  const gone = seating.order.findIndex((man) => man.p.key === key);
-  const total = [...seating.total];
+export function withoutFor(lineup: SeasonLineup, key: string): Without {
+  const gone = lineup.order.findIndex((player) => player.p.key === key);
+  const total = [...lineup.total];
   const gained: Record<string, number> = {};
 
   if (gone < 0) {
     return { total, gained };
   }
 
-  const men = seating.order.length;
+  const players = lineup.order.length;
 
   for (let i = 0; i < total.length; i++) {
-    const row = i * men;
-    let hole = seating.at[row + gone]!;
+    const row = i * players;
+    let hole = lineup.at[row + gone]!;
 
     if (hole < 0) {
       continue;
     }
 
-    let sum = total[i]! - seating.order[gone]!.its[i + seating.from]!;
+    let sum = total[i]! - lineup.order[gone]!.its[i + lineup.from]!;
 
-    for (let m = gone + 1; m < men && hole >= 0; m++) {
-      const man = seating.order[m]!;
+    for (let m = gone + 1; m < players && hole >= 0; m++) {
+      const player = lineup.order[m]!;
 
-      if (!((seating.fits[man.p.position] ?? 0) & (1 << hole))) {
+      if (!((lineup.fits[player.p.position] ?? 0) & (1 << hole))) {
         continue;
       }
 
-      const his = seating.at[row + m]!;
+      const his = lineup.at[row + m]!;
 
       if (his > hole) {
         hole = his;
@@ -541,19 +541,19 @@ export function withoutFor(seating: Seating, key: string): Without {
         continue;
       }
 
-      const score = man.its[i + seating.from]!;
+      const score = player.its[i + lineup.from]!;
 
       if (score <= 0) {
         continue;
       }
 
       sum += score;
-      gained[man.p.key] = (gained[man.p.key] ?? 0) + 1;
+      gained[player.p.key] = (gained[player.p.key] ?? 0) + 1;
       hole = -1;
     }
 
     if (hole >= 0) {
-      sum += seating.offWire[hole]!;
+      sum += lineup.offWire[hole]!;
     }
 
     total[i] = sum;
@@ -575,7 +575,7 @@ export function baselineAcross(
   const total: number[] = [];
   const displaced: Record<string, Held[]> = {};
   const started: Record<string, number> = {};
-  const seated: Record<string, Record<string, number>> = {};
+  const startedIn: Record<string, Record<string, number>> = {};
 
   for (const where of WHERE) {
     displaced[where] = [];
@@ -596,8 +596,8 @@ export function baselineAcross(
       started[key] = (started[key] ?? 0) + count;
     }
 
-    for (const [key, his] of Object.entries(base.seated)) {
-      const mine = seated[key] ??= {};
+    for (const [key, his] of Object.entries(base.startedIn)) {
+      const mine = startedIn[key] ??= {};
 
       for (const [slot, count] of Object.entries(his)) {
         mine[slot] = (mine[slot] ?? 0) + count;
@@ -605,23 +605,23 @@ export function baselineAcross(
     }
   });
 
-  return { total, displaced, started, seated };
+  return { total, displaced, started, startedIn };
 }
 
 /**
- * A typical opponent's week: the middle team at every starting seat.
+ * A typical opponent's week: the middle team at every starting slot.
  * With twelve teams the sixth best back is somebody's first back and
  * the eighteenth is somebody's second, so the middle of each run is
  * what an ordinary side puts out.
  */
 export function typicalWeek(
-  men: Player[], slots: string[] | null | undefined, teams: number,
+  players: Player[], slots: string[] | null | undefined, teams: number,
   draws = DRAWS,
 ): number[] {
   const { named, flex } = lineupOf(slots);
   const byPosition: Record<string, Player[]> = {};
 
-  for (const p of men) {
+  for (const p of players) {
     (byPosition[p.position] ??= []).push(p);
   }
 
@@ -633,10 +633,10 @@ export function typicalWeek(
 
   for (const [where, count] of Object.entries(named)) {
     for (let i = 0; i < count; i++) {
-      const man = byPosition[where]?.[Math.floor(teams / 2) + i * teams];
+      const player = byPosition[where]?.[Math.floor(teams / 2) + i * teams];
 
-      if (man) {
-        theirs.push(man);
+      if (player) {
+        theirs.push(player);
       }
     }
   }
@@ -648,11 +648,11 @@ export function typicalWeek(
       .flatMap((where) => byPosition[where] ?? [])
       .filter((p) => !taken.has(p.key))
       .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
-    const man = pool[Math.floor(teams / 2) + i * teams];
+    const player = pool[Math.floor(teams / 2) + i * teams];
 
-    if (man) {
-      theirs.push(man);
-      taken.add(man.key);
+    if (player) {
+      theirs.push(player);
+      taken.add(player.key);
     }
   }
 
@@ -662,13 +662,13 @@ export function typicalWeek(
     weeks.reduce((sum, its) => sum + (its[i] ?? 0), 0));
 }
 
-/** how many drawn drafts the seats you have not filled are filled from */
+/** how many drawn drafts the slots you have not filled are filled from */
 export const FILLS = 8;
 
 /**
  * Where he goes in one drawn draft: a triangular draw between the
  * earliest and the latest pick he has gone at, peaking at his average.
- * The same draw serves every turn, so a man gone by your fourth pick
+ * The same draw serves every turn, so a player gone by your fourth pick
  * is still gone by your fifth.
  */
 export function drawnPick(p: Player, fill: number): number {
@@ -697,29 +697,29 @@ const picked = new WeakMap<Player, number[]>();
 
 /**
  * Your roster as it will look when the draft ends, in one drawn draft:
- * what you have, plus the man you get at each seat you have not filled.
+ * what you have, plus the player you get at each slot you have not filled.
  *
  * Who is still there at each of your turns is drawn, not assumed. The
- * fill used to take any man whose average draft position was at or
+ * fill used to take any player whose average draft position was at or
  * after the turn, as if he were certain to be there, which made the
- * man it assumed for you worth nothing to take now and made a seat you
- * could easily fail to fill look filled. Here a man is there for you
+ * player it assumed for you worth nothing to take now and made a slot you
+ * could easily fail to fill look filled. Here a player is there for you
  * when his drawn pick comes after your turn.
  *
  * Measuring against what you have today says nothing on the first pick,
- * because one man against a whole side loses every week whoever he is,
- * and every candidate reads nought. It also makes an empty seat look
+ * because one player against a whole side loses every week whoever he is,
+ * and every candidate reads zero. It also makes an empty slot look
  * enormous when a late round would fill it nearly as well.
  *
- * Filling the seats first fixes both. A defence you take now is then
+ * Filling the slots first fixes both. A defence you take now is then
  * worth what he beats a fourteenth round defence by, and a back is
  * worth what he beats the back you would have got in the eighth.
  */
 export function projectedRoster(
-  mine: Player[], slots: string[] | null | undefined, left: Player[],
+  mine: Player[], slotNames: string[] | null | undefined, left: Player[],
   turns: number[], fill = 0,
 ): Player[] {
-  const seats = seatsOf(slots);
+  const slots = slotsOf(slotNames);
   const filled = [...mine].sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0));
   const spare = new Set(left.map((p) => p.key));
   const roster = [...mine];
@@ -729,36 +729,36 @@ export function projectedRoster(
   }
 
   for (const p of filled) {
-    const seat = seats.find((s) => !s.taken && s.where.includes(p.position));
+    const slot = slots.find((s) => !s.taken && s.where.includes(p.position));
 
-    if (seat) {
-      seat.taken = { expect: p.ppg ?? 0, score: 0 };
+    if (slot) {
+      slot.taken = { expect: p.ppg ?? 0, score: 0 };
     }
   }
 
   /**
-   * Turn by turn rather than seat by seat, taking the best man still
-   * expected to be there who fits somewhere. Going down the seats in
+   * Turn by turn rather than slot by slot, taking the best player still
+   * expected to be there who fits somewhere. Going down the slots in
    * order instead had you spending the third pick of the draft on a
-   * quarterback, because the quarterback seat is listed first.
+   * quarterback, because the quarterback slot is listed first.
    */
   for (const at of turns) {
-    const seat = seats.find((s) => !s.taken);
+    const slot = slots.find((s) => !s.taken);
 
-    if (!seat) {
+    if (!slot) {
       break;
     }
 
     const him = left.find((p) =>
       spare.has(p.key) &&
       drawnPick(p, fill) >= at &&
-      seats.some((s) => !s.taken && s.where.includes(p.position)));
+      slots.some((s) => !s.taken && s.where.includes(p.position)));
 
     if (!him) {
       continue;
     }
 
-    const his = seats.find((s) => !s.taken && s.where.includes(him.position))!;
+    const his = slots.find((s) => !s.taken && s.where.includes(him.position))!;
     his.taken = { expect: him.ppg ?? 0, score: 0 };
     roster.push(him);
     spare.delete(him.key);
@@ -792,7 +792,7 @@ export interface WinShare {
  * A win share with the points behind it, for a page that has to say why
  * the number is what it is.
  *
- * A reader cannot tell a man who adds two points of win chance by
+ * A reader cannot tell a player who adds two points of win chance by
  * scoring eight more points a week from one who adds the same by
  * starting three weeks in twenty, and the two are different pickups.
  */
@@ -803,8 +803,8 @@ export interface Priced extends WinShare {
   before: number;
   after: number;
   /**
-   * The man he pushes out of the lineup in most of the weeks he starts,
-   * by his key. Nobody when the seat he takes was filled off the wire.
+   * The player he pushes out of the lineup in most of the weeks he starts,
+   * by his key. Nobody when the slot he takes was filled off the wire.
    */
   displaces: string | null;
 }
@@ -826,17 +826,17 @@ const meanOf = (xs: number[]) =>
   xs.reduce((sum, x) => sum + x, 0) / Math.max(1, xs.length);
 
 /**
- * What taking each man at this turn does to your week, with the rest of
+ * What taking each player at this turn does to your week, with the rest of
  * the draft filled in around him.
  *
  * He goes on the roster, the turns after this one are filled with the
- * best men expected to be there, and the lineup is drawn week by week.
+ * best players expected to be there, and the lineup is drawn week by week.
  * That is set against the same roster with this turn passed over, so
  * the figure is what the pick itself is worth to you.
  *
  * The cheaper way, one baseline for the whole board, assumed the best
- * man left at every empty seat before asking what anybody added. He
- * then read nought, being measured against himself, and a second
+ * player left at every empty slot before asking what anybody added. He
+ * then read zero, being measured against himself, and a second
  * quarterback read as much as a first with the assumed one still there.
  */
 export function takeNowFor(
@@ -851,13 +851,9 @@ export function takeNowFor(
     slots, draws, wire,
   );
   const without = winChance(passed.total, opponent);
-  /**
-   * The rest of the roster depends on where he plays and little else,
-   * so a few rosters serve the whole board. Each is drawn once and he
-   * is set into it by displacement, which comes to the same lineup as
-   * drawing the roster again with him on it and costs one subtraction
-   * a week.
-   */
+  // the rest of the roster depends on where he plays and little else, so
+  // a few rosters serve the whole board, each drawn once and him set into
+  // it by displacement
   const around = new Map<
     string, { chance: number; share: (p: Player) => WinShare }
   >();
@@ -890,36 +886,36 @@ export function takeNowFor(
 }
 
 /**
- * What each man on the board would add, all against one baseline.
+ * What each player on the board would add, all against one baseline.
  *
- * He goes in only where he beats the man he would push out, so a fifth
+ * He goes in only where he beats the player he would push out, so a fifth
  * back gets the weeks the four above him miss and nothing else, and a
- * first kicker gets every week because the seat is empty.
+ * first kicker gets every week because the slot is empty.
  *
  * Quick, since the lineup is filled once for everybody, and right for
- * any man the baseline did not already assume. The board uses
+ * any player the baseline did not already assume. The board uses
  * takeNowFor, which has no such exception.
  */
 /**
- * Whether you would start him over the man in the seat. A man of your
+ * Whether you would start him over the player in the slot. A player of your
  * own goes in on a tie with somebody you would have to pick up, and
  * stays on the bench on a tie with somebody you already have.
  */
-function wouldStart(his: number, seat: Held): boolean {
-  if (seat.wire) {
-    return his >= seat.expect;
+function wouldStart(his: number, slot: Held): boolean {
+  if (slot.wire) {
+    return his >= slot.expect;
   }
 
-  return his > seat.expect;
+  return his > slot.expect;
 }
 
 /**
  * What a newcomer at each position has to expect to start in any drawn
- * week at all: the least the man he would push out expects, across the
+ * week at all: the least the player he would push out expects, across the
  * whole season.
  *
- * A man off the wire goes in on a tie, so the bar is what he has to
- * reach rather than beat, and anybody under it is worth nought whatever
+ * A player off the wire goes in on a tie, so the bar is what he has to
+ * reach rather than beat, and anybody under it is worth zero whatever
  * he goes on to score.
  */
 export function barsOf(baseline: Baseline): Record<string, number> {
@@ -973,11 +969,8 @@ export function winShareFor(
 
     for (let i = 0; i < baseline.total.length; i++) {
       const out = beats[i]!;
-      /**
-       * He starts on Thursday if you expect more of him, and he has to
-       * be playing at all. What that costs or buys you is whatever the
-       * two of them then went and scored.
-       */
+      // he starts on Thursday if you expect more of him, and he has to be
+      // playing at all
       const plays = his[i]! > 0;
       const starts = plays && wouldStart(p.ppg ?? 0, out);
 

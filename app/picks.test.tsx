@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DraftView, type DraftNow, type Pick } from "./views/Draft.tsx";
 import type { Player } from "./lib/scoring.ts";
 
-const man = (name: string, i: number): Player => ({
+const player = (name: string, i: number): Player => ({
   name, key: name.toLowerCase().replace(/[^a-z]/g, ""), position: "RB",
   team: "PIT", ppg: 15 - i * 0.1, vor: 100 - i, games: 15,
   adp: i + 1, adpLow: i + 10, adpHigh: Math.max(1, i - 5),
@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 describe("picks so far", () => {
-  const men = Array.from({ length: 40 }, (_, i) => man("Player " + i, i));
+  const players = Array.from({ length: 40 }, (_, i) => player("Player " + i, i));
   const state: DraftNow = {
     taken: new Set(["bijanrobinson"]), mine: new Set(), teams: {},
     rosteredBy: {}, grid: null, made,
@@ -32,7 +32,7 @@ describe("picks so far", () => {
 
   it("lists them newest first, with who took each", () => {
     render(
-      <DraftView men={men} state={state} teams={12} snake posFilter="ALL"
+      <DraftView players={players} state={state} teams={12} snake posFilter="ALL"
         query="" order="rank" onMore={() => {}} />,
       where,
     );
@@ -48,7 +48,7 @@ describe("picks so far", () => {
 
   it("says nothing when the draft has not started", () => {
     render(
-      <DraftView men={men} state={{ ...state, made: [] }} teams={12} snake
+      <DraftView players={players} state={{ ...state, made: [] }} teams={12} snake
         posFilter="ALL" query="" order="rank" onMore={() => {}} />,
       where,
     );

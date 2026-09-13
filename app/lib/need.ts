@@ -1,8 +1,8 @@
 /**
- * Which of your starting seats are still open, and who can fill one.
+ * Which of your starting slots are still open, and who can fill one.
  *
- * This is the roster arithmetic on its own. What a man is worth to you
- * once the seats are counted is a different question and a harder one,
+ * This is the roster arithmetic on its own. What a player is worth to you
+ * once the slots are counted is a different question and a harder one,
  * answered by drawing weeks rather than by counting points.
  */
 
@@ -15,16 +15,16 @@ export interface Openings {
   named: Record<string, number>;
   /** flex slots still open */
   flex: number;
-  /** the men in a starting slot */
+  /** the players in a starting slot */
   starters: Player[];
   /** nothing in your lineup is open */
   full: boolean;
 }
 
 /**
- * Your lineup so far, every man into a slot of his own position first
+ * Your lineup so far, every player into a slot of his own position first
  * and whoever is best left into the flexes. Filling flexes first would
- * seat a receiver in a flex and leave his own slot open, which reads as
+ * slot a receiver in a flex and leave his own slot open, which reads as
  * a need you do not have.
  */
 export function openingsAfter(

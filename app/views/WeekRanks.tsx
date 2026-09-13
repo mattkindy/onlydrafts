@@ -1,8 +1,8 @@
 /**
- * One week, ranked, so you can look a man up.
+ * One week, ranked, so you can look a player up.
  *
  * The table is everybody the model has a number for, not only your own
- * men. Your own are marked and there is a switch to hide the rest.
+ * players. Your own are marked and there is a switch to hide the rest.
  *
  * Compare mode is for the question people actually ask, which is not
  * "how many points" but "which of these two". The bands it reports come
@@ -26,16 +26,16 @@ const POSITIONS = ["ALL", "QB", "RB", "WR", "TE"];
 interface Props {
   slate: Slate | null;
   /**
-   * The same week with the office's rulings applied. The slate says who
+   * The same week with the injury report's rulings applied. The slate says who
    * the table lists; this says what each of them is worth.
    */
   rows: Map<string, SlateRow>;
-  /** the men on your team, or nothing when no league is connected */
+  /** the players on your team, or nothing when no league is connected */
   roster: Set<string> | null;
   listed: Map<string, Listed>;
 }
 
-/** what the league office and his side's injuries say about one man */
+/** what the injury report and his side's injuries say about one player */
 function Chips({ row, his }: { row: SlateRow; his: Listed | undefined }) {
   const badge = injuryBadge(his);
 
@@ -137,7 +137,7 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
 
   const rows = useMemo(() => {
     // the slate decides who is listed, and the priced map what he is worth,
-    // so a man ruled out sinks to the bottom rather than leaving the table
+    // so a player ruled out sinks to the bottom rather than leaving the table
     const all = (slate?.rows ?? [])
       .map((row) => priced.get(normalizeName(row.name)) ?? row);
     const wanted = query.trim();
@@ -153,7 +153,7 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
   const max = Math.max(1, ...rows.map((row) => row.ceiling));
 
   /**
-   * Two men, and only two men at the same position. Picking somebody
+   * Two players, and only two players at the same position. Picking somebody
    * else's position starts the comparison over on him rather than
    * refusing the click, since a refusal with no explanation reads as a
    * broken button.

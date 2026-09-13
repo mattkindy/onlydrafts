@@ -1,10 +1,10 @@
 /**
- * A week one game, from an ESPN payload to each man's remaining points.
+ * A week one game, from an ESPN payload to each player's remaining points.
  *
  * The rest of the engine is checked against the Node simulator. What
  * this covers is the path the live page actually walks: a scoreboard
  * reply, the situation read off it, the game picked out as one past
- * half time, and the two men everybody knows getting sensible numbers.
+ * half time, and the two players everybody knows getting sensible numbers.
  */
 
 import { describe, expect, it } from "vitest";
@@ -58,7 +58,7 @@ describe.skipIf(!existsSync(PATH))("a week one game, end to end", () => {
     expect(gamesToPlay(situations)).toHaveLength(1);
   });
 
-  it("gives the two men everybody knows a sensible afternoon", () => {
+  it("gives the two players everybody knows a sensible afternoon", () => {
     const played = remainderDraws(tables, situations, PPR, 400);
     const burrow = played.get("joeburrow");
     const chase = played.get("jamarrchase");
@@ -78,7 +78,7 @@ describe.skipIf(!existsSync(PATH))("a week one game, end to end", () => {
     expect(mean(chase!)).toBeLessThan(14);
   });
 
-  it("leaves a man the tables have never heard of to the copula", () => {
+  it("leaves a player the tables have never heard of to the copula", () => {
     const played = remainderDraws(tables, situations, PPR, 50);
 
     expect(played.has("nobodyatall")).toBe(false);
