@@ -10,6 +10,7 @@
  * decide a matchup.
  */
 
+import { outThisWeek, type Listed } from "./availability.ts";
 import { normalizeName } from "./store.ts";
 
 export interface WeekRef {
@@ -206,6 +207,69 @@ export function slateUnder(slate: Slate, perCatch: number): Slate {
       q3: moved(row, row.q3) ?? undefined,
     })),
   };
+}
+
+/** every points figure on a row, for a man who is not going to play */
+const NOTHING = {
+  ours: 0, sleeper: 0, blend: 0, floor: 0, q1: 0, q3: 0, ceiling: 0,
+};
+
+/**
+ * The week's rows with the men the league office has ruled out set to
+ * nought.
+ *
+ * A row of noughts draws a flat nought week instead of his usual ladder.
+ * What he put up before he limped off is counted separately from the
+ * draws, so a man hurt at halftime keeps his half.
+ *
+ * A man the weekly model does not cover has no row to zero, and a kicker
+ * or a defence is always one of those. Left alone he would fall through
+ * to his season game or the position's stock week, so a row of noughts is
+ * written for him instead.
+ */
+export function withOutMenZeroed(
+  rows: Map<string, SlateRow>, listed: Map<string, Listed>,
+): Map<string, SlateRow> {
+  const sat: [string, SlateRow][] = [];
+
+  for (const [key, his] of listed) {
+    if (!outThisWeek(his.status)) {
+      continue;
+    }
+
+    const row = rows.get(key);
+
+    if (row) {
+      sat.push([key, { ...row, ...NOTHING }]);
+      continue;
+    }
+
+    if (!his.position) {
+      continue;
+    }
+
+    sat.push([key, {
+      playerId: key,
+      name: his.name,
+      position: his.position,
+      team: his.team ?? "",
+      opponent: "",
+      home: true,
+      ...NOTHING,
+      catches: 0,
+      questionable: false,
+      gamesMissedRecent: 0,
+      absenceShare: 0,
+    }]);
+  }
+
+  // the same map comes back when nobody is out, since callers key work off
+  // the map itself and a fresh copy each render would throw that away
+  if (!sat.length) {
+    return rows;
+  }
+
+  return new Map([...rows, ...sat]);
 }
 
 export async function loadSlate(file: string): Promise<Slate> {

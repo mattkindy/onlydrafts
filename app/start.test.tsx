@@ -14,8 +14,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Start } from "./views/Start.tsx";
 import { WeekRanks } from "./views/WeekRanks.tsx";
 import {
-  isSplit, readSlate, rosterKeys, verdict, weekRefs, type SlateRow,
+  isSplit, readSlate, rosterKeys, verdict, weekRefs, withOutMenZeroed,
+  type SlateRow,
 } from "./lib/slate.ts";
+import type { Listed } from "./lib/availability.ts";
+import { normalizeName } from "./lib/store.ts";
 
 const slate = readSlate(JSON.parse(
   readFileSync(join(import.meta.dirname, "fixtures", "slate-2026-3.json"), "utf8"),
@@ -29,8 +32,23 @@ const at = (name: string): SlateRow =>
 
 let where: HTMLElement;
 
-const draw = (roster: Set<string> | null = null) => {
-  render(<WeekRanks slate={slate} roster={roster} />, where);
+const rowsOf = (listed: Map<string, Listed>) => withOutMenZeroed(
+  new Map(slate.rows.map((r) => [normalizeName(r.name), r])), listed,
+);
+
+const draw = (
+  roster: Set<string> | null = null,
+  listed: Map<string, Listed> = new Map(),
+) => {
+  render(
+    <WeekRanks
+      slate={slate}
+      rows={rowsOf(listed)}
+      roster={roster}
+      listed={listed}
+    />,
+    where,
+  );
 };
 
 const names = () =>
@@ -130,6 +148,20 @@ describe("who to start", () => {
     expect(rowFor("Trey McBride").textContent).toContain("missed 1");
   });
 
+  it("ranks a man the office has ruled out at nought, and says why", () => {
+    draw(null, new Map([[normalizeName("Ja'Marr Chase"), {
+      name: "Ja'Marr Chase", status: "Out", part: "hip",
+    }]]));
+
+    const row = rowFor("Ja'Marr Chase");
+
+    expect(row.querySelector(".badge")!.textContent).toBe("out");
+    expect(Array.from(row.querySelectorAll("td.n"))
+      .map((td) => td.textContent!.trim().slice(0, 3)))
+      .toEqual(["0.0", "0.0", "0.0"]);
+    expect(names()[names().length - 1]).toBe("Ja'Marr Chase");
+  });
+
   it("compares two men at the same position", async () => {
     draw();
 
@@ -160,6 +192,7 @@ describe("who to start", () => {
       <Start
         weeks={[]} picked={null} onWeek={() => {}} slate={null} roster={null}
         games={[]} rows={new Map()} men={[]} mine={null} slots={null}
+        listed={new Map()}
       />,
       where,
     );

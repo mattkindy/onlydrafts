@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { gamesLeft, WEEKS_OUT } from "./availability.ts";
+import { gamesLeft, outThisWeek, WEEKS_OUT } from "./availability.ts";
 
 describe("what a man on a list is expected to play", () => {
   it("takes six games off him", () => {
@@ -40,5 +40,33 @@ describe("what a man on a list is expected to play", () => {
 describe("a word that looks like it means out", () => {
   it("leaves a man marked NA where the board had him", () => {
     expect(gamesLeft(9.1, "NA")).toBe(9.1);
+  });
+
+  /**
+   * The other way round for one Sunday. A man on a roster in October
+   * carrying NA is not active, whatever the stale flags on the draft
+   * board mean.
+   */
+  it("counts NA as not playing this week", () => {
+    expect(outThisWeek("NA")).toBe(true);
+  });
+});
+
+describe("who does not play this week", () => {
+  it("rules out the men the office has parked", () => {
+    for (const word of ["Out", "IR", "PUP", "Sus", "DNR", "COV"]) {
+      expect(outThisWeek(word)).toBe(true);
+    }
+  });
+
+  it("leaves questionable and doubtful men playing", () => {
+    expect(outThisWeek("Questionable")).toBe(false);
+    expect(outThisWeek("Doubtful")).toBe(false);
+  });
+
+  it("takes a man with nothing said about him as playing", () => {
+    expect(outThisWeek(null)).toBe(false);
+    expect(outThisWeek(undefined)).toBe(false);
+    expect(outThisWeek("")).toBe(false);
   });
 });

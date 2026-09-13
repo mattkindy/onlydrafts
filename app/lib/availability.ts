@@ -13,6 +13,17 @@
  */
 
 /**
+ * There are two questions here, and the answer to one is not the answer
+ * to the other.
+ *
+ * One is how much of a season a man will play, which is what the draft
+ * board asks. The other is whether he plays on Sunday, which is what an
+ * owner setting a lineup asks. The sets below differ on NA, because that
+ * word means one thing on a draft board in July and another on a roster
+ * in week eight.
+ */
+
+/**
  * The words that mean he is gone for a while rather than a week.
  *
  * NA is not one of them, whatever it looks like. It means no
@@ -23,6 +34,34 @@
 export const OUT_FOR_A_WHILE = new Set([
   "IR", "PUP", "Sus", "DNR", "COV", "Out",
 ]);
+
+/**
+ * The words that mean he does not play this week.
+ *
+ * NA is here, unlike in the season set. A man on somebody's roster
+ * carrying it is not active, and projecting him a full week was the bug
+ * an owner noticed. Questionable and Doubtful are not here, because most
+ * of the men carrying either one play, and nothing else in the app marks
+ * a doubtful man down.
+ */
+export const OUT_THIS_WEEK = new Set([
+  "IR", "PUP", "Sus", "DNR", "COV", "Out", "NA",
+]);
+
+/** whether the league office says he does not play this week */
+export const outThisWeek = (status: string | null | undefined) =>
+  Boolean(status && OUT_THIS_WEEK.has(status));
+
+/** what the league office says about a man, by the board's key for him */
+export interface Listed {
+  /** his name as the office spells it, for a row written from scratch */
+  name: string;
+  status: string;
+  /** where, since a hamstring and a thumb are different news */
+  part?: string;
+  position?: string;
+  team?: string;
+}
 
 /** and how many games that costs him */
 export const WEEKS_OUT = 6;
