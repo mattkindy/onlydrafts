@@ -1,0 +1,186 @@
+/**
+ * The waiver page's season pricing, gathered into one ask and one
+ * answer so it can happen off the main thread.
+ *
+ * Drawing a year of weeks for the whole board takes a few hundred
+ * milliseconds on a phone, and nothing paints while it does. A worker
+ * takes the rescored board and the league and sends back the priced
+ * rows, so the page can put up a spinner and fill in.
+ *
+ * The ask comes in two parts because the second one depends on what the
+ * reader has filtered to. The board is drawn once for the season ask
+ * and the worker keeps it, so asking what a handful of adds cost is
+ * quick however often the filter changes.
+ */
+
+import type { Room } from "./draftShare.ts";
+import { roomFor } from "./draftShare.ts";
+import type { Roster } from "./providers.ts";
+import type { Player } from "./scoring.ts";
+import {
+  addsFor, dropsFor, netsFor, type Add, type Drop, type Net,
+} from "./waivers.ts";
+
+/** who each side plays each week, as the board ships it */
+export type Schedule = Record<string, (string | null)[]>;
+
+export interface SeasonAsk {
+  ask: "season";
+  /** the board in this league's terms */
+  men: Player[];
+  /**
+   * The drawn weeks need to know who each side plays, and the board is
+   * the only thing that says. Without it the men in a game stop moving
+   * together and a side's week comes out far too narrow.
+   */
+  schedule: Schedule | null;
+  slots: string[] | null;
+  teams: number;
+  draws: number;
+  rosters: Roster[] | null;
+  /** your roster and the wire by key, since the board has the rest */
+  mine: string[];
+  pool: string[];
+}
+
+export interface NetsAsk {
+  ask: "nets";
+  /** the adds that get a drop worked out, by key */
+  keys: string[];
+  openSpots: number | null;
+}
+
+export type WaiversAsk = SeasonAsk | NetsAsk;
+
+export interface SeasonAnswer {
+  said: "season";
+  adds: Add[];
+  drops: Drop[];
+}
+
+export interface NetsAnswer {
+  said: "nets";
+  /** by the add's key, since a Map does not survive the trip on its own */
+  nets: [string, Net][];
+}
+
+export type WaiversAnswer = SeasonAnswer | NetsAnswer;
+
+/** what a season ask leaves behind, so a nets ask draws nothing again */
+export interface Kept {
+  mine: Player[];
+  slots: string[] | null;
+  room: Room;
+  adds: Add[];
+}
+
+export function priceSeason(
+  ask: SeasonAsk,
+): { answer: SeasonAnswer; kept: Kept } {
+  const byKey = new Map(ask.men.map((p) => [p.key, p]));
+  const ours = (keys: string[]) => keys
+    .map((key) => byKey.get(key))
+    .filter((p): p is Player => Boolean(p));
+  const mine = ours(ask.mine);
+  const room = roomFor(
+    ask.men, ask.slots, ask.teams, ask.draws, ask.rosters);
+  const adds = addsFor(mine, ours(ask.pool), ask.slots, room);
+
+  return {
+    answer: {
+      said: "season", adds, drops: dropsFor(mine, ask.slots, room),
+    },
+    kept: { mine, slots: ask.slots, room, adds },
+  };
+}
+
+export function priceNets(kept: Kept, ask: NetsAsk): NetsAnswer {
+  const byKey = new Map(kept.adds.map((row) => [row.p.key, row]));
+  const asked = ask.keys
+    .map((key) => byKey.get(key))
+    .filter((row): row is Add => Boolean(row));
+
+  return {
+    said: "nets",
+    nets: [...netsFor(
+      kept.mine, asked, kept.slots, kept.room, ask.openSpots)],
+  };
+}
+
+/** where a page sends its asks, whether that is a worker or this thread */
+export interface Pricer {
+  season(ask: SeasonAsk): Promise<SeasonAnswer>;
+  nets(ask: NetsAsk): Promise<NetsAnswer>;
+  close(): void;
+}
+
+const NO_NETS: NetsAnswer = { said: "nets", nets: [] };
+
+/**
+ * A pricer that works on whatever thread it is called from, for a
+ * browser with no workers and for the tests.
+ */
+export function pricerHere(): Pricer {
+  let kept: Kept | null = null;
+
+  return {
+    season: async (ask) => {
+      const said = priceSeason(ask);
+      kept = said.kept;
+
+      return said.answer;
+    },
+    nets: async (ask) => kept ? priceNets(kept, ask) : NO_NETS,
+    close: () => {},
+  };
+}
+
+/**
+ * The same off the main thread, kept alive between asks so the board is
+ * drawn once.
+ *
+ * Every ask is answered exactly once and in order, so the promises wait
+ * in a line. A worker that falls over settles the whole line with
+ * nothing rather than leaving the page spinning.
+ */
+export function pricerInWorker(): Pricer {
+  if (typeof Worker === "undefined") {
+    return pricerHere();
+  }
+
+  const worker = new Worker(
+    new URL("./waiversWorker.ts", import.meta.url), { type: "module" });
+  const line: ((said: WaiversAnswer | null) => void)[] = [];
+
+  worker.onmessage = (event: MessageEvent<WaiversAnswer>) => {
+    line.shift()?.(event.data);
+  };
+
+  worker.onerror = () => {
+    while (line.length) {
+      line.shift()?.(null);
+    }
+  };
+
+  const send = (ask: WaiversAsk) =>
+    new Promise<WaiversAnswer | null>((settle) => {
+      line.push(settle);
+      worker.postMessage(ask);
+    });
+
+  return {
+    season: async (ask) => {
+      const said = await send(ask);
+
+      return said?.said === "season"
+        ? said
+        : { said: "season", adds: [], drops: [] };
+    },
+    nets: async (ask) => {
+      const said = await send(ask);
+
+      return said?.said === "nets" ? said : NO_NETS;
+    },
+    close: () => worker.terminate(),
+  };
+}

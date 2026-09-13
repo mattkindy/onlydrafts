@@ -18,7 +18,10 @@ import { roomFor } from "../app/lib/draftShare.ts";
 import {
   addsFor, dropsFor, netsFor, openSpotsFor,
 } from "../app/lib/waivers.ts";
+import { weekPricesFor } from "../app/lib/waiversWeek.ts";
 import { barsOf, baselineFor, weeksOf } from "../app/lib/winShare.ts";
+import { loadSlate, weekRefs } from "../app/lib/slate.ts";
+import { normalizeName } from "../app/lib/store.ts";
 
 const DATA = join(process.cwd(), "docs", "data");
 
@@ -83,3 +86,40 @@ console.log(
   "bars",
   Object.entries(bars).map(([at, n]) => `${at} ${n.toFixed(1)}`).join("  "));
 console.log("pool skipped", under.length, "of", pool.length);
+
+/**
+ * The other half of the page: this week's own game, against a side of
+ * the same shape put together off the same slate.
+ */
+const weeks = weekRefs(meta.weeks, meta.boardSeason);
+const latest = weeks[weeks.length - 1];
+
+if (latest) {
+  const slate = await loadSlate(latest.file);
+  const rows = new Map(slate.rows.map((r) => [normalizeName(r.name), r]));
+  const seats = slots.filter((slot) => slot !== "BN");
+  const sideOf = (roster: typeof mine, owner: string) => ({
+    owner,
+    points: 0,
+    starters: roster.slice(0, seats.length)
+      .map((p, i) => ({ key: p.key, slot: seats[i]!, points: 0 })),
+    bench: roster.slice(seats.length).map((p) => ({ key: p.key, points: 0 })),
+  });
+  const theirs = [
+    ...byPos("QB", 1, 4), ...byPos("RB", 5, 7), ...byPos("WR", 5, 9),
+    ...byPos("TE", 2, 5), ...byPos("K", 1, 3), ...byPos("DEF", 1, 5),
+  ];
+  const lines = new Map(men.map((p) => [p.key, p]));
+
+  t("weekPricesFor x12", () => weekPricesFor(
+    {
+      side: sideOf(mine, "me"),
+      against: sideOf(theirs, "them"),
+      slots,
+      rows,
+      states: new Map(),
+      lines,
+    },
+    adds.slice(0, 12).map((a) => ({ p: a.p, drop: mine[mine.length - 1]! })),
+  ));
+}

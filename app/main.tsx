@@ -858,6 +858,7 @@ function App() {
             posFilter={posFilter}
             rows={slateRows}
             games={games}
+            schedule={board.schedule ?? null}
             season={week?.season ?? null}
             week={week?.week ?? null}
             onMore={setShowing}
