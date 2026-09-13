@@ -423,7 +423,7 @@ const FORM_FADES = [0, 1, 2, 3, 4, 5].map((b) => Math.pow(FORM_FADE, b));
  * HOW_FAR raises his level to a power, 0 turning it off. NO_LONG_SHAPE
  * drops the long gain correction from that level. FROM_COUNTS moves
  * the level of who gets the ball off the projection and onto the
- * counts, 1 being all counts. scripts/playLayerEval.ts reads them.
+ * counts, 1 being all counts.
  */
 const HOW_FAR = Number(process.env["HOW_FAR"] ?? 1);
 const FROM_COUNTS = Number(process.env["FROM_COUNTS"] ?? 0);

@@ -19,7 +19,7 @@ before changing anything under `src/`.
 ```
 src/         the model: features, fits, simulation, scoring, metrics
 app/         the Preact page vite builds into docs/
-scripts/     entry points for the weekly refresh, plus evals and checks
+scripts/     entry points for the weekly refresh, plus the benches
 data/        curated inputs (data/raw is downloaded and gitignored)
 docs/        the built site, and the write-ups the site links to
 worker/      a Cloudflare worker that reads private ESPN leagues
@@ -27,8 +27,8 @@ worker/      a Cloudflare worker that reads private ESPN leagues
 
 `src/` splits further: `features/` and `model/` contain the fits and the
 walk, `data/` the loaders, `sim/` the season and lineup simulation,
-`scoring/` the fantasy point formulas, `backtest/` the metrics, `graph/`
-the node and edge types, `datalog/` the fact layer.
+`scoring/` the fantasy point formulas, `backtest/` the metrics, and
+`graph/` the node and edge types.
 
 ## Getting started
 
@@ -111,8 +111,10 @@ npx tsx scripts/start.ts --season 2025 --week 10 "st. brown" "nacua"
   in the order it landed, scored on the same three instruments.
 - `data/curated/README.md`: what each curated file is, which ones a
   script reproduces, and which are compiled by hand.
-- `scripts/README.md`: findings from the evals, and a guide to which
+- `scripts/README.md`: findings from the benches, and a guide to which
   scripts are entry points.
+- `src/README.md`: how the model is put together, and which bench
+  measured each constant in it.
 - `worker/README.md`: the ESPN worker and why it exists.
 - `BACKLOG.md`: what is designed but not built.
 

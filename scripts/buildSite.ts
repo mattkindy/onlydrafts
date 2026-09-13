@@ -1289,8 +1289,7 @@ async function main(): Promise<void> {
      * Game script was in here and it is out again. It is a true thing
      * about football, and the part of it that survives to August does
      * not predict a week: against 2025 it went with what happened at
-     * -0.004, and it dragged the roof from 0.050 down to 0.038. See
-     * scripts/weeklyEval.ts.
+     * -0.004, and it dragged the roof from 0.050 down to 0.038.
      */
     const lifts = sharedOut(his.map((w) =>
       settingLift(p.position, settingOf(p.teamId, w.week))));

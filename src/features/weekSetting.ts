@@ -9,7 +9,7 @@
  *
  * Fitted on 2016-2020 and checked on 2021-2025, keeping only the ones
  * that came back the same way and big enough to matter, then refitted
- * on every season. See scripts/knowableWeekEval.ts.
+ * on every season.
  */
 
 /** a roof, a night kickoff, and how many days off he had */

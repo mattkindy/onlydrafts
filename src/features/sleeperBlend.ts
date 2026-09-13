@@ -36,8 +36,7 @@ export const SHIPPED_BLEND_WEIGHT = 0.5;
  * scores, on both test seasons, and no other position more than half a
  * point. Taking the three off before the blend wins a quarter of a point
  * of error at quarterback and leaves every other position where it was.
- * A per-position bias fitted on the other season did no better. See
- * scripts/README.md.
+ * A per-position bias fitted on the other season did no better.
  */
 export const SLEEPER_QB_BIAS = 3;
 

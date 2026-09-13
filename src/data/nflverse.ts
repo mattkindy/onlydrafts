@@ -214,8 +214,8 @@ export const EXEMPT = "EXE";
  * Not the source to reach for when the question is who can play today.
  * These files lag by weeks, so a man added this afternoon is not in
  * them, and the code is not the same list every season: 2026 spells 28
- * rows E14, which is the international pathway. scripts/exemptCheck.ts
- * asks Sleeper instead. This is here for looking backwards.
+ * rows E14, which is the international pathway. Ask Sleeper when the
+ * question is today. This is here for looking backwards.
  */
 export async function exemptMen(
   season: number,

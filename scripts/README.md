@@ -3,6 +3,11 @@
 Two kinds of file sit in this directory, and the difference matters
 before you delete anything.
 
+The one-off evals and checks have been deleted. Each was written to
+answer a single question, and what each one found is written down in
+`docs/scoreboard.md` and in the findings below. Where a finding
+mentions a script that is no longer here, it says so.
+
 **Entry points**, the ones a person runs on purpose:
 
 - `week.ts` is the weekly refresh. `npm run week` runs it, and it calls
@@ -20,20 +25,22 @@ before you delete anything.
 - `start.ts` prints the start or sit comparison for named players at
   the terminal.
 
-**Evals and checks**, everything ending in `Eval.ts` or `Check.ts` plus
-the one-off diagnostics. These are not part of any build. Each one was
-written to answer a single question, and they are kept because the rows
-in `docs/scoreboard.md` and the findings below are reproduced by running
-them. The three that the scoreboard is scored on are
-`boardShareEval.ts`, `walkWeeklyEval.ts` and `scorePredictionEval.ts`.
+**The benches that are still run.** These are not part of any build.
+`boardShareEval.ts`, `walkWeeklyEval.ts` and `scorePredictionEval.ts`
+are the three the scoreboard is scored on. The rest each back a
+constant or a decision that is still in the model, and `src/README.md`
+says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
+`knowableWeekEval.ts`, `mechanicsCarryEval.ts`, `walkWeekCache.ts`,
+`jointProjectionEval.ts`, `playLayerEval.ts`, `estimateCorrelation.ts`,
+`exemptCheck.ts` and `simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
 # Where the walk's kicking excess comes from
 
 A kicker on the board takes 2.27 field goal attempts a game where his
-side really takes about 2.0. Run any of the player eval with
-`DRIVE_CHECK=on` and it prints everything below.
+side really takes about 2.0. The player evals that printed everything
+below, under `DRIVE_CHECK=on`, have been deleted.
 
 ## What is not wrong
 
@@ -267,10 +274,10 @@ doing together with the box score evals beside them.
 
 # Where the weekly points line has room left
 
-`npx tsx scripts/boxScoreWeekEval.ts` scores every way of guessing one
-man's week over 2024 and 2025, weeks 1 to 17, by position and split at
-week 4. It runs in about twenty seconds. Everything is full PPR, because
-Sleeper's points column is PPR.
+`boxScoreWeekEval.ts` scored every way of guessing one man's week over
+2024 and 2025, weeks 1 to 17, by position and split at week 4.
+Everything is full PPR, because Sleeper's points column is PPR. The
+script has been deleted and its row is in `docs/scoreboard.md`.
 
 Two rows are the reason the bench exists. "Oracle: usage known" gets the
 man's actual targets, carries and pass attempts and has to guess his
@@ -410,9 +417,10 @@ from, what each man had scored by then, and what the rest of the game
 gave him, all in PPR. 2024 gives 1595 of them over 272 games and
 2025 gives 1602.
 
-`scripts/liveRemainderEval.ts` scores the three ways against that, by
-position and by checkpoint, for weeks 3, 6, 9, 12 and 15 of 2024 and
-2025. It also scores the two sides' remaining points on their own, which
+`liveRemainderEval.ts`, since deleted and with its row in
+`docs/scoreboard.md`, scored the three ways against that, by position
+and by checkpoint, for weeks 3, 6, 9, 12 and 15 of 2024 and
+2025. It also scored the two sides' remaining points on their own, which
 is the check on whether the engine is right about the game at all before
 anybody argues about a receiver, and it pairs random lineups off the
 week's pool to get a Brier score and an implied against realised spread,
@@ -530,8 +538,8 @@ in process rather than the shipped slate, since only two slates were
 ever written to `docs/data`.
 
 The per-man rate reconciliation and the pass-catcher fallback both have
-numbers now, in the next section. `scripts/matchupCalibration.ts` was
-left alone: a lineup there needs all
+numbers now, in the next section. `matchupCalibration.ts`, now deleted,
+was left alone: a lineup there needs all
 seven men drawn, the walk has only played the odd weeks, and a Brier
 over the subset of lineups where every seat has simulator runs cannot be
 read against the 0.2112 the shipped bench reports.
@@ -678,11 +686,12 @@ points at the end of the first quarter. Three quarters of a game is
 0.74 of the point a game, so that much of the -1.96 is what this
 change can account for and the rest is the offence.
 
-Why no bench saw it. `boxScoreEval.ts` scores a side's points against
-the sum of its own drives' points, so a return is not in its truth and
-never could be. `liveRemainderEval.ts` scores against the scoreboard,
+Why no bench saw it. `boxScoreEval.ts` scored a side's points against
+the sum of its own drives' points, so a return was not in its truth and
+never could be. `liveRemainderEval.ts` scored against the scoreboard,
 which has every point on it, and that is the bench where the missing
-point a game shows up as bias.
+point a game shows up as bias. Both scripts have been deleted and their
+rows are in `docs/scoreboard.md`.
 
 ## Getting the sim into a static site
 
@@ -731,7 +740,8 @@ The board projected a defence by dividing last season's box score by
 seventeen, so every week said the same thing whatever the fixture. That
 orders defences within a week no better than chance.
 
-`scripts/defenceWeekEval.ts` scores each candidate against the actual
+`defenceWeekEval.ts`, since deleted and with its row in
+`docs/scoreboard.md`, scored each candidate against the actual
 paid week over all 1088 defence weeks of 2024 and 2025 that Sleeper has
 a projection for. Which defence to start is a question about the order
 inside one week, so the number to read is the mean Spearman within a
@@ -795,4 +805,4 @@ own, about a tenth of a game. The recovery is `fumble_recovery_opp`, at
 about 0.47 a game, so every actual defence week was a point and a half
 light and the board's line with it. That is fixed in the board and in
 this bench. `defenceForecastEval.ts` and `defenceMatchupEval.ts` still
-read the old column.
+read the old column, and both have since been deleted.

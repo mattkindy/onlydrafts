@@ -32,8 +32,8 @@ of these are in `scripts/README.md`.
   rather than a spread too wide. Drawing each touch on its own is the
   suspect: a man who gets an early target gets the next one, and a team
   that is behind throws to him all afternoon. Modelling that would thin
-  the tails and fill the middle at once. Sweeps in
-  `scripts/fitWeekSettings.ts`.
+  the tails and fill the middle at once. The script that swept it has
+  been deleted; the numbers are in `docs/scoreboard.md`.
 - **Nothing predicts which of a man's own weeks is the big one.** Over
   2025, the weekly model scores .624 across players and -.023 within
   one. The simulation told what game it was playing (opponent, spread,
@@ -50,14 +50,15 @@ of these are in `scripts/README.md`.
   .364 for 2024 and .517 for 2025, well past his own past
   concentration. Splitting the residual model into concentration bands
   made every quantile worse. `src/backtest/intervals.ts` stays as the
-  harness. See `scripts/concentrationEval.ts` and
-  `scripts/shapedIntervalEval.ts`.
+  harness. The two benches that measured it have been deleted; the
+  numbers are in `docs/scoreboard.md`.
 - **A play's yards are predictable between configurations, not within
   one.** The same model scores .084 on single plays and .698 to .850 on
   cell means as the cells get bigger, which is what it should do when
   the play call is unobserved. Five model classes were compared on
   single plays and tied; comparing them on cell means might separate
-  them and has not been done. See `scripts/cellMeansEval.ts`.
+  them and has not been done. The bench has been deleted; the numbers
+  are in `docs/scoreboard.md`.
 - **Letting a model find combinations does not pay.** Both
   `src/model/factorization.ts` and `src/model/entityNet.ts` come out
   level with adding the pieces up, on yards, run or pass, personnel and
@@ -70,11 +71,12 @@ of these are in `scripts/README.md`.
   play-caller.** It carries at .434 when the passer stays and .253 when
   he changes, and the play-caller split has no signal in it. The drive
   walk conditions a play's yards on down and distance and has no idea
-  who is throwing. See `scripts/thirdDownDepthEval.ts`.
+  who is throwing. The bench has been deleted; the numbers are in
+  `docs/scoreboard.md`.
 - **A new coordinator does not tell you to fade a back.** A player's
   own carry share carries at .671 under the same staff and .653 under a
-  new one. Tight ends are the exception, at .737 against .484. See
-  `scripts/roleCarryoverEval.ts`.
+  new one. Tight ends are the exception, at .737 against .484. The
+  bench has been deleted; the numbers are in `docs/scoreboard.md`.
 - **A corner's coverage is largely not measurable from the
   play-by-play.** Charging a tackle only to a corner leaves yards
   allowed a target carrying over at .112, which is nothing. Include

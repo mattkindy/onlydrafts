@@ -139,6 +139,6 @@ export const WEEKLY_WALK_SHARE: Record<string, number> = {
  * One world deals every week with no role changes, so the walk's
  * bands run narrow. Once absences were lived inside the season the
  * stretch came down: at 1.2 an 80% band covers 81.3% of 2025's played
- * weeks and 78.8% of 2024's, measured in scripts/walkBandEval.ts.
+ * weeks and 78.8% of 2024's.
  */
 export const DEALT_WIDER = 1.2;

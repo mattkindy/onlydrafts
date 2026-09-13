@@ -105,6 +105,30 @@ Each piece is scored on its own before anything is composed, and scored
 where it lives: an opening level on the first three weeks, an updating
 rule on week seven onward, a matchup on cell means, a share on a season.
 
+## Benches behind the constants
+
+Several numbers in here were measured by a script rather than chosen.
+The comments say why each number is what it is; this is where to look
+when you want to measure it again.
+
+| The constant or decision | Where it lives | What measured it |
+| --- | --- | --- |
+| `DEALT_WIDER`, how much wider a man's week runs than the walk deals it | `features/walkWeek.ts` | `scripts/walkBandEval.ts` |
+| `SLEEPER_QB_BIAS`, and the blend weight beside it | `features/sleeperBlend.ts` | the Sleeper blend finding in `scripts/README.md` |
+| The two point and extra point tables | `features/afterTouchdown.ts` | `scripts/twoPointEval.ts` |
+| Which board source ships, the fitted one or the walked one | `features/boardSource.ts` | `scripts/sourceCompare.ts` |
+| Which parts of a week's setting survive, the roof and the kickoff time | `features/weekSetting.ts` | `scripts/knowableWeekEval.ts` |
+| `KEEPS`, how much of each mechanic a man takes into next season | `features/mechanicsProjection.ts` | `scripts/mechanicsCarryEval.ts` |
+| The walk's weekly numbers being cached on disk at all | `features/walkWeeklyCache.ts` | written by `scripts/walkWeekCache.ts` |
+| `COMPONENT_THROUGH_WEEK`, where the component line hands over to the ridge | `features/componentWeek.ts` | the component week finding in `scripts/README.md` |
+| The game script effects being pooled over a side's fixtures | `features/gameScript.ts` | `scripts/aggregateGameScript.ts` |
+| Fitting every part of a man's season in one model | `features/jointParts.ts` | `scripts/jointProjectionEval.ts` |
+| `HOW_FAR`, `NO_LONG_SHAPE` and `FROM_COUNTS`, all off | `features/fitPlayFactors.ts` | `scripts/playLayerEval.ts` |
+| `GAME_LOADING` and the QB loading beside it | `sim/season.ts` | `scripts/estimateCorrelation.ts` |
+| Sleeper being the source for who is exempt today | `data/nflverse.ts` | `scripts/exemptCheck.ts` |
+| Game script being left out of the week's setting | `scripts/buildSite.ts` | deleted, see `docs/scoreboard.md` |
+| The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
+
 ## What is still doubled up
 
 Three drive walks exist. `drive.ts` came first and takes yards from a

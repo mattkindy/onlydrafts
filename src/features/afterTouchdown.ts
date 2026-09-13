@@ -8,8 +8,6 @@
  * anything else: a side down 2 goes 81% of the time, where down 4
  * kicks nearly every time. The chance climbs again inside the last
  * five minutes, when the same margins carry more weight.
- *
- * `scripts/twoPointEval.ts` prints the numbers this is fitted from.
  */
 
 export interface AfterTouchdownRow {
@@ -98,8 +96,7 @@ export function fitAfterTouchdown(rows: AfterTouchdownRow[]): AfterTouchdown {
 
 /**
  * The fit above, run once on 2022 to 2025 and kept as a constant, the
- * way `AT_HOME` and `CLOCK_DEFAULTS` are. `scripts/twoPointEval.ts`
- * measures these same counts against those seasons.
+ * way `AT_HOME` and `CLOCK_DEFAULTS` are.
  */
 const OVERALL: [number, number, number][] = [
   [-15, 0.017, 59], [-11, 0.106, 85], [-8, 0.194, 165], [-7, 0.027, 73],
