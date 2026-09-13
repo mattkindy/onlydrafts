@@ -11,6 +11,8 @@
  * layout and the words can be tested where there is no canvas.
  */
 
+import { scoredSays } from "./scoring.ts";
+
 /** the dark palette from style.css, written out so a share looks the same to everyone */
 export const SHADES = {
   bg: "#10141C",
@@ -95,7 +97,7 @@ function sideText(side: ShareSide, favoured: boolean): SideText {
   return {
     name: side.name,
     owner: side.owner && side.owner !== side.name ? side.owner : null,
-    points: side.points.toFixed(1),
+    points: scoredSays(side.points),
     projected: side.projected.toFixed(1) + " proj",
     odds: pctText(side.odds),
     favoured,

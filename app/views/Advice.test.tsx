@@ -13,9 +13,9 @@ describe("pct", () => {
     expect(pct(0.003)).toBe("0.3%");
   });
 
-  it("says 100 or 0 once the tenth would read the same", () => {
-    expect(pct(0.9997)).toBe("100%");
-    expect(pct(0.0002)).toBe("0%");
+  it("rounds the tenth toward the middle, so only a settled game says 100 or 0", () => {
+    expect(pct(0.9997)).toBe("99.9%");
+    expect(pct(0.0002)).toBe("0.1%");
     expect(pct(1)).toBe("100%");
     expect(pct(0)).toBe("0%");
   });

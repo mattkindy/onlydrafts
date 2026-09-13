@@ -62,7 +62,7 @@ describe("layoutWeek", () => {
     expect(said[0]).toBe("Dynasty Warriors");
     expect(said[1]).toBe("week 3");
     expect(said).toContain("Team Rocket");
-    expect(said).toContain("88.4");
+    expect(said).toContain("88.40");
     expect(said).toContain("120.3 proj");
     expect(said).toContain("63%");
     expect(said.at(-1)).toBe("onlydrafts");

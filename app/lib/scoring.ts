@@ -118,6 +118,13 @@ export const scorable = (category: string) =>
   category in SKILL || COUNTED_ONLY.has(category) ||
   (ALSO_CALLED[category] ?? category) in THEIR_OWN_FALLBACK;
 
+/**
+ * Points already scored, to the hundredth. A league keeps them that way,
+ * and 12.30 against 12.28 is a game still in the balance, which one
+ * decimal would print as a tie.
+ */
+export const scoredSays = (points: number) => points.toFixed(2);
+
 /** what one game of his is worth here */
 export function payFor(parts: Parts, pays: Pays): number {
   let points = 0;
