@@ -1,5 +1,5 @@
 /**
- * What each man on your roster is worth keeping for.
+ * What each player on your roster is worth keeping for.
  *
  * The question is a trade every time: his value over a season against
  * what the pick he costs would have bought instead, less what waiting
@@ -15,26 +15,17 @@ import {
   type Chance, type Draft,
 } from "../lib/picks.ts";
 import {
-  adpOverrides, betterLater, keeperCosts, likelyKept, markedKeepers,
-  saveAdpAt, saveKeeperCost, whoToKeep, worthUpToEach, type Beaten,
+  betterLater, keeperCosts, likelyKept, markedKeepers,
+  saveKeeperCost, worthUpToEach, type Beaten,
 } from "../lib/keepers.ts";
-import { SeasonCard, ordinal, seasonScale } from "./Card.tsx";
-
-interface Props {
-  men: Player[];
-  byKey: Map<string, Player>;
-  league: League;
-  perTeam: number;
-  onMore: (p: Player) => void;
-  onChange: () => void;
-}
+import { ordinal } from "./Card.tsx";
 
 function Figures(
-  { men, p, costPick, draft, teams }:
-  { men: Player[]; p: Player; costPick: number; draft: Draft; teams: number },
+  { players, p, costPick, draft, teams }:
+  { players: Player[]; p: Player; costPick: number; draft: Draft; teams: number },
 ) {
   const { best, rate, roi, wait, net, makesItUp } =
-    keeperSums(men, p, costPick, draft);
+    keeperSums(players, p, costPick, draft);
   const cell = (label: string, value: number, how: string, tip: string) => (
     <span class={"fig " + how} title={tip} key={label}>
       <i>{label}</i>
@@ -77,15 +68,15 @@ function Figures(
 }
 
 /**
- * Who else that pick could buy. The men at his own position are the
+ * Who else that pick could buy. The players at his own position are the
  * swap a drafter pictures; the rest are there because a pick spent on
  * him is a pick not spent on a tight end either. Both compare on value
- * over the last man the league would start at that position, which is
+ * over the last player the league would start at that position, which is
  * the only way a quarterback and a receiver sit side by side.
  */
 function Instead(
-  { men, p, costPick, draft, teams }:
-  { men: Player[]; p: Player; costPick: number; draft: Draft; teams: number },
+  { players, p, costPick, draft, teams }:
+  { players: Player[]; p: Player; costPick: number; draft: Draft; teams: number },
 ) {
   const ranks = (title: string, who: Player[]) => {
     if (!who.length) {
@@ -130,7 +121,7 @@ function Instead(
       </div>
     );
   };
-  const anybody = optionsAt(men, costPick, draft, p.key, null, 10)
+  const anybody = optionsAt(players, costPick, draft, p.key, null, 10)
     .filter((o) => o.position !== p.position)
     .slice(0, 3);
 
@@ -138,7 +129,7 @@ function Instead(
     <div class="instead">
       {ranks(
         `other ${p.position}s near ${asRound(costPick, teams)}`,
-        optionsAt(men, costPick, draft, p.key, p.position, 5),
+        optionsAt(players, costPick, draft, p.key, p.position, 5),
       )}
       {anybody.length > 0 && (
         <div class="alsoat">{ranks("anyone else there", anybody)}</div>
@@ -171,7 +162,7 @@ function Beat({ beaten, costPick, teams }: {
  * The draft a keeper is priced against: your own turns, and everybody
  * already spoken for.
  *
- * Your own marks, plus the men every other team is likely to keep.
+ * Your own marks, plus the players every other team is likely to keep.
  * Everyone else on a roster goes back into the draft, so treating a whole
  * roster as unavailable would empty the board.
  */
@@ -190,9 +181,9 @@ export function keeperDraft(
   };
 }
 
-/** the earliest pick each of your men still beats, by his key */
+/** the earliest pick each of your players still beats, by his key */
 export function keeperRounds(
-  men: Player[],
+  players: Player[],
   mine: { p: Player | null }[],
   draft: Draft,
 ): Map<string, number> {
@@ -201,34 +192,34 @@ export function keeperRounds(
     .filter((p): p is Player => Boolean(p));
 
   return new Map(
-    worthUpToEach(men, onRoster, draft).map(({ p, round }) => [p.key, round]),
+    worthUpToEach(players, onRoster, draft).map(({ p, round }) => [p.key, round]),
   );
 }
 
 /** what the pick he costs would buy instead, and who beats him there */
 function KeeperDetail(
-  { men, p, costPick, draft, teams }:
-  { men: Player[]; p: Player; costPick: number; draft: Draft; teams: number },
+  { players, p, costPick, draft, teams }:
+  { players: Player[]; p: Player; costPick: number; draft: Draft; teams: number },
 ) {
   return (
     <>
       <Figures
-        men={men} p={p} costPick={costPick} draft={draft} teams={teams}
+        players={players} p={p} costPick={costPick} draft={draft} teams={teams}
       />
       <Beat
-        beaten={betterLater(men, p, costPick, draft.taken)}
+        beaten={betterLater(players, p, costPick, draft.taken)}
         costPick={costPick}
         teams={teams}
       />
       <Instead
-        men={men} p={p} costPick={costPick} draft={draft} teams={teams}
+        players={players} p={p} costPick={costPick} draft={draft} teams={teams}
       />
     </>
   );
 }
 
 /**
- * The draft with this man back on the board: he is the one being
+ * The draft with this player back on the board: he is the one being
  * priced, so he cannot also be taken.
  */
 function pricedAgainst(draft: Draft, p: Player, also?: Iterable<string>): Draft {
@@ -256,8 +247,8 @@ function keeperCall(net: number) {
  * him, whether to keep him, and the mark that says you are.
  */
 export function KeeperRow(
-  { men, p, league, perTeam, round, kept, onMark, onChange }: {
-    men: Player[];
+  { players, p, league, perTeam, round, kept, onMark, onChange }: {
+    players: Player[];
     p: Player;
     league: League;
     perTeam: number;
@@ -272,10 +263,10 @@ export function KeeperRow(
   const teams = league.size || 12;
   const cost = Number(keeperCosts(league.leagueId)[p.key]) || 0;
   const draft = keeperDraft(
-    league, new Map(men.map((one) => [one.key, one])), perTeam);
+    league, new Map(players.map((one) => [one.key, one])), perTeam);
   const costPick = cost ? pickForRound(cost, draft) : null;
   const mineToo = pricedAgainst(draft, p);
-  const sums = costPick ? keeperSums(men, p, costPick, mineToo) : null;
+  const sums = costPick ? keeperSums(players, p, costPick, mineToo) : null;
   const call = sums ? keeperCall(sums.net) : null;
   const why = call?.how === "down"
     ? `a ${ordinal(cost)} buys more`
@@ -289,7 +280,6 @@ export function KeeperRow(
         p={p}
         cost={cost}
         leagueId={league.leagueId}
-        bare
         onChange={onChange}
       />
       <button
@@ -311,7 +301,7 @@ export function KeeperRow(
       {open && costPick && (
         <div class="keeperfold">
           <KeeperDetail
-            men={men} p={p} costPick={costPick}
+            players={players} p={p} costPick={costPick}
             draft={mineToo} teams={teams}
           />
         </div>
@@ -320,102 +310,11 @@ export function KeeperRow(
   );
 }
 
-export function Keepers(props: Props) {
-  const { men, byKey, league, perTeam } = props;
-  const teams = league.size || 12;
-  const costs = keeperCosts(league.leagueId);
-  const draft = keeperDraft(league, byKey, perTeam);
-  const onRoster = league.myRoster
-    .map((r) => byKey.get(r.key))
-    .filter((p): p is Player => Boolean(p));
-  const keeping = whoToKeep(
-    men, onRoster, costs, draft, perTeam,
-    league.myPicks.length ? league.myPicks : null,
-  );
-  const mine = worthUpToEach(men, onRoster, draft);
-  const max = seasonScale(onRoster);
-
-  return (
-    <>
-      <div class="empty">
-        <b>What each player is worth keeping for.</b> The round shown is the
-        earliest pick he still beats. Enter what your league charges and the
-        card says keep or let go.
-        <br />
-        Every other team is assumed to keep the {perTeam} best it can pay
-        for, which takes {draft.taken.size} players out of the draft.
-        {league.myPicks.length > 0 && (
-          <>
-            <br />
-            You pick {league.draftSlot ? ordinal(league.draftSlot) + " and " : ""}
-            have rounds {league.myPicks.join(", ")}.
-          </>
-        )}
-      </div>
-
-      <div class="cards wide">
-        {mine.map(({ p, round }) => {
-          const cost = Number(costs[p.key]) || 0;
-          const costPick = cost ? pickForRound(cost, draft) : null;
-          const holdsIt = !cost || !league.myPicks.length ||
-            league.myPicks.includes(cost);
-          /**
-           * Your own keepers are off the board as well. Weighing one
-           * against a pick that might buy Brock Purdy is wrong when
-           * Purdy is a man you are keeping.
-           */
-          const mineToo = pricedAgainst(draft, p, keeping);
-          const sums = costPick
-            ? keeperSums(men, p, costPick, mineToo)
-            : null;
-          // the chip says what the net says, so the card cannot argue
-          // with itself the way it did when the two were worked out apart
-          const call = sums ? keeperCall(sums.net) : null;
-
-          return (
-            <SeasonCard
-              key={p.key}
-              p={p}
-              max={max}
-              teams={teams}
-              costs={cost || null}
-              aside={{ label: "worth a", value: ordinal(round) }}
-              badge={call?.word ?? ""}
-              badgeHow={call?.how ?? ""}
-              tag={holdsIt
-                ? ""
-                : `you traded your ${ordinal(cost)}, so you cannot keep him`}
-              warn={!holdsIt}
-              onMore={() => props.onMore(p)}
-            >
-              <CostRow
-                p={p}
-                cost={cost}
-                leagueId={league.leagueId}
-                onChange={props.onChange}
-              />
-              {costPick && (
-                <KeeperDetail
-                  men={men} p={p} costPick={costPick}
-                  draft={mineToo} teams={teams}
-                />
-              )}
-            </SeasonCard>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
 /** what the league charges for him, which you can correct */
-function CostRow({ p, cost, leagueId, bare, onChange }: {
-  p: Player; cost: number; leagueId: string; bare?: boolean;
+function CostRow({ p, cost, leagueId, onChange }: {
+  p: Player; cost: number; leagueId: string;
   onChange: () => void;
 }) {
-  const yours = !bare && keeperCosts(leagueId)[p.key];
-  const goesAt = !bare && adpOverrides(leagueId)[p.key];
-
   return (
     <label class="costrow">
       <i>costs</i>
@@ -428,12 +327,6 @@ function CostRow({ p, cost, leagueId, bare, onChange }: {
         }}
       />
       <b>rd</b>
-      {yours ? <span class="chip up">yours</span> : null}
-      {goesAt
-        ? <span class="chip">usually goes at {Math.round(goesAt)}</span>
-        : null}
     </label>
   );
 }
-
-export { saveAdpAt };

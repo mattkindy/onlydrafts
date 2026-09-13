@@ -2,7 +2,7 @@
  * Which live games the remainder engine answers for, and what it says.
  *
  * From half time on, playing the rest of a game out beats pulling a
- * man's week line toward what he has done, so a game that has reached
+ * player's week line toward what he has done, so a game that has reached
  * the third quarter is handed to the engine and everything earlier
  * stays on the copula posterior.
  */
@@ -64,7 +64,7 @@ export function gamesToPlay(
   return out;
 }
 
-/** what each man in those games still has to come, draw by draw */
+/** what each player in those games still has to come, draw by draw */
 export function remainderDraws(
   tables: SimTables, situations: Map<string, LiveSituation>, pays: Pays,
   draws = REMAINDER_DRAWS,
@@ -80,7 +80,7 @@ export function remainderDraws(
       continue;
     }
 
-    for (const [key, its] of played.men) {
+    for (const [key, its] of played.players) {
       out.set(key, Array.from(its));
     }
   }
@@ -91,7 +91,7 @@ export function remainderDraws(
 /**
  * The same thing off the main thread. Two thousand replays of a game
  * take long enough to drop frames, so the worker does the loop and the
- * page gets back one array of points a man.
+ * page gets back one array of points a player.
  */
 export function remainderInWorker(
   tables: SimTables, situations: Map<string, LiveSituation>, pays: Pays,
@@ -107,8 +107,8 @@ export function remainderInWorker(
     const worker = new Worker(
       new URL("./remainderWorker.ts", import.meta.url), { type: "module" });
 
-    worker.onmessage = (event: MessageEvent<{ men: Record<string, number[]> }>) => {
-      settle(new Map(Object.entries(event.data.men)));
+    worker.onmessage = (event: MessageEvent<{ players: Record<string, number[]> }>) => {
+      settle(new Map(Object.entries(event.data.players)));
       worker.terminate();
     };
 
@@ -134,8 +134,8 @@ const fileFor = (season: number): Promise<SimTables | null> =>
  * Last season's tables answer when this season has none of its own. The
  * sides are the same franchises and the fitted play behaviour barely
  * moves over one summer, so a stale cast is a better live answer than
- * no engine at all. Where a man has moved or arrived he will be absent,
- * and an absent man falls back to the copula on his own.
+ * no engine at all. Where a player has moved or arrived he will be absent,
+ * and an absent player falls back to the copula on his own.
  */
 const loaded = new Map<number, Promise<SimTables | null>>();
 

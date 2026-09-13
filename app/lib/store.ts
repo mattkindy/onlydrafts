@@ -21,7 +21,7 @@ export function keep(key: string, value: unknown): void {
 }
 
 // accents come off before the letters are kept, so Estimé and Estime
-// are one man rather than two spellings
+// are one player rather than two spellings
 export const normalizeName = (name: string | null | undefined) =>
   (name ?? "")
     .normalize("NFD")

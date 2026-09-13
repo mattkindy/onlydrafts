@@ -67,10 +67,10 @@ function poisson(rate: number, rand: () => number): number {
 const AT = [0.1, 0.25, 0.5, 0.75, 0.9];
 
 /**
- * A run of numbers between nought and one, this name's own.
+ * A run of numbers between zero and one, this name's own.
  *
  * Keyed on the name and not on the week, because a coin flipped from
- * the week alone comes up the same for everybody: every man in the
+ * the week alone comes up the same for everybody: every player in the
  * league was then hurt in the same weeks, and a typical side's worst
  * week came out at five points.
  */
@@ -81,7 +81,7 @@ export function streamFor(name: string, draws = DRAWS): number[] {
 }
 
 /**
- * Where one number between nought and one lands on his distribution,
+ * Where one number between zero and one lands on his distribution,
  * reading the five shipped figures as points on its inverse and going
  * straight between them.
  *
@@ -196,7 +196,7 @@ export function weeksFromNormals(spread: Spread, normals: number[]): number[] {
 
 /**
  * The five shipped figures, nudged up wherever two of them are equal,
- * so going backwards from a score to a quantile never divides by nought.
+ * so going backwards from a score to a quantile never divides by zero.
  */
 function rising(points: number[]): number[] {
   const out = [points[0]!];
@@ -210,7 +210,7 @@ function rising(points: number[]): number[] {
 
 /**
  * Which quantile of his week a score is at, the other way round from
- * weekAt. This is how a man's afternoon so far is read as evidence: what
+ * weekAt. This is how a player's afternoon so far is read as evidence: what
  * he is on pace for goes in, and where that lands on his own
  * distribution comes out.
  */
@@ -271,14 +271,14 @@ export function normalCdf(z: number): number {
 const FURTHEST = 8;
 
 /**
- * The normal CDF backwards. A quantile of a man's week goes in and the
+ * The normal CDF backwards. A quantile of a player's week goes in and the
  * normal behind it comes out, which is what turns a score he has
  * already put up into evidence about the factors a copula shares out.
  *
  * Halved rather than approximated in its own right, so it inverts the
  * CDF above exactly instead of the two disagreeing in the tails. Forty
  * halvings of sixteen leave nothing anybody can see, and this is called
- * once per man rather than once per draw.
+ * once per player rather than once per draw.
  */
 export function normalQuantile(p: number): number {
   const want = Math.min(1 - 1e-12, Math.max(1e-12, p));

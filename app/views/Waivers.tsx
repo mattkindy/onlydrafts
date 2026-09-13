@@ -2,14 +2,14 @@
  * Who to add, who that costs you, and what the pair is worth.
  *
  * Adds are everybody no team in the league has, priced by what putting him
- * on your roster does to how often you win a week. Drops are your own men,
+ * on your roster does to how often you win a week. Drops are your own players,
  * priced by what taking one off costs. For the handful of adds worth
  * thinking about, the page also says who would go: nobody if there is a
- * spot open, otherwise the cheapest man to drop with the newcomer there.
+ * spot open, otherwise the cheapest player to drop with the newcomer there.
  *
  * The same rows read two ways. Rest of season draws a year of weeks against
  * a typical opponent; this week uses the week's own projections, the lineup
- * you would set, and the team you play. A bench man costs nothing this week
+ * you would set, and the team you play. A bench player costs nothing this week
  * and something over a season, and only the pair of them says so.
  */
 
@@ -45,12 +45,12 @@ const SPANS: [Span, string][] = [
 ];
 
 interface Props {
-  men: Player[];
+  players: Player[];
   league: League;
   posFilter: string;
   /** where the page keeps the filter, when it wants the buttons drawn here */
   onPosFilter?: (where: string) => void;
-  /** the week's projections, by the key a lineup uses for a man */
+  /** the week's projections, by the key a lineup uses for a player */
   rows: Map<string, SlateRow>;
   /** this week's games in your league, for the one you are in */
   games: Matchup[];
@@ -62,7 +62,7 @@ interface Props {
   slate: Slate | null;
   /** the players on your team, so the rankings can mark them */
   roster: Set<string> | null;
-  /** who the office has listed, for the rankings table's badges */
+  /** who the injury report has listed, for the rankings table's badges */
   listed: Map<string, Listed>;
   onMore: (p: Player) => void;
 }
@@ -88,7 +88,7 @@ function points(n: number): string {
 const OPEN_SPOT = "nobody, spot open";
 
 /** a lineup slot by the name a reader would use for it */
-const seatName = (slot: string) => slot === "FLEX" ? "FLEX" : slot;
+const slotName = (slot: string) => slot === "FLEX" ? "FLEX" : slot;
 
 /**
  * How often you win a week either side of the move, and the gap between
@@ -111,34 +111,34 @@ function Swing(
 interface Figures {
   /** points the move is worth, a week over the season or in this one */
   points: number;
-  /** the seat that changes hands, and who it changes hands with */
-  seat: string;
+  /** the slot that changes hands, and who it changes hands with */
+  slot: string;
   before: number;
   after: number;
   delta: number;
 }
 
 /**
- * Who takes the seat a drop hands over, across the drawn season.
+ * Who takes the slot a drop hands over, across the drawn season.
  *
  * This column used to be headed "when he starts", with another player's
- * name under it, and two men in one phrase with no "he" attached to
+ * name under it, and two players in one phrase with no "he" attached to
  * either is a sentence nobody can read. Both the heading and the value
  * now name whoever inherits the slot.
  */
-function seasonSeat(row: Drop): string {
+function seasonSlot(row: Drop): string {
   if (row.starts < RARELY_STARTS) {
     return "he rarely starts, so nobody";
   }
 
-  const seat = row.seat ? seatName(row.seat) : "the lineup";
+  const slot = row.slot ? slotName(row.slot) : "the lineup";
 
-  return `${row.heir?.name ?? "a free agent"} at ${seat}`;
+  return `${row.heir?.name ?? "a free agent"} at ${slot}`;
 }
 
 const seasonDrop = (row: Drop): Figures => ({
   points: -row.takes,
-  seat: seasonSeat(row),
+  slot: seasonSlot(row),
   before: row.before,
   after: row.after,
   delta: -row.costs,
@@ -148,8 +148,8 @@ const weekDrop = (
   his: WeekDrop, nameFor: (key: string) => string,
 ): Figures => ({
   points: -his.takes,
-  seat: his.slot
-    ? `${his.heir ? nameFor(his.heir) : "nobody"} at ${seatName(his.slot)}`
+  slot: his.slot
+    ? `${his.heir ? nameFor(his.heir) : "nobody"} at ${slotName(his.slot)}`
     : "he is not starting",
   before: his.before,
   after: his.after,
@@ -158,7 +158,7 @@ const weekDrop = (
 
 const seasonAdd = (row: Add): Figures => ({
   points: row.brings,
-  seat: row.displaced?.name ?? "an open starting spot",
+  slot: row.displaced?.name ?? "an open starting spot",
   before: row.before,
   after: row.after,
   delta: row.added,
@@ -166,8 +166,8 @@ const seasonAdd = (row: Add): Figures => ({
 
 const weekAdd = (his: WeekAdd, nameFor: (key: string) => string): Figures => ({
   points: his.brings,
-  seat: his.displaced
-    ? `${nameFor(his.displaced)} at ${seatName(his.slot ?? "")}`
+  slot: his.displaced
+    ? `${nameFor(his.displaced)} at ${slotName(his.slot ?? "")}`
     : his.slot ? "an open starting spot" : "would not start",
   before: his.before,
   after: his.after,
@@ -181,18 +181,18 @@ function Starting(
   return (
     <span class="starting">
       {pct(starts)}
-      {at && <i>{at.slot ? "in at " + seatName(at.slot) : "benched"}</i>}
+      {at && <i>{at.slot ? "in at " + slotName(at.slot) : "benched"}</i>}
     </span>
   );
 }
 
 /** the figures, or a word saying why there are none to show */
 function Figured(
-  { figures, absent, seatLabel }: {
+  { figures, absent, slotLabel }: {
     figures: Figures | null;
     absent: string;
-    /** what the seat column is called, since the two tables differ */
-    seatLabel: string;
+    /** what the slot column is called, since the two tables differ */
+    slotLabel: string;
   },
 ) {
   if (!figures) {
@@ -213,7 +213,7 @@ function Figured(
         />
       </td>
       <td data-label="pts">{points(figures.points)}</td>
-      <td data-label={seatLabel}>{figures.seat}</td>
+      <td data-label={slotLabel}>{figures.slot}</td>
     </>
   );
 }
@@ -257,7 +257,7 @@ function AddRow(
           <td data-label="starts"><Starting starts={row.starts} at={at} /></td>
         </>
       )}
-      <Figured figures={figures} absent={absent} seatLabel="instead of" />
+      <Figured figures={figures} absent={absent} slotLabel="instead of" />
       <td data-label="drop">
         {paid ? <>{paid.drop} <b>{signed(paid.net)}</b></> : ""}
       </td>
@@ -266,12 +266,12 @@ function AddRow(
 }
 
 function DropRow(
-  { row, at, figures, absent, seatLabel, span, onMore }: {
+  { row, at, figures, absent, slotLabel, span, onMore }: {
     row: Drop;
     at: { slot: string | null } | null;
     figures: Figures | null;
     absent: string;
-    seatLabel: string;
+    slotLabel: string;
     span: Span;
     onMore: () => void;
   },
@@ -289,7 +289,7 @@ function DropRow(
           <td data-label="starts"><Starting starts={row.starts} at={at} /></td>
         </>
       )}
-      <Figured figures={figures} absent={absent} seatLabel={seatLabel} />
+      <Figured figures={figures} absent={absent} slotLabel={slotLabel} />
     </tr>
   );
 }
@@ -332,7 +332,7 @@ function missingWeek(
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
 
 export function Waivers(props: Props) {
-  const { men, league, posFilter, rows, games } = props;
+  const { players, league, posFilter, rows, games } = props;
   const [query, setQuery] = useState("");
   // before any week has been built there is nothing for the week to say,
   // so the page opens on the season instead of on a table of blanks
@@ -342,17 +342,17 @@ export function Waivers(props: Props) {
     props.season ?? undefined, props.week ?? undefined);
 
   const { drops, listed, priced, working } = useWaiverPrices(
-    men, league, props.schedule, posFilter);
+    players, league, props.schedule, posFilter);
 
   const lines: Lines = useMemo(
-    () => new Map(men.map((p) => [p.key, p])), [men]);
+    () => new Map(players.map((p) => [p.key, p])), [players]);
   const ours = useMemo(() => myGameIn(games, league.team), [games, league]);
   const nameFor = (key: string) => nameOf(key, rows, lines);
 
   /**
    * This week's own answer, for the whole roster and for the adds that have
-   * a drop worked out. The men further down the list are priced over the
-   * season only, since the week has to name the seat each one would take.
+   * a drop worked out. The players further down the list are priced over the
+   * season only, since the week has to name the slot each one would take.
    */
   const week: WeekPrices | null = useMemo(() => {
     if (!ours || !states || !rows.size) {
@@ -373,7 +373,7 @@ export function Waivers(props: Props) {
   }, [ours, states, rows, lines, league, priced]);
 
   /**
-   * Only the top of the list has a drop worked out, and paying for a man
+   * Only the top of the list has a drop worked out, and paying for a player
    * can only take value off him, so anybody adding less than the bar
    * cannot clear it once he is paid for either.
    */
@@ -388,7 +388,7 @@ export function Waivers(props: Props) {
    * The adds worth showing, in the order the span asks for. This week
    * leads with what a move does to your win probability and drops
    * everybody it does nothing for, since a list led by five tight ends
-   * worth nought is a list nobody reads.
+   * worth zero is a list nobody reads.
    */
   const adds = useMemo(() => {
     const every = [...worth.map(({ row }) => row), ...rest]
@@ -410,7 +410,7 @@ export function Waivers(props: Props) {
   const yours = drops
     .filter((row) => !wanted || normalizeName(row.p.name).includes(wanted));
   const missing = missingWeek(props.week, rows, states, ours);
-  const dropSeat = "who takes his slot";
+  const dropSlot = "who takes his slot";
 
   /**
    * A row with no week figures says which of the two reasons it is: the
@@ -609,7 +609,7 @@ export function Waivers(props: Props) {
             {span === "season" && <th>starts</th>}
             <th>win %</th>
             <th>{span === "week" ? "pts" : "pts a week"}</th>
-            <th>{dropSeat}</th>
+            <th>{dropSlot}</th>
           </tr>
         </thead>
         <tbody>
@@ -617,7 +617,7 @@ export function Waivers(props: Props) {
             <DropRow
               key={row.p.key}
               row={row}
-              seatLabel={dropSeat}
+              slotLabel={dropSlot}
               span={span}
               {...dropSeen(row)}
               onMore={() => props.onMore(row.p)}

@@ -25,7 +25,7 @@ export function answer(ask: WaiversAsk): WaiversAnswer {
 
   const schedule = ask.schedule;
   notePassCatchers(
-    ask.men,
+    ask.players,
     schedule ? (team, week) => schedule[team]?.[week - 1] ?? null : null,
   );
   const said = priceSeason(ask);

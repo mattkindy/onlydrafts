@@ -3,7 +3,7 @@
  *
  * Two thousand replays of a game take long enough to drop frames, and
  * a live page runs one per game in progress, so the work happens here
- * and the page gets back one array of points a man.
+ * and the page gets back one array of points a player.
  */
 
 import { leagueOf, remainderFor, type RemainderState } from "./remainder.ts";
@@ -18,8 +18,8 @@ export interface RemainderAsk {
 }
 
 export interface RemainderAnswer {
-  /** by the slate's key for a man, one number a draw */
-  men: Record<string, number[]>;
+  /** by the slate's key for a player, one number a draw */
+  players: Record<string, number[]>;
   /** and how long the whole ask took, so a page can say */
   millis: number;
 }
@@ -27,7 +27,7 @@ export interface RemainderAnswer {
 export function answer(ask: RemainderAsk): RemainderAnswer {
   const started = Date.now();
   const league = leagueOf(ask.tables);
-  const men: Record<string, number[]> = {};
+  const players: Record<string, number[]> = {};
 
   for (const game of ask.games) {
     const played = remainderFor(
@@ -37,12 +37,12 @@ export function answer(ask: RemainderAsk): RemainderAnswer {
       continue;
     }
 
-    for (const [key, its] of played.men) {
-      men[key] = Array.from(its);
+    for (const [key, its] of played.players) {
+      players[key] = Array.from(its);
     }
   }
 
-  return { men, millis: Date.now() - started };
+  return { players, millis: Date.now() - started };
 }
 
 self.onmessage = (event: MessageEvent<RemainderAsk>) => {

@@ -16,7 +16,7 @@ import { loadBoard, loadMeta, type Board } from "./lib/data.ts";
 import { rescore, roomFor } from "./lib/board.ts";
 import { keep, stored, normalizeName } from "./lib/store.ts";
 import {
-  NeedsEspnCookies, officeList, officeListWith, PROVIDERS, sleeperPlayers,
+  NeedsEspnCookies, listedPlayers, listedPlayersWith, PROVIDERS, sleeperPlayers,
   type League, type Matchup,
 } from "./lib/providers.ts";
 import type { Listed } from "./lib/availability.ts";
@@ -35,7 +35,7 @@ import { Matchups } from "./views/Matchups.tsx";
 import { Standings } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import {
-  loadSlate, rosterKeys, slateUnder, weekRefs, withOutMenZeroed,
+  loadSlate, rosterKeys, slateUnder, weekRefs, withOutPlayersZeroed,
   type Slate, type WeekRef,
 } from "./lib/slate.ts";
 
@@ -43,7 +43,7 @@ export type Order = "war" | "rank" | "adp";
 
 /**
  * What each ordering means, said once you have chosen it. The three
- * answer different questions and the same man moves a long way between
+ * answer different questions and the same player moves a long way between
  * them, so a reader wondering why Puka Nacua is top of one list and
  * eighth on another should not have to work it out.
  */
@@ -133,7 +133,7 @@ const NOTHING: DraftNow = {
  * in to it, so it offers every one and they all carry the same league
  * number. Which team it is has to be part of telling two of them apart.
  */
-const sameSeat = (a: League | null, b: League | null) =>
+const sameSlot = (a: League | null, b: League | null) =>
   Boolean(a && b && a.provider === b.provider &&
     a.leagueId === b.leagueId && a.userId === b.userId);
 
@@ -149,7 +149,7 @@ const NEXT_THEME: Record<Theme, Theme> = {
 };
 
 /** where the team you picked in a league is remembered */
-const seatKey = (lg: League) => "seat." + lg.provider + "." + lg.leagueId;
+const slotKey = (lg: League) => "slot." + lg.provider + "." + lg.leagueId;
 
 /** and where your answer lives when the provider will not say */
 const keeperKey = (lg: League) => "keepers." + lg.provider + "." + lg.leagueId;
@@ -223,14 +223,8 @@ function App() {
   /** and whether your own draft is being replayed under your roster */
   const [myDraft, setMyDraft] = useState(false);
   const [everyTeam, setEveryTeam] = useState(false);
-  /**
-   * The weeks he wins you leads, because ordering that way beat
-   * ordering by value over replacement in 26 of 36 seats across three
-   * finished seasons, by about five points of weekly win rate. It used
-   * to be a checkbox called weight by need, which described the measure
-   * it replaced rather than this one and quietly overrode the order
-   * chosen here.
-   */
+  // the weeks he wins you leads, because ordering that way beat ordering
+  // by value over replacement in 26 of 36 slots across three seasons
   const [order, setOrder] = useState<Order>(() => stored<Order>("order", "war"));
   const [needOnly, setNeedOnly] = useState(false);
   const [manual, setManual] = useState(() => stored("manual", ""));
@@ -252,8 +246,8 @@ function App() {
   const [games, setGames] = useState<Matchup[]>([]);
   const [gamesStatus, setGamesStatus] = useState("");
   const [rereading, setRereading] = useState(false);
-  /** who the league office has listed, for the week's pages as well as the draft */
-  const [office, setOffice] = useState<Map<string, Listed>>(() => new Map());
+  /** who the injury report has listed, for the week's pages as well as the draft */
+  const [allListed, setAllListed] = useState<Map<string, Listed>>(() => new Map());
   // the guard has to be the same object every render, since two reads
   // started from different effects would otherwise not see each other
   const reading = useRef(false);
@@ -286,16 +280,16 @@ function App() {
   }, []);
 
   /**
-   * The office's list, read once. Sleeper's file is the same file the
+   * The injury report's list, read once. Sleeper's file is the same file the
    * draft view reads and is kept for a day either way, so asking for it
    * here costs nothing. A read that fails leaves the list empty, and then
-   * every man projects the way he did before, which is the old bug rather
+   * every player projects the way he did before, which is the old bug rather
    * than a new one.
    */
   useEffect(() => {
     sleeperPlayers()
-      .then((all) => setOffice(officeList(all)))
-      .catch(() => setOffice(new Map()));
+      .then((all) => setAllListed(listedPlayers(all)))
+      .catch(() => setAllListed(new Map()));
   }, []);
 
   /** the week itself is only fetched once you ask for a tab that prices one */
@@ -350,7 +344,7 @@ function App() {
 
   /**
    * The week in this league's scoring. The build scored it once, and
-   * a league that pays a catch differently moves every man by his
+   * a league that pays a catch differently moves every player by his
    * catches. Without a league, or one saved before its scoring was
    * kept, it reads as built.
    */
@@ -363,24 +357,24 @@ function App() {
   }, [built, active]);
 
   /**
-   * Sleeper covers every man in the game, and an ESPN league adds only
-   * what its own rosters say about men Sleeper had nothing on.
+   * Sleeper covers every player in the game, and an ESPN league adds only
+   * what its own rosters say about players Sleeper had nothing on.
    */
   const listed = useMemo(
-    () => active ? officeListWith(
-      office, [active.myRoster, ...active.allRosters.map((r) => r.keys)],
-    ) : office,
-    [office, active],
+    () => active ? listedPlayersWith(
+      allListed, [active.myRoster, ...active.allRosters.map((r) => r.keys)],
+    ) : allListed,
+    [allListed, active],
   );
 
   /**
-   * The week's projections, under the same key a lineup uses for a man,
-   * with a nought where the office says he is not playing. Every page that
+   * The week's projections, under the same key a lineup uses for a player,
+   * with a zero where the injury report says he is not playing. Every page that
    * prices a week reads this map, so the ruling is applied once here
    * rather than in each of them.
    */
   const slateRows = useMemo(
-    () => withOutMenZeroed(
+    () => withOutPlayersZeroed(
       new Map((slate?.rows ?? []).map((r) => [normalizeName(r.name), r])),
       listed,
     ),
@@ -389,10 +383,10 @@ function App() {
 
   /**
    * The board in this league's terms. Nothing here needs the model to
-   * have been run for the league, since what each man does in a game
+   * have been run for the league, since what each player does in a game
    * travels with the board and the scoring is applied on the way in.
    */
-  const men = useMemo(() => {
+  const players = useMemo(() => {
     if (!board) {
       return [];
     }
@@ -408,7 +402,7 @@ function App() {
     );
   }, [board, active]);
 
-  const byKey = useMemo(() => new Map(men.map((p) => [p.key, p])), [men]);
+  const byKey = useMemo(() => new Map(players.map((p) => [p.key, p])), [players]);
   const marked = active ? markedKeepers(active.leagueId) : {};
 
   /**
@@ -430,7 +424,7 @@ function App() {
           nameFor: (id) => all[id]?.n ?? "",
           positionFor: (id) => all[id]?.p ?? "",
           teamFor: (id) => all[id]?.t ?? "",
-          hurt: Object.fromEntries(officeList(all)),
+          hurt: Object.fromEntries(listedPlayers(all)),
         }))
         .then(setDraft)
         .catch((e: Error) => setStatus(e.message));
@@ -461,7 +455,7 @@ function App() {
       // looking again is how you pick up a draft order drawn since, or
       // a roster that has moved on, so the league you are on is
       // replaced by the one this read returned
-      const again = found.find((lg) => sameSeat(lg, active));
+      const again = found.find((lg) => sameSlot(lg, active));
 
       if (again) {
         setActive(again);
@@ -484,7 +478,7 @@ function App() {
    * The league you are on, read again.
    *
    * Nothing else notices a roster that moved on: the league is a
-   * snapshot taken when you looked it up, so a man added off waivers is
+   * snapshot taken when you looked it up, so a player added off waivers is
    * missing from the lineup pages until somebody asks the provider
    * again. This asks quietly, leaves the page as it is while it waits,
    * and a read that fails changes nothing, ESPN wanting cookies
@@ -505,7 +499,7 @@ function App() {
     const found = await PROVIDERS[active.provider]!
       .leaguesFor(who.trim(), season ?? active.season)
       .catch(() => null);
-    const again = found?.find((lg) => sameSeat(lg, active));
+    const again = found?.find((lg) => sameSlot(lg, active));
 
     if (found) {
       setLeagues(found);
@@ -544,13 +538,13 @@ function App() {
    * have said which, the others are put away until you ask for them.
    */
   const shown = useMemo(() => everyTeam ? leagues : leagues.filter((lg) => {
-    const picked = stored(seatKey(lg), "");
+    const picked = stored(slotKey(lg), "");
 
     return !picked || picked === lg.userId;
   }), [leagues, everyTeam, active]);
 
   /**
-   * Opening a league rescores the whole board and draws every man's
+   * Opening a league rescores the whole board and draws every player's
    * weeks before the draft view can paint, which freezes the page for a
    * second or two. The loader is painted first, and the work starts on
    * the frame after.
@@ -560,7 +554,7 @@ function App() {
     setTimeout(() => {
       setActive(lg);
       keep("active", lg);
-      keep(seatKey(lg), lg.userId);
+      keep(slotKey(lg), lg.userId);
       setEveryTeam(false);
       // once weeks are being played the draft is over, so a league opens
       // on your matchup rather than on pricing the whole board
@@ -570,7 +564,7 @@ function App() {
   };
 
   /**
-   * A man's sheet, opened off his key. The lineup views only ever have a
+   * A player's sheet, opened off his key. The lineup views only ever have a
    * key, and every name on the page opens the same sheet, so the lookup
    * belongs here rather than in each of them.
    */
@@ -777,7 +771,7 @@ function App() {
               </select>
             </label>
             <span class="says">{ORDER_MEANS[order]}</span>
-            {/* the filter is its own thing: it hides men you cannot start
+            {/* the filter is its own thing: it hides players you cannot start
                 rather than changing the order of the ones you can */}
             <label>
               <input
@@ -850,7 +844,7 @@ function App() {
                     <div
                       key={lg.leagueId + lg.userId}
                       class={"card league-card" +
-                        (sameSeat(active, lg) ? " mine" : "")}
+                        (sameSlot(active, lg) ? " mine" : "")}
                       onClick={() => open(lg)}
                     >
                       <div class="nm">{lg.name}</div>
@@ -882,7 +876,7 @@ function App() {
             <Roster
               key={marks}
               byKey={byKey}
-              men={men}
+              players={players}
               league={active}
               season={season}
               perTeam={perTeam}
@@ -937,7 +931,7 @@ function App() {
             {myDraft && (
               <AfterPaint saying="replaying your draft">
                 <MyDraftPicks
-                  board={men}
+                  board={players}
                   byKey={byKey}
                   league={active}
                   made={draft.made ?? []}
@@ -949,7 +943,7 @@ function App() {
 
         {board && view === "draft" && (
           <DraftView
-            men={men}
+            players={players}
             state={draft}
             teams={active?.size ?? 12}
             snake={active?.snake ?? true}
@@ -970,7 +964,7 @@ function App() {
             slate={slate}
             games={games}
             rows={slateRows}
-            men={men}
+            players={players}
             listed={listed}
             mine={active?.team ?? null}
             slots={active?.slots ?? null}
@@ -991,7 +985,7 @@ function App() {
                 <Matchups
                   games={games}
                   rows={slateRows}
-                  men={men}
+                  players={players}
                   mine={active.team}
                   slots={active.slots ?? null}
                   pays={active.pays ?? {}}
@@ -1007,7 +1001,7 @@ function App() {
             <h2>draft grades</h2>
             <AfterPaint saying="rating every team's draft">
               <DraftRating
-                board={men}
+                board={players}
                 byKey={byKey}
                 league={active}
                 made={draft.made ?? []}
@@ -1018,7 +1012,7 @@ function App() {
 
         {board && active && view === "players" && (
           <Waivers
-            men={men}
+            players={players}
             league={active}
             posFilter={posFilter}
             onPosFilter={setPosFilter}

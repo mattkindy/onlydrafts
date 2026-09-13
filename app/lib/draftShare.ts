@@ -46,7 +46,7 @@ export interface Room {
 
 /**
  * Say who the league already has wherever you know, or the wire reads far
- * too good. With nothing to go on the bar assumes one man a team, which
+ * too good. With nothing to go on the bar assumes one player a team, which
  * in season puts the best back nobody has around the thirtieth best in
  * the game when the truth is nearer the hundred and eightieth.
  */
@@ -62,9 +62,9 @@ export function roomFor(
 }
 
 /**
- * The roster the room would have handed these picks: the starting seats
+ * The roster the room would have handed these picks: the starting slots
  * filled the way the draft board fills them, and the turns after that
- * spent on the best man drawn to still be there. Best by where the room
+ * spent on the best player drawn to still be there. Best by where the room
  * takes him, not by our board, or every side reads below a drafter who
  * agreed with us about everybody.
  */
@@ -100,10 +100,10 @@ export function shareTeams(
 
   return teams
     .map((team) => {
-      const men = team.took.map((t) => t.p);
+      const players = team.took.map((t) => t.p);
       const picks = [...team.took].map((t) => t.at).sort((a, b) => a - b);
       const wins = winChance(
-        baselineFor(men, slots, room.draws, room.wire).total, room.opponent);
+        baselineFor(players, slots, room.draws, room.wire).total, room.opponent);
       const handed = baselineAcross(
         fills.map((k) => marketRoster(board, slots, picks, k)),
         slots, room.draws, room.wire);
@@ -126,11 +126,11 @@ export interface PickShare {
   kept: boolean;
   /** what taking him at that turn added, as the board would have said */
   share: WinShare;
-  /** the man the board would have taken instead, when it was somebody else */
+  /** the player the board would have taken instead, when it was somebody else */
   best: { p: Player; share: WinShare } | null;
 }
 
-/** how many of the men left the board is asked about at each turn */
+/** how many of the players left the board is asked about at each turn */
 const LOOKED_AT = 40;
 
 export function sharePicks(

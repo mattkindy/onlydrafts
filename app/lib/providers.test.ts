@@ -54,8 +54,8 @@ describe("a standard PPR league on ESPN", () => {
   /**
    * ESPN steps at 14-17 and 18-21 where the board has one step at
    * 14-20, and this league pays the first a point and leaves the second
-   * out. A step left out of a priced ladder is nought, so the board's
-   * step is the mean of one and nought.
+   * out. A step left out of a priced ladder is zero, so the board's
+   * step is the mean of one and zero.
    */
   it("reads the points allowed ladder, blanks included", () => {
     expect(pays).toMatchObject({

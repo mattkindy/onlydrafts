@@ -6,8 +6,8 @@
  * two sides alternate, a drive is a run of snaps that ends in a score,
  * a punt, a turnover or the downs, and the clock decides when to stop.
  *
- * A draw is one replay of the rest of the game. Every man in a game
- * shares a draw index, so two men on the same side rise and fall
+ * A draw is one replay of the rest of the game. Every player in a game
+ * shares a draw index, so two players on the same side rise and fall
  * together and nothing has to be correlated afterwards.
  */
 
@@ -41,10 +41,10 @@ export interface RemainderState {
   receivedFirst?: string;
 }
 
-/** what one draw gave a man, in whatever the league pays */
+/** what one draw gave a player, in whatever the league pays */
 export interface RemainderDraws {
-  /** by the slate's key for a man, one number a draw */
-  men: Map<string, Float64Array>;
+  /** by the slate's key for a player, one number a draw */
+  players: Map<string, Float64Array>;
   /** and the two sides' remaining points, for anyone checking the game */
   teamPoints: Record<string, Float64Array>;
   draws: number;
@@ -63,7 +63,7 @@ function mulberry32(seed: number) {
   };
 }
 
-/** a man's line over one replay, in the categories the scoring knows */
+/** a player's line over one replay, in the categories the scoring knows */
 interface Line {
   passYds: number; passTd: number; interceptions: number;
   rushYds: number; rushTd: number;
@@ -79,7 +79,7 @@ const blankLine = (): Line => ({
 /** one side, with its tables read out of base64 once */
 interface Loaded {
   team: string;
-  men: { id: string; key: string; position: string }[];
+  players: { id: string; key: string; position: string }[];
   passerAt: number;
   runRate: Uint8Array;
   shares: Uint8Array;
@@ -147,14 +147,14 @@ function loadSide(
 
   return {
     team,
-    men: side.men,
-    passerAt: side.men.findIndex((man) => man.id === side.passer),
+    players: side.men,
+    passerAt: side.men.findIndex((player) => player.id === side.passer),
     runRate: bytesOf(side.runRate),
     shares: bytesOf(side.shares),
     caught: bytesOf(side.caught),
-    gains: side.men.flatMap((man) => [
-      bytesOf(side.gains[`${man.id}|run`] ?? ""),
-      bytesOf(side.gains[`${man.id}|pass`] ?? ""),
+    gains: side.men.flatMap((player) => [
+      bytesOf(side.gains[`${player.id}|run`] ?? ""),
+      bytesOf(side.gains[`${player.id}|pass`] ?? ""),
     ]),
     lift,
     matchup: bend
@@ -194,12 +194,12 @@ const runRateAt = (
   return (side.runRate[at] ?? 128) / 255;
 };
 
-/** who the ball goes to here, as an index into the side's men */
+/** who the ball goes to here, as an index into the side's players */
 function goesTo(
   side: Loaded, call: number, down: number, yardline: number,
   uniform: () => number,
 ): number {
-  const count = side.men.length;
+  const count = side.players.length;
   const block = ((call * 2 + (down >= 3 ? 1 : 0)) * FIELD_BANDS +
     fieldBand(yardline)) * count;
   let total = 0;
@@ -287,9 +287,9 @@ interface DriveOutcome {
 
 /**
  * One drive. The caller keeps the score and the clock, so this only
- * says where the ball ends up, how long it took, and what each man did.
+ * says where the ball ends up, how long it took, and what each player did.
  */
-function walkDrive(
+function playDrive(
   side: Loaded, league: LeagueTables, lines: Line[], uniform: () => number,
   startAt: number, margin: number, secondsLeft: number,
   openDown: number | undefined, openToGo: number | undefined,
@@ -444,7 +444,7 @@ const goesForTwo = (
   return (league.goesForTwo[at] ?? 24) / 255;
 };
 
-/** one replay of the rest of a game, adding each man's line into `into` */
+/** one replay of the rest of a game, adding each player's line into `into` */
 function playOut(
   home: Loaded, away: Loaded, league: LeagueTables, state: RemainderState,
   uniform: () => number, into: Map<Loaded, Line[]>,
@@ -496,7 +496,7 @@ function playOut(
       break;
     }
 
-    const drive = walkDrive(
+    const drive = playDrive(
       withBall, league, into.get(withBall)!, uniform, startAt, margin,
       secondsLeft, firstDown, firstToGo);
     firstDown = undefined;
@@ -567,7 +567,7 @@ function playOut(
 }
 
 /**
- * Every draw of the rest of one game, as points a man still has to come.
+ * Every draw of the rest of one game, as points a player still has to come.
  *
  * The seed is the game's, so two calls about the same game at the same
  * snap give the same answer, and two different games never share a
@@ -584,23 +584,23 @@ export function remainderFor(
     return null;
   }
 
-  const men = new Map<string, Float64Array>();
+  const players = new Map<string, Float64Array>();
   const teamPoints: Record<string, Float64Array> = {
     [state.home]: new Float64Array(draws),
     [state.away]: new Float64Array(draws),
   };
 
   for (const side of [home, away]) {
-    for (const man of side.men) {
-      if (man.key && !men.has(man.key)) {
-        men.set(man.key, new Float64Array(draws));
+    for (const player of side.players) {
+      if (player.key && !players.has(player.key)) {
+        players.set(player.key, new Float64Array(draws));
       }
     }
   }
 
   const lines = new Map<Loaded, Line[]>([
-    [home, home.men.map(blankLine)],
-    [away, away.men.map(blankLine)],
+    [home, home.players.map(blankLine)],
+    [away, away.players.map(blankLine)],
   ]);
 
   for (let draw = 0; draw < draws; draw++) {
@@ -623,9 +623,9 @@ export function remainderFor(
     for (const side of [home, away]) {
       const its = lines.get(side)!;
 
-      for (let i = 0; i < side.men.length; i++) {
-        const key = side.men[i]!.key;
-        const his = key ? men.get(key) : undefined;
+      for (let i = 0; i < side.players.length; i++) {
+        const key = side.players[i]!.key;
+        const his = key ? players.get(key) : undefined;
 
         if (his) {
           his[draw] = payFor(
@@ -635,5 +635,5 @@ export function remainderFor(
     }
   }
 
-  return { men, teamPoints, draws };
+  return { players, teamPoints, draws };
 }

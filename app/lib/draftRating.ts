@@ -1,8 +1,8 @@
 /**
  * What a drafted roster is worth, and what its picks were worth.
  *
- * Two questions, kept apart. What a man is worth to a team is his value
- * over the last man his league would start at his position. What a pick
+ * Two questions, kept apart. What a player is worth to a team is his value
+ * over the last player his league would start at his position. What a pick
  * was worth is where the room was taking him, since a team picking
  * third should come away with more than a team picking tenth, and a
  * rating that ignores that only says who drew the good slot.
@@ -28,7 +28,7 @@ import { lineupOf, type Player } from "./scoring.ts";
  */
 
 /**
- * A bench man plays only when somebody ahead of him is hurt or on a
+ * A bench player plays only when somebody ahead of him is hurt or on a
  * bye, so he is worth a fraction of a starter and not nothing.
  */
 export const ON_THE_BENCH = 0.25;
@@ -36,12 +36,12 @@ export const ON_THE_BENCH = 0.25;
 /**
  * What a pick is worth, read off where the room takes people.
  *
- * Men go in the order the room drafts them and their value over
+ * Players go in the order the room drafts them and their value over
  * replacement is smoothed along that order, so the curve says what the
- * pick buys rather than what one man happened to return.
+ * pick buys rather than what one player happened to return.
  */
-export function marketCurve(men: Player[], smoothOver = 12): number[] {
-  const priced = men
+export function marketCurve(players: Player[], smoothOver = 12): number[] {
+  const priced = players
     .filter((p) => p.adp !== null && p.adp !== undefined)
     .sort((a, b) => a.adp! - b.adp!);
   const curve: number[] = [];
@@ -75,7 +75,7 @@ export function worthAt(curve: number[], pick: number): number {
 /**
  * What a pick at each place bought in the draft in front of you.
  *
- * A simulated room drafting on draft position is a guess at how far men
+ * A simulated room drafting on draft position is a guess at how far players
  * fall, and this room is the answer. Smoothed wide, over two rounds
  * either side, so the trend across the slots survives and one team's
  * choice does not become its own bar.
@@ -122,8 +122,8 @@ export function barFromPicks(
 }
 
 /**
- * What one man is worth, the room's price and our own number together.
- * A man nobody priced is ours alone to judge.
+ * What one player is worth, the room's price and our own number together.
+ * A player nobody priced is ours alone to judge.
  */
 export function worthOf(p: Player, curve: number[]): number {
   /**
@@ -146,7 +146,7 @@ export function worthOf(p: Player, curve: number[]): number {
 }
 
 export interface RosterWorth {
-  /** the men who would start, in the order they fill the lineup */
+  /** the players who would start, in the order they fill the lineup */
   starters: { p: Player; slot: string }[];
   bench: Player[];
   /** what the starters are worth, plus the bench at a quarter */
@@ -156,15 +156,15 @@ export interface RosterWorth {
 /**
  * The lineup this roster would put out, filled best first.
  *
- * Named slots take the best man left at that position and the flexes
+ * Named slots take the best player left at that position and the flexes
  * take the best of whoever is left. A team that drafted five good backs
  * cannot start five, and a rater that adds them all up says it can.
  */
 export function fillLineup(
-  men: Player[], slots: string[] | null | undefined, curve: number[],
+  players: Player[], slots: string[] | null | undefined, curve: number[],
 ): RosterWorth {
   const { named, flex } = lineupOf(slots);
-  const left = [...men].sort((a, b) => worthOf(b, curve) - worthOf(a, curve));
+  const left = [...players].sort((a, b) => worthOf(b, curve) - worthOf(a, curve));
   const starters: { p: Player; slot: string }[] = [];
   const take = (where: (p: Player) => boolean, slot: string) => {
     const at = left.findIndex(where);
@@ -214,7 +214,7 @@ export interface TeamRating {
  * Every team, against what its own picks should have bought, so the
  * team that picked first is not rewarded for picking first.
  *
- * Picks arrive already paired with the men they bought, so a pick
+ * Picks arrive already paired with the players they bought, so a pick
  * nobody could look up costs a team nothing: both sides of the
  * comparison then count the same picks.
  */
@@ -226,7 +226,7 @@ export function rateTeams(
   curve: number[],
   /**
    * What a pick at each place buys, asked of the slot and of whether it
-   * was a keeper. A man kept costs the pick he is kept at and he is
+   * was a keeper. A player kept costs the pick he is kept at and he is
    * nearly always cheaper than one drafted there, so measuring both
    * against one bar made keeping look good for everybody and drafting
    * look bad for nine sides out of twelve.
@@ -238,11 +238,11 @@ export function rateTeams(
 
   return teams
     .map((team) => {
-      const men = team.took.map((t) => t.p);
-      const filled = fillLineup(men, slots, curve);
+      const players = team.took.map((t) => t.p);
+      const filled = fillLineup(players, slots, curve);
       // the slots a lineup cannot start are discounted the way the
       // bench is, so both sides of the comparison count alike
-      const starts = men.length - filled.bench.length;
+      const starts = players.length - filled.bench.length;
       const expected = [...team.took]
         .sort((a, b) => a.at - b.at)
         .reduce((sum, t, i) =>
@@ -268,7 +268,7 @@ export function rateTeams(
 export interface PickRating {
   at: number;
   p: Player;
-  /** where the room had him, absent for a man nobody priced */
+  /** where the room had him, absent for a player nobody priced */
   adp: number | null;
   /** how far he fell past ADP, so a minus is you reaching for him */
   fell: number | null;
@@ -278,7 +278,7 @@ export interface PickRating {
   kept: boolean;
 }
 
-/** each pick of one draft, against where the room had the man */
+/** each pick of one draft, against where the room had the player */
 export function ratePicks(
   made: { at: number; p: Player; kept?: boolean }[], curve: number[],
   buysAt?: (pick: number, kept: boolean) => number,
@@ -343,7 +343,7 @@ export function gradesFor(
 const SAME_SIDE: Record<string, string> = { LAR: "LA" };
 
 /**
- * Men the providers spell differently from the board, normalized
+ * Players the providers spell differently from the board, normalized
  * spelling to the board's key. The board goes by the league's roster
  * name, so Joshua Palmer is joshpalmer there while ESPN and Sleeper
  * both write him out in full, and Marquise Brown goes by Hollywood on
@@ -362,7 +362,7 @@ const SAME_MAN: Record<string, string> = {
 };
 
 /**
- * The board's key for a man a provider named. A defence comes back as
+ * The board's key for a player a provider named. A defence comes back as
  * "Los Angeles Rams" where the board has it as the three letters the
  * league writes on a scoreboard, so it is looked up by its team.
  */

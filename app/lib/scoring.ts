@@ -1,7 +1,7 @@
 /**
  * What a league pays, applied to what a player does.
  *
- * The board ships what each man does in a game and leaves the scoring
+ * The board ships what each player does in a game and leaves the scoring
  * to whoever reads it, so one board serves every league. Sleeper and
  * ESPN both name their categories, and those names are what a stat
  * line is kept under.
@@ -45,8 +45,8 @@ export interface Player {
    */
   ownVor?: number;
   /**
-   * What he beats the last man his league starts by, over the middle
-   * ninety of his simulated seasons. Two men on the same average are
+   * What he beats the last player his league starts by, over the middle
+   * ninety of his simulated seasons. Two players on the same average are
    * not the same bet and this is where that shows.
    */
   par?: { low: number; mid: number; high: number };
@@ -67,7 +67,7 @@ const SKILL: Record<string, string> = {
   rushYds: "rush_yd", rushTd: "rush_td",
   receptions: "rec", recYds: "rec_yd", recTd: "rec_td",
   fumblesLost: "fum_lost",
-  // the board counts a man's two point plays together; a league prices
+  // the board counts a player's two point plays together; a league prices
   // running one in and catching one the same, so either rate serves
   twoPointConversions: "rush_2pt",
 };
@@ -141,8 +141,8 @@ export function payFor(parts: Parts, pays: Pays): number {
 }
 
 /**
- * What he scores in a game here. The walk's line leads wherever it
- * played the man, and the regression covers the men it never saw.
+ * What he scores in a game here. The simulation's line leads wherever it
+ * played the player, and the regression covers the players it never saw.
  */
 export function scoredHere(p: Player, pays: Pays): number {
   if (p.simulated) {
@@ -172,7 +172,7 @@ export const knownSlot = (slot: string): boolean =>
   FLEX_SLOTS.includes(slot);
 
 /**
- * Whether a starting slot takes a man of this position. A superflex takes
+ * Whether a starting slot takes a player of this position. A superflex takes
  * a quarterback as well, which is the whole point of one.
  */
 export function slotTakes(slot: string, position: string): boolean {

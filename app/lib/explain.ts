@@ -1,12 +1,13 @@
 /**
- * Why one man beats another in a seat, in pieces a reader can follow.
+ * Why one player beats another in a lineup slot, in pieces a reader can
+ * follow.
  *
  * Nothing here counts wins. In each draw the shared factors and every
- * other man's week stay at what that draw made them, and the only thing
- * left free is the man in the seat's own noise. His week is a ladder
+ * other player's week stay at what that draw made them, and the only thing
+ * left free is the noise of the player in the slot. His week is a ladder
  * in that noise, so the noise he needs to carry the lineup over the
  * opponent is written down rather than searched for, and a draw gives
- * a probability instead of a nought or a one.
+ * a probability instead of a zero or a one.
  *
  * The four pieces each change one thing about him and ask again, each
  * measured against the step before it, so they add up to the whole
@@ -37,13 +38,13 @@ export interface Explanation extends Pieces {
   gains: number;
   /** how often you win the week as things stand */
   odds: number;
-  /** what each man is projected for, off his own draws */
+  /** what each player is projected for, off his own draws */
   projected: { starter: number; candidate: number };
-  /** how wide each man's week is, as a standard deviation */
+  /** how wide each player's week is, as a standard deviation */
   width: { starter: number; candidate: number };
 }
 
-/** one of the two men in the seat, and how his week was drawn */
+/** one of the two players up for the slot, and how his week was drawn */
 export interface Contender {
   /** what the draws give him on top of what he has already scored */
   week: number[];
@@ -57,13 +58,16 @@ export interface Contender {
   pace: Pace;
 }
 
-/** the seat a man is priced in: everything about the week that is not him */
-export interface Seat {
+/**
+ * The open slot a player is priced in: everything about the week that is
+ * not him.
+ */
+export interface Opening {
   /** what the rest of your starters put up, draw by draw */
   others: number[];
   /** what the opponent's lineup puts up */
   theirs: number[];
-  /** what each factor came out at, draw by draw, as the men were drawn */
+  /** what each factor came out at, draw by draw, as the players were drawn */
   factors: From;
   /** the factors the opponent's starters are loaded on */
   against: string[];
@@ -86,9 +90,9 @@ function deviation(its: number[]): number {
   return Math.sqrt(squares / Math.max(1, its.length));
 }
 
-/** what the opponent is ahead by before the man in the seat plays */
-const gapsIn = (seat: Seat, draws: number) =>
-  Array.from({ length: draws }, (_, i) => seat.theirs[i]! - seat.others[i]!);
+/** what the opponent is ahead by before the player in the slot plays */
+const gapsIn = (opening: Opening, draws: number) =>
+  Array.from({ length: draws }, (_, i) => opening.theirs[i]! - opening.others[i]!);
 
 /** below this his week is settled and there is nothing left to average */
 const NO_ROOM = 1e-9;
@@ -135,21 +139,22 @@ function chanceOver(
   return sum / Math.max(1, gaps.length);
 }
 
-/** every factor the seat ties him to, on either side of the matchup */
-const tyingIn = (seat: Seat) => new Set([...seat.against, ...seat.alongside]);
+/** every factor the slot ties him to, on either side of the matchup */
+const tyingIn = (opening: Opening) =>
+  new Set([...opening.against, ...opening.alongside]);
 
-/** how often you win the week with this man in the seat */
-export function chanceWith(seat: Seat, his: Contender): number {
-  const draws = Math.min(seat.others.length, seat.theirs.length);
+/** how often you win the week with this player in the slot */
+export function chanceWith(opening: Opening, his: Contender): number {
+  const draws = Math.min(opening.others.length, opening.theirs.length);
 
   return chanceOver(
-    his, his.spread, tiedTo(his.mix, tyingIn(seat)),
-    gapsIn(seat, draws), seat.factors);
+    his, his.spread, tiedTo(his.mix, tyingIn(opening)),
+    gapsIn(opening, draws), opening.factors);
 }
 
 /**
  * His ladder moved so that what he adds is projected for so much more.
- * A man with part of his week behind him only draws the rest of it, so
+ * A player with part of his week behind him only draws the rest of it, so
  * the ladder has to move further than his total does.
  */
 function movedTo(his: Contender, by: number): Spread {
@@ -160,19 +165,19 @@ function movedTo(his: Contender, by: number): Spread {
   return shiftedBy(his.spread, by / his.left);
 }
 
-/** what starting each of the two men does to your chance of winning */
+/** what starting each of the two players does to your chance of winning */
 export function explainSwap(
-  seat: Seat, starter: Contender, candidate: Contender,
+  opening: Opening, starter: Contender, candidate: Contender,
 ): Explanation {
   const draws = Math.min(
-    seat.others.length, seat.theirs.length,
+    opening.others.length, opening.theirs.length,
     starter.week.length, candidate.week.length);
-  const gaps = gapsIn(seat, draws);
-  const tying = tyingIn(seat);
-  const alongside = new Set(seat.alongside);
+  const gaps = gapsIn(opening, draws);
+  const tying = tyingIn(opening);
+  const alongside = new Set(opening.alongside);
   const nobody = new Set<string>();
   const chance = (his: Contender, spread: Spread, keep: Set<string>) =>
-    chanceOver(his, spread, tiedTo(his.mix, keep), gaps, seat.factors);
+    chanceOver(his, spread, tiedTo(his.mix, keep), gaps, opening.factors);
   const projected = {
     starter: projectedFor(starter),
     candidate: projectedFor(candidate),
@@ -202,14 +207,14 @@ export function explainSwap(
   };
 }
 
-/** how far apart two men are projected before it stops being a close call */
+/** how far apart two players are projected before it stops being a close call */
 export const CLOSE = 1.5;
 
 /** the smallest change in win chance worth putting a sentence next to */
 const WORTH_SAYING = 0.005;
 
 /**
- * Whether a swap changes how the seat reads. A man projected for more who
+ * Whether a swap changes how the slot reads. A player projected for more who
  * also wins more often says nothing a reader cannot already see, so the
  * ones explained are where the model disagrees with the projection and
  * where the two are close enough that the projection settles nothing.

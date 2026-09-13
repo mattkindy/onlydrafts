@@ -10,11 +10,11 @@ import type { Listed } from "./availability.ts";
 import { normalizeName, stored, keep } from "./store.ts";
 import type { Pays } from "./scoring.ts";
 
-export interface Man {
+export interface RosterPlayer {
   name: string;
   key: string;
   pos?: string;
-  /** what the league office says, in Sleeper's words whoever said it */
+  /** what the injury report says, in Sleeper's words whoever said it */
   hurt?: string;
 }
 
@@ -22,7 +22,7 @@ export interface Roster {
   owner: string;
   /** the rounds this team still holds */
   picks: number[];
-  keys: Man[];
+  keys: RosterPlayer[];
   /** wins, losses and points for, where the provider says */
   record?: TeamRecord;
 }
@@ -48,7 +48,7 @@ export interface League {
   userId: string;
   team: string;
   members: Record<string, string>;
-  myRoster: Man[];
+  myRoster: RosterPlayer[];
   myPicks: number[];
   draftSlot: number | null;
   snake: boolean;
@@ -81,7 +81,7 @@ export interface Side {
   points: number;
   /**
    * Each starter, in lineup order, with what he has scored so far this
-   * week. The name is the provider's own spelling, kept because a man the
+   * week. The name is the provider's own spelling, kept because a player the
    * board and the week both miss would otherwise be drawn as his key, and
    * "treysmack" on a lineup row reads as somebody's username.
    */
@@ -107,7 +107,7 @@ export interface DraftNow {
     /**
      * Who he is, when the provider already knows. Sleeper hands back an
      * id and the page looks it up in the file it keeps; ESPN numbers its
-     * own men and there is no such file, so its picks arrive named.
+     * own players and there is no such file, so its picks arrive named.
      */
     name?: string;
     position?: string;
@@ -163,10 +163,10 @@ const ESPN_STATS: Record<number, string[]> = {
 /**
  * What one line of ESPN's scoring is actually worth.
  *
- * The same play can pay different men differently, a quarterback and a
+ * The same play can pay different players differently, a quarterback and a
  * defence for one interception being the case that matters, so ESPN
  * puts a price per position beside the plain one and leaves the plain
- * one at nought. Reading only the plain one made every sack, pick and
+ * one at zero. Reading only the plain one made every sack, pick and
  * shutout in the league look free. 16 is its number for a defence.
  */
 export function espnWorthOf(item: {
@@ -187,7 +187,7 @@ export function espnWorthOf(item: {
 /**
  * What a defence gets for holding a side to a score.
  *
- * ESPN steps at nought, 1-6, 7-13, 14-17, 18-21, 22-27, 28-34, 35-45
+ * ESPN steps at zero, 1-6, 7-13, 14-17, 18-21, 22-27, 28-34, 35-45
  * and 46 up. The board steps in different places, so where two of
  * ESPN's cover one of ours the two prices are averaged. Anything ESPN
  * leaves out of the list is worth nothing, which is why it is missing.
@@ -211,7 +211,7 @@ const ESPN_SLOTS: Record<number, string> = {
 };
 
 /**
- * What position a man plays. ESPN numbers a lineup slot and a position
+ * What position a player plays. ESPN numbers a lineup slot and a position
  * separately and the two disagree: 4 is the wide receiver slot but a
  * tight end, so reading one with the other quietly mislabels people.
  */
@@ -229,7 +229,7 @@ const ESPN_TEAMS: Record<number, string> = {
 };
 
 /**
- * What to call an ESPN man.
+ * What to call an ESPN player.
  *
  * A defence there is "Falcons D/ST" under a made up id of -16000 minus
  * its pro team, while the board goes by team code. Left alone the two
@@ -238,48 +238,48 @@ const ESPN_TEAMS: Record<number, string> = {
 const espnNameOf = (id: number, fullName: string, pos: string) =>
   pos === "DEF" ? ESPN_TEAMS[-id - 16000] ?? fullName : fullName;
 
-export interface SleeperMan {
+export interface SleeperPlayer {
   n: string;
   p: string;
   /** the side he plays for, which is the whole of who a defence is */
   t?: string;
-  /** what the league office says: questionable, out, ir, and the rest */
+  /** what the injury report says: questionable, out, ir, and the rest */
   hurt?: string;
   /** and where, since a hamstring and a thumb are different news */
   part?: string;
 }
 
-export type SleeperMen = Record<string, SleeperMan>;
+export type SleeperPlayers = Record<string, SleeperPlayer>;
 
 /** Sleeper's whole player file, trimmed and kept for the day */
-let sleeperMen: SleeperMen | null = null;
+let sleeperFile: SleeperPlayers | null = null;
 
 export async function sleeperPlayers() {
-  if (sleeperMen) {
-    return sleeperMen;
+  if (sleeperFile) {
+    return sleeperFile;
   }
 
   /**
-   * A day, because the list gains men every week of the year: rookies
+   * A day, because the list gains players every week of the year: rookies
    * at the draft, signings all summer. The old cache never expired and
-   * a browser from last season silently dropped every newer man from
+   * a browser from last season silently dropped every newer player from
    * the draft it was watching.
    */
   const cached = stored<{
-    at: number; men: SleeperMen;
-  } | null>("players.v5", null);
+    at: number; players: SleeperPlayers;
+  } | null>("players.v6", null);
 
   if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) {
-    sleeperMen = cached.men;
+    sleeperFile = cached.players;
 
-    return cached.men;
+    return cached.players;
   }
 
   const raw = await ask("/players/nfl") as Record<string, {
     full_name?: string; position?: string; team?: string | null;
     injury_status?: string | null; injury_body_part?: string | null;
   }>;
-  const trimmed: SleeperMen = {};
+  const trimmed: SleeperPlayers = {};
 
   for (const [id, p] of Object.entries(raw)) {
     /**
@@ -301,31 +301,31 @@ export async function sleeperPlayers() {
     }
   }
 
-  keep("players.v5", { at: Date.now(), men: trimmed });
-  sleeperMen = trimmed;
+  keep("players.v6", { at: Date.now(), players: trimmed });
+  sleeperFile = trimmed;
 
   return trimmed;
 }
 
 /**
- * Everybody the league office has listed, by the key the board gives a
- * man rather than by whatever id a provider uses. A man with nothing
+ * Everybody the injury report has listed, by the key the board gives a
+ * player rather than by whatever id a provider uses. A player with nothing
  * against his name is left out.
  */
-export function officeList(all: SleeperMen): Map<string, Listed> {
+export function listedPlayers(all: SleeperPlayers): Map<string, Listed> {
   const listed = new Map<string, Listed>();
 
-  for (const man of Object.values(all)) {
-    if (!man.hurt) {
+  for (const player of Object.values(all)) {
+    if (!player.hurt) {
       continue;
     }
 
-    listed.set(normalizeName(man.n), {
-      name: man.n,
-      status: man.hurt,
-      ...(man.part ? { part: man.part } : {}),
-      ...(man.p ? { position: man.p } : {}),
-      ...(man.t ? { team: man.t } : {}),
+    listed.set(normalizeName(player.n), {
+      name: player.n,
+      status: player.hurt,
+      ...(player.part ? { part: player.part } : {}),
+      ...(player.p ? { position: player.p } : {}),
+      ...(player.t ? { team: player.t } : {}),
     });
   }
 
@@ -334,66 +334,66 @@ export function officeList(all: SleeperMen): Map<string, Listed> {
 
 /**
  * The same list with a league's own rosters folded in, so an ESPN league
- * gets the office's word too. Sleeper's file covers every man in the
+ * gets the injury report's word too. Sleeper's file covers every player in the
  * game, so where both have something to say the file wins and a roster
  * only fills gaps.
  */
-export function officeListWith(
-  listed: Map<string, Listed>, rosters: Man[][],
+export function listedPlayersWith(
+  listed: Map<string, Listed>, rosters: RosterPlayer[][],
 ): Map<string, Listed> {
   const both = new Map(listed);
 
-  for (const man of rosters.flat()) {
-    if (!man.hurt || both.has(man.key)) {
+  for (const player of rosters.flat()) {
+    if (!player.hurt || both.has(player.key)) {
       continue;
     }
 
-    both.set(man.key, {
-      name: man.name,
-      status: man.hurt,
-      ...(man.pos ? { position: man.pos } : {}),
+    both.set(player.key, {
+      name: player.name,
+      status: player.hurt,
+      ...(player.pos ? { position: player.pos } : {}),
     });
   }
 
   return both;
 }
 
-export interface EspnMan {
+export interface EspnPlayer {
   n: string;
   p: string;
 }
 
-export type EspnMen = Record<string, EspnMan>;
+export type EspnPlayers = Record<string, EspnPlayer>;
 
 /** ESPN's whole player list, trimmed and kept for the day */
-let espnMen: EspnMen | null = null;
+let espnFile: EspnPlayers | null = null;
 
 /**
  * Everyone ESPN has, by the numbers it gives them.
  *
  * A pick arrives as a number and nothing else. The rosters in the same
- * answer name only the men already handed out, which before a draft is
+ * answer name only the players already handed out, which before a draft is
  * nobody, so the board would sit blank until somebody picked. This is
  * the list the public site reads and it needs no cookie.
  */
-export async function espnPlayers(season: number): Promise<EspnMen> {
-  if (espnMen) {
-    return espnMen;
+export async function espnPlayers(season: number): Promise<EspnPlayers> {
+  if (espnFile) {
+    return espnFile;
   }
 
-  const key = "espnPlayers." + season;
-  const cached = stored<{ at: number; men: EspnMen } | null>(key, null);
+  const key = "espnPlayers.v2." + season;
+  const cached = stored<{ at: number; players: EspnPlayers } | null>(key, null);
 
   if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) {
-    espnMen = cached.men;
+    espnFile = cached.players;
 
-    return cached.men;
+    return cached.players;
   }
 
   const answered = await fetch(
     "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/" +
       season + "/players?scoringPeriodId=0&view=players_wl",
-    // asked without a limit it returns only the first fifty men
+    // asked without a limit it returns only the first fifty players
     { headers: { "x-fantasy-filter": '{"players":{"limit":4000}}' } },
   );
 
@@ -404,18 +404,18 @@ export async function espnPlayers(season: number): Promise<EspnMen> {
   const raw = await answered.json() as {
     id: number; fullName?: string; defaultPositionId?: number;
   }[];
-  const trimmed: EspnMen = {};
+  const trimmed: EspnPlayers = {};
 
-  for (const man of raw) {
-    const pos = ESPN_POSITIONS[man.defaultPositionId ?? -1];
+  for (const player of raw) {
+    const pos = ESPN_POSITIONS[player.defaultPositionId ?? -1];
 
-    if (man.fullName && pos) {
-      trimmed[man.id] = { n: espnNameOf(man.id, man.fullName, pos), p: pos };
+    if (player.fullName && pos) {
+      trimmed[player.id] = { n: espnNameOf(player.id, player.fullName, pos), p: pos };
     }
   }
 
-  keep(key, { at: Date.now(), men: trimmed });
-  espnMen = trimmed;
+  keep(key, { at: Date.now(), players: trimmed });
+  espnFile = trimmed;
 
   return trimmed;
 }
@@ -449,25 +449,25 @@ function sleeperRecord(r: SleeperRoster): TeamRecord | undefined {
 }
 
 /**
- * One Sleeper man as the board knows him, or nothing when the id is not
+ * One Sleeper player as the board knows him, or nothing when the id is not
  * in the player file. An empty lineup slot arrives as the id "0", so
  * the caller has to cope with nobody being there.
  */
-const sleeperManOf = (men: SleeperMen, id: string): Man | null => {
-  const p = men[id];
+const sleeperPlayerOf = (players: SleeperPlayers, id: string): RosterPlayer | null => {
+  const p = players[id];
 
   return p ? { name: p.n, key: normalizeName(p.n), pos: p.p } : null;
 };
 
-const sleeperMenOf = (men: SleeperMen, ids: string[] | undefined): Man[] =>
+const sleeperPlayersOf = (players: SleeperPlayers, ids: string[] | undefined): RosterPlayer[] =>
   (ids ?? [])
-    .map((id) => sleeperManOf(men, id))
-    .filter((m): m is Man => Boolean(m));
+    .map((id) => sleeperPlayerOf(players, id))
+    .filter((m): m is RosterPlayer => Boolean(m));
 
 /**
  * Which rounds each team still holds.
  *
- * Keeping a man costs the pick he is priced at, so a team without that
+ * Keeping a player costs the pick he is priced at, so a team without that
  * round cannot keep him at any price. A pick dealt away and later
  * bought back reads as both, so it stays put.
  */
@@ -532,7 +532,7 @@ async function sleeperLeagues(username: string): Promise<League[]> {
   const found = await ask(
     "/user/" + user.user_id + "/leagues/nfl/" + state.season,
   );
-  const men = await sleeperPlayers();
+  const players = await sleeperPlayers();
   const out: League[] = [];
 
   for (const lg of (found ?? []) as Record<string, any>[]) {
@@ -561,7 +561,7 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       userId: user.user_id,
       team: nameOf.get(user.user_id) ?? username,
       members: Object.fromEntries(nameOf),
-      myRoster: sleeperMenOf(men, mine?.players),
+      myRoster: sleeperPlayersOf(players, mine?.players),
       myPicks: held(mine ? mine.roster_id : -1),
       // where you sit in the order, so a keeper is priced against the
       // pick you would actually make rather than the middle of a round
@@ -574,7 +574,7 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       allRosters: (rosters as SleeperRoster[]).map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
         picks: held(r.roster_id),
-        keys: sleeperMenOf(men, r.players),
+        keys: sleeperPlayersOf(players, r.players),
         ...(sleeperRecord(r) ? { record: sleeperRecord(r)! } : {}),
       })),
     });
@@ -626,7 +626,7 @@ async function sleeperMatchups(
     ask("/league/" + league.leagueId + "/matchups/" + week),
     ask("/league/" + league.leagueId + "/rosters"),
   ]);
-  const men = await sleeperPlayers();
+  const players = await sleeperPlayers();
   const ownerOf = new Map(
     (rosters as SleeperRoster[] ?? []).map((r) => [
       r.roster_id,
@@ -641,13 +641,13 @@ async function sleeperMatchups(
     const starters: Side["starters"] = [];
 
     for (const [i, id] of starting.entries()) {
-      const man = sleeperManOf(men, id);
+      const player = sleeperPlayerOf(players, id);
 
-      if (man) {
+      if (player) {
         starters.push({
-          key: man.key,
-          name: man.name,
-          slot: slots[i] ?? man.pos ?? "FLEX",
+          key: player.key,
+          name: player.name,
+          slot: slots[i] ?? player.pos ?? "FLEX",
           points: side.starters_points?.[i] ?? scored[id] ?? 0,
         });
       }
@@ -659,10 +659,10 @@ async function sleeperMatchups(
       starters,
       bench: (side.players ?? [])
         .filter((id) => !starting.includes(id))
-        .map((id) => ({ man: sleeperManOf(men, id), points: scored[id] ?? 0 }))
-        .filter((b): b is { man: Man; points: number } => Boolean(b.man))
-        .map(({ man, points }) => ({
-          key: man.key, name: man.name, points,
+        .map((id) => ({ player: sleeperPlayerOf(players, id), points: scored[id] ?? 0 }))
+        .filter((b): b is { player: RosterPlayer; points: number } => Boolean(b.player))
+        .map(({ player, points }) => ({
+          key: player.key, name: player.name, points,
         })),
     };
   };
@@ -824,20 +824,20 @@ function espnRecord(team: EspnTeam): TeamRecord | undefined {
 }
 
 /**
- * One ESPN man as the board knows him.
+ * One ESPN player as the board knows him.
  *
- * A roster entry usually spells the man out, but sometimes gives only
+ * A roster entry usually spells the player out, but sometimes gives only
  * his number, and then the player list is the only way to know him.
  */
-function espnManOf(men: EspnMen, entry: EspnEntry): Man | null {
-  const man = entry.playerPoolEntry?.player;
-  const id = man?.id ?? entry.playerId;
-  const listed = id ? men[id] : undefined;
-  const hurt = ESPN_INJURIES[man?.injuryStatus ?? ""];
+function espnPlayerOf(players: EspnPlayers, entry: EspnEntry): RosterPlayer | null {
+  const player = entry.playerPoolEntry?.player;
+  const id = player?.id ?? entry.playerId;
+  const listed = id ? players[id] : undefined;
+  const hurt = ESPN_INJURIES[player?.injuryStatus ?? ""];
 
-  if (man?.fullName) {
-    const pos = ESPN_POSITIONS[man.defaultPositionId ?? -1] ?? listed?.p ?? "";
-    const name = espnNameOf(id!, man.fullName, pos);
+  if (player?.fullName) {
+    const pos = ESPN_POSITIONS[player.defaultPositionId ?? -1] ?? listed?.p ?? "";
+    const name = espnNameOf(id!, player.fullName, pos);
 
     return { name, key: normalizeName(name), pos, ...(hurt ? { hurt } : {}) };
   }
@@ -961,10 +961,10 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
   const teams = said.teams as EspnTeam[];
   const nameOf = (team: EspnTeam) =>
     (team.name ?? [team.location, team.nickname].filter(Boolean).join(" ")).trim();
-  const men = await espnPlayers(season).catch(() => ({} as EspnMen));
-  const menOf = (team: EspnTeam): Man[] => (team.roster?.entries ?? [])
-    .map((e) => espnManOf(men, e))
-    .filter((m): m is Man => Boolean(m));
+  const players = await espnPlayers(season).catch(() => ({} as EspnPlayers));
+  const playersOf = (team: EspnTeam): RosterPlayer[] => (team.roster?.entries ?? [])
+    .map((e) => espnPlayerOf(players, e))
+    .filter((m): m is RosterPlayer => Boolean(m));
   const rounds = Math.max(
     ...(said.draftDetail?.picks ?? []).map((p: EspnPick) => p.roundId),
     ROUNDS,
@@ -986,7 +986,7 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     userId: String(team.id),
     team: nameOf(team),
     members: Object.fromEntries(teams.map((t) => [String(t.id), nameOf(t)])),
-    myRoster: menOf(team),
+    myRoster: playersOf(team),
     myPicks: everyRound,
     draftSlot: order[String(team.id)] ?? null,
     snake: true,
@@ -995,7 +995,7 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     allRosters: teams.map((t) => ({
       owner: nameOf(t),
       picks: everyRound,
-      keys: menOf(t),
+      keys: playersOf(t),
       ...(espnRecord(t) ? { record: espnRecord(t)! } : {}),
     })),
   }));
@@ -1010,7 +1010,7 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
  * what Sleeper gives too.
  *
  * A pick has only a number in it, so names come from the player list.
- * Where ESPN has already put a man on a roster it gives his name in
+ * Where ESPN has already put a player on a roster it gives his name in
  * this same answer, and that wins, since it cannot be out of date.
  */
 async function espnDraft(league: League): Promise<DraftNow | null> {
@@ -1022,21 +1022,21 @@ async function espnDraft(league: League): Promise<DraftNow | null> {
   }
 
   const picks = detail.picks as EspnPick[];
-  const men = await espnPlayers(league.season).catch(() => ({} as EspnMen));
+  const players = await espnPlayers(league.season).catch(() => ({} as EspnPlayers));
   const named = new Map<number, { name: string; pos: string }>();
 
-  for (const [id, man] of Object.entries(men)) {
-    named.set(Number(id), { name: man.n, pos: man.p });
+  for (const [id, player] of Object.entries(players)) {
+    named.set(Number(id), { name: player.n, pos: player.p });
   }
 
   for (const team of (said.teams ?? []) as EspnTeam[]) {
     for (const entry of team.roster?.entries ?? []) {
-      const man = entry.playerPoolEntry?.player;
-      const id = man?.id ?? entry.playerId;
+      const player = entry.playerPoolEntry?.player;
+      const id = player?.id ?? entry.playerId;
 
-      if (id && man?.fullName) {
-        const pos = ESPN_POSITIONS[man.defaultPositionId ?? -1] ?? "";
-        named.set(id, { name: espnNameOf(id, man.fullName, pos), pos });
+      if (id && player?.fullName) {
+        const pos = ESPN_POSITIONS[player.defaultPositionId ?? -1] ?? "";
+        named.set(id, { name: espnNameOf(id, player.fullName, pos), pos });
       }
     }
   }
@@ -1105,7 +1105,7 @@ async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
     return [];
   }
 
-  const men = await espnPlayers(league.season).catch(() => ({} as EspnMen));
+  const players = await espnPlayers(league.season).catch(() => ({} as EspnPlayers));
   const teams = (said.teams ?? []) as EspnTeam[];
   const ownerOf = new Map(teams.map((t) => [
     t.id,
@@ -1117,9 +1117,9 @@ async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
     const bench: Side["bench"] = [];
 
     for (const entry of side.rosterForCurrentScoringPeriod?.entries ?? []) {
-      const man = espnManOf(men, entry);
+      const player = espnPlayerOf(players, entry);
 
-      if (!man) {
+      if (!player) {
         continue;
       }
 
@@ -1127,12 +1127,12 @@ async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
       const points = entry.playerPoolEntry?.appliedStatTotal ?? 0;
 
       if (ESPN_BENCH.has(slot)) {
-        bench.push({ key: man.key, name: man.name, points });
+        bench.push({ key: player.key, name: player.name, points });
       } else {
         starters.push({
-          key: man.key,
-          name: man.name,
-          slot: ESPN_SLOTS[slot] ?? man.pos ?? "FLEX",
+          key: player.key,
+          name: player.name,
+          slot: ESPN_SLOTS[slot] ?? player.pos ?? "FLEX",
           points,
         });
       }

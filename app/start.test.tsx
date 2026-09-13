@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { MyMatchup } from "./views/Matchup.tsx";
 import { WeekRanks } from "./views/WeekRanks.tsx";
 import {
-  isSplit, readSlate, rosterKeys, verdict, weekRefs, withOutMenZeroed,
+  isSplit, readSlate, rosterKeys, verdict, weekRefs, withOutPlayersZeroed,
   type SlateRow,
 } from "./lib/slate.ts";
 import type { Listed } from "./lib/availability.ts";
@@ -32,7 +32,7 @@ const at = (name: string): SlateRow =>
 
 let where: HTMLElement;
 
-const rowsOf = (listed: Map<string, Listed>) => withOutMenZeroed(
+const rowsOf = (listed: Map<string, Listed>) => withOutPlayersZeroed(
   new Map(slate.rows.map((r) => [normalizeName(r.name), r])), listed,
 );
 
@@ -65,7 +65,7 @@ const myRosterChip = () =>
     .find((b) => b.textContent === "my roster") as
     HTMLButtonElement | undefined;
 
-/** the row for one man, so a test can press compare on him */
+/** the row for one player, so a test can press compare on him */
 const rowFor = (name: string) =>
   Array.from(where.querySelectorAll("table.ranks tbody tr"))
     .find((tr) => tr.querySelector(".who")!.textContent!.trim() === name) as
@@ -78,7 +78,7 @@ beforeEach(() => {
 });
 
 describe("who to start", () => {
-  it("draws every man on the slate", () => {
+  it("draws every player on the slate", () => {
     draw();
 
     expect(where.querySelectorAll("table.ranks tbody tr").length)
@@ -112,7 +112,7 @@ describe("who to start", () => {
     );
   });
 
-  it("marks your own men and can hide everybody else", async () => {
+  it("marks your own players and can hide everybody else", async () => {
     draw(MINE);
 
     const mine = where.querySelectorAll("table.ranks tbody tr.mine");
@@ -136,7 +136,7 @@ describe("who to start", () => {
 
     expect(isSplit(at("Ja'Marr Chase"))).toBe(true);
     expect(isSplit(at("Bijan Robinson"))).toBe(false);
-    // a man Sleeper has no number for is not a disagreement
+    // a player Sleeper has no number for is not a disagreement
     expect(isSplit(at("Chase Brown"))).toBe(false);
 
     const flagged = where.querySelectorAll("table.ranks tbody tr.split");
@@ -146,7 +146,7 @@ describe("who to start", () => {
       .toContain("Sleeper is right about 55% of the time");
   });
 
-  it("says which men are questionable or short of a starter", () => {
+  it("says which players are questionable or short of a starter", () => {
     draw();
 
     expect(rowFor("Ja'Marr Chase").textContent).toContain("questionable");
@@ -154,7 +154,7 @@ describe("who to start", () => {
     expect(rowFor("Trey McBride").textContent).toContain("missed 1");
   });
 
-  it("ranks a man the office has ruled out at nought, and says why", () => {
+  it("ranks a player the injury report has ruled out at zero, and says why", () => {
     draw(null, new Map([[normalizeName("Ja'Marr Chase"), {
       name: "Ja'Marr Chase", status: "Out", part: "hip",
     }]]));
@@ -168,7 +168,7 @@ describe("who to start", () => {
     expect(names()[names().length - 1]).toBe("Ja'Marr Chase");
   });
 
-  it("compares two men at the same position", async () => {
+  it("compares two players at the same position", async () => {
     draw();
 
     rowFor("Josh Allen").click();
@@ -181,7 +181,7 @@ describe("who to start", () => {
     expect(where.querySelector(".clock")!.textContent).toContain("83%");
   });
 
-  it("starts over when the second man plays another position", async () => {
+  it("starts over when the second player plays another position", async () => {
     draw();
 
     rowFor("Josh Allen").click();
@@ -197,7 +197,7 @@ describe("who to start", () => {
     render(
       <MyMatchup
         weeks={[]} picked={null} onWeek={() => {}} slate={null}
-        games={[]} rows={new Map()} men={[]} mine={null} slots={null}
+        games={[]} rows={new Map()} players={[]} mine={null} slots={null}
         listed={new Map()}
       />,
       where,

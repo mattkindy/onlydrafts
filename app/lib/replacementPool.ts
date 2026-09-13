@@ -3,9 +3,9 @@
  * question at different positions.
  *
  * A back you draft, you keep, and the backs on waivers are poor, so the
- * last man the league starts is a fair stand-in. A kicker or a defence
+ * last player the league starts is a fair stand-in. A kicker or a defence
  * you replace any week you like, so what you weigh him against is the
- * best man nobody rosters plus whatever choosing weekly on the matchup
+ * best player nobody rosters plus whatever choosing weekly on the matchup
  * adds. That comes out far above the last starter's average, which is
  * why a defence looks worth a sixth-round pick when it is not. How many
  * are rostered comes off the league where we have it, so a room where
@@ -47,8 +47,8 @@ export function rosteredCounts(rosters: Roster[]): Record<string, number> {
   const tally: Record<string, number> = {};
 
   for (const team of rosters) {
-    for (const man of team.keys) {
-      const where = man.pos;
+    for (const player of team.keys) {
+      const where = player.pos;
 
       if (!where) {
         continue;
@@ -64,7 +64,7 @@ export function rosteredCounts(rosters: Roster[]): Record<string, number> {
 /**
  * How many are rostered, from the league when it has told us and from
  * the roster arithmetic when it has not. Before a draft nobody owns
- * anybody, so the counts are nought and the settings answer instead.
+ * anybody, so the counts are zero and the settings answer instead.
  */
 export function keptAt(
   position: string, teams: number, rosters: Roster[] | null | undefined,
@@ -80,7 +80,7 @@ export function keptAt(
 
 /**
  * What the wire gives you at a position you replace week to week: the
- * best man nobody rosters, plus what choosing weekly on the matchup is
+ * best player nobody rosters, plus what choosing weekly on the matchup is
  * worth on top of him.
  *
  * The gain is added rather than read as the best week the pool happened
@@ -89,11 +89,11 @@ export function keptAt(
  * 9.15 a game where a person choosing weekly gets 7.61.
  */
 export function offWaivers(
-  men: Player[], position: string, teams: number,
+  players: Player[], position: string, teams: number,
   rosters: Roster[] | null | undefined,
   kept = keptAt(position, teams, rosters),
 ): number | null {
-  const best = men
+  const best = players
     .filter((p) => p.position === position)
     .sort((a, b) => (b.ppg ?? 0) - (a.ppg ?? 0))
     .slice(kept)[0]?.ppg;
@@ -106,28 +106,28 @@ export function offWaivers(
 }
 
 /**
- * What the wire gives you at every position, for a seat nobody on your
+ * What the wire gives you at every position, for a slot nobody on your
  * roster can fill that week.
  *
  * How many are already spoken for is the whole question. Teams keep one
  * kicker and one defence, so the wire kicker is the thirteenth in a
  * twelve team league. They keep backs and receivers in bulk, and a
  * league that starts twenty nine backs has at least that many gone, so
- * counting one a team there would hand an empty flex a man who is
+ * counting one a team there would hand an empty flex a player who is
  * somebody's second back.
  */
 export function waiverBar(
-  men: Player[], slots: string[] | null | undefined, teams: number,
+  players: Player[], slots: string[] | null | undefined, teams: number,
   rosters: Roster[] | null | undefined,
 ): Record<string, number> {
   const started = startedHere(slots, teams);
   const bar: Record<string, number> = {};
 
-  for (const position of new Set(men.map((p) => p.position))) {
+  for (const position of new Set(players.map((p) => p.position))) {
     const gone = Math.max(
       keptAt(position, teams, rosters), started[position] ?? 0,
     );
-    const best = offWaivers(men, position, teams, rosters, gone);
+    const best = offWaivers(players, position, teams, rosters, gone);
 
     if (best !== null) {
       bar[position] = best;
@@ -138,16 +138,16 @@ export function waiverBar(
 }
 
 export interface PoolInput {
-  men: Player[];
+  players: Player[];
   teams: number;
   rosters?: Roster[] | null;
-  /** the last man the league starts at each position, the old measure */
+  /** the last player the league starts at each position, the old measure */
   lastStarter: Record<string, number>;
 }
 
 /**
  * The bar every position is measured against. Streamed positions get
- * the best off waivers, everybody else keeps the last man the league
+ * the best off waivers, everybody else keeps the last player the league
  * starts, since that is who you would be playing instead of him.
  */
 export function replacementBar(input: PoolInput): Record<string, number> {
@@ -155,7 +155,7 @@ export function replacementBar(input: PoolInput): Record<string, number> {
 
   for (const position of STREAMED) {
     const best = offWaivers(
-      input.men, position, input.teams, input.rosters,
+      input.players, position, input.teams, input.rosters,
     );
 
     if (best !== null) {
