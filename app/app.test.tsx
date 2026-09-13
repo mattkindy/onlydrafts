@@ -197,7 +197,7 @@ describe("the views", () => {
     render(
       <PlayerSheet
         p={men[0]!} plus={["a factor"]} minus={[]} teams={12}
-        kept={false} onKeep={() => {}} onClose={() => {}}
+        onClose={() => {}}
       />,
       where,
     );
@@ -457,8 +457,7 @@ describe("a week row keeps its shape", () => {
 
     render(
       <PlayerSheet
-        p={p} plus={[]} minus={[]} teams={12} kept={false}
-        onKeep={() => {}} onClose={() => {}}
+        p={p} plus={[]} minus={[]} teams={12} onClose={() => {}}
       />,
       where,
     );

@@ -58,6 +58,8 @@ export interface League {
    * say, and then the page asks the reader.
    */
   keepers?: boolean | null;
+  /** how many each team may keep, when the provider says */
+  keepersPerTeam?: number | null;
 }
 
 export interface Provider {
@@ -513,8 +515,9 @@ function keeperLeague(
 ): boolean {
   const settings = (lg["settings"] ?? {}) as Record<string, number>;
 
-  return (settings["max_keepers"] ?? 0) > 0 ||
-    settings["type"] === 2 ||
+  // max_keepers is 1 on every redraft league too, so it says nothing;
+  // type is 0 redraft, 1 keeper, 2 dynasty
+  return (settings["type"] ?? 0) > 0 ||
     rosters.some((r) => (r.keepers?.length ?? 0) > 0);
 }
 
@@ -565,6 +568,9 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       draftSlot: drafts?.[0]?.draft_order?.[user.user_id] ?? null,
       snake: !drafts?.[0] || drafts[0].type === "snake",
       keepers: keeperLeague(lg, rosters as SleeperRoster[]),
+      keepersPerTeam: keeperLeague(lg, rosters as SleeperRoster[])
+        ? (lg["settings"]?.["max_keepers"] ?? null)
+        : null,
       allRosters: (rosters as SleeperRoster[]).map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
         picks: held(r.roster_id),
@@ -985,6 +991,7 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     draftSlot: order[String(team.id)] ?? null,
     snake: true,
     keepers: (settings.draftSettings?.keeperCount ?? 0) > 0,
+    keepersPerTeam: settings.draftSettings?.keeperCount || null,
     allRosters: teams.map((t) => ({
       owner: nameOf(t),
       picks: everyRound,

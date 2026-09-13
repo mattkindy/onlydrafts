@@ -313,9 +313,6 @@ export function MyDraftPicks(props: Props) {
 
   return (
     <>
-      <p class="hint">
-        Each pick vs the best player still on the board at the time.
-      </p>
       <table class="rating">
             <thead>
               <tr>

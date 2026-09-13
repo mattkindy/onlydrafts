@@ -351,6 +351,17 @@
   .disclose:hover { color: var(--ink); }
   .disclose .chev { color: var(--go); font-size: var(--t3); line-height: 1;
     width: .8rem; }
+  /* a section heading that opens its section: the whole row taps, and
+     the chevron turns rather than swapping glyphs */
+  .fold { display: flex; align-items: center; justify-content: space-between;
+    width: 100%; background: none; border: none; border-top: 1px solid var(--edge);
+    padding: var(--s3) 0 0; margin-top: var(--s4); color: var(--faint);
+    cursor: pointer; min-height: var(--tap); }
+  .fold h2 { margin: 0; }
+  .fold .chev { color: var(--muted); transition: transform .15s ease; }
+  .fold .chev.open { transform: rotate(180deg); }
+  .fold:hover .chev { color: var(--ink); }
+  @media (prefers-reduced-motion: reduce) { .fold .chev { transition: none; } }
   .keeperfold { border-top: 1px solid var(--edge); margin-top: var(--s2);
     padding-top: var(--s2); }
   /* a plain word you can press, for the odd one-off that is neither a
@@ -462,8 +473,14 @@
 
   .sheet { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 14px; padding: var(--s4) var(--s5); max-width: 34rem;
-    width: 100%; }
-  .sheet h3 { margin: 0; font-size: var(--t5); text-wrap: balance; }
+    width: 100%; position: relative; }
+  .sheet h3 { margin: 0; font-size: var(--t5); text-wrap: balance;
+    padding-right: var(--tap); }
+  .shut { position: absolute; top: var(--s2); right: var(--s2);
+    min-width: var(--tap); min-height: var(--tap); border: none;
+    background: none; color: var(--muted); font-size: var(--t5);
+    line-height: 1; cursor: pointer; border-radius: 50%; }
+  .shut:hover, .shut:focus-visible { color: var(--ink); background: var(--chip); }
   .sheet .sub { color: var(--faint); font-size: var(--t2);
     margin-bottom: var(--s3); }
   .wk { display: grid; grid-template-columns: 2.2rem 3.2rem 1fr 3.6rem;
@@ -493,7 +510,6 @@
   .fact { font-size: var(--t2); margin: .15rem 0; }
   .fact.p::before { content: "+ "; color: var(--go); font-weight: 700; }
   .fact.m::before { content: "- "; color: var(--mark); font-weight: 700; }
-  .sheet .row { display: flex; gap: var(--s3); margin-top: var(--s4); }
   .league-card .nm { font-size: var(--t4); }
   /* what he does in a game, so the points beside it can be checked */
   .statline { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2);
