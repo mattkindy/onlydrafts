@@ -44,6 +44,12 @@ export interface CardProps {
   teamsInLeague?: number;
   /** where his season could place him at his position */
   finish?: Finish | null;
+  /**
+   * The roster reads twelve cards in a column on a phone, so it asks
+   * for the header, one line of figures and nothing else. The board
+   * still gets the bar and the box score.
+   */
+  slim?: boolean;
   mine?: boolean;
   kept?: boolean;
   gone?: boolean;
@@ -225,9 +231,9 @@ export function Card(props: CardProps) {
       <div class="sub">
         <span>{p.position} &middot; {p.team ?? ""}</span>
       </div>
-      {props.teamsInLeague
+      {!props.slim && (props.teamsInLeague
         ? <OnTheBoard p={p} teams={props.teamsInLeague} />
-        : range && <Spread range={range} max={props.max} />}
+        : range && <Spread range={range} max={props.max} />)}
       {props.finish && <Finishes finish={props.finish} />}
       {props.note && <div class="note">{props.note}</div>}
       {props.tag && (
@@ -242,11 +248,31 @@ export function Card(props: CardProps) {
  * The few figures that put the big number in context: where we have
  * him, where the room has him, how many games he plays, and his bye.
  */
-function Facts({ p, teams, costs, aside }: {
+function Facts({ p, teams, costs, aside, slim }: {
   p: Player; teams: number; costs?: number | null;
   aside?: { label: string; value: string };
+  slim?: boolean;
 }) {
   const rounds = roundsOfGap(p, teams);
+
+  if (slim) {
+    return (
+      <span class="facts">
+        <span class="f">
+          <i>pts/g</i>{(p.game?.["ev"] ?? p.ppg ?? 0).toFixed(1)}
+        </span>
+        {p.games !== undefined && (
+          <span
+            class="f"
+            title="projected games, from his injury history, his age and his workload"
+          >
+            <i>games</i>{p.games.toFixed(1)}
+          </span>
+        )}
+        {p.bye ? <span class="f"><i>bye</i>{p.bye}</span> : null}
+      </span>
+    );
+  }
 
   return (
     <span class="facts">
@@ -396,12 +422,16 @@ export function SeasonCard(
             tailLow: g["low"], tailHigh: g["high"],
           }
         : undefined}
-      note={
-        <>
-          <StatLine p={p} />
-          <Facts p={p} teams={teams} costs={props.costs} aside={props.aside} />
-        </>
-      }
+      note={props.slim
+        ? <Facts p={p} teams={teams} slim />
+        : (
+          <>
+            <StatLine p={p} />
+            <Facts
+              p={p} teams={teams} costs={props.costs} aside={props.aside}
+            />
+          </>
+        )}
     />
   );
 }
