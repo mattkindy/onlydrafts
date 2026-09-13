@@ -11,6 +11,7 @@ import { useMemo } from "preact/hooks";
 import {
   bestLineupFor, standingFor, type GameState, type Lines,
 } from "../lib/matchups.ts";
+import { wholePair } from "../lib/pctPair.ts";
 import type { Side } from "../lib/providers.ts";
 import type { SlateRow } from "../lib/slate.ts";
 
@@ -35,6 +36,21 @@ export function pct(share: number): string {
     : Math.ceil(inTenths) / 10;
 
   return tenths.toFixed(1) + "%";
+}
+
+const whole = (share: number) => share >= 0.01 && share <= 0.99;
+
+/**
+ * Both sides of one game. When both print whole they are made to add
+ * up to 100; a side under 1% or over 99% keeps its tenths, and those
+ * already add up.
+ */
+export function pctPair(odds: number): [string, string] {
+  if (!whole(odds) || !whole(1 - odds)) {
+    return [pct(odds), pct(1 - odds)];
+  }
+
+  return wholePair(odds).map((n) => n + "%") as [string, string];
 }
 
 /**
