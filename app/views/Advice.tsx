@@ -24,10 +24,20 @@ export const pct = (share: number) => (100 * share).toFixed(0) + "%";
 export const gainPct = (share: number) =>
   100 * share < 0.5 ? "<1%" : "+" + pct(share);
 
-/** whatever anybody calls this man: the week, the board, or his key */
+/**
+ * Whatever anybody calls this man: the week, the board, the provider, or
+ * failing all three his key. The key is a name with its spaces taken out,
+ * so falling straight to it printed "treysmack" on a kicker's row.
+ */
 export const nameOf = (
-  key: string, rows: Map<string, SlateRow>, lines: Lines,
-) => rows.get(key)?.name ?? lines.get(key)?.name ?? key;
+  key: string, rows: Map<string, SlateRow>, lines: Lines, said?: string,
+) => rows.get(key)?.name ?? lines.get(key)?.name ?? said ?? key;
+
+/** what the provider calls every man in a game, by the key a lineup uses */
+export const namesIn = (sides: Side[]) => new Map(
+  sides.flatMap((side) => [...side.starters, ...side.bench])
+    .map((man) => [man.key, man.name] as const),
+);
 
 interface Props {
   side: Side;
@@ -40,12 +50,37 @@ interface Props {
   odds?: number;
   /** what the remainder engine says a man in a live game still has to come */
   remainder?: Map<string, number[]> | null;
+  /** opens a man's sheet, where the page has one to open */
+  onMore?: (key: string) => void;
+}
+
+/**
+ * A man's name where tapping it opens his sheet. Every name on the page
+ * opens the same sheet, so they all have to look alike and none of them
+ * can be a bare span some readers learn is dead.
+ */
+export function Who(
+  { name, onOpen }: { name: string; onOpen?: (() => void) | undefined },
+) {
+  if (!onOpen) {
+    return <>{name}</>;
+  }
+
+  return (
+    <button
+      class="who link"
+      onClick={(e) => { e.stopPropagation(); onOpen(); }}
+    >
+      {name}
+    </button>
+  );
 }
 
 export function Advice(
-  { side, against, slots, rows, states, lines, odds, remainder }: Props,
+  { side, against, slots, rows, states, lines, odds, remainder, onMore }: Props,
 ) {
   const played = remainder ?? undefined;
+  const said = useMemo(() => namesIn([side, against]), [side, against]);
   const best = useMemo(
     () => bestLineupFor(
       side, against, slots, rows, states, undefined, lines, played),
@@ -76,9 +111,17 @@ export function Advice(
       <ul>
         {best.swaps.map((swap) => (
           <li key={swap.starts + swap.benches}>
-            Start {nameOf(swap.starts, rows, lines)} over{" "}
-            {nameOf(swap.benches, rows, lines)} at {swap.slot}{" "}
-            <span class="gain">({gainPct(swap.gains)})</span>
+            Start{" "}
+            <Who
+              name={nameOf(swap.starts, rows, lines, said.get(swap.starts))}
+              onOpen={onMore ? () => onMore(swap.starts) : undefined}
+            />{" "}
+            over{" "}
+            <Who
+              name={nameOf(swap.benches, rows, lines, said.get(swap.benches))}
+              onOpen={onMore ? () => onMore(swap.benches) : undefined}
+            />{" "}
+            at {swap.slot} <span class="gain">({gainPct(swap.gains)})</span>
           </li>
         ))}
       </ul>

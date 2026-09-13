@@ -147,10 +147,14 @@ describe("this week's matchups on Sleeper", () => {
     expect([home.owner, away.owner]).toEqual(["one", "two"]);
     expect([home.points, away.points]).toEqual([88.5, 71]);
     expect(home.starters).toEqual([
-      { key: "joshallen", slot: "QB", points: 24.1 },
-      { key: "bijanrobinson", slot: "RB", points: 64.4 },
+      { key: "joshallen", name: "Josh Allen", slot: "QB", points: 24.1 },
+      {
+        key: "bijanrobinson", name: "Bijan Robinson", slot: "RB",
+        points: 64.4,
+      },
     ]);
-    expect(home.bench).toEqual([{ key: "pukanacua", points: 7.2 }]);
+    expect(home.bench)
+      .toEqual([{ key: "pukanacua", name: "Puka Nacua", points: 7.2 }]);
     expect(away.starters.map((s) => s.key)).toEqual(["pukanacua", "jahmyrgibbs"]);
     expect(away.bench).toEqual([]);
   });
@@ -218,10 +222,14 @@ describe("this week's matchups on ESPN", () => {
     // used for a side whose games have not started
     expect([home.points, away.points]).toEqual([88.5, 71]);
     expect(home.starters).toEqual([
-      { key: "joshallen", slot: "QB", points: 24.1 },
-      { key: "bijanrobinson", slot: "RB", points: 64.4 },
+      { key: "joshallen", name: "Josh Allen", slot: "QB", points: 24.1 },
+      {
+        key: "bijanrobinson", name: "Bijan Robinson", slot: "RB",
+        points: 64.4,
+      },
     ]);
-    expect(home.bench).toEqual([{ key: "pukanacua", points: 7.2 }]);
+    expect(home.bench)
+      .toEqual([{ key: "pukanacua", name: "Puka Nacua", points: 7.2 }]);
     expect(away.starters.map((s) => s.slot)).toEqual(["RB", "WR"]);
   });
 });
