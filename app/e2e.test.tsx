@@ -68,6 +68,67 @@ it("the shipped files load and score end to end", async () => {
 });
 
 /**
+ * What dropping your best back costs, against the same figure worked out
+ * by hand.
+ *
+ * Ten points of win chance reads small to anybody who takes it for a
+ * season number, so the check is that it is the weekly number it claims
+ * to be: shift the mean of a weekly margin by the points he takes with
+ * him and the normal curve says how much of the week you lose.
+ */
+it("prices dropping a first back the way the margin says it should", async () => {
+  const { roomFor } = await import("./lib/draftShare.ts");
+  const { dropsFor } = await import("./lib/waivers.ts");
+  const { baselineFor, notePassCatchers } = await import("./lib/winShare.ts");
+  const slots = [
+    "QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF",
+    "BN", "BN", "BN", "BN", "BN", "BN",
+  ];
+  const file = JSON.parse(
+    readFileSync(join(DATA, "board-2026.json"), "utf8"),
+  ) as { players: Parameters<typeof rescore>[0] };
+  const men = rescore(file.players, {
+    teams: 12,
+    slots,
+    pays: {
+      rec: 0.5, rec_yd: 0.1, rec_td: 6, rush_yd: 0.1, rush_td: 6,
+      pass_yd: 0.04, pass_td: 4, int: -2, fum_lost: -2,
+    },
+  });
+
+  notePassCatchers(men, null);
+
+  const named = (name: string) => men.find((p) => p.name.includes(name))!;
+  const mine = [
+    "Jahmyr Gibbs", "Saquon Barkley", "Quinshon Judkins", "Rico Dowdle",
+    "Nico Collins", "Chris Godwin", "Xavier Worthy", "Omar Cooper",
+    "Harold Fannin", "Lamar Jackson", "Matthew Stafford", "Cam Little",
+  ].map(named).filter(Boolean);
+  const draws = 1000;
+  const room = roomFor(men, slots, 12, draws, null);
+  const gibbs = named("Jahmyr Gibbs");
+  const his = dropsFor(mine, slots, room).find((d) => d.p.key === gibbs.key)!;
+
+  expect(his.starts).toBeGreaterThan(0.8);
+  expect(his.takes).toBeGreaterThan(8);
+  expect(his.before).toBeGreaterThan(his.after);
+
+  const held = baselineFor(mine, slots, draws, room.wire);
+  const margin = held.total.map((x, i) => x - room.opponent[i]!);
+  const mean = margin.reduce((s, x) => s + x, 0) / margin.length;
+  const sd = Math.sqrt(
+    margin.reduce((s, x) => s + (x - mean) ** 2, 0) / margin.length);
+  const phi = (z: number) =>
+    0.5 * (1 + Math.sign(z) * Math.sqrt(1 - Math.exp(-2 * z * z / Math.PI)));
+  const byHand = phi(mean / sd) - phi((mean - his.takes) / sd);
+
+  expect(
+    Math.abs(his.costs - byHand),
+    `model ${(100 * his.costs).toFixed(1)} vs by hand ${(100 * byHand).toFixed(1)}`,
+  ).toBeLessThan(0.04);
+});
+
+/**
  * A defence is in the week's slate like anyone else, and the start/sit
  * view has to find it by the key it keys a defence with, which is the
  * side's abbreviation in lower case.

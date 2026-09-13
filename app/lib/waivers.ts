@@ -15,14 +15,21 @@
 
 import type { Player } from "./scoring.ts";
 import type { Room } from "./draftShare.ts";
-import { baselineFor, winChance, winShareFor } from "./winShare.ts";
+import {
+  baselineFor, winChance, winShareFor, type Baseline, type Priced,
+} from "./winShare.ts";
 
-export interface Add {
+/**
+ * Under half a point of win chance is inside the noise of a few thousand
+ * drawn weeks, so a page that lists such a man is inviting a move that
+ * changes nothing.
+ */
+export const WORTH_ADDING = 0.005;
+
+export interface Add extends Omit<Priced, "displaces"> {
   p: Player;
-  /** how much more often you win a week with him on the roster */
-  added: number;
-  /** how often he ends up in the lineup at all */
-  starts: number;
+  /** the man he takes the seat from, or nobody when it was a wire seat */
+  displaced: Player | null;
 }
 
 export interface Drop {
@@ -30,6 +37,13 @@ export interface Drop {
   /** how much less often you win a week once he is gone */
   costs: number;
   starts: number;
+  /** how many points a week your lineup loses with him gone */
+  takes: number;
+  /** how often you win a week with him, and how often without him */
+  before: number;
+  after: number;
+  /** who starts most in the weeks he would have, nobody if the wire does */
+  heir: Player | null;
 }
 
 export interface Net {
@@ -37,6 +51,9 @@ export interface Net {
   net: number;
   /** who goes, or nobody when there is a spot for him */
   drop: Player | null;
+  /** how often you win a week as you are, and how often after the move */
+  before: number;
+  after: number;
 }
 
 /**
@@ -50,9 +67,17 @@ export function addsFor(
 ): Add[] {
   const base = baselineFor(mine, slots, room.draws, room.wire);
   const worth = winShareFor(base, room.opponent, room.draws);
+  const byKey = new Map(mine.map((p) => [p.key, p]));
 
   return pool
-    .map((p) => ({ p, ...worth(p) }))
+    .map((p) => {
+      const { displaces, ...his } = worth(p);
+
+      return {
+        p, ...his,
+        displaced: displaces ? byKey.get(displaces) ?? null : null,
+      };
+    })
     .sort((a, b) => b.added - a.added);
 }
 
@@ -67,19 +92,49 @@ export function dropsFor(
   const held = baselineFor(mine, slots, room.draws, room.wire);
   const with_ = winChance(held.total, room.opponent);
   const weeks = Math.max(1, held.total.length);
+  const scores = mean(held.total);
 
   return mine
     .map((p) => {
       const rest = mine.filter((q) => q.key !== p.key);
       const base = baselineFor(rest, slots, room.draws, room.wire);
+      const after = winChance(base.total, room.opponent);
 
       return {
         p,
-        costs: with_ - winChance(base.total, room.opponent),
+        costs: with_ - after,
         starts: (held.started[p.key] ?? 0) / weeks,
+        takes: scores - mean(base.total),
+        before: with_,
+        after,
+        heir: heirTo(rest, held, base),
       };
     })
     .sort((a, b) => b.costs - a.costs);
+}
+
+const mean = (xs: number[]) =>
+  xs.reduce((sum, x) => sum + x, 0) / Math.max(1, xs.length);
+
+/**
+ * Who ends up starting in his place: the man who gains the most weeks in
+ * the lineup once he is gone. Nobody, when every week he started is
+ * filled off the wire instead.
+ */
+function heirTo(rest: Player[], held: Baseline, base: Baseline): Player | null {
+  let heir: Player | null = null;
+  let most = 0;
+
+  for (const q of rest) {
+    const gained = (base.started[q.key] ?? 0) - (held.started[q.key] ?? 0);
+
+    if (gained > most) {
+      most = gained;
+      heir = q;
+    }
+  }
+
+  return heir;
 }
 
 /**
@@ -125,7 +180,9 @@ export function netFor(
   openSpots: number | null,
 ): Net {
   if (openSpots !== null && openSpots > 0) {
-    return { net: add.added, drop: null };
+    return {
+      net: add.added, drop: null, before: add.before, after: add.after,
+    };
   }
 
   const now = baselineFor(mine, slots, room.draws, room.wire);
@@ -136,16 +193,21 @@ export function netFor(
     .pop();
 
   if (!cheapest) {
-    return { net: add.added, drop: null };
+    return {
+      net: add.added, drop: null, before: add.before, after: add.after,
+    };
   }
 
-  const after = baselineFor(
+  const swapped = baselineFor(
     withHim.filter((p) => p.key !== cheapest.p.key),
     slots, room.draws, room.wire,
   );
+  const after = winChance(swapped.total, room.opponent);
 
   return {
-    net: winChance(after.total, room.opponent) - held,
+    net: after - held,
     drop: cheapest.p,
+    before: held,
+    after,
   };
 }

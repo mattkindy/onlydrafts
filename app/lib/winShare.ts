@@ -27,6 +27,8 @@ export interface Held {
   expect: number;
   score: number;
   wire?: boolean;
+  /** his key, so a page can name the man a newcomer pushes out */
+  who?: string;
 }
 
 export interface Baseline {
@@ -278,7 +280,7 @@ export function baselineFor(
         !s.taken && s.where.includes(man.p.position));
 
       if (seat) {
-        seat.taken = { expect: man.expect, score };
+        seat.taken = { expect: man.expect, score, who: man.p.key };
         started[man.p.key] = (started[man.p.key] ?? 0) + 1;
       }
     }
@@ -521,6 +523,43 @@ export interface WinShare {
 }
 
 /**
+ * A win share with the points behind it, for a page that has to say why
+ * the number is what it is.
+ *
+ * A reader cannot tell a man who adds two points of win chance by
+ * scoring eight more points a week from one who adds the same by
+ * starting three weeks in twenty, and the two are different pickups.
+ */
+export interface Priced extends WinShare {
+  /** how many more points a week your lineup scores with him */
+  brings: number;
+  /** how often you win a week as you are, and how often with him */
+  before: number;
+  after: number;
+  /**
+   * The man he pushes out of the lineup in most of the weeks he starts,
+   * by his key. Nobody when the seat he takes was filled off the wire.
+   */
+  displaces: string | null;
+}
+
+/** whoever the count is highest for, or nobody when it is empty */
+function commonest(counts: Map<string, number>): string | null {
+  let best: string | null = null;
+
+  for (const [key, n] of counts) {
+    if (best === null || n > counts.get(best)!) {
+      best = key;
+    }
+  }
+
+  return best;
+}
+
+const meanOf = (xs: number[]) =>
+  xs.reduce((sum, x) => sum + x, 0) / Math.max(1, xs.length);
+
+/**
  * What taking each man at this turn does to your week, with the rest of
  * the draft filled in around him.
  *
@@ -610,18 +649,23 @@ function wouldStart(his: number, seat: Held): boolean {
 
 export function winShareFor(
   baseline: Baseline, opponent: number[], draws = DRAWS,
-): (p: Player) => WinShare {
+): (p: Player) => Priced {
   const without = winChance(baseline.total, opponent);
+  const now = meanOf(baseline.total);
 
   return (p: Player) => {
     const his = weeksOf(p, draws);
     const beats = baseline.displaced[p.position];
 
     if (!beats) {
-      return { added: 0, starts: 0 };
+      return {
+        added: 0, starts: 0, brings: 0, displaces: null,
+        before: without, after: without,
+      };
     }
 
     const withHim: number[] = [];
+    const pushedOut = new Map<string, number>();
     let started = 0;
 
     for (let i = 0; i < baseline.total.length; i++) {
@@ -636,14 +680,24 @@ export function winShareFor(
 
       if (starts) {
         started++;
+
+        if (out.who) {
+          pushedOut.set(out.who, (pushedOut.get(out.who) ?? 0) + 1);
+        }
       }
 
       withHim.push(baseline.total[i]! + (starts ? his[i]! - out.score : 0));
     }
 
+    const after = winChance(withHim, opponent);
+
     return {
-      added: winChance(withHim, opponent) - without,
+      added: after - without,
       starts: started / Math.max(1, baseline.total.length),
+      brings: meanOf(withHim) - now,
+      before: without,
+      after,
+      displaces: commonest(pushedOut),
     };
   };
 }
