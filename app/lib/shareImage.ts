@@ -53,10 +53,10 @@ export const SITE = "onlydrafts";
 /** the export is a fixed width, so a phone and a laptop make the same picture */
 export const WIDTH = 1080;
 const PAD = 40;
-const HEAD = 152;
+const HEAD = 168;
 const FOOT = 72;
-const CARD_GAP = 20;
-const CARD_BASE = 212;
+const CARD_GAP = 28;
+const CARD_BASE = 300;
 const CARD_OWNER = 26;
 
 /** one side of one card, with everything already turned into words */
@@ -220,15 +220,15 @@ function drawSide(
 
   ctx.fillStyle = SHADES.ink;
   ctx.font = "800 46px " + FONT;
-  ctx.fillText(side.points, x, y + 52);
+  ctx.fillText(side.points, x, y + 64);
 
   ctx.fillStyle = SHADES.muted;
   ctx.font = "600 24px " + FONT;
-  ctx.fillText(side.projected, x, y + 86);
+  ctx.fillText(side.projected, x, y + 108);
 
   ctx.fillStyle = side.favoured ? SHADES.go : SHADES.muted;
   ctx.font = "800 26px " + FONT;
-  ctx.fillText(side.odds, x, y + 120);
+  ctx.fillText(side.odds, x, y + 156);
 }
 
 /** the only part that touches a canvas */
@@ -268,10 +268,10 @@ export function drawOn(canvas: HTMLCanvasElement, layout: Layout, scale = 2) {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    drawSide(ctx, card.sides[0], 0, left, right, card.y + 26);
-    drawSide(ctx, card.sides[1], 1, left, right, card.y + 26);
+    drawSide(ctx, card.sides[0], 0, left, right, card.y + 36);
+    drawSide(ctx, card.sides[1], 1, left, right, card.y + 36);
 
-    const bar = card.y + card.height - 30;
+    const bar = card.y + card.height - 48;
     const wide = right - left;
 
     ctx.fillStyle = SHADES.chip;
