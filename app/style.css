@@ -667,6 +667,10 @@
      as a different player */
   .playername b { font-weight: 600; overflow-wrap: break-word; hyphens: none; }
   .playername i { font-style: normal; font-size: var(--t1); color: var(--faint); }
+  /* his box score goes under the team, and wraps rather than pushing the
+     figures out of their column */
+  .playername .line { font-size: var(--t1); color: var(--faint);
+    font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
   /* the figures hug the chip column at one width, so every row's
      score and projection line up down the card */
   .player .num { display: flex; flex-direction: column; flex: 0 0 2.6rem;
