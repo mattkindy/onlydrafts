@@ -15,11 +15,25 @@ export const fitted = (name: string) =>
   name.length > FITS ? initialForm(name) : name;
 
 export function ManName(
-  { name, team }: { name: string; team?: string | null },
+  { name, team, onOpen }: {
+    name: string;
+    team?: string | null;
+    /** opens his sheet, which every name on the page does */
+    onOpen?: (() => void) | undefined;
+  },
 ) {
   return (
     <span class="manname" title={name}>
-      <b>{fitted(name)}</b>
+      {onOpen
+        ? (
+          <button
+            class="link"
+            onClick={(e) => { e.stopPropagation(); onOpen(); }}
+          >
+            {fitted(name)}
+          </button>
+        )
+        : <b>{fitted(name)}</b>}
       {team && <i>{team}</i>}
     </span>
   );

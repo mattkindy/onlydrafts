@@ -434,6 +434,8 @@ export interface Starter {
   points?: number;
   /** the seat he is in, which says what position to fall back on */
   slot?: string;
+  /** what the provider calls him, for a man nobody else has a name for */
+  name?: string;
 }
 
 /** the position a seat implies, for a man nobody has a line on */
@@ -961,6 +963,8 @@ export function initialForm(name: string): string {
 /** one bench man measured against the starter in a seat */
 export interface Alternative {
   key: string;
+  /** what the provider calls him, for a man nobody else has a name for */
+  name?: string | undefined;
   position: string;
   /** what starting him instead would do to the win chance */
   gains: number;
@@ -1051,6 +1055,7 @@ export function alternativesFor(
 
         return {
           key: one.man.key,
+          name: one.man.name,
           position: one.line!.position,
           gains,
           locked: shut || locked(one.man, rows, states, lines),

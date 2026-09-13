@@ -77,9 +77,14 @@ export interface Matchup {
 export interface Side {
   owner: string;
   points: number;
-  /** each starter, in lineup order, with what he has scored so far this week */
-  starters: { key: string; slot: string; points: number }[];
-  bench: { key: string; points: number }[];
+  /**
+   * Each starter, in lineup order, with what he has scored so far this
+   * week. The name is the provider's own spelling, kept because a man the
+   * board and the week both miss would otherwise be drawn as his key, and
+   * "treysmack" on a lineup row reads as somebody's username.
+   */
+  starters: { key: string; name?: string; slot: string; points: number }[];
+  bench: { key: string; name?: string; points: number }[];
 }
 
 export interface DraftNow {
@@ -635,6 +640,7 @@ async function sleeperMatchups(
       if (man) {
         starters.push({
           key: man.key,
+          name: man.name,
           slot: slots[i] ?? man.pos ?? "FLEX",
           points: side.starters_points?.[i] ?? scored[id] ?? 0,
         });
@@ -647,8 +653,11 @@ async function sleeperMatchups(
       starters,
       bench: (side.players ?? [])
         .filter((id) => !starting.includes(id))
-        .map((id) => ({ key: sleeperManOf(men, id)?.key, points: scored[id] ?? 0 }))
-        .filter((b): b is { key: string; points: number } => Boolean(b.key)),
+        .map((id) => ({ man: sleeperManOf(men, id), points: scored[id] ?? 0 }))
+        .filter((b): b is { man: Man; points: number } => Boolean(b.man))
+        .map(({ man, points }) => ({
+          key: man.key, name: man.name, points,
+        })),
     };
   };
 
@@ -1111,10 +1120,11 @@ async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
       const points = entry.playerPoolEntry?.appliedStatTotal ?? 0;
 
       if (ESPN_BENCH.has(slot)) {
-        bench.push({ key: man.key, points });
+        bench.push({ key: man.key, name: man.name, points });
       } else {
         starters.push({
           key: man.key,
+          name: man.name,
           slot: ESPN_SLOTS[slot] ?? man.pos ?? "FLEX",
           points,
         });
