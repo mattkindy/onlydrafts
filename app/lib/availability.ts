@@ -52,6 +52,17 @@ export const OUT_THIS_WEEK = new Set([
 export const outThisWeek = (status: string | null | undefined) =>
   Boolean(status && OUT_THIS_WEEK.has(status));
 
+/**
+ * The positions a lineup can start. The injury report is read by name,
+ * and a linebacker who shares a receiver's name would otherwise rule the
+ * receiver out.
+ */
+export const PLAYED_POSITIONS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
+
+/** whether a listing can be about the player on this row */
+export const listingFits = (his: Listed, position: string) =>
+  !his.position || his.position === position;
+
 /** what the injury report says about a player, by the board's key for him */
 export interface Listed {
   /** his name as the injury report spells it, for a row written from scratch */

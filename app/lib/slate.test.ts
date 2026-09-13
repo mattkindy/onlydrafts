@@ -128,6 +128,16 @@ describe("a player the injury report says is not playing", () => {
     expect(rows.get(normalizeName("Joe Burrow"))!.blend).toBe(18);
   });
 
+  it("does not rule a player out over a namesake at another position", () => {
+    const rows = withOutPlayersZeroed(rowsOf(built), listedBy({
+      "Ja'Marr Chase": {
+        name: "Ja'Marr Chase", status: "Out", position: "LB", team: "CLE",
+      },
+    }));
+
+    expect(rows.get(chase)!.blend).toBeGreaterThan(0);
+  });
+
   it("leaves a questionable player alone", () => {
     const rows = rowsOf(built);
 

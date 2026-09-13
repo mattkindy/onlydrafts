@@ -15,7 +15,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { espnPays, type EspnScoringItem, type League } from "./providers.ts";
+import {
+  espnPays, listedPlayers, type EspnScoringItem, type League,
+} from "./providers.ts";
 
 const items = JSON.parse(readFileSync(
   join(import.meta.dirname, "..", "fixtures", "espnScoringItems.json"), "utf8",
@@ -231,5 +233,18 @@ describe("this week's matchups on ESPN", () => {
     expect(home.bench)
       .toEqual([{ key: "pukanacua", name: "Puka Nacua", points: 7.2 }]);
     expect(away.starters.map((s) => s.slot)).toEqual(["RB", "WR"]);
+  });
+});
+
+describe("listedPlayers", () => {
+  it("skips a listing at a position no lineup starts", () => {
+    const listed = listedPlayers({
+      "6794": { n: "Justin Jefferson", p: "WR", t: "MIN" },
+      "13524": { n: "Justin Jefferson", p: "LB", t: "CLE", hurt: "Out" },
+      "1": { n: "Tyler Boyd", p: "WR", t: "TEN", hurt: "Out" },
+    });
+
+    expect(listed.has("justinjefferson")).toBe(false);
+    expect(listed.get("tylerboyd")?.status).toBe("Out");
   });
 });
