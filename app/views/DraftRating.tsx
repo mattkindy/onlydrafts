@@ -268,14 +268,58 @@ export function DraftRating(props: Props) {
         </>
       )}
 
-      {picks.length > 0 && (
-        <>
-          <h2>{league.team}, pick by pick</h2>
-          <p class="hint">
-            Each pick as our board would have read it at the time, with
-            everything taken up to then already gone.
-          </p>
-          <table class="rating">
+    </>
+  );
+}
+
+/**
+ * Your own draft, pick by pick. It lives under your roster rather than
+ * under the league, since it is about you and the league tab is about
+ * everybody else.
+ */
+export function MyDraftPicks(props: Props) {
+  const { league, board, byKey } = props;
+
+  const picks = useMemo(() => {
+    const drafted: Took[] = [];
+    const mine: Took[] = [];
+
+    for (const pick of props.made) {
+      const p = byKey.get(keyForPick(pick, normalizeName));
+
+      if (!p) {
+        continue;
+      }
+
+      const one: Took = { at: pick.overall, p, kept: pick.keeper };
+      drafted.push(one);
+
+      if (pick.mine) {
+        mine.push(one);
+      }
+    }
+
+    const room = roomFor(board, league.slots, league.size, WEEKS_DRAWN);
+
+    return sharePicks(mine, drafted, board, league.slots, room);
+  }, [board, league, props.made]);
+
+  if (picks.length === 0) {
+    return (
+      <div class="empty">
+        This league cannot say what happened pick by pick, so there is
+        nothing to replay.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <p class="hint">
+        Each pick as our board would have read it at the time, with
+        everything taken up to then already gone.
+      </p>
+      <table class="rating">
             <thead>
               <tr>
                 <th>pick</th><th>player</th><th>adp</th>
@@ -310,10 +354,8 @@ export function DraftRating(props: Props) {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </>
-      )}
+        </tbody>
+      </table>
     </>
   );
 }
