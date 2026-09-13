@@ -6,7 +6,7 @@
  * site it came from.
  */
 
-import type { Listed } from "./availability.ts";
+import { PLAYED_POSITIONS, type Listed } from "./availability.ts";
 import { normalizeName, stored, keep } from "./store.ts";
 import type { Pays } from "./scoring.ts";
 
@@ -316,7 +316,7 @@ export function listedPlayers(all: SleeperPlayers): Map<string, Listed> {
   const listed = new Map<string, Listed>();
 
   for (const player of Object.values(all)) {
-    if (!player.hurt) {
+    if (!player.hurt || !PLAYED_POSITIONS.has(player.p)) {
       continue;
     }
 

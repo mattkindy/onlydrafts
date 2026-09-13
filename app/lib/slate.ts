@@ -10,7 +10,7 @@
  * decide a matchup.
  */
 
-import { outThisWeek, type Listed } from "./availability.ts";
+import { listingFits, outThisWeek, type Listed } from "./availability.ts";
 import { normalizeName } from "./store.ts";
 
 export interface WeekRef {
@@ -241,7 +241,10 @@ export function withOutPlayersZeroed(
     const row = rows.get(key);
 
     if (row) {
-      sat.push([key, { ...row, ...NOTHING }]);
+      if (listingFits(his, row.position)) {
+        sat.push([key, { ...row, ...NOTHING }]);
+      }
+
       continue;
     }
 
