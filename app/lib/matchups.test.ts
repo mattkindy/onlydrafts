@@ -105,14 +105,36 @@ describe("oddsFor", () => {
 
   it("gives a kicker nobody has a line on the position's stock week", () => {
     const totals = sideTotals(
-      side("me", 5, [{ key: "nobody", slot: "K", points: 5 }]),
+      side("me", 0, [{ key: "nobody", slot: "K", points: 0, team: "KC" }]),
       new Map(),
-      states({}),
+      states({ KC: { where: "pre", left: 1 } }),
       4000,
     );
 
-    expect(mean(totals)).toBeGreaterThan(5 + 6);
-    expect(mean(totals)).toBeLessThan(5 + 10);
+    expect(mean(totals)).toBeGreaterThan(6);
+    expect(mean(totals)).toBeLessThan(10);
+  });
+
+  it("reads a kicker with points and no team as done, not yet to kick off", () => {
+    const totals = sideTotals(
+      side("me", 12, [{ key: "nobody", slot: "K", points: 12 }]),
+      new Map(),
+      states({}),
+      400,
+    );
+
+    expect(mean(totals)).toBe(12);
+  });
+
+  it("finds the game of a kicker nobody has a line on by his team", () => {
+    const totals = sideTotals(
+      side("me", 12, [{ key: "nobody", slot: "K", points: 12, team: "JAX" }]),
+      new Map(),
+      states({ JAX: { where: "post", left: 0 } }),
+      400,
+    );
+
+    expect(mean(totals)).toBe(12);
   });
 
   it("scores a player in no stock position on his points alone", () => {

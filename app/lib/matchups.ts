@@ -546,7 +546,7 @@ const STOCK: Record<string, Spread> = {
 };
 
 /** the stock week for a position, where there is one worth drawing */
-export const stockLine = (position: string): Line | null => {
+export const stockLine = (position: string, team?: string): Line | null => {
   const spread = STOCK[position];
 
   if (!spread) {
@@ -556,7 +556,7 @@ export const stockLine = (position: string): Line | null => {
   return {
     spread,
     position,
-    team: null,
+    team: team?.toUpperCase() ?? null,
     opponent: null,
     blend: spread.ev,
     stock: true,
@@ -574,6 +574,7 @@ export const stockLine = (position: string): Line | null => {
  */
 export function lineOf(
   key: string, rows: Map<string, SlateRow>, lines?: Lines, position?: string,
+  team?: string,
 ): Line | null {
   const row = rows.get(key);
 
@@ -592,7 +593,7 @@ export function lineOf(
   const game = player?.game;
 
   if (!player || !game?.["ev"]) {
-    return position ? stockLine(position) : null;
+    return position ? stockLine(position, team) : null;
   }
 
   const ev = game["ev"]!;
@@ -622,6 +623,8 @@ export interface Starter {
   slot?: string;
   /** what the provider calls him, for a player nobody else has a name for */
   name?: string;
+  /** his club, for a player nobody has a line on, so he still has a game */
+  team?: string;
 }
 
 /** the position a slot implies, for a player nobody has a line on */
@@ -631,11 +634,29 @@ const hintOf = (slot: string | undefined) =>
 /** what the week, the board, or the position says about a player in a slot */
 export const lineFor = (
   player: Starter, rows: Map<string, SlateRow>, lines?: Lines,
-) => lineOf(player.key, rows, lines, hintOf(player.slot));
+) => lineOf(player.key, rows, lines, hintOf(player.slot), player.team);
 
-/** where his game has got to, off whichever team the line gives him */
-const stateAt = (line: Line, states: Map<string, GameState>): GameState =>
-  (line.team ? states.get(line.team) : null) ?? { where: "pre", left: 1 };
+const NOT_STARTED: GameState = { where: "pre", left: 1 };
+const OVER: GameState = { where: "post", left: 0 };
+
+/**
+ * Where his game has got to, off whichever team the line gives him.
+ *
+ * With no team to look up, points on the board are the only clue, and
+ * they say he has played. Reading him as not started would stack his
+ * whole line on top of what he has already scored.
+ */
+function stateAt(
+  line: Line, states: Map<string, GameState>, starter?: Starter,
+): GameState {
+  const known = line.team ? states.get(line.team) : null;
+
+  if (known) {
+    return known;
+  }
+
+  return (starter?.points ?? 0) > 0 ? OVER : NOT_STARTED;
+}
 
 /** the two teams in a player's game, so both sides reach the same name */
 const gameOf = (line: Line) =>
@@ -767,7 +788,7 @@ export function liveDraws(
       continue;
     }
 
-    const state = stateAt(line, states);
+    const state = stateAt(line, states, player);
     const played = state.where === "in"
       ? Math.min(1, Math.max(0, 1 - state.left))
       : 0;
@@ -1144,7 +1165,7 @@ export function starterState(
 ): GameState | null {
   const line = lineFor(starter, rows, lines);
 
-  return line ? stateAt(line, states) : null;
+  return line ? stateAt(line, states, starter) : null;
 }
 
 /** what a player is projected to add from here, on top of what he has */

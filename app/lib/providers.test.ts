@@ -149,9 +149,12 @@ describe("this week's matchups on Sleeper", () => {
     expect([home.owner, away.owner]).toEqual(["one", "two"]);
     expect([home.points, away.points]).toEqual([88.5, 71]);
     expect(home.starters).toEqual([
-      { key: "joshallen", name: "Josh Allen", slot: "QB", points: 24.1 },
       {
-        key: "bijanrobinson", name: "Bijan Robinson", slot: "RB",
+        key: "joshallen", name: "Josh Allen", team: "BUF", slot: "QB",
+        points: 24.1,
+      },
+      {
+        key: "bijanrobinson", name: "Bijan Robinson", team: "ATL", slot: "RB",
         points: 64.4,
       },
     ]);
@@ -165,13 +168,16 @@ describe("this week's matchups on Sleeper", () => {
 describe("this week's matchups on ESPN", () => {
   const entry = (
     id: number, fullName: string, positionId: number,
-    lineupSlotId: number, points: number,
+    lineupSlotId: number, points: number, proTeamId?: number,
   ) => ({
     playerId: id,
     lineupSlotId,
     playerPoolEntry: {
       appliedStatTotal: points,
-      player: { id, fullName, defaultPositionId: positionId },
+      player: {
+        id, fullName, defaultPositionId: positionId,
+        ...(proTeamId ? { proTeamId } : {}),
+      },
     },
   });
 
@@ -190,8 +196,8 @@ describe("this week's matchups on ESPN", () => {
             home: {
               teamId: 1, totalPoints: 80, totalPointsLive: 88.5,
               rosterForCurrentScoringPeriod: { entries: [
-                entry(3918298, "Josh Allen", 1, 0, 24.1),
-                entry(4430807, "Bijan Robinson", 2, 2, 64.4),
+                entry(3918298, "Josh Allen", 1, 0, 24.1, 2),
+                entry(4430807, "Bijan Robinson", 2, 2, 64.4, 1),
                 entry(4426515, "Puka Nacua", 3, 20, 7.2),
               ] },
             },
@@ -224,9 +230,12 @@ describe("this week's matchups on ESPN", () => {
     // used for a side whose games have not started
     expect([home.points, away.points]).toEqual([88.5, 71]);
     expect(home.starters).toEqual([
-      { key: "joshallen", name: "Josh Allen", slot: "QB", points: 24.1 },
       {
-        key: "bijanrobinson", name: "Bijan Robinson", slot: "RB",
+        key: "joshallen", name: "Josh Allen", team: "BUF", slot: "QB",
+        points: 24.1,
+      },
+      {
+        key: "bijanrobinson", name: "Bijan Robinson", team: "ATL", slot: "RB",
         points: 64.4,
       },
     ]);

@@ -14,6 +14,8 @@ export interface RosterPlayer {
   name: string;
   key: string;
   pos?: string;
+  /** his club, so a player the week has no line on still has a game */
+  team?: string;
   /** what the injury report says, in Sleeper's words whoever said it */
   hurt?: string;
 }
@@ -85,7 +87,9 @@ export interface Side {
    * board and the week both miss would otherwise be drawn as his key, and
    * "treysmack" on a lineup row reads as somebody's username.
    */
-  starters: { key: string; name?: string; slot: string; points: number }[];
+  starters: {
+    key: string; name?: string; team?: string; slot: string; points: number;
+  }[];
   bench: { key: string; name?: string; points: number }[];
 }
 
@@ -465,7 +469,14 @@ function sleeperRecord(r: SleeperRoster): TeamRecord | undefined {
 const sleeperPlayerOf = (players: SleeperPlayers, id: string): RosterPlayer | null => {
   const p = players[id];
 
-  return p ? { name: p.n, key: normalizeName(p.n), pos: p.p } : null;
+  if (!p) {
+    return null;
+  }
+
+  return {
+    name: p.n, key: normalizeName(p.n), pos: p.p,
+    ...(p.t ? { team: p.t } : {}),
+  };
 };
 
 const sleeperPlayersOf = (players: SleeperPlayers, ids: string[] | undefined): RosterPlayer[] =>
@@ -656,6 +667,7 @@ async function sleeperMatchups(
         starters.push({
           key: player.key,
           name: player.name,
+          ...(player.team ? { team: player.team } : {}),
           slot: slots[i] ?? player.pos ?? "FLEX",
           points: side.starters_points?.[i] ?? scored[id] ?? 0,
         });
@@ -781,6 +793,7 @@ interface EspnEntry {
       id?: number;
       fullName?: string;
       defaultPositionId?: number;
+      proTeamId?: number;
       /** ESPN's own word for it, which is not Sleeper's word */
       injuryStatus?: string;
     };
@@ -847,8 +860,13 @@ function espnPlayerOf(players: EspnPlayers, entry: EspnEntry): RosterPlayer | nu
   if (player?.fullName) {
     const pos = ESPN_POSITIONS[player.defaultPositionId ?? -1] ?? listed?.p ?? "";
     const name = espnNameOf(id!, player.fullName, pos);
+    const team = ESPN_TEAMS[player.proTeamId ?? -1];
 
-    return { name, key: normalizeName(name), pos, ...(hurt ? { hurt } : {}) };
+    return {
+      name, key: normalizeName(name), pos,
+      ...(team ? { team } : {}),
+      ...(hurt ? { hurt } : {}),
+    };
   }
 
   return listed
@@ -1141,6 +1159,7 @@ async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
         starters.push({
           key: player.key,
           name: player.name,
+          ...(player.team ? { team: player.team } : {}),
           slot: ESPN_SLOTS[slot] ?? player.pos ?? "FLEX",
           points,
         });
