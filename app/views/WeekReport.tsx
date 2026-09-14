@@ -96,8 +96,8 @@ function Strip({ block }: { block: ScoresBlock }) {
         </div>
       ))}
       <p class="hint">
-        Green won, grey lost. The pale end is what the bench would have
-        added, and the line is the middle of the week, {block.middle}.
+        Green won, grey lost. Pale part is points left on the bench.
+        Line is the league median, {block.middle}.
       </p>
     </div>
   );
@@ -113,9 +113,9 @@ export function WeekReport({ report }: { report: Report }) {
   return (
     <div class="card plain review">
       <div class="revtop">
-        <h3>week {report.week} in review</h3>
+        <h3>week {report.week} recap</h3>
         <ShareButton
-          label="share the review"
+          label="share"
           onShare={() => shareReport(layout)}
         />
       </div>

@@ -28,13 +28,13 @@ const report: Report = {
   player: note("Josh Allen", "Ace", 34.2),
   manager: {
     award: "beater", owner: "Ace", figure: "+20.00",
-    note: "140.00 on a projection of 120.00",
+    note: "140.00, projected 120.00",
   },
   awards: [
     { award: "highest", owner: "Ace", figure: "140.00", note: "against Bea" },
     {
       award: "stolen", owner: "Cy", figure: "31%",
-      note: "was 31% pregame and beat Dot by 0.50", fill: 0.31, won: true,
+      note: "31% to win, beat Dot by 0.50", fill: 0.31, won: true,
     },
   ],
   scores: [
@@ -101,7 +101,7 @@ describe("layoutReport", () => {
   it("leads with the player and the manager of the week", () => {
     const [first, second] = layoutReport(report).blocks;
 
-    expect(first?.title).toBe("the two of the week");
+    expect(first?.title).toBe("headliners");
     expect(second?.kind).toBe("scores");
     expect(first?.kind === "rows" && first.rows.map((row) => row.label))
       .toEqual(["player of the week", "manager of the week"]);
@@ -111,7 +111,7 @@ describe("layoutReport", () => {
     const layout = layoutReport(report);
 
     expect(layout.title).toBe("Dynasty Warriors");
-    expect(layout.subtitle).toBe("week 3 in review");
+    expect(layout.subtitle).toBe("week 3 recap");
     expect(layout.footer).toBe("onlydrafts");
     expect(layout.note).toBe(null);
   });
@@ -119,20 +119,20 @@ describe("layoutReport", () => {
   it("says how far a provisional week has got", () => {
     const layout = layoutReport({ ...report, finished: 1, provisional: true });
 
-    expect(layout.note).toBe("provisional, 1 of 3 games final");
-    expect(reportTextOf(layout)).toContain("provisional, 1 of 3 games final");
+    expect(layout.note).toBe("1 of 3 games final, numbers will move");
+    expect(reportTextOf(layout)).toContain("1 of 3 games final, numbers will move");
   });
 
   it("says the awards, the players, and their lines", () => {
     const said = reportTextOf(layoutReport(report));
 
-    expect(said).toContain("highest score");
+    expect(said).toContain("top score");
     expect(said).toContain("Ace");
     expect(said).toContain("140.00");
     expect(said).toContain("QB best");
     expect(said).toContain("Josh Allen");
-    expect(said).toContain("Ace, line 12.4, 96th");
-    expect(said).toContain("middle 105.00");
+    expect(said).toContain("Ace, line 12.4, 1 in 25 good");
+    expect(said).toContain("median 105.00");
     expect(said).toContain("BUF stack");
     expect(said[0]).toBe("Dynasty Warriors");
     expect(said[said.length - 1]).toBe("onlydrafts");
@@ -141,7 +141,7 @@ describe("layoutReport", () => {
   it("draws a bar beside a player and beside an upset", () => {
     const blocks = layoutReport(report).blocks;
     const week = blocks.find(
-      (block) => block.kind === "rows" && block.title === "the week");
+      (block) => block.kind === "rows" && block.title === "awards");
     const kinds = week?.kind === "rows"
       ? week.rows.map((row) => row.chart?.kind ?? null)
       : [];
@@ -169,7 +169,7 @@ describe("layoutReport", () => {
     });
 
     expect(layout.blocks.map((block) => block.title))
-      .toEqual(["by position, against the line"]);
+      .toEqual(["best and worst by position"]);
   });
 
   it("keeps every line short enough for a phone to read", () => {

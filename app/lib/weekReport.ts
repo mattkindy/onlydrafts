@@ -38,25 +38,30 @@ export type Award =
   | "beater" | "shortfall" | "bench" | "manager" | "swap";
 
 export const AWARD_SAYS: Record<Award, string> = {
-  highest: "highest score",
-  lowest: "lowest score",
-  blowout: "biggest blowout",
-  closest: "closest game",
-  lucky: "luckiest win",
-  unlucky: "unluckiest loss",
-  stolen: "stolen game",
-  choke: "choke of the week",
-  beater: "beat his projection by most",
-  shortfall: "furthest under projection",
-  bench: "most left on the bench",
-  manager: "best set lineup",
-  swap: "the swap that wins it",
+  highest: "top score",
+  lowest: "low score",
+  blowout: "blowout",
+  closest: "nail biter",
+  lucky: "lucky win",
+  unlucky: "tough loss",
+  stolen: "steal",
+  choke: "choke",
+  beater: "most over projection",
+  shortfall: "most under projection",
+  bench: "most points benched",
+  manager: "best lineup call",
+  swap: "worst lineup call",
 };
 
-/** the order the card and the picture read them in */
+/**
+ * The ones given out, in the order the card reads them. A lucky win and a
+ * tough loss say much what a steal and a choke do, and the best lineup
+ * call is nearly always "nothing left on the bench", so those stay in
+ * the picks and out of the card.
+ */
 export const AWARDS: Award[] = [
-  "highest", "lowest", "blowout", "closest", "lucky", "unlucky",
-  "stolen", "choke", "beater", "shortfall", "bench", "manager", "swap",
+  "highest", "lowest", "blowout", "closest", "stolen", "choke",
+  "beater", "bench", "swap",
 ];
 
 export interface Superlative {
@@ -442,7 +447,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
 
     return top && {
       award: "highest", owner: top.owner, figure: scoredSays(top.points),
-      note: `against ${top.against}`,
+      note: `vs ${top.against}`,
     };
   },
   lowest: (sides) => {
@@ -450,7 +455,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
 
     return low && {
       award: "lowest", owner: low.owner, figure: scoredSays(low.points),
-      note: `against ${low.against}`,
+      note: `vs ${low.against}`,
     };
   },
   blowout: (sides) => {
@@ -498,7 +503,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
 
     return {
       award: "stolen", owner: thief.owner, figure: asPct(thief.chance),
-      note: `was ${asPct(thief.chance)} pregame and ${beat(thief)}`,
+      note: `${asPct(thief.chance)} to win, ${beat(thief)}`,
       fill: thief.chance,
       won: true,
     };
@@ -512,7 +517,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
 
     return {
       award: "choke", owner: gone.owner, figure: asPct(gone.chance),
-      note: `was ${asPct(gone.chance)} pregame and lost to ${gone.against}`,
+      note: `${asPct(gone.chance)} to win, lost to ${gone.against}`,
       fill: gone.chance,
       won: false,
     };
@@ -524,8 +529,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
       ? {
         award: "beater", owner: over.owner,
         figure: "+" + scoredSays(over.over),
-        note: `${scoredSays(over.points)} on a projection of ` +
-          scoredSays(over.expected),
+        note: `${scoredSays(over.points)}, projected ${scoredSays(over.expected)}`,
       }
       : null;
   },
@@ -536,8 +540,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
       ? {
         award: "shortfall", owner: under.owner,
         figure: scoredSays(under.over),
-        note: `${scoredSays(under.points)} on a projection of ` +
-          scoredSays(under.expected),
+        note: `${scoredSays(under.points)}, projected ${scoredSays(under.expected)}`,
       }
       : null;
   },
@@ -551,7 +554,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
     return {
       award: "bench", owner: waster.owner, figure: scoredSays(waster.left),
       // the scores strip already draws what every side left out
-      note: `best lineup was ${scoredSays(waster.best)}`,
+      note: `could have had ${scoredSays(waster.best)}`,
     };
   },
   manager: (sides) => {
@@ -560,8 +563,8 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
     return sharp && {
       award: "manager", owner: sharp.owner, figure: scoredSays(sharp.left),
       note: sharp.left <= 0
-        ? "started the best lineup"
-        : `off a best lineup of ${scoredSays(sharp.best)}`,
+        ? "nothing left on the bench"
+        : `could have had ${scoredSays(sharp.best)}`,
     };
   },
   swap: (sides) => {
@@ -571,7 +574,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
 
     return worst && {
       award: "swap", owner: worst.owner, figure: scoredSays(worst.swap.by),
-      note: `start ${worst.swap.starts} over ${worst.swap.benches}`,
+      note: `${worst.swap.starts} over ${worst.swap.benches} wins it`,
     };
   },
 };
@@ -789,19 +792,48 @@ function freeAgentsOf(input: ReportInput): FreeAgents | null {
   };
 }
 
-/** where a week's points fall on his spread, as a plain ordinal */
+/** past this far into either tail, a percentile stops saying much */
+const TAIL = 0.05;
+
+/**
+ * The tail past the 90th is a normal fitted to the top of the spread,
+ * so the odds it gives a monster week are a model's, and get silly fast.
+ * A million is where they stop.
+ */
+const LONGEST_ODDS = 1_000_000;
+
+/** one in so many, to two figures, with commas */
+function oneIn(share: number): string {
+  const n = Math.min(LONGEST_ODDS, 1 / Math.max(share, 1e-12));
+  const digits = 10 ** Math.max(0, Math.floor(Math.log10(n)) - 1);
+  const rounded = Math.round(n / digits) * digits;
+
+  return "1 in " + rounded.toLocaleString("en-US");
+}
+
+/**
+ * Where a week's points fall on his spread. Inside the spread it is a
+ * percentile, and out in either tail it is the odds of a week that far
+ * out, which says more about a 40 point week than "99th" does.
+ */
 export function quantileSays(quantile: number): string {
-  const at = Math.min(99, Math.max(1, Math.round(quantile * 100)));
+  const tail = Math.min(quantile, 1 - quantile);
+
+  if (tail < TAIL) {
+    return oneIn(tail) + (quantile > 0.5 ? " good" : " bad");
+  }
+
+  const at = Math.round(quantile * 100);
   const last = at % 10;
   const teens = at > 10 && at < 20;
   const ends = teens ? "th" : ["th", "st", "nd", "rd"][last] ?? "th";
 
-  return at + ends;
+  return at + ends + " pct";
 }
 
 /** what one player's week reads as next to his line */
 export const noteSays = (note: PlayerNote) =>
-  `${scoredSays(note.points)} on a line of ${note.line.toFixed(1)}, ` +
+  `${scoredSays(note.points)} line ${note.line.toFixed(1)}, ` +
   quantileSays(note.quantile);
 
 export function reportFor(input: ReportInput): Report {

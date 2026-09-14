@@ -743,12 +743,12 @@
     gap: var(--s2); }
   .revtop h3 { margin: 0; font-size: var(--t5); }
   .card.review .hint.warn { color: var(--mark); margin-top: var(--s1); }
-  .revblock { margin-top: var(--s4); }
-  .revblock h4 { margin: 0 0 var(--s2); font-size: var(--t1);
+  .revblock { margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--edge); }
+  .revblock h4 { margin: 0 0 var(--s3); font-size: var(--t1);
     text-transform: uppercase; letter-spacing: .06em; color: var(--faint);
     font-weight: 700; }
   .revrows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--s3) var(--s4); }
+    gap: var(--s4) var(--s5); }
   .rev { display: grid; grid-template-columns: minmax(0, 1fr) auto;
     align-items: baseline; column-gap: var(--s2); min-width: 0; }
   .rev .lab { grid-column: 1 / -1; font-size: var(--t1); color: var(--faint);

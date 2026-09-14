@@ -173,7 +173,7 @@ function scoresBlock(report: Report, y: number): ScoresBlock {
 
   return {
     kind: "scores",
-    title: "every score, and what was on the bench",
+    title: "scores",
     bars: report.scores.map((side) => ({
       ...side,
       fill: share(side.points),
@@ -245,7 +245,7 @@ const freeAgentRows = (report: Report): ReportRow[] => {
     .filter((its) => its.top && its.top.key !== free.top?.key)
     .map((its) => scorerRow(its.position, its.top!, "flat"));
 
-  return [scorerRow("best week on nobody's roster", free.top, "up"), ...rest];
+  return [scorerRow("top free agent", free.top, "up"), ...rest];
 };
 
 const leadRows = (report: Report): ReportRow[] => [
@@ -266,7 +266,7 @@ const leadRows = (report: Report): ReportRow[] => [
 /** how much of the week is in, for one somebody is still playing */
 const noteFor = (report: Report) =>
   report.provisional
-    ? `provisional, ${report.finished} of ${report.games} games final`
+    ? `${report.finished} of ${report.games} games final, numbers will move`
     : null;
 
 export function layoutReport(report: Report): ReportLayout {
@@ -285,35 +285,27 @@ export function layoutReport(report: Report): ReportLayout {
     put(rowsBlock(title, its, y));
   };
 
-  rows("the two of the week", leadRows(report));
+  rows("headliners", leadRows(report));
 
   if (report.scores.length) {
     put(scoresBlock(report, y));
   }
 
-  rows("the week", awardRows(report));
-  rows("by position, against the line", positionRows(report));
-  // the player of the week is already at the top of the report
-  const rest = report.best.filter((his) => his !== report.player);
-
-  rows("biggest weeks", rest.map((his) => noteRow("over", his, "up")));
+  rows("awards", awardRows(report));
+  rows("best and worst by position", positionRows(report));
   rows(
-    "biggest busts",
-    report.worst.map((his) => noteRow("under", his, "down")),
-  );
-  rows(
-    "bench of the week",
+    "best on the bench",
     report.benched.map((his) => scorerRow(his.position, his, "flat")),
   );
-  rows("the zero club", zeroRows(report));
-  rows("stack of the week", stackRows(report));
-  rows("free agents", freeAgentRows(report));
+  rows("goose eggs", zeroRows(report));
+  rows("best stack", stackRows(report));
+  rows("best free agents", freeAgentRows(report));
 
   return {
     width: WIDTH,
     height: y - (blocks.length ? GAP : 0) + FOOT,
     title: report.league,
-    subtitle: `week ${report.week} in review`,
+    subtitle: `week ${report.week} recap`,
     footer: SITE,
     note,
     blocks,
@@ -334,7 +326,7 @@ export function reportTextOf(layout: ReportLayout): string[] {
     if (block.kind === "scores") {
       words.push(...block.bars.flatMap(
         (bar) => [bar.owner, scoredSays(bar.points)]));
-      words.push("middle " + block.middle);
+      words.push("median " + block.middle);
 
       continue;
     }
