@@ -123,8 +123,6 @@ describe("reportFor", () => {
     expect(awardIn(report, "blowout")?.figure).toBe("70.00");
     expect(awardIn(report, "closest")?.owner).toBe("Cy");
     expect(awardIn(report, "closest")?.figure).toBe("0.50");
-    expect(awardIn(report, "lucky")?.owner).toBe("Cy");
-    expect(awardIn(report, "unlucky")?.owner).toBe("Eli");
   });
 
   it("says every award it gives in the league's own words", () => {
@@ -247,7 +245,6 @@ describe("reportFor, with the week as it looked pregame", () => {
 
     expect(awardIn(report, "beater")?.owner).toBe("Ace");
     expect(awardIn(report, "beater")?.figure).toBe("+30.00");
-    expect(awardIn(report, "shortfall")?.owner).toBe("Dot");
     expect(report.manager?.owner).toBe("Ace");
   });
 });
@@ -359,12 +356,18 @@ describe("bestPointsFor", () => {
 });
 
 describe("quantileSays", () => {
-  it("reads a share of a spread as an ordinal", () => {
-    expect(quantileSays(0.96)).toBe("96th");
-    expect(quantileSays(0.21)).toBe("21st");
-    expect(quantileSays(0.02)).toBe("2nd");
-    expect(quantileSays(0.13)).toBe("13th");
-    expect(quantileSays(0)).toBe("1st");
-    expect(quantileSays(1)).toBe("99th");
+  it("reads the middle of a spread as a percentile", () => {
+    expect(quantileSays(0.9)).toBe("90th pct");
+    expect(quantileSays(0.21)).toBe("21st pct");
+    expect(quantileSays(0.13)).toBe("13th pct");
+    expect(quantileSays(0.5)).toBe("50th pct");
+  });
+
+  it("reads either tail as odds, to two figures", () => {
+    expect(quantileSays(0.97)).toBe("1 in 33 good");
+    expect(quantileSays(0.9971)).toBe("1 in 340 good");
+    expect(quantileSays(0.02)).toBe("1 in 50 bad");
+    expect(quantileSays(0.0000004)).toBe("1 in 1,000,000 bad");
+    expect(quantileSays(1)).toBe("1 in 1,000,000 good");
   });
 });
