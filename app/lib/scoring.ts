@@ -148,6 +148,29 @@ export function payFor(parts: Parts, pays: Pays): number {
 }
 
 /**
+ * What a week of counted stats is worth here, where the fields already
+ * spelt the way a league spells what it prices. Sleeper's weekly stats
+ * are, so its own scoring settings run straight over them. A field nobody
+ * prices and no fallback knows is left out rather than guessed at.
+ */
+export function paidFor(stats: Record<string, number>, pays: Pays): number {
+  let points = 0;
+
+  for (const [category, count] of Object.entries(stats)) {
+    const rate = pays[category] ?? SKILL_FALLBACK[category] ??
+      THEIR_OWN_FALLBACK[category];
+
+    if (rate === undefined || typeof count !== "number") {
+      continue;
+    }
+
+    points += count * rate;
+  }
+
+  return points;
+}
+
+/**
  * What he scores in a game here. The simulation's line leads wherever it
  * played the player, and the regression covers the players it never saw.
  */

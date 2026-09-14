@@ -8,7 +8,7 @@
 
 import { PLAYED_POSITIONS, type Listed } from "./availability.ts";
 import { normalizeName, stored, keep } from "./store.ts";
-import type { Pays } from "./scoring.ts";
+import { paidFor, type Pays } from "./scoring.ts";
 
 export interface RosterPlayer {
   name: string;
@@ -71,6 +71,8 @@ export interface Provider {
   leaguesFor: (who: string, season: number) => Promise<League[]>;
   draftNow: ((league: League) => Promise<DraftNow | null>) | null;
   matchupsFor?: (league: League, week: number) => Promise<Matchup[]>;
+  /** every player's week, for the ones nobody in the league had */
+  weekPointsFor?: (league: League, week: number) => Promise<PlayerWeek[]>;
 }
 
 export interface Matchup {
@@ -705,6 +707,88 @@ async function sleeperMatchups(
     .map((sides) => ({ sides: [sideOf(sides[0]!), sideOf(sides[1]!)] as [Side, Side] }));
 }
 
+/** what one player scored in one week, in this league's own scoring */
+export interface PlayerWeek {
+  key: string;
+  name: string;
+  position: string;
+  team: string | null;
+  points: number;
+  /**
+   * Where the figure came from: the league's own rates run over the
+   * counted stats, or Sleeper's full point total for a player whose
+   * categories this league prices nothing for.
+   */
+  scoredBy: "league" | "ppr";
+}
+
+type WeekStats = Record<string, Record<string, number>>;
+
+/** the last week of stats read, since a live week is read again and again */
+let statsRead: { key: string; at: number; stats: WeekStats } | null = null;
+
+/** long enough that a page polling for live points is not re-reading it */
+const STATS_FOR = 5 * 60 * 1000;
+
+async function sleeperWeekStats(
+  season: number, week: number,
+): Promise<WeekStats> {
+  const key = season + "/" + week;
+
+  if (statsRead?.key === key && Date.now() - statsRead.at < STATS_FOR) {
+    return statsRead.stats;
+  }
+
+  const raw = await askFresh("/stats/nfl/regular/" + season + "/" + week);
+  const stats = (raw ?? {}) as WeekStats;
+
+  statsRead = { key, at: Date.now(), stats };
+
+  return stats;
+}
+
+/**
+ * Every player's week, whoever has him, which is what says who the free
+ * agents of the week were. Sleeper spells its own stats the way its
+ * leagues spell what they pay for, so a league's settings run over them;
+ * a player those settings pay nothing for takes his full point total
+ * instead, which is the case for a league that has said nothing at all.
+ */
+export async function sleeperWeekPoints(
+  league: League, week: number,
+): Promise<PlayerWeek[]> {
+  const [stats, players] = await Promise.all([
+    sleeperWeekStats(league.season, week),
+    sleeperPlayers(),
+  ]);
+  const pays = league.pays ?? {};
+  const priced = Object.keys(pays).length > 0;
+  const out: PlayerWeek[] = [];
+
+  for (const [id, line] of Object.entries(stats)) {
+    const player = players[id];
+
+    if (!player || !line) {
+      continue;
+    }
+
+    const ppr = line["pts_ppr"] ?? line["pts_half_ppr"] ?? line["pts_std"] ?? 0;
+    const own = priced ? paidFor(line, pays) : 0;
+    const took = priced && own !== 0;
+
+    out.push({
+      key: normalizeName(player.n),
+      name: player.n,
+      position: player.p,
+      team: player.t ?? null,
+      points: took ? own : ppr,
+      scoredBy: took ? "league" : "ppr",
+    });
+  }
+
+  return out;
+}
+
 export class NeedsEspnCookies extends Error {}
 
 /**
@@ -1191,6 +1275,7 @@ export const PROVIDERS: Record<string, Provider> = {
     leaguesFor: (who) => sleeperLeagues(who),
     draftNow: sleeperDraft,
     matchupsFor: sleeperMatchups,
+    weekPointsFor: sleeperWeekPoints,
   },
   espn: {
     label: "ESPN",

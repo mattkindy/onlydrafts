@@ -7,8 +7,9 @@
  * written out, because the people it gets sent to have their own themes
  * and a share image should look the same to all of them.
  *
- * Everything except drawOn() is arithmetic over the matchup data, so the
- * layout and the words can be tested where there is no canvas.
+ * Everything except the painting is arithmetic over the matchup data, so
+ * the layout and the words can be tested where there is no canvas. The
+ * header and the footer are shared with the week in review.
  */
 
 import { wholePair } from "./pctPair.ts";
@@ -24,6 +25,8 @@ export const SHADES = {
   faint: "#5B6575",
   go: "#35C06F",
   chip: "#232B38",
+  mark: "#F5B841",
+  no: "#E5534B",
 };
 
 export const FONT =
@@ -55,9 +58,10 @@ export const SITE = "onlydrafts";
 
 /** the export is a fixed width, so a phone and a laptop make the same picture */
 export const WIDTH = 1080;
-const PAD = 40;
-const HEAD = 168;
-const FOOT = 72;
+export const PAD = 40;
+/** how far down the first thing under the header goes */
+export const HEAD = 168;
+export const FOOT = 72;
 const CARD_GAP = 28;
 const CARD_BASE = 300;
 const CARD_OWNER = 26;
@@ -81,12 +85,21 @@ export interface CardLayout {
   fill: number;
 }
 
-export interface Layout {
+/** what every share picture has, whatever it draws in the middle */
+export interface Picture {
   width: number;
   height: number;
   title: string;
   subtitle: string;
   footer: string;
+}
+
+/** how one kind of picture puts itself on a canvas */
+export type Paint<P extends Picture> = (
+  ctx: CanvasRenderingContext2D, layout: P,
+) => void;
+
+export interface Layout extends Picture {
   cards: CardLayout[];
 }
 
@@ -172,7 +185,7 @@ export function textOf(layout: Layout): string[] {
 }
 
 /** shortens a name that would run past the space it has */
-function fitted(
+export function fitted(
   ctx: CanvasRenderingContext2D, text: string, width: number,
 ): string {
   if (ctx.measureText(text).width <= width) {
@@ -188,7 +201,7 @@ function fitted(
   return cut + "...";
 }
 
-function roundRect(
+export function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number, r: number,
 ) {
@@ -236,8 +249,13 @@ function drawSide(
   ctx.fillText(side.odds, x, y + 156);
 }
 
-/** the only part that touches a canvas */
-export function drawOn(canvas: HTMLCanvasElement, layout: Layout, scale = 2) {
+/**
+ * The ground, the header, and the footer, which every share picture has,
+ * with the middle left to whatever kind of picture this is.
+ */
+export function drawPicture<P extends Picture>(
+  canvas: HTMLCanvasElement, layout: P, paint: Paint<P>, scale = 2,
+) {
   canvas.width = layout.width * scale;
   canvas.height = layout.height * scale;
 
@@ -262,6 +280,16 @@ export function drawOn(canvas: HTMLCanvasElement, layout: Layout, scale = 2) {
   ctx.font = "600 28px " + FONT;
   ctx.fillText(layout.subtitle, PAD, PAD + 86);
 
+  paint(ctx, layout);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = SHADES.faint;
+  ctx.font = "600 24px " + FONT;
+  ctx.fillText(layout.footer, PAD, layout.height - PAD + 8);
+}
+
+/** the cards of a week, under the header a picture already has */
+export function paintWeek(ctx: CanvasRenderingContext2D, layout: Layout) {
   const left = PAD + 28;
   const right = layout.width - PAD - 28;
 
@@ -286,24 +314,23 @@ export function drawOn(canvas: HTMLCanvasElement, layout: Layout, scale = 2) {
     roundRect(ctx, left, bar, Math.max(2, wide * card.fill), 12, 6);
     ctx.fill();
   }
-
-  ctx.textAlign = "left";
-  ctx.fillStyle = SHADES.faint;
-  ctx.font = "600 24px " + FONT;
-  ctx.fillText(layout.footer, PAD, layout.height - PAD + 8);
 }
 
-export function canvasFor(layout: Layout, scale = 2): HTMLCanvasElement {
+export function canvasFor<P extends Picture>(
+  layout: P, paint: Paint<P>, scale = 2,
+): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
 
-  drawOn(canvas, layout, scale);
+  drawPicture(canvas, layout, paint, scale);
 
   return canvas;
 }
 
-export function pngOf(layout: Layout, scale = 2): Promise<Blob> {
+export function pngOf<P extends Picture>(
+  layout: P, paint: Paint<P>, scale = 2,
+): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    canvasFor(layout, scale).toBlob(
+    canvasFor(layout, paint, scale).toBlob(
       (blob) => blob
         ? resolve(blob)
         : reject(new Error("the browser would not make a PNG")),
@@ -313,7 +340,7 @@ export function pngOf(layout: Layout, scale = 2): Promise<Blob> {
 }
 
 /** a file name the chat app will show, like onlydrafts-week-3.png */
-export function fileNameFor(layout: Layout): string {
+export function fileNameFor(layout: Picture): string {
   return SITE + "-" + layout.subtitle.replace(/\s+/g, "-") + ".png";
 }
 
@@ -322,9 +349,11 @@ export function fileNameFor(layout: Layout): string {
  * otherwise falls back to a download. A cancelled share throws, and
  * there is nothing to say about it, so it is swallowed.
  */
-export async function shareLayout(layout: Layout): Promise<void> {
+export async function sharePicture<P extends Picture>(
+  layout: P, paint: Paint<P>,
+): Promise<void> {
   try {
-    const blob = await pngOf(layout);
+    const blob = await pngOf(layout, paint);
     const name = fileNameFor(layout);
     const title = layout.title + " " + layout.subtitle;
     const file = new File([blob], name, { type: "image/png" });
@@ -347,3 +376,6 @@ export async function shareLayout(layout: Layout): Promise<void> {
     // a cancelled share sheet lands here, and it means nothing went wrong
   }
 }
+
+/** a week or a single card, which is what most of the app shares */
+export const shareLayout = (layout: Layout) => sharePicture(layout, paintWeek);

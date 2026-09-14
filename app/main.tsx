@@ -375,6 +375,20 @@ function App() {
   }, [built, active]);
 
   /**
+   * Every player's week, for the free agents the week in review picks out.
+   * A provider that will not say leaves the section out altogether.
+   */
+  const weekPointsFor = useMemo(() => {
+    const asks = active && PROVIDERS[active.provider]?.weekPointsFor;
+
+    if (!active || !asks || !week) {
+      return undefined;
+    }
+
+    return () => asks(active, week.week);
+  }, [active, week]);
+
+  /**
    * Sleeper covers every player in the game, and an ESPN league adds only
    * what its own rosters say about players Sleeper had nothing on.
    */
@@ -1013,6 +1027,8 @@ function App() {
                   week={week.week}
                   league={active.name}
                   status={gamesStatus || weekStatus}
+                  rosters={active.allRosters}
+                  weekPointsFor={weekPointsFor}
                   onMore={openKey}
                 />
               )

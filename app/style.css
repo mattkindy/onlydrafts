@@ -734,8 +734,82 @@
    * labelled pairs. The other tables keep their shape and scroll
    * sideways with the name column pinned.
    */
+  /* The week in review, under the games.
+
+     One section a block, rows two across where there is room and one
+     across on a phone. Every bar is a share of its own row, drawn in the
+     page's variables, so a report reads the same in either theme. */
+  .revtop { display: flex; align-items: center; justify-content: space-between;
+    gap: var(--s2); }
+  .revtop h3 { margin: 0; font-size: var(--t5); }
+  .card.review .hint.warn { color: var(--mark); margin-top: var(--s1); }
+  .revblock { margin-top: var(--s4); }
+  .revblock h4 { margin: 0 0 var(--s2); font-size: var(--t1);
+    text-transform: uppercase; letter-spacing: .06em; color: var(--faint);
+    font-weight: 700; }
+  .revrows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s3) var(--s4); }
+  .rev { display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline; column-gap: var(--s2); min-width: 0; }
+  .rev .lab { grid-column: 1 / -1; font-size: var(--t1); color: var(--faint);
+    font-weight: 600; }
+  /* a name breaks between its words or not at all */
+  .rev .who { font-weight: 700; font-size: var(--t3); min-width: 0;
+    overflow-wrap: break-word; hyphens: none; }
+  .rev .fig { font-weight: 800; font-size: var(--t3); white-space: nowrap;
+    font-variant-numeric: tabular-nums; }
+  .rev .fig.up { color: var(--go); }
+  .rev .fig.down { color: var(--no); }
+  .rev .ft { grid-column: 1 / -1; font-size: var(--t1); color: var(--muted); }
+  /* the box and whisker the player sheet draws, one row high, with his
+     week as the dot */
+  .rev .rng, .rev .fillbar { grid-column: 1 / -1; position: relative;
+    height: 10px; margin-top: var(--s2); background: var(--chip);
+    border-radius: 999px; }
+  .rev .rng u, .rev .rng b, .rev .rng i { position: absolute; }
+  .rev .rng u { top: 0; bottom: 0; border-radius: 2px;
+    background: color-mix(in srgb, var(--go) 40%, var(--chip)); }
+  .rev .rng b { top: -3px; width: 3px; height: 16px; margin-left: -1.5px;
+    background: var(--faint); border-radius: 2px; }
+  .rev .rng i { top: -2px; width: 14px; height: 14px; margin-left: -7px;
+    border-radius: 50%; background: var(--ink);
+    box-shadow: 0 0 0 2px var(--panel); }
+  /* a week outside his own floor to ceiling is worth marking */
+  .rev .rng i.out { background: var(--mark); }
+  .rev .fillbar u { position: absolute; left: 0; top: 0; bottom: 0;
+    background: var(--go); border-radius: 999px; }
+  .rev .fillbar u.no { background: var(--no); }
+  .rev .fillbar b { position: absolute; top: -3px; width: 4px; height: 16px;
+    background: var(--ink); border-radius: 2px; }
+  .rev .fillbar b.right { right: 0; }
+  .rev .fillbar b.left { left: 0; }
+
+  .strip { display: flex; flex-direction: column; gap: var(--s1); }
+  .strip .hint { margin-top: var(--s2); }
+  .score { display: grid; grid-template-columns: 9rem 1fr 4rem;
+    align-items: center; gap: var(--s2); font-size: var(--t2); }
+  /* block, not the card's flex, or the ellipsis never shows */
+  .score .nm { display: block; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; font-weight: 600; }
+  .score .bar { position: relative; height: 12px; background: var(--chip);
+    border-radius: 999px; }
+  .score .bar u { position: absolute; left: 0; top: 0; bottom: 0;
+    border-radius: 999px; }
+  /* what the bench would have added, behind what he actually scored */
+  .score .bar u.best { background: var(--edge); }
+  .score .bar u.won { background: var(--go); }
+  .score .bar u.lost { background: var(--muted); }
+  .score .bar b { position: absolute; top: -3px; width: 3px; height: 18px;
+    background: var(--mark); border-radius: 2px; }
+  .score .pts { text-align: right; font-weight: 700;
+    font-variant-numeric: tabular-nums; }
+
   @media (max-width: 600px) {
     .wrap { padding: var(--s3) var(--s3) 4rem; }
+    .revrows { grid-template-columns: minmax(0, 1fr); }
+    .score { grid-template-columns: 1fr 3.6rem; gap: 2px var(--s1); }
+    .score .nm { grid-column: 1 / -1; }
+    .strip { gap: var(--s2); }
     #subnav button { padding: 0 var(--s2); }
     .chips button, .seg button, .keepbtn, button.quiet,
     #espnhelp { min-height: 36px; }

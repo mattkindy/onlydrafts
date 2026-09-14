@@ -13,22 +13,25 @@
  * Your own game comes first, so the shared picture of the week has it.
  */
 
-import { useMemo } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { defenceLineSays, statLineSays } from "../lib/boxScore.ts";
 import {
   lineFor, standingFor, starterState,
   type GameState, type InGameStatus, type Lines,
 } from "../lib/matchups.ts";
-import type { Matchup, Side } from "../lib/providers.ts";
+import type { Matchup, PlayerWeek, Roster, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import { layoutGame, layoutWeek, shareLayout } from "../lib/shareImage.ts";
 import type { ShareGame } from "../lib/shareImage.ts";
 import type { SlateRow } from "../lib/slate.ts";
+import { pregameOf, reportFor } from "../lib/weekReport.ts";
 import { Advice, nameOf, pct, pctPair } from "./Advice.tsx";
 import { PlayerName } from "./PlayerName.tsx";
 import { Reading } from "./Reading.tsx";
 import { useLiveWeek } from "./scoreboard.ts";
+import { ShareButton } from "./ShareButton.tsx";
+import { WeekReport } from "./WeekReport.tsx";
 
 interface Props {
   games: Matchup[];
@@ -46,6 +49,10 @@ interface Props {
   /** the league's own name, which the shared picture is headed with */
   league?: string;
   status?: string;
+  /** every team's players, so the review knows who was a free agent */
+  rosters?: Roster[];
+  /** every player's week, where the provider will say */
+  weekPointsFor?: (() => Promise<PlayerWeek[]>) | undefined;
   /** opens a player's sheet, since every name on the page opens one */
   onMore?: (key: string) => void;
 }
@@ -141,24 +148,6 @@ export function shareGameOf(
       odds: odds[at]!,
     })) as ShareGame["sides"],
   };
-}
-
-function ShareButton(
-  { onShare, label, only }: {
-    onShare: () => void; label: string; only?: boolean;
-  },
-) {
-  return (
-    <button
-      class={"quiet share" + (only ? " icon" : "")}
-      title="save this as a picture for the group chat"
-      aria-label={label}
-      onClick={onShare}
-    >
-      <span aria-hidden="true">&#x2934;</span>
-      {!only && label}
-    </button>
-  );
 }
 
 /**
@@ -301,7 +290,7 @@ export function Game(
 export function Matchups(
   {
     games, rows, players, mine, slots, pays, season, week, league, status,
-    onMore,
+    rosters, weekPointsFor, onMore,
   }: Props,
 ) {
   const lines = useMemo(
@@ -316,6 +305,53 @@ export function Matchups(
 
     return [...games].sort((a, b) => Number(isMine(b)) - Number(isMine(a)));
   }, [games, mine]);
+
+  const [weeks, setWeeks] = useState<PlayerWeek[] | null>(null);
+  const asksWeek = useRef(weekPointsFor);
+
+  asksWeek.current = weekPointsFor;
+
+  useEffect(() => {
+    const asks = asksWeek.current;
+
+    if (!asks) {
+      setWeeks(null);
+
+      return;
+    }
+
+    let stale = false;
+
+    asks()
+      .then((got) => { if (!stale) { setWeeks(got); } })
+      // the review reads better without the free agents than not at all
+      .catch(() => { if (!stale) { setWeeks(null); } });
+
+    return () => { stale = true; };
+  }, [season, week, Boolean(weekPointsFor)]);
+
+  const rostered = useMemo(
+    () => new Set((rosters ?? []).flatMap(
+      (team) => team.keys.map((player) => player.key))),
+    [rosters],
+  );
+
+  /** how every game looked before anybody kicked off */
+  const pregame = useMemo(
+    () => games.length ? pregameOf(games, rows, lines) : [],
+    [games, rows, lines],
+  );
+
+  const report = useMemo(
+    () => states && league && games.length
+      ? reportFor({
+        league, week, games, rows, states, lines, slots, pregame,
+        ...(weeks ? { weeks } : {}),
+        rostered,
+      })
+      : null,
+    [states, league, games, rows, lines, slots, week, pregame, weeks, rostered],
+  );
 
   const shareWeek = () => {
     if (!states || !league) {
@@ -370,6 +406,8 @@ export function Matchups(
           />
         ))}
       </div>
+
+      {report && <WeekReport report={report} />}
     </>
   );
 }
