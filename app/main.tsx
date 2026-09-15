@@ -1073,6 +1073,7 @@ function App() {
             slate={slate}
             roster={rosterKeys(active.myRoster)}
             listed={listed}
+            gamesStatus={gamesStatus}
             onMore={setShowing}
           />
         )}
