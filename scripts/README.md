@@ -33,8 +33,8 @@ constant or a decision that is still in the model, and `src/README.md`
 says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `knowableWeekEval.ts`, `mechanicsCarryEval.ts`, `walkWeekCache.ts`,
 `jointProjectionEval.ts`, `playLayerEval.ts`, `estimateCorrelation.ts`,
-`exemptCheck.ts`, `leverageUsageProbe.ts`, `marketPriceProbe.ts` and
-`simAgreement.ts`.
+`exemptCheck.ts`, `leverageUsageProbe.ts`, `marketPriceProbe.ts`,
+`sleeperEval.ts` and `simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
@@ -1059,3 +1059,132 @@ pick spread and the draft count on it. Boards pulled before September
 2026 do not, because `pullAdp.ts` was dropping both fields on the way to
 disk; it keeps them now, so the 2026 board has to be pulled again before
 the disagreement measure can say anything about this season.
+
+# Whether a sleeper score beats who is hot
+
+`sleeperEval.ts` prints all of this in about ten seconds. At weeks 4, 6
+and 8 of each season it takes the players priced past pick 100 or not
+drafted at all, has every method pick its top twenty, and scores those
+twenty on what they went on to average and on how many of them finished
+inside the tier a league starts. That is 11529 player cuts over eight
+seasons, 9110 of them cheap enough to be picked from, all in PPR.
+
+`src/model/sleepers.ts` is the model. One ridge fit predicts points a
+game over the rest of the season from the price curve's median and width,
+the player's work share, the leverage lift on that share, his shrunk
+trend, his points a game so far, his games played and how far his pick
+moved across the sampled drafts. Its score is that number less the same
+fit's number for a player at the same price and position whose form is
+average for that position, so the price level comes out of it. The
+reasons come back with the score: each one is a term's weight times how
+far the player is from an average player at his position, and they add up
+to the score exactly.
+
+Points a game over the rest of a season divides by the games the player's
+club played rather than by the ones he played, so a back who tore
+something in November is worth what he was worth. Finishing inside the
+tier is read off total points over the same weeks against every player at
+the position, not only the cheap ones, which is why the oracle stops at
+0.698 and not at 1: a player can be the best of the cheap ones and still
+miss the top 24 receivers.
+
+The bench covers 2019 to 2025 rather than 2016 to 2025. A price curve
+wants three earlier boards and the first board on disk is 2015, so 2018
+is the earliest season that has one, and 2018 is then the earliest season
+with cuts, so there is nothing before it for a fit to read.
+
+```
+method                    ppg a pick   prec@10   prec@20   picks   worst season  median   best
+the price itself            8.55     0.238     0.250     420           7.30    8.23   9.99
+points a game so far       11.17     0.410     0.343     420           9.50   11.03  12.77
+raw work share              8.24     0.319     0.288     420           7.69    8.19   9.18
+the model                  10.02     0.438     0.398     420           8.98   10.11  10.93
+the model over the curve    8.26     0.338     0.260     420           6.74    8.12   9.72
+the model's own line       11.58     0.414     0.350     420          10.37   11.83  12.79
+oracle: the rest known     15.45     0.852     0.698     420          13.87   15.59  16.67
+```
+
+What the 2018 to 2024 fit weighs, in points a game for each standard
+deviation of a term:
+
+```
+  intercept               5.33     work share             0.60
+  price median            0.14     leverage lift         -0.09
+  price width             0.06     trend                  0.34
+  price hit rate          0.81     points a game so far   2.22
+  off the board          -0.73     games played           0.58
+  is RB / WR / TE   -0.89 / -0.63 / -0.96
+                                   pick spread            0.13
+```
+
+## Reading it
+
+The score does not beat who is hot at finding the players who go on to
+score the most. Its twenty average 10.02 points a game over the rest of
+the season where points a game so far gets 11.17, and it wins one season
+of the seven.
+
+Where it does win is how many of its picks turn into somebody a league
+starts. 0.398 of its top twenty finish inside the starter tier against
+0.343, and 0.438 of its top ten against 0.410, and it beats points a game
+so far on precision at twenty in five seasons of seven. Those are two
+different questions and the score wins the second one. A league that
+needs a startable flex every week cares about that one, and a league
+chasing points at any position cares about the first.
+
+The plain projection wins the points outright. "The model's own line" is
+the same fit with nothing taken off, and it averages 11.58 a pick against
+points a game so far's 11.17, five seasons of seven. So taking the price
+off costs a point and a half a pick and buys five points of precision.
+The players the board is highest on among the cheap are the ones already
+scoring, and subtracting the price pushes them down in favour of players
+whose share and trend say more than their box score does.
+
+Taking the price curve's median off instead is the wrong subtraction.
+That reads 8.26 a pick and 0.260 at twenty, which is the board's own order
+and nothing more, and it loses to every other method in every season. The
+curve's median is a whole season's points a game over the games a player
+played and the target is a rest of season rate over the games his club
+played. The gap between those two grows as the price falls, so the
+subtraction puts an error that moves with the price into the ranking.
+
+Points a game so far is most of the fit, at 2.22 of a point for each
+deviation where nothing else clears 0.81. The work share is worth 0.60
+and the trend 0.34, both positive, which is the first time either has
+been read forward. The leverage lift comes out at -0.09, so weighting a
+touch by how open the game still was adds nothing here, which is what the
+leverage probe said about everybody outside the rotational cohort.
+
+The pick spread comes out at +0.13 rather than negative. The disagreement
+finding above is about the hit rate at a fixed price and this is points a
+game with four to eight weeks of form already in the fit, so the two are
+not measuring the same thing, and 0.13 of a point is small either way. A
+wide spread on a player who has since taken a job is a room that was late
+rather than a room that was right.
+
+Centring the form terms on every position at once instead of on the
+player's own makes the score prefer cheap quarterbacks, since a
+quarterback outscores the average skill player at any price. That reads
+11.17 a pick and 0.395 at twenty, and it gets there by handing a
+quarterback a claim against the board he has not earned, so the per
+position centre is what ships even though it scores worse on the points.
+
+## What to try next
+
+Three things, in the order they look most likely to pay.
+
+Fit the rest of a season per position rather than pooled with position
+offsets. Points a game so far is doing nearly all the work and its slope
+almost certainly differs between a quarterback and a tight end, and one
+pooled slope is why the score has to be re-centred per position after the
+fact.
+
+Score the thing the score is for. The fit predicts points a game and the
+measure it wins on is whether a player clears his position's starter
+tier, so fit that instead, as a probability, against the curve's own hit
+rate at his price. The hit rate is already the best price term in the fit
+at 0.81 and it is the only one pointing at the tier.
+
+Put the player's own remaining schedule in. Nothing here knows who he
+plays, and a cheap back with six soft fixtures left is a different bet
+from one with six hard ones.
