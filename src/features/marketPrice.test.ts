@@ -5,6 +5,7 @@ import {
   seasonPrices,
   type PriceOutcome,
   type PriceFit,
+  type SeasonPrices,
 } from "./marketPrice.js";
 
 const SEASONS = [2018, 2019, 2020, 2021, 2022];
@@ -246,6 +247,25 @@ describe("marketPriceAsOf", () => {
 
   it("refuses a season with too little behind it", async () => {
     await expect(marketPriceAsOf(2016)).rejects.toThrow(/earlier/);
+  });
+
+  it("fills a handed-in cache and gives the same curve off it", async () => {
+    const counted = new Map<number, SeasonPrices | null>();
+    const cold = await marketPriceAsOf(2019, { counted });
+
+    expect([...counted.keys()].sort()).toEqual([2015, 2016, 2017, 2018]);
+
+    const warm = await marketPriceAsOf(2019, { counted });
+
+    expect(warm.trainedOn).toEqual(cold.trainedOn);
+    expect(warm.expectedPpg("RB", 40)).toBe(cold.expectedPpg("RB", 40));
+  });
+
+  it("leaves out a season the cache says has nothing", async () => {
+    const counted = new Map<number, SeasonPrices | null>([[2017, null]]);
+    const fitted = await marketPriceAsOf(2019, { counted });
+
+    expect(fitted.trainedOn).toEqual([2015, 2016, 2018]);
   });
 });
 

@@ -188,6 +188,15 @@ export interface MarketPriceOptions {
   /** what the outcome is scored under, PPR unless a caller says otherwise */
   rules?: ScoringRules;
   fit?: PriceFit;
+  /**
+   * Seasons already counted, keyed by season. A bench fitting one curve
+   * per season reads every earlier season again for each of them, which
+   * is a season of stat files loaded ten times over. Hand in a map and
+   * each one is read once. The map belongs to one set of the options
+   * above, since nothing in it says which format or rules it was counted
+   * under.
+   */
+  counted?: Map<number, SeasonPrices | null>;
 }
 
 /* ---------- one season's prices against what happened ---------- */
@@ -942,7 +951,10 @@ export async function marketPriceAsOf(
   const counted: number[] = [];
 
   for (let earlier = from; earlier < season; earlier++) {
-    const priced = await seasonPrices(earlier, options).catch(() => null);
+    const priced = options.counted?.has(earlier)
+      ? options.counted.get(earlier) ?? null
+      : await seasonPrices(earlier, options).catch(() => null);
+    options.counted?.set(earlier, priced);
 
     if (!priced || priced.rows.length === 0) {
       continue;

@@ -48,6 +48,14 @@ and how often one of them finished inside the tier a league starts
 every week. A later step can then rank players by how far the model
 disagrees with the price rather than by the points it projects.
 
+**A sleeper** is a player whose rest of season is worth far more than his
+price says, and `model/sleepers.ts` scores one. It fits the rest of a
+season on the curve, the player's share and his form so far, then takes
+off what the same fit says about a player at that price and position with
+average form, so the number left over is the claim against the board. It
+ranks who becomes startable better than points a game so far does and it
+ranks who scores the most worse, and `scripts/README.md` has the table.
+
 Three decisions in there are worth knowing before reading the code.
 
 The quantiles are counted off the players rather than taken from a
@@ -162,6 +170,7 @@ when you want to measure it again.
 | Sleeper being the source for who is exempt today | `data/nflverse.ts` | `scripts/exemptCheck.ts` |
 | `SHIPPED_SHAPE`, which way a play is weighted by how much the game was still in the balance | `model/leverage.ts` | `scripts/leverageUsageProbe.ts` |
 | Leverage weighted share not replacing raw share anywhere | `features/leverageUsage.ts` | the leverage finding in `scripts/README.md` |
+| The sleeper score taking the price off at all, and the form terms being centred per position | `model/sleepers.ts` | `scripts/sleeperEval.ts` |
 | Game script being left out of the week's setting | `scripts/buildSite.ts` | deleted, see `docs/scoreboard.md` |
 | The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
 
