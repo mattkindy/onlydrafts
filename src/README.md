@@ -126,6 +126,8 @@ when you want to measure it again.
 | `HOW_FAR`, `NO_LONG_SHAPE` and `FROM_COUNTS`, all off | `features/fitPlayFactors.ts` | `scripts/playLayerEval.ts` |
 | `GAME_LOADING` and the QB loading beside it | `sim/season.ts` | `scripts/estimateCorrelation.ts` |
 | Sleeper being the source for who is exempt today | `data/nflverse.ts` | `scripts/exemptCheck.ts` |
+| `SHIPPED_SHAPE`, which way a play is weighted by how much the game was still in the balance | `model/leverage.ts` | `scripts/leverageUsageProbe.ts` |
+| Leverage weighted share not replacing raw share anywhere | `features/leverageUsage.ts` | the leverage finding in `scripts/README.md` |
 | Game script being left out of the week's setting | `scripts/buildSite.ts` | deleted, see `docs/scoreboard.md` |
 | The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
 
