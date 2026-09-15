@@ -121,6 +121,21 @@ export interface WeeklyExample {
 }
 
 const POSITIONS = ["QB", "RB", "WR", "TE"];
+
+/**
+ * How many weeks a player needs behind him before the model will read him.
+ *
+ * Training wants two, because a mean and a trend off one game are mostly
+ * noise and there are plenty of players who have two. The slate cannot
+ * afford to be that strict: in week 2 nobody has two, so asking for them
+ * drops every back, receiver, tight end and quarterback and leaves a
+ * slate of defences, which is what week 2 shipped as until this was
+ * found. One week and the preseason line behind it beats no player at
+ * all, and the early week blend in the site build already leans on the
+ * line rather than on the one game.
+ */
+const TRAIN_WEEKS = 2;
+const SLATE_WEEKS = 1;
 const FIRST_WEEK = 5;
 const MAX_WEEK = 18;
 
@@ -389,10 +404,11 @@ export function buildWeeklyExamples(
     week: number,
     reference: PlayerWeekStats,
     target: PlayerWeekStats | undefined,
+    least = TRAIN_WEEKS,
   ): WeeklyExample | undefined => {
     const earlier = rows.filter((r) => r.week < week);
 
-    if (earlier.length < 2) {
+    if (earlier.length < least) {
       return undefined;
     }
 
@@ -547,7 +563,8 @@ export function buildWeeklyExamples(
         continue;
       }
 
-      const example = assemble(playerId, rows, prospectiveWeek, last, undefined);
+      const example = assemble(
+        playerId, rows, prospectiveWeek, last, undefined, SLATE_WEEKS);
 
       if (example) {
         prospective.push(example);
