@@ -216,6 +216,39 @@ describe("this week's matchups on ESPN", () => {
     });
   });
 
+  it("reads a week ESPN has not made live yet off the matchup period", async () => {
+    serve({
+      "/players?": [],
+      "/leagues/77": {
+        teams: [{ id: 1, name: "Team One" }, { id: 2, name: "Team Two" }],
+        schedule: [{
+          matchupPeriodId: 4,
+          home: {
+            teamId: 1, totalPoints: 0,
+            rosterForMatchupPeriod: { entries: [
+              entry(3918298, "Josh Allen", 1, 0, 0, 2),
+            ] },
+          },
+          away: {
+            teamId: 2, totalPoints: 0,
+            rosterForMatchupPeriod: { entries: [
+              entry(4429795, "Jahmyr Gibbs", 2, 2, 0),
+            ] },
+          },
+        }],
+      },
+    });
+
+    const { PROVIDERS } = await import("./providers.ts");
+    const league = leagueLike({ provider: "espn", leagueId: "77" });
+    const games = await PROVIDERS["espn"]!.matchupsFor!(league, 4);
+
+    expect(games[0]!.sides[0]!.starters.map((s) => s.name))
+      .toEqual(["Josh Allen"]);
+    expect(games[0]!.sides[1]!.starters.map((s) => s.name))
+      .toEqual(["Jahmyr Gibbs"]);
+  });
+
   it("pairs home with away, names the teams and scores the starters", async () => {
     const { PROVIDERS } = await import("./providers.ts");
     const league = leagueLike({ provider: "espn", leagueId: "77" });
