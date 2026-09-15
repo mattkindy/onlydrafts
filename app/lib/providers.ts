@@ -820,18 +820,23 @@ async function throughTheWorker(leagueId: string, season: number, query: string)
     );
   }
 
-  const said = await fetch(
-    where.replace(/\/+$/, "") + "/espn/" + encodeURIComponent(leagueId) +
-      "?season=" + season + query,
-    { headers: { "x-espn-swid": swid, "x-espn-s2": s2 } },
-  ).then((r) => r.json()).catch(() => null);
+  const at = where.replace(/\/+$/, "") + "/espn/" +
+    encodeURIComponent(leagueId) + "?season=" + season + query;
+  const answered = await fetch(
+    at, { headers: { "x-espn-swid": swid, "x-espn-s2": s2 } },
+  ).catch((e: Error) => {
+    throw new NeedsEspnCookies(
+      `could not reach the relay at ${where}: ${e.message}`);
+  });
+  const said = await answered.json().catch(() => {
+    throw new NeedsEspnCookies(
+      `the relay answered ${answered.status} with something other than json`);
+  });
 
-  if (!said || said.error) {
+  if (said.error) {
     // stale cookies look exactly like never having had any, so the page
     // says what to do rather than what went wrong
-    throw new NeedsEspnCookies(
-      said?.error ?? "the relay could not reach ESPN",
-    );
+    throw new NeedsEspnCookies(said.error);
   }
 
   keep("espnAsked", new Date().toISOString().slice(0, 10));
