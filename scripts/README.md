@@ -33,7 +33,7 @@ constant or a decision that is still in the model, and `src/README.md`
 says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `knowableWeekEval.ts`, `mechanicsCarryEval.ts`, `walkWeekCache.ts`,
 `jointProjectionEval.ts`, `playLayerEval.ts`, `estimateCorrelation.ts`,
-`exemptCheck.ts` and `simAgreement.ts`.
+`exemptCheck.ts`, `leverageUsageProbe.ts` and `simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
@@ -887,3 +887,93 @@ games and net points are left out, and a three-way tie is settled by
 those same pairwise comparisons rather than by the reduction the league
 applies, so a division race that finishes level is a rough count rather
 than an exact one.
+
+# What weighting a touch by leverage is worth
+
+`aggregateLeverage.ts` counts every target and every carry twice, once as
+itself and once multiplied by how much the game was still in the balance,
+into `data/curated/leverage.csv`. That is 55712 player weeks over 2015 to
+2025 and 7.2 megabytes. Each row also keeps receptions, air yards, first
+and second down work, and looks inside the twenty and inside the ten,
+with the side's total for each of them beside it.
+
+`src/model/leverage.ts` has two ways to put a number between zero and one
+on the state a play was run from. `doubt` is 4p(1-p) on the win
+probability the side with the ball had. `margin` tapers on the score
+instead, from nine points in the fourth quarter down to nothing at
+seventeen, with both thresholds scaled back through the rest of the game
+by the square root of the time left, so nine points with a quarter to go
+is eighteen at kickoff. Nine and seventeen are the thresholds the fourth
+quarter probe behind `app/lib/remainder.ts` found, so `margin` stretches
+that finding over the whole game rather than guessing again.
+
+`leverageUsageProbe.ts` asks whether a player's share through week w
+orders his points a game over weeks w+1 to w+4 better than his raw share
+does. Weeks 4 to 13 of 2015 to 2025, in PPR, a player counting once he
+has 20 targets and carries behind him and played two of the next four.
+Weeks won is how many of the 110 season weeks the weighted share ordered
+better in, and seasons is the same count over the eleven seasons, which
+is the harder test because the ten weeks of one season share most of
+their players.
+
+```
+position  measure       raw    leverage   within a week   weeks won  seasons  agree   pairs
+RB        carry share   0.572  0.578     0.558 / 0.564     71/110     8/11  0.992    7307
+RB        target share  0.475  0.493     0.458 / 0.475     82/110     9/11  0.976    7307
+RB        work share    0.616  0.615     0.604 / 0.603     50/110     5/11  0.989    7307
+TE        carry share   0.098  0.108     0.100 / 0.111     50/109     7/11  0.975    3283
+TE        target share  0.525  0.529     0.452 / 0.458     66/109     7/11  0.985    3283
+TE        work share    0.525  0.541     0.447 / 0.472     72/109     7/11  0.977    3283
+WR        carry share   0.064  0.066     0.063 / 0.064     65/110     5/11  0.988    9319
+WR        target share  0.583  0.581     0.553 / 0.554     57/110     5/11  0.985    9319
+WR        work share    0.583  0.588     0.551 / 0.559     74/110     9/11  0.982    9319
+```
+
+The same again over only the players under 15% of their side's work,
+which is where the idea should matter most:
+
+```
+position  measure       raw    leverage   within a week   weeks won  seasons  agree   pairs
+RB        carry share   0.216  0.238     0.168 / 0.190     72/110     8/11  0.950    3153
+RB        target share  0.183  0.194     0.154 / 0.173     61/110     5/11  0.949    3153
+RB        work share    0.299  0.311     0.252 / 0.272     66/110     6/11  0.931    3153
+TE        carry share   0.094  0.103     0.096 / 0.107     49/107     7/11  0.974    3221
+TE        target share  0.511  0.514     0.438 / 0.443     64/107     7/11  0.984    3221
+TE        work share    0.510  0.527     0.428 / 0.455     71/107     7/11  0.975    3221
+WR        carry share   0.034  0.033     0.036 / 0.034     54/110     4/11  0.986    8073
+WR        target share  0.510  0.508     0.464 / 0.469     61/110     5/11  0.979    8073
+WR        work share    0.508  0.515     0.465 / 0.477     72/110     9/11  0.973    8073
+```
+
+`margin` is the shipped shape. It ordered better in 587 of the 987 season
+weeks the first table counts where `doubt` managed 555, and the pooled
+numbers differ by a few thousandths in both directions.
+
+Read straight, the weighting does not beat raw share by enough to replace
+it. The agree column says why: the two order the same players at .93 to
+.99, so there was never much room for either to move. The cell it does
+help is a back's target share, .475 raw against .493 weighted, 82 weeks
+of 110 and 9 seasons of 11. A back catches passes when his side is
+behind, which is where the score distorts usage most, so that is where
+the idea had the most to find. A rotational back's carry share is the
+other one, .216 against .238 over the 3153 weeks under 15% of a side's
+work, 8 seasons of 11.
+
+Everything else is inside the noise or the wrong way round. A back's work
+share, his targets and carries together, which is the best single number
+he has at .616, goes to .615 and wins 5 seasons of 11. A receiver's
+target share goes .583 to .581 and also wins 5 of 11.
+
+Nothing in the model reads the file, and on these numbers nothing should
+read it in place of raw share. It still answers the question it was built
+for, which is which backup is being worked into a role rather than
+mopping up, and there it adds two hundredths of ordering on a rotational
+back's carries.
+
+The last block of the probe checks the trend `src/features/leverageUsage.ts`
+reports, which is the last three weeks of share against everything before
+them, pulled toward the position's mean by how many chances are behind
+it. Against how a player's points a game actually moved, from the weeks
+before the probe week to the four after it, the trend ranks .091 for a
+back, .045 for a receiver on targets and .041 for a tight end. Positive
+at every position, and small.
