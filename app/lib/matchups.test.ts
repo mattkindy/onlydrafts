@@ -696,6 +696,30 @@ describe("standingFor", () => {
       expect(summed).toBeCloseTo(standing.projected[at]!, 6);
     }
   });
+
+  it("gives a finished loser 0% and the winner 100%, however the sides are ordered", () => {
+    const rows = rowsFor(row("qb", "BUF", 95, "QB", "MIA"));
+    const now = states({ BUF: { where: "post", left: 0 } });
+    // the defence has no team on it, the way one nobody has a line on
+    // shows up, and it gave up a lot of points, so its own score is
+    // negative rather than the zero a game that has not kicked off reads as
+    const mine = side("me", 92, [
+      { key: "qb", points: 95, slot: "QB" },
+      { key: "def", points: -3, slot: "DEF" },
+    ]);
+    const theirs = side("them", 100, [{ key: "qb2", points: 100, slot: "QB" }]);
+
+    // the summary line always puts your own side first
+    const summary = standingFor({ sides: [mine, theirs] }, rows, now);
+
+    expect(summary.odds).toEqual([0, 1]);
+
+    // the card draws the game in whichever order the league handed it
+    // back, and it has to land on the same answer either way
+    const card = standingFor({ sides: [theirs, mine] }, rows, now);
+
+    expect(card.odds).toEqual([1, 0]);
+  });
 });
 
 describe("hurtFrom", () => {
