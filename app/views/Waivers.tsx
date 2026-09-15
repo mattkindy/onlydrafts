@@ -64,6 +64,8 @@ interface Props {
   roster: Set<string> | null;
   /** who the injury report has listed, for the rankings table's badges */
   listed: Map<string, Listed>;
+  /** why the games could not be read, when they could not */
+  gamesStatus?: string;
   onMore: (p: Player) => void;
 }
 
@@ -300,7 +302,7 @@ function DropRow(
  */
 function missingWeek(
   week: number | null, rows: Map<string, SlateRow>,
-  states: unknown, ours: unknown,
+  states: unknown, ours: unknown, gamesStatus = "",
 ): { says: string; reading: boolean } | null {
   if (week === null) {
     return {
@@ -315,6 +317,12 @@ function missingWeek(
 
   if (!states) {
     return { says: "reading the scoreboard...", reading: true };
+  }
+
+  // a league whose games could not be read looks the same as one with no
+  // game for you this week, and the reader can only fix the first
+  if (!ours && gamesStatus) {
+    return { says: gamesStatus, reading: false };
   }
 
   if (!ours) {
@@ -410,7 +418,8 @@ export function Waivers(props: Props) {
 
   const yours = drops
     .filter((row) => !wanted || normalizeName(row.p.name).includes(wanted));
-  const missing = missingWeek(props.week, rows, states, ours);
+  const missing = missingWeek(
+    props.week, rows, states, ours, props.gamesStatus);
   const dropSlot = "who takes his slot";
 
   /**
