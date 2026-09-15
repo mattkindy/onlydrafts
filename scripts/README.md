@@ -33,7 +33,8 @@ constant or a decision that is still in the model, and `src/README.md`
 says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `knowableWeekEval.ts`, `mechanicsCarryEval.ts`, `walkWeekCache.ts`,
 `jointProjectionEval.ts`, `playLayerEval.ts`, `estimateCorrelation.ts`,
-`exemptCheck.ts`, `leverageUsageProbe.ts` and `simAgreement.ts`.
+`exemptCheck.ts`, `leverageUsageProbe.ts`, `marketPriceProbe.ts` and
+`simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
@@ -977,3 +978,84 @@ it. Against how a player's points a game actually moved, from the weeks
 before the probe week to the four after it, the trend ranks .091 for a
 back, .045 for a receiver on targets and .041 for a tight end. Positive
 at every position, and small.
+# What a draft price is worth
+
+`marketPriceProbe.ts` prints all of this in about fourteen seconds. It
+covers 1892 priced players over 2015 to 2025, PPR points a game, and
+every season is scored against a curve fitted only on the seasons before
+it.
+
+The price is a good ordering and the hit rate is close to calibrated.
+Points a game order at .70 Spearman against a curve that never saw the
+season, and bucketing players by the chance the curve gave them lines up
+with how often they finished inside the starter tier: 14.3% said against
+15.6% really over 409 players, 36.9% against 36.6% over 254, 52.7%
+against 52.8% over 235. The top bucket is the one that is off, 68.2%
+said against 72.5% really, so an early pick hits slightly more often
+than the curve admits.
+
+## The two fits cannot be separated
+
+Fitting points a game as a straight line on log price with one slope and
+a position offset, against a windowed fit that pools neighbouring prices
+until nothing rises with price, gives the same 3.78 points of error.
+Each orders players better in four of the eight scored seasons, and no
+season separates them by more than .02 of ordering. The windowed one
+ships because the quantiles and the hit rate come off the same window,
+so one thing is fitted rather than two.
+
+## How wide the outcome runs at a cheap price
+
+The outcome at a given price is close to symmetric. Measured as the mean
+minus the median over the middle eight tenths, every position and price
+band comes out inside ±0.08, and the season total says the same thing as
+the rate. The cheapest back band is the most skewed on the board at 0.08
+for points a game and 0.19 for the total, which is small.
+
+What does move, and moves a lot, is the width. From the 10th to the 90th
+percentile as a multiple of the median:
+
+```
+RB 1-12   0.67     RB 49-96  0.92     RB 97-160  1.44
+WR 1-12   0.60     WR 49-96  0.82     WR 161+    1.35
+QB 13-24  0.39     QB 49-96  0.46     QB 97-160  0.64
+```
+
+A cheap pick is the same shape of bet as an early one spread over twice
+the range, and a quarterback is half the bet a back is at any price. A
+ranking step should read the quantile width rather than reach for a skew
+correction.
+
+## What a wide pick spread says about a player
+
+At a fixed price, cutting players into thirds by how wide their pick ran
+across the sampled drafts, the right tail does not move: 11.4% of the
+tightest third beat the 90th percentile for their price against 9.6% of
+the widest, which is 1.0 standard errors and the wrong way round.
+
+The hit rate does move, and also the wrong way round. 40.3% of the
+tightest third finished inside the starter tier against 33.3% of the
+widest, 2.5 standard errors apart. A room that cannot agree where a
+player goes is telling you he is less likely to start, not that he has
+more upside. How many drafts took him points the same way and does not
+clear two standard errors, at 1.5.
+
+The thirds are level on price, which is what makes them comparable: each
+one averages .46 to .49 of the way through its own price window, where
+half is dead level. The measure is a within-window rank, so a tenth
+rounder whose pick moves four rounds is being compared against other
+tenth rounders rather than against first rounders.
+
+Nothing here is fed forward yet. The next thing to try is shading the hit
+rate by the spread rather than shading the mean or the tail.
+
+## What the numbers rest on
+
+Two to three drafted players a season never appear in a stat line, and
+they are kept at zero points a game rather than dropped. Nought to two
+board names a season match nobody on any roster and are left out, so the
+name join is close to complete. Every board from 2015 to 2025 has the
+pick spread and the draft count on it. Boards pulled before September
+2026 do not, because `pullAdp.ts` was dropping both fields on the way to
+disk; it keeps them now, so the 2026 board has to be pulled again before
+the disagreement measure can say anything about this season.

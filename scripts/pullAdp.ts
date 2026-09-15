@@ -12,9 +12,13 @@ const body = await fetch(url).then((r) => r.json());
 
 if (body.status !== "Success") throw new Error(`no board for ${season}`);
 
+// The spread and the draft count come through because the market price
+// model asks whether a room that argued about a player was telling you
+// something. Boards pulled before this was added have neither.
 const players = body.players.map((p: any) => ({
   name: p.name, position: p.position, adp: p.adp,
   high: p.high, low: p.low,
+  stdev: p.stdev, times_drafted: p.times_drafted,
 }));
 const out = `data/raw/adp_${format}_${season}.json`;
 await writeFile(out, JSON.stringify({ meta: body.meta, players }, null, 2));
