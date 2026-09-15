@@ -41,6 +41,48 @@ function Range({ chart }: { chart: RowChart }) {
   );
 }
 
+/**
+ * Every week he could have had, with the part past the week he did have
+ * filled in. That filled sliver is the odds the line above says in
+ * words, so it is drawn over the rest rather than beside it.
+ */
+function Bell({ chart }: { chart: RowChart }) {
+  if (chart.kind !== "curve") {
+    return null;
+  }
+
+  const { curve } = chart;
+  const across = (share: number) => (share * 100).toFixed(2);
+  const up = (share: number) => (100 - share * 96).toFixed(2);
+  const outline = curve.line
+    .map(([x, y]) => `${across(x)},${up(y)}`)
+    .join(" ");
+  const shape = `M0,100 L${outline} L100,100 Z`;
+  const at = across(curve.at);
+  const tail = curve.high
+    ? `M${at},0 H100 V100 H${at} Z`
+    : `M0,0 H${at} V100 H0 Z`;
+
+  return (
+    <svg
+      class="bell" viewBox="0 0 100 100" preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <clipPath id="past"><path d={tail} /></clipPath>
+      <path class="all" d={shape} />
+      <path
+        class={curve.high ? "past up" : "past down"} d={shape}
+        clip-path="url(#past)"
+      />
+      <path class="edge" d={`M${outline}`} />
+      <path class="line" d={`M${across(curve.mid)},18 V100`} />
+      <path
+        class={curve.high ? "mark up" : "mark down"} d={`M${at},0 V100`}
+      />
+    </svg>
+  );
+}
+
 /** a chance, with a tick at the end for the side that actually won */
 function Fill({ chart }: { chart: RowChart }) {
   if (chart.kind !== "fill") {
@@ -60,6 +102,7 @@ function Fill({ chart }: { chart: RowChart }) {
 
 const CHARTS: Record<RowChart["kind"], typeof Range> = {
   spread: Range,
+  curve: Bell,
   fill: Fill,
 };
 
@@ -67,7 +110,7 @@ function Row({ row }: { row: ReportRow }) {
   const Chart = row.chart ? CHARTS[row.chart.kind] : null;
 
   return (
-    <div class="rev">
+    <div class={row.chart?.kind === "curve" ? "rev hero" : "rev"}>
       <span class="lab">{row.label}</span>
       <span class="who">{row.head}</span>
       <span class={"fig " + row.tone}>{row.figure}</span>
@@ -128,7 +171,7 @@ export function WeekReport({ report }: { report: Report }) {
           {block.kind === "scores"
             ? <Strip block={block} />
             : (
-              <div class="revrows">
+              <div class={block.wide ? "revrows wide" : "revrows"}>
                 {block.rows.map((row, at) => (
                   <Row row={row} key={row.label + row.head + at} />
                 ))}

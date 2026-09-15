@@ -14,7 +14,7 @@ import {
   SITE, WIDTH, type Picture,
 } from "./shareImage.ts";
 import { scoredSays } from "./scoring.ts";
-import type { Spread } from "./spread.ts";
+import { pointsOf, weekAtNormal, type Spread } from "./spread.ts";
 import {
   AWARD_SAYS, quantileSays,
   type Award, type PlayerNote, type Report, type Scorer, type SideScore,
@@ -54,9 +54,79 @@ export function spreadBarOf(spread: Spread, points: number): SpreadBar {
   };
 }
 
+/** how far into each tail the curve is drawn, in normals */
+const CURVE_FAR = 3.2;
+
+/** how many points the outline is drawn from */
+const CURVE_STEPS = 72;
+
+/** how many samples either side the density is averaged over */
+const CURVE_SMOOTH = 5;
+
+const normalPdf = (z: number) => Math.exp(-(z * z) / 2) / Math.sqrt(2 * Math.PI);
+
+export interface Curve {
+  /** the outline left to right, each point a share of the box it fills */
+  line: [number, number][];
+  /** where his week landed across that same box */
+  at: number;
+  /** whether it landed above the middle of the curve rather than below */
+  high: boolean;
+  /** and where the middle of the curve itself sits, which was the line */
+  mid: number;
+}
+
+/**
+ * One player's week against the shape of every week he could have had.
+ *
+ * The five shipped figures are his distribution turned inside out, so
+ * stepping a normal across them and asking how far the points move per
+ * step gives the density back: where a step barely moves the points,
+ * the weeks pile up. His own week goes on the same axis, and the sliver
+ * of curve past it is the odds of a week that big.
+ */
+export function curveOf(spread: Spread, points: number): Curve {
+  const shipped = pointsOf(spread);
+  const step = (CURVE_FAR * 2) / CURVE_STEPS;
+  const zs = Array.from(
+    { length: CURVE_STEPS + 1 }, (_, i) => -CURVE_FAR + i * step);
+  const xs = zs.map((z) => weekAtNormal(shipped, z));
+  const tall = xs.map((_, i) => {
+    const under = Math.max(0, i - 1);
+    const over = Math.min(xs.length - 1, i + 1);
+    const across = Math.max(xs[over]! - xs[under]!, 1e-6);
+
+    return normalPdf(zs[i]!) * ((over - under) * step) / across;
+  });
+
+  // the five figures are joined by straight lines, so the density they
+  // give back is four flat steps. Averaging over a short window turns
+  // the staircase into the curve the steps are standing in for.
+  const smooth = tall.map((_, i) => {
+    const from = Math.max(0, i - CURVE_SMOOTH);
+    const to = Math.min(tall.length - 1, i + CURVE_SMOOTH);
+
+    return tall.slice(from, to + 1).reduce((sum, n) => sum + n, 0)
+      / (to - from + 1);
+  });
+
+  const left = Math.min(xs[0]!, points);
+  const span = Math.max(Math.max(xs.at(-1)!, points) - left, 0.01);
+  const most = Math.max(...smooth);
+  const share = (x: number) => (x - left) / span;
+
+  return {
+    line: xs.map((x, i) => [share(x), smooth[i]! / most]),
+    at: share(points),
+    high: points > spread.mid,
+    mid: share(spread.mid),
+  };
+}
+
 /** what one row draws beside its figures, where a picture says anything */
 export type RowChart =
   | { kind: "spread"; bar: SpreadBar }
+  | { kind: "curve"; curve: Curve }
   | { kind: "fill"; fill: number; won: boolean | null };
 
 export interface ReportRow {
@@ -95,8 +165,10 @@ export interface RowsBlock {
   kind: "rows";
   title: string;
   rows: ReportRow[];
-  /** how tall one line of rows is here, since a chart needs more */
-  line: number;
+  /** one row to a line, across the whole card, for the week's headline */
+  wide: boolean;
+  /** where each row starts under the title, since a chart needs more room */
+  tops: number[];
   y: number;
   height: number;
 }
@@ -113,6 +185,7 @@ const GAP = 24;
 const BLOCK_TITLE = 46;
 const ROW = 92;
 const CHART_ROW = 124;
+const CURVE_ROW = 240;
 const BLOCK_PAD = 20;
 const STRIP_ROW = 46;
 
@@ -154,16 +227,55 @@ const scorerRow = (label: string, his: Scorer, tone: Tone): ReportRow => ({
   tone,
 });
 
-function rowsBlock(title: string, rows: ReportRow[], y: number): RowsBlock {
-  const line = rows.some((row) => row.chart) ? CHART_ROW : ROW;
+const ROW_HEIGHTS: Record<RowChart["kind"], number> = {
+  spread: CHART_ROW,
+  curve: CURVE_ROW,
+  fill: CHART_ROW,
+};
+
+const rowHeight = (row: ReportRow) =>
+  row.chart ? ROW_HEIGHTS[row.chart.kind] : ROW;
+
+/**
+ * Where each row starts under its block's title.
+ *
+ * Rows go two to a line unless the block is wide, and a line is as tall
+ * as the taller of its two, so a spread bar next to a plain row does not
+ * run into the line below.
+ */
+function rowTops(
+  rows: ReportRow[], wide: boolean,
+): { tops: number[]; height: number } {
+  const perLine = wide ? 1 : 2;
+  const tops: number[] = [];
+  let height = 0;
+
+  for (let at = 0; at < rows.length; at += perLine) {
+    const line = rows.slice(at, at + perLine);
+
+    for (const _ of line) {
+      tops.push(height);
+    }
+
+    height += Math.max(...line.map(rowHeight));
+  }
+
+  return { tops, height };
+}
+
+function rowsBlock(
+  title: string, rows: ReportRow[], y: number, wide = false,
+): RowsBlock {
+  const { tops, height } = rowTops(rows, wide);
 
   return {
     kind: "rows",
     title,
     rows,
-    line,
+    wide,
+    tops,
     y,
-    height: BLOCK_TITLE + Math.ceil(rows.length / 2) * line + BLOCK_PAD,
+    height: BLOCK_TITLE + height + BLOCK_PAD,
   };
 }
 
@@ -248,10 +360,19 @@ const freeAgentRows = (report: Report): ReportRow[] => {
   return [scorerRow("top free agent", free.top, "up"), ...rest];
 };
 
+/** the one row that gets the whole width and the curve behind it */
+const heroRows = (report: Report): ReportRow[] =>
+  report.player
+    ? [{
+      ...noteRow("player of the week", report.player, "up"),
+      chart: {
+        kind: "curve" as const,
+        curve: curveOf(report.player.spread, report.player.points),
+      },
+    }]
+    : [];
+
 const leadRows = (report: Report): ReportRow[] => [
-  ...(report.player
-    ? [noteRow("player of the week", report.player, "up")]
-    : []),
   ...(report.manager
     ? [{
       label: "manager of the week",
@@ -277,15 +398,15 @@ export function layoutReport(report: Report): ReportLayout {
     blocks.push(block);
     y += block.height + GAP;
   };
-  const rows = (title: string, its: ReportRow[]) => {
+  const rows = (title: string, its: ReportRow[], wide = false) => {
     if (!its.length) {
       return;
     }
 
-    put(rowsBlock(title, its, y));
+    put(rowsBlock(title, its, y, wide));
   };
 
-  rows("headliners", leadRows(report));
+  rows("headliners", [...heroRows(report), ...leadRows(report)], true);
 
   if (report.scores.length) {
     put(scoresBlock(report, y));
@@ -377,6 +498,83 @@ function drawSpread(
   ctx.fill();
 }
 
+/** how tall the curve is drawn, under the row's own three lines */
+const CURVE_TALL = 120;
+
+/**
+ * The curve, with the part past his week filled in his colour.
+ *
+ * That filled sliver is the odds the row says in words, so it is drawn
+ * over the rest rather than beside it, and the line down from his week
+ * is where the two meet.
+ */
+function drawCurve(
+  ctx: CanvasRenderingContext2D, curve: Curve,
+  left: number, width: number, top: number,
+) {
+  const foot = top + CURVE_TALL;
+  const at = (point: [number, number]): [number, number] =>
+    [left + point[0] * width, foot - point[1] * (CURVE_TALL - 8)];
+  const outline = () => {
+    ctx.beginPath();
+    ctx.moveTo(left, foot);
+
+    for (const point of curve.line) {
+      ctx.lineTo(...at(point));
+    }
+
+    ctx.lineTo(left + width, foot);
+    ctx.closePath();
+  };
+
+  outline();
+  ctx.fillStyle = SHADES.chip;
+  ctx.fill();
+
+  const edge = left + curve.at * width;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(
+    curve.high ? edge : left, top,
+    curve.high ? left + width - edge : edge - left, CURVE_TALL);
+  ctx.clip();
+  outline();
+  ctx.fillStyle = curve.high ? SHADES.go : SHADES.no;
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = SHADES.edge;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  for (const [i, point] of curve.line.entries()) {
+    const to = at(point);
+
+    if (i === 0) {
+      ctx.moveTo(...to);
+
+      continue;
+    }
+
+    ctx.lineTo(...to);
+  }
+
+  ctx.stroke();
+
+  // where the line had him, so the gap to where he landed is the story
+  ctx.strokeStyle = SHADES.faint;
+  ctx.setLineDash([4, 5]);
+  ctx.beginPath();
+  ctx.moveTo(left + curve.mid * width, top + 20);
+  ctx.lineTo(left + curve.mid * width, foot);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = curve.high ? SHADES.go : SHADES.no;
+  ctx.fillRect(edge - 2, top, 4, CURVE_TALL);
+}
+
 function drawFill(
   ctx: CanvasRenderingContext2D, chart: { fill: number; won: boolean | null },
   left: number, width: number, top: number,
@@ -412,6 +610,11 @@ const CHARTS: Record<
       drawSpread(ctx, chart.bar, left, width, top);
     }
   },
+  curve: (ctx, chart, left, width, top) => {
+    if (chart.kind === "curve") {
+      drawCurve(ctx, chart.curve, left, width, top);
+    }
+  },
   fill: (ctx, chart, left, width, top) => {
     if (chart.kind === "fill") {
       drawFill(ctx, chart, left, width, top);
@@ -424,6 +627,8 @@ function drawRow(
   left: number, width: number, top: number,
 ) {
   const right = left + width;
+  // the row with the curve is the week's headline, so it is set larger
+  const name = row.chart?.kind === "curve" ? 46 : 29;
 
   ctx.textAlign = "left";
   ctx.fillStyle = SHADES.faint;
@@ -431,24 +636,25 @@ function drawRow(
   ctx.fillText(fitted(ctx, row.label, width), left, top + 21);
 
   ctx.fillStyle = SHADES.ink;
-  ctx.font = "700 29px " + FONT;
+  ctx.font = `700 ${name}px ` + FONT;
 
   const figure = ctx.measureText(row.figure).width;
+  const line = top + 40 + name / 2;
 
-  ctx.fillText(fitted(ctx, row.head, width - figure - 18), left, top + 54);
+  ctx.fillText(fitted(ctx, row.head, width - figure - 18), left, line);
 
   ctx.textAlign = "right";
   ctx.fillStyle = TONES[row.tone];
-  ctx.font = "800 29px " + FONT;
-  ctx.fillText(row.figure, right, top + 54);
+  ctx.font = `800 ${name}px ` + FONT;
+  ctx.fillText(row.figure, right, line);
 
   ctx.textAlign = "left";
   ctx.fillStyle = SHADES.muted;
   ctx.font = "500 21px " + FONT;
-  ctx.fillText(fitted(ctx, row.foot, width), left, top + 80);
+  ctx.fillText(fitted(ctx, row.foot, width), left, line + 26);
 
   if (row.chart) {
-    CHARTS[row.chart.kind](ctx, row.chart, left, width, top + 94);
+    CHARTS[row.chart.kind](ctx, row.chart, left, width, line + 40);
   }
 }
 
@@ -525,11 +731,11 @@ export function paintReport(
     }
 
     block.rows.forEach((row, at) => {
-      const side = at % 2;
+      const side = block.wide ? 0 : at % 2;
       const left = PAD + BLOCK_PAD + side * (column + GAP);
-      const top = block.y + BLOCK_TITLE + Math.floor(at / 2) * block.line;
+      const across = block.wide ? width - BLOCK_PAD * 2 : column;
 
-      drawRow(ctx, row, left, column, top);
+      drawRow(ctx, row, left, across, block.y + BLOCK_TITLE + block.tops[at]!);
     });
   }
 }

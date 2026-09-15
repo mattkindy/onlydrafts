@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { layoutReport, reportTextOf, spreadBarOf } from "./shareReport.ts";
+import {
+  curveOf, layoutReport, reportTextOf, spreadBarOf,
+} from "./shareReport.ts";
 import { WIDTH } from "./shareImage.ts";
 import type { PlayerNote, Report } from "./weekReport.ts";
 
@@ -150,7 +152,7 @@ describe("layoutReport", () => {
 
     const two = blocks[0];
 
-    expect(two?.kind === "rows" && two.rows[0]?.chart?.kind).toBe("spread");
+    expect(two?.kind === "rows" && two.rows[0]?.chart?.kind).toBe("curve");
   });
 
   it("leaves a block out when the week has nothing for it", () => {
@@ -194,5 +196,47 @@ describe("spreadBarOf", () => {
 
     expect(bar.at).toBeCloseTo(1);
     expect(bar.beyond).toBe(true);
+  });
+});
+
+describe("curveOf", () => {
+  const spread = { ev: 12.4, q1: 8, mid: 12, q3: 17, low: 4, high: 24 };
+
+  it("rises to a peak in the middle and falls away on both sides", () => {
+    const { line } = curveOf(spread, 12);
+    const tallest = line.reduce(
+      (best, point, at) => (point[1] > line[best]![1] ? at : best), 0);
+
+    expect(tallest).toBeGreaterThan(line.length * 0.2);
+    expect(tallest).toBeLessThan(line.length * 0.8);
+    expect(line[0]![1]).toBeLessThan(0.2);
+    expect(line.at(-1)![1]).toBeLessThan(0.2);
+    expect(Math.max(...line.map((point) => point[1]))).toBe(1);
+  });
+
+  it("goes left to right across the box, never outside it", () => {
+    const { line } = curveOf(spread, 12);
+
+    for (const [at, [x, y]] of line.entries()) {
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x).toBeLessThanOrEqual(1);
+      expect(y).toBeGreaterThanOrEqual(0);
+
+      if (at > 0) {
+        expect(x).toBeGreaterThan(line[at - 1]![0]);
+      }
+    }
+  });
+
+  it("makes room for a week past the end of the curve", () => {
+    const far = curveOf(spread, 60);
+
+    expect(far.at).toBe(1);
+    expect(far.high).toBe(true);
+    expect(far.line.at(-1)![0]).toBeLessThan(1);
+  });
+
+  it("marks a week under the middle as a low one", () => {
+    expect(curveOf(spread, 2).high).toBe(false);
   });
 });
