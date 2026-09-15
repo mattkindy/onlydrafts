@@ -756,6 +756,22 @@
   /* a name breaks between its words or not at all */
   .rev .who { font-weight: 700; font-size: var(--t3); min-width: 0;
     overflow-wrap: break-word; hyphens: none; }
+  .revrows.wide { grid-template-columns: minmax(0, 1fr); }
+  /* the week's headline, set larger, with the curve under it */
+  .rev.hero .who, .rev.hero .fig { font-size: var(--t6); letter-spacing: -.02em; }
+  .bell { grid-column: 1 / -1; width: 100%; height: 104px;
+    margin-top: var(--s3); display: block; overflow: visible; }
+  .bell .all { fill: var(--chip); }
+  .bell .past.up { fill: var(--go); }
+  .bell .past.down { fill: var(--no); }
+  .bell .edge { fill: none; stroke: var(--edge); stroke-width: 2;
+    vector-effect: non-scaling-stroke; }
+  /* where the line had him, so the gap to where he landed is the story */
+  .bell .line { stroke: var(--faint); stroke-width: 2; stroke-dasharray: 3 4;
+    vector-effect: non-scaling-stroke; }
+  .bell .mark { stroke-width: 3; vector-effect: non-scaling-stroke; }
+  .bell .mark.up { stroke: var(--go); }
+  .bell .mark.down { stroke: var(--no); }
   .rev .fig { font-weight: 800; font-size: var(--t3); white-space: nowrap;
     font-variant-numeric: tabular-nums; }
   .rev .fig.up { color: var(--go); }
