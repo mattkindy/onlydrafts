@@ -44,6 +44,8 @@ interface Props {
   listed: Map<string, Listed>;
   /** your own team's name in the league */
   mine: string | null;
+  /** and the provider's id for that team, where it has one */
+  mineId?: string | null;
   slots: string[] | null;
   /** the league's own name, which the shared picture is headed with */
   league?: string;
@@ -265,13 +267,14 @@ function Lineup(
 }
 
 export function MyMatchup(props: Props) {
-  const { games, mine, rows, slots, slate, onMore } = props;
+  const { games, mine, mineId, rows, slots, slate, onMore } = props;
   const { states, remainder, trouble } = useLiveWeek(
     props.picked?.season, props.picked?.week, props.pays ?? {});
 
   const lines = useMemo(
     () => new Map(props.players.map((p) => [p.key, p])), [props.players]);
-  const ours = useMemo(() => myGameIn(games, mine), [games, mine]);
+  const ours = useMemo(
+    () => myGameIn(games, mine, mineId), [games, mine, mineId]);
 
   if (!props.weeks.length) {
     return (

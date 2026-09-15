@@ -346,7 +346,8 @@ export function Waivers(props: Props) {
 
   const lines: Lines = useMemo(
     () => new Map(players.map((p) => [p.key, p])), [players]);
-  const ours = useMemo(() => myGameIn(games, league.team), [games, league]);
+  const ours = useMemo(
+    () => myGameIn(games, league.team, league.userId), [games, league]);
   const nameFor = (key: string) => nameOf(key, rows, lines);
 
   /**

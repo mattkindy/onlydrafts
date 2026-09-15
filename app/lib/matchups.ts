@@ -928,10 +928,15 @@ export interface Live {
 
 /** your own side of this week's game, and the side across from it */
 export function myGameIn(
-  games: Matchup[], mine: string | null,
+  games: Matchup[], mine: string | null, mineId?: string | null,
 ): { side: Side; against: Side; game: Matchup; at: number } | null {
+  // the id is the one thing about a team that does not change when its
+  // manager renames it, so it is tried before the name
+  const isMine = (side: Side) =>
+    mineId && side.ownerId ? side.ownerId === mineId : side.owner === mine;
+
   for (const game of games) {
-    const at = game.sides.findIndex((s) => s.owner === mine);
+    const at = game.sides.findIndex(isMine);
 
     if (at >= 0) {
       return {

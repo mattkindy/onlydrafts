@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import {
   alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, hurtFrom,
-  initialForm, liveDraws,
+  initialForm, liveDraws, myGameIn,
   oddsFor, standingFor, sideTotals, situationsFrom, spreadOf, starterState,
   statesFrom, stockLine,
 } from "./matchups.ts";
@@ -768,5 +768,27 @@ describe("liveDraws for a player who has gone off", () => {
     expect(mean(live.toCome("gone"))).toBe(0);
     expect(mean(live.toCome("iffy")) / fit).toBeGreaterThan(0.3);
     expect(mean(live.toCome("iffy")) / fit).toBeLessThan(0.75);
+  });
+});
+
+describe("myGameIn", () => {
+  const side = (owner: string, ownerId?: string) => ({
+    owner, ...(ownerId ? { ownerId } : {}), points: 0,
+    starters: [], bench: [],
+  });
+
+  it("finds your side by id when the team has been renamed", () => {
+    const games = [{ sides: [side("New Name", "7"), side("Theirs", "8")] }] as
+      Parameters<typeof myGameIn>[0];
+
+    expect(myGameIn(games, "Old Name", "7")?.at).toBe(0);
+  });
+
+  it("falls back to the name where the provider gives no id", () => {
+    const games = [{ sides: [side("Mine"), side("Theirs")] }] as
+      Parameters<typeof myGameIn>[0];
+
+    expect(myGameIn(games, "Mine", "7")?.at).toBe(0);
+    expect(myGameIn(games, "Nobody", "7")).toBe(null);
   });
 });

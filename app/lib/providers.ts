@@ -82,6 +82,12 @@ export interface Matchup {
 
 export interface Side {
   owner: string;
+  /**
+   * The provider's own id for this team, where it gives one. A team name
+   * is whatever its manager last felt like calling it, so finding your
+   * own side by name breaks the week somebody renames theirs.
+   */
+  ownerId?: string;
   points: number;
   /**
    * Each starter, in lineup order, with what he has scored so far this
@@ -655,6 +661,9 @@ async function sleeperMatchups(
       league.members[r.owner_id] ?? r.owner_id,
     ]),
   );
+  const userOf = new Map(
+    (rosters as SleeperRoster[] ?? []).map((r) => [r.roster_id, r.owner_id]),
+  );
   const slots = sleeperStartingSlots(league.slots);
 
   const sideOf = (side: SleeperMatchup): Side => {
@@ -678,6 +687,9 @@ async function sleeperMatchups(
 
     return {
       owner: ownerOf.get(side.roster_id) ?? String(side.roster_id),
+      ...(userOf.get(side.roster_id)
+        ? { ownerId: userOf.get(side.roster_id)! }
+        : {}),
       points: side.points ?? 0,
       starters,
       bench: (side.players ?? [])
@@ -1216,14 +1228,23 @@ interface EspnGame {
 /** ESPN's numbers for the bench and for injured reserve */
 const ESPN_BENCH = new Set([20, 21]);
 
-/** this week's games, both sides of each, as ESPN has them now */
+const ESPN_VIEWS = ["mTeam", "mMatchupScore", "mRoster"];
+
+/**
+ * The week's games, both sides of each, as ESPN has them now.
+ *
+ * Asking for a period ESPN has not started can come back with no
+ * schedule at all, which reads as a league with no games this week, so a
+ * second ask leaves the period off and takes whatever it has. The
+ * scoring period is what puts this week's points on a player, so it is
+ * still asked for first.
+ */
 async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
-  const said = await espnAnswer(
-    league.leagueId,
-    league.season,
-    ["mTeam", "mMatchupScore", "mRoster"],
-    week,
-  );
+  const asked = await espnAnswer(
+    league.leagueId, league.season, ESPN_VIEWS, week);
+  const said = asked?.schedule
+    ? asked
+    : await espnAnswer(league.leagueId, league.season, ESPN_VIEWS);
 
   if (!said?.schedule) {
     return [];
@@ -1267,6 +1288,7 @@ async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
       // the live total is only there once a game is under way, so before
       // kickoff the settled total is the one to use
       owner: ownerOf.get(side.teamId) ?? String(side.teamId),
+      ownerId: String(side.teamId),
       points: side.totalPointsLive ?? side.totalPoints ?? 0,
       starters,
       bench,
