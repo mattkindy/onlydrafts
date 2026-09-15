@@ -216,6 +216,45 @@ describe("this week's matchups on ESPN", () => {
     });
   });
 
+  it("asks again without the period when ESPN sends no schedule", async () => {
+    const asked: string[] = [];
+    const game = {
+      matchupPeriodId: 4,
+      home: {
+        teamId: 1, totalPoints: 0,
+        rosterForMatchupPeriod: { entries: [entry(1, "Josh Allen", 1, 0, 0)] },
+      },
+      away: {
+        teamId: 2, totalPoints: 0,
+        rosterForMatchupPeriod: { entries: [entry(2, "Bo Nix", 1, 0, 0)] },
+      },
+    };
+
+    globalThis.fetch = ((url: string) => {
+      asked.push(String(url));
+
+      const teams = [{ id: 1, name: "Team One" }, { id: 2, name: "Team Two" }];
+
+      if (String(url).includes("/players?")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+
+      // ESPN sends back no schedule at all for a period it has not started
+      const body = String(url).includes("scoringPeriodId")
+        ? { teams }
+        : { teams, schedule: [game] };
+
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    }) as unknown as typeof fetch;
+
+    const { PROVIDERS } = await import("./providers.ts");
+    const league = leagueLike({ provider: "espn", leagueId: "77" });
+    const games = await PROVIDERS["espn"]!.matchupsFor!(league, 4);
+
+    expect(games).toHaveLength(1);
+    expect(asked.some((url) => url.includes("scoringPeriodId=4"))).toBe(true);
+  });
+
   it("reads a week ESPN has not made live yet off the matchup period", async () => {
     serve({
       "/players?": [],

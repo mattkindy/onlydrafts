@@ -348,7 +348,19 @@ function App() {
     }
 
     asks(active, week.week)
-      .then((got) => { if (!stale) { setGames(got); setGamesStatus(""); } })
+      .then((got) => {
+        if (stale) {
+          return;
+        }
+
+        setGames(got);
+        // an empty answer looks the same as one still loading, and the
+        // two want different things from whoever is reading it
+        setGamesStatus(got.length === 0
+          ? `${active.provider} has no week ${week.week} games for this ` +
+            "league yet. If your league has them, tell me and I will look."
+          : "");
+      })
       .catch((e: Error) => {
         if (!stale) {
           setGamesStatus("could not read this week's games: " + e.message);
@@ -1001,6 +1013,7 @@ function App() {
             players={players}
             listed={listed}
             mine={active?.team ?? null}
+            mineId={active?.userId ?? null}
             slots={active?.slots ?? null}
             league={active?.name}
             pays={active?.pays ?? {}}
