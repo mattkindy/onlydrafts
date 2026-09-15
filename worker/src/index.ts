@@ -77,7 +77,12 @@ export default {
       return answer({ error: `ESPN answered ${said.status}` }, said.status);
     }
 
-    return answer(await said.json(), 200);
+    // ESPN's body goes through untouched: parsing a week's worth of
+    // rosters and writing it back out costs more cpu than a worker gets
+    return new Response(said.body, {
+      status: 200,
+      headers: { ...CORS, "content-type": "application/json" },
+    });
   },
 };
 
