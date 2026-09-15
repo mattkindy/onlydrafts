@@ -40,6 +40,39 @@ them and from what his attributes say where he does not.
 `attributePriors.ts` mixes the two, and how much of each is fitted on a
 season nobody is being judged on rather than chosen.
 
+**A draft price** is what a room of drafters thought in August, and
+`marketPrice.ts` fits what it went on to mean. For a position and an
+average draft position it gives the points a game players bought there
+have averaged, the 10th through 90th percentiles of where they landed,
+and how often one of them finished inside the tier a league starts
+every week. A later step can then rank players by how far the model
+disagrees with the price rather than by the points it projects.
+
+Three decisions in there are worth knowing before reading the code.
+
+The quantiles are counted off the players rather than taken from a
+standard deviation around the mean, because the width of the outcome
+moves a long way with the price while its shape barely does. From the
+10th to the 90th percentile is two thirds of the median at the top of
+the first round and one and a half times the median past pick 96, and
+the mean comes out within a tenth of the median nearly everywhere. The
+right tail people talk about at cheap prices is a wider distribution,
+not a lopsided one, and it is the same story in season totals as in
+points a game.
+
+Every curve is monotone in price. A curve that said pick 40 was worth
+less than pick 60 would be telling a drafter to reach past the player
+he wants, so neighbouring prices that come out in the wrong order are
+pooled until nothing rises with price. A neighbour is weighted by how
+far off in price he is, because only two or three tight ends a year go
+in the first four rounds: weighting them equally instead put the top
+tight end at 13.4 points a game where those players really averaged
+16.0, and the weighting closed 1.7 of that 2.6.
+
+A drafted player who never played is kept at zero rather than dropped.
+He is the pick somebody spent, and dropping him would make every price
+look better than it was. There are two or three a season.
+
 ## Which way things are passed
 
 Think of it as a stack that passes messages in three directions, since
@@ -121,6 +154,7 @@ when you want to measure it again.
 | `KEEPS`, how much of each mechanic a player takes into next season | `features/mechanicsProjection.ts` | `scripts/mechanicsCarryEval.ts` |
 | The walk's weekly numbers being cached on disk at all | `features/walkWeeklyCache.ts` | written by `scripts/walkWeekCache.ts` |
 | `COMPONENT_THROUGH_WEEK`, where the component line hands over to the ridge | `features/componentWeek.ts` | the component week finding in `scripts/README.md` |
+| `SHIPPED_FIT`, whether the price curve is windowed or a line on log price | `features/marketPrice.ts` | `scripts/marketPriceProbe.ts` |
 | The game script effects being pooled over a side's fixtures | `features/gameScript.ts` | `scripts/aggregateGameScript.ts` |
 | Fitting every part of a player's season in one model | `features/jointParts.ts` | `scripts/jointProjectionEval.ts` |
 | `HOW_FAR`, `NO_LONG_SHAPE` and `FROM_COUNTS`, all off | `features/fitPlayFactors.ts` | `scripts/playLayerEval.ts` |

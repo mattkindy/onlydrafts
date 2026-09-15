@@ -11,6 +11,16 @@ export interface AdpEntry {
   /** earliest and latest he actually went across the sampled drafts */
   high: number;
   low: number;
+  /** how far his pick moved across those drafts, where the board says */
+  stdev?: number;
+  /** how many of them took him at all */
+  timesDrafted?: number;
+  /**
+   * The same count as a share of the drafts in the sample, because one
+   * August's sample is not another's size: 2403 drafts in 2020 against
+   * 8007 in 2026, so 500 picks means two different things.
+   */
+  draftedShare?: number;
 }
 
 /** which set of mock drafts to read */
@@ -35,15 +45,19 @@ export async function loadAdp(
     "utf8",
   );
   const parsed = JSON.parse(text) as {
+    meta?: { total_drafts?: number };
     players: {
       name: string;
       position: string;
       adp: number;
       high?: number;
       low?: number;
+      stdev?: number;
+      times_drafted?: number;
     }[];
   };
 
+  const sampled = parsed.meta?.total_drafts;
   const result = new Map<string, AdpEntry>();
 
   for (const player of parsed.players) {
@@ -53,6 +67,12 @@ export async function loadAdp(
       adp: player.adp,
       high: player.high ?? player.adp,
       low: player.low ?? player.adp,
+      stdev: player.stdev,
+      timesDrafted: player.times_drafted,
+      draftedShare:
+        player.times_drafted !== undefined && sampled
+          ? player.times_drafted / sampled
+          : undefined,
     });
   }
 
