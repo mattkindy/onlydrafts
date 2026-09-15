@@ -1192,7 +1192,20 @@ interface EspnScoreSide {
   totalPoints?: number;
   totalPointsLive?: number;
   rosterForCurrentScoringPeriod?: { entries?: EspnEntry[] };
+  rosterForMatchupPeriod?: { entries?: EspnEntry[] };
 }
+
+/**
+ * ESPN fills the current period's roster only for the week it thinks is
+ * live, and puts every other week under the matchup period instead. It
+ * rolls the live week over on the Tuesday night, so a Tuesday morning
+ * that asks for the coming week gets a side with nobody on it unless
+ * the other key is read too.
+ */
+const espnEntriesOf = (side: EspnScoreSide): EspnEntry[] =>
+  side.rosterForCurrentScoringPeriod?.entries
+    ?? side.rosterForMatchupPeriod?.entries
+    ?? [];
 
 interface EspnGame {
   matchupPeriodId?: number;
@@ -1227,7 +1240,7 @@ async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
     const starters: Side["starters"] = [];
     const bench: Side["bench"] = [];
 
-    for (const entry of side.rosterForCurrentScoringPeriod?.entries ?? []) {
+    for (const entry of espnEntriesOf(side)) {
       const player = espnPlayerOf(players, entry);
 
       if (!player) {
