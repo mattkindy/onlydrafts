@@ -643,8 +643,10 @@ const OVER: GameState = { where: "post", left: 0 };
  * Where his game has got to, off whichever team the line gives him.
  *
  * With no team to look up, points on the board are the only clue, and
- * they say he has played. Reading him as not started would stack his
- * whole line on top of what he has already scored.
+ * anything other than zero says he has played, a negative total included:
+ * a defence that gave up plenty is still a defence that has taken the
+ * field. Reading him as not started would stack a whole projected week
+ * on top of a score that is already final.
  */
 function stateAt(
   line: Line, states: Map<string, GameState>, starter?: Starter,
@@ -655,7 +657,7 @@ function stateAt(
     return known;
   }
 
-  return (starter?.points ?? 0) > 0 ? OVER : NOT_STARTED;
+  return (starter?.points ?? 0) !== 0 ? OVER : NOT_STARTED;
 }
 
 /** the two teams in a player's game, so both sides reach the same name */
