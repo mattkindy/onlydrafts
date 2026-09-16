@@ -10,6 +10,7 @@ import { parseCsv } from "../data/csv.js";
 import {
   loadGames, loadPlayerStats, loadWeeklyRosters,
 } from "../data/nflverse.js";
+import { listedPositions } from "../data/listedPositions.js";
 import type { AvailabilityRow } from "./gamesPlayed.js";
 import {
   openedOnReserve, readSignals, type SeasonSignals,
@@ -47,8 +48,16 @@ async function readSeason(season: number): Promise<Season> {
     },
   };
 
+  // a two way player's rows say where he lines up on defence, so the
+  // team's own listing is what says he belongs here
+  const listed = await listedPositions(season);
+
   for (const w of await loadPlayerStats(season).catch(() => [])) {
-    if (w.week > 18 || !WANTED.includes(w.position)) {
+    const plays = WANTED.includes(w.position)
+      ? w.position
+      : listed.get(w.playerId) ?? "";
+
+    if (w.week > 18 || !WANTED.includes(plays)) {
       continue;
     }
 
@@ -70,7 +79,7 @@ async function readSeason(season: number): Promise<Season> {
       (out.touches.get(w.playerId) ?? 0) + (w.targets ?? 0) +
         (w.carries ?? 0) + (w.passing?.attempts ?? 0),
     );
-    out.position.set(w.playerId, w.position);
+    out.position.set(w.playerId, plays);
     out.team.set(w.playerId, w.teamId);
   }
 
