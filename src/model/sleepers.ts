@@ -68,6 +68,13 @@ export interface PlayerCut {
    */
   pickSpread: number;
   hasPickSpread: boolean;
+  /**
+   * What the in-season update makes of him from here: his preseason
+   * anchor moved by his usage and his scoring so far.
+   */
+  inSeasonPpg: number;
+  /** what his usage alone pays, with his own scoring rate left out */
+  roleLevelPpg: number;
 }
 
 /** one cut week and what the player went on to do after it */
@@ -139,19 +146,45 @@ const FORM_TERMS: Term[] = [
   { name: "pick spread", of: (cut) => cut.pickSpread },
 ];
 
-const ALL_TERMS = [...PRICE_TERMS, ...FORM_TERMS];
+/**
+ * What the in-season update says, which the rest of the form terms only
+ * see the ingredients of. Kept apart from `FORM_TERMS` so a fit can be
+ * taken with them and without them and the two compared.
+ */
+const IN_SEASON_TERMS: Term[] = [
+  { name: "in-season level", of: (cut) => cut.inSeasonPpg },
+  { name: "role level", of: (cut) => cut.roleLevelPpg },
+];
 
-export const SLEEPER_TERMS: readonly string[] = ALL_TERMS.map((t) => t.name);
+/** which form terms a fit reads */
+export type SleeperTermSet = "shipped" | "with in-season";
+
+const FORM_TERMS_BY_SET: Record<SleeperTermSet, Term[]> = {
+  shipped: FORM_TERMS,
+  "with in-season": [...FORM_TERMS, ...IN_SEASON_TERMS],
+};
+
+const allTerms = (terms: SleeperTermSet): Term[] =>
+  [...PRICE_TERMS, ...FORM_TERMS_BY_SET[terms]];
+
+/** every term a fit reads, in the order its weights come in */
+export const sleeperTermNames = (
+  terms: SleeperTermSet = "shipped",
+): readonly string[] => allTerms(terms).map((term) => term.name);
+
+export const SLEEPER_TERMS = sleeperTermNames();
 
 /** how many leading columns the price accounts for, the intercept included */
 const PRICE_COLUMNS = PRICE_TERMS.length + 1;
 
-/** the raw value of every term, in `SLEEPER_TERMS` order */
-export const termValues = (cut: PlayerCut): number[] =>
-  ALL_TERMS.map((term) => term.of(cut));
+/** the raw value of every term, in `sleeperTermNames` order */
+export const termValues = (
+  cut: PlayerCut, terms: SleeperTermSet = "shipped",
+): number[] => allTerms(terms).map((term) => term.of(cut));
 
 /** what each term averaged and varied by over the rows behind a fit */
 interface Scaling {
+  terms: SleeperTermSet;
   means: number[];
   deviations: number[];
 }
@@ -160,7 +193,7 @@ export interface SleeperFit extends Scaling {
   /** the seasons the rows came from */
   trainedOn: number[];
   examples: number;
-  /** the intercept, then one weight per term in `SLEEPER_TERMS` order */
+  /** the intercept, then one weight per term in the order of this term set */
   weights: number[];
   /**
    * What each form term averaged inside one position, standardized. A
@@ -193,10 +226,16 @@ function deviation(values: number[], middle: number): number {
  * leave the points alone.
  */
 function standardized(scaling: Scaling, cut: PlayerCut): number[] {
-  const raw = termValues(cut);
+  const raw = termValues(cut, scaling.terms);
 
   return [1, ...raw.map((value, i) =>
     (value - (scaling.means[i] ?? 0)) / (scaling.deviations[i] ?? 1))];
+}
+
+export interface SleeperFitOptions {
+  lambdaShare?: number;
+  /** which form terms to read, the shipped set unless a caller says otherwise */
+  terms?: SleeperTermSet;
 }
 
 /**
@@ -206,20 +245,24 @@ function standardized(scaling: Scaling, cut: PlayerCut): number[] {
  */
 export function fitSleepers(
   examples: SleeperExample[],
-  lambdaShare = LAMBDA_SHARE,
+  options: SleeperFitOptions = {},
 ): SleeperFit {
-  if (examples.length <= ALL_TERMS.length) {
+  const { lambdaShare = LAMBDA_SHARE, terms = "shipped" } = options;
+  const columns = allTerms(terms);
+
+  if (examples.length <= columns.length) {
     throw new Error(
-      `a sleeper fit wants more than ${ALL_TERMS.length} rows and has ` +
+      `a sleeper fit wants more than ${columns.length} rows and has ` +
         `${examples.length}`,
     );
   }
 
-  const raw = examples.map((example) => termValues(example.cut));
-  const means = ALL_TERMS.map((_, i) => mean(raw.map((row) => row[i] ?? 0)));
+  const raw = examples.map((example) => termValues(example.cut, terms));
+  const means = columns.map((_, i) => mean(raw.map((row) => row[i] ?? 0)));
   const scaling: Scaling = {
+    terms,
     means,
-    deviations: ALL_TERMS.map((_, i) =>
+    deviations: columns.map((_, i) =>
       deviation(raw.map((row) => row[i] ?? 0), means[i] ?? 0)),
   };
   const X = examples.map((example) => standardized(scaling, example.cut));
@@ -228,7 +271,7 @@ export function fitSleepers(
 
   return {
     ...scaling,
-    ...formAverages(X, positions),
+    ...formAverages(X, positions, terms),
     trainedOn: [...new Set(examples.map((one) => one.cut.season))]
       .sort((a, b) => a - b),
     examples: examples.length,
@@ -240,9 +283,9 @@ export function fitSleepers(
 const MIN_POSITION_ROWS = 40;
 
 function formAverages(
-  X: number[][], positions: string[],
+  X: number[][], positions: string[], terms: SleeperTermSet,
 ): Pick<SleeperFit, "formMeans" | "pooledFormMeans"> {
-  const columns = FORM_TERMS.map((_, i) => PRICE_COLUMNS + i);
+  const columns = FORM_TERMS_BY_SET[terms].map((_, i) => PRICE_COLUMNS + i);
   const averaged = (rows: number[][]) =>
     columns.map((column) => mean(rows.map((row) => row[column] ?? 0)));
   const byPosition = new Map<string, number[][]>();
@@ -277,11 +320,11 @@ function formAverages(
 export function fitSleepersAsOf(
   season: number,
   examples: SleeperExample[],
-  lambdaShare = LAMBDA_SHARE,
+  options: SleeperFitOptions = {},
 ): SleeperFit {
   return fitSleepers(
     examples.filter((example) => example.cut.season < season),
-    lambdaShare,
+    options,
   );
 }
 
@@ -318,7 +361,7 @@ export function scoreSleeper(fit: SleeperFit, cut: PlayerCut): SleeperScore {
   const columns = standardized(fit, cut);
   const modelPpg = predictRidge(fit.weights, columns);
   const average = fit.formMeans[cut.position] ?? fit.pooledFormMeans;
-  const reasons = FORM_TERMS.map((term, i) => {
+  const reasons = FORM_TERMS_BY_SET[fit.terms].map((term, i) => {
     const column = PRICE_COLUMNS + i;
     const standoff = (columns[column] ?? 0) - (average[i] ?? 0);
 

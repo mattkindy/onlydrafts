@@ -9,7 +9,8 @@
  * game by the cut whose club still has games left, priced at
  * `UNDRAFTED_PRICE` when no board took him, and a hit is a finish
  * inside the position's starter tier over the rest of the season,
- * ranked on total points so missed weeks count against him.
+ * ranked on total points so missed weeks count against him. Each row
+ * also has the in-season update on it, fitted on earlier seasons only.
  */
 
 import { loadAdp, type AdpEntry } from "../data/adp.js";
@@ -22,6 +23,14 @@ import {
 import {
   leverageUsage, loadLeverage, type LeverageRow, type Usage,
 } from "../features/leverageUsage.js";
+import {
+  readPlayedWeeks, roleRowsFrom, SHIPPED_SHAPE,
+  type SeasonWeeks as PlayedSeason,
+} from "../features/inSeasonBoard.js";
+import {
+  fitInSeasonUpdate, fitRoleLevel, updateLevel,
+  type InSeasonFit, type PlayedWeek, type RoleLevelRow, type UpdateCase,
+} from "../features/inSeasonLevel.js";
 import { UNDRAFTED_PRICE, type PlayerCut } from "../model/sleepers.js";
 import { fantasyPoints, scoringRules } from "../scoring/fantasyPoints.js";
 
@@ -160,14 +169,21 @@ export interface Row {
   tierMargin: number;
 }
 
-function cutsFor(
-  season: number,
-  week: number,
-  read: SeasonWeeks,
-  curve: MarketPrice,
-  byName: Map<string, AdpEntry[]>,
-  counted: LeverageRow[],
-): Row[] {
+/** everything one season needs before its cuts can be written out */
+interface SeasonInput {
+  season: number;
+  read: SeasonWeeks;
+  curve: MarketPrice;
+  byName: Map<string, AdpEntry[]>;
+  counted: LeverageRow[];
+  /** the same season's games as the in-season update reads them */
+  played: PlayedSeason;
+  /** the update as it stood before this season started */
+  inSeason: InSeasonFit;
+}
+
+function cutsFor(input: SeasonInput, week: number): Row[] {
+  const { season, read, curve, byName, counted } = input;
   const usage = leverageUsage(counted, {
     season, through: week, positions: read.positions,
   });
@@ -199,6 +215,11 @@ function cutsFor(
     const price = entry?.adp ?? UNDRAFTED_PRICE;
     const quantiles = curve.quantiles(position, price);
     const rest = over(his, week + 1, LAST_WEEK);
+    const said = updateLevel(input.inSeason, {
+      anchor: quantiles.p50,
+      position,
+      weeks: gamesBy(input.played, playerId, week),
+    });
     rows.push({
       cut: {
         season, week, playerId, playerName: name, position,
@@ -215,6 +236,8 @@ function cutsFor(
         pickSpread: entry?.stdev === undefined
           ? 0 : entry.stdev / Math.max(1, entry.adp),
         hasPickSpread: entry?.stdev !== undefined,
+        inSeasonPpg: said.ppg,
+        roleLevelPpg: said.roleLevel,
       },
       club,
       weeksLeft: left,
@@ -255,6 +278,84 @@ function marked(rows: Row[]): Row[] {
   return rows;
 }
 
+/* ---------- what the season so far says about a candidate ---------- */
+
+/** how many earlier seasons the role level is taught on */
+const ROLE_SEASONS = 8;
+
+const gamesBy = (
+  played: PlayedSeason, playerId: string, week: number,
+): PlayedWeek[] =>
+  (played.weeks.get(playerId) ?? []).filter((one) => one.week <= week);
+
+/**
+ * The candidates of earlier seasons, as cases the update weights can be
+ * fitted on. The anchor is the price curve's median at his price, which
+ * is the preseason number this bench already reads him by, and the
+ * target is the same rest of season the sleeper model predicts.
+ */
+function casesFrom(
+  earlier: Row[], played: Map<number, PlayedSeason>,
+): UpdateCase[] {
+  const cases: UpdateCase[] = [];
+
+  for (const row of earlier) {
+    const season = played.get(row.cut.season);
+
+    if (!season) {
+      continue;
+    }
+
+    const weeks = gamesBy(season, row.cut.playerId, row.cut.week);
+
+    if (weeks.length === 0) {
+      continue;
+    }
+
+    cases.push({
+      position: row.cut.position,
+      anchor: row.cut.priceMedian,
+      weeks,
+      restPpg: row.restOfSeasonPpg,
+    });
+  }
+
+  return cases;
+}
+
+/**
+ * The update as a drafter could have had it before a season kicked off:
+ * both the role level and the weights read only earlier seasons, so a
+ * candidate is never scored by a fit that saw what he did. The earliest
+ * priced season has no candidates behind it to fit weights on and takes
+ * the shipped constants, which is why it stays out of the scoring.
+ */
+function inSeasonFitFor(
+  season: number, played: Map<number, PlayedSeason>, earlier: Row[],
+): InSeasonFit {
+  const roleRows: RoleLevelRow[] = [];
+
+  for (let year = season - ROLE_SEASONS; year < season; year++) {
+    const read = played.get(year);
+
+    if (read) {
+      roleRows.push(...roleRowsFrom(read));
+    }
+  }
+
+  if (roleRows.length === 0) {
+    throw new Error(`no season before ${season} has games to fit a role level`);
+  }
+
+  const cases = casesFrom(earlier, played);
+
+  if (cases.length === 0) {
+    return { role: fitRoleLevel(roleRows), shape: SHIPPED_SHAPE };
+  }
+
+  return fitInSeasonUpdate(roleRows, cases);
+}
+
 /* ---------- putting the bench together ---------- */
 
 export interface Built {
@@ -264,14 +365,30 @@ export interface Built {
   skipped: Map<number, string>;
 }
 
+/** every season's games the update can read, the training years included */
+async function playedFor(
+  seasons: number[],
+): Promise<Map<number, PlayedSeason>> {
+  const first = Math.min(...seasons) - ROLE_SEASONS;
+  const last = Math.max(...seasons);
+  const played = new Map<number, PlayedSeason>();
+
+  for (let year = first; year <= last; year++) {
+    played.set(year, await readPlayedWeeks(year));
+  }
+
+  return played;
+}
+
 export async function build(seasons: number[]): Promise<Built> {
   const counted = await loadLeverage(seasons);
   const cache = new Map<number, SeasonPrices | null>();
+  const played = await playedFor(seasons);
   const rows: Row[] = [];
   const priced: number[] = [];
   const skipped = new Map<number, string>();
 
-  for (const season of seasons) {
+  for (const season of [...seasons].sort((a, b) => a - b)) {
     const curve = await marketPriceAsOf(season, { counted: cache })
       .catch((error: Error) => error);
 
@@ -287,12 +404,20 @@ export async function build(seasons: number[]): Promise<Built> {
       continue;
     }
 
-    const read = readSeason(await loadPlayerStats(season));
-    const byName = boardByName(await loadAdp(season, "ppr"));
+    const input: SeasonInput = {
+      season,
+      read: readSeason(await loadPlayerStats(season)),
+      curve,
+      byName: boardByName(await loadAdp(season, "ppr")),
+      counted: lines,
+      played: played.get(season)!,
+      // the rows so far are every earlier season's, since seasons run in order
+      inSeason: inSeasonFitFor(season, played, rows),
+    };
     priced.push(season);
 
     for (const week of CUTS) {
-      rows.push(...cutsFor(season, week, read, curve, byName, lines));
+      rows.push(...cutsFor(input, week));
     }
   }
 
