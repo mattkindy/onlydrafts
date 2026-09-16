@@ -1063,7 +1063,7 @@ the disagreement measure can say anything about this season.
 
 # Whether a sleeper score beats who is hot
 
-`sleeperEval.ts` prints all of this in about ten seconds. At weeks 4, 6
+`sleeperEval.ts` prints all of this in about twenty seconds. At weeks 4, 6
 and 8 of each season it takes the players priced past pick 100 or not
 drafted at all, has every method pick its top twenty, and scores those
 twenty on what they went on to average and on how many of them finished
@@ -1095,15 +1095,24 @@ is the earliest season that has one, and 2018 is then the earliest season
 with cuts, so there is nothing before it for a fit to read.
 
 ```
-method                    ppg a pick   prec@10   prec@20   picks   worst season  median   best
-the price itself            8.55     0.238     0.250     420           7.30    8.23   9.99
-points a game so far       11.17     0.410     0.343     420           9.50   11.03  12.77
-raw work share              8.24     0.319     0.288     420           7.69    8.19   9.18
-the model                  10.02     0.438     0.398     420           8.98   10.11  10.93
-the model over the curve    8.26     0.338     0.260     420           6.74    8.12   9.72
-the model's own line       11.58     0.414     0.350     420          10.37   11.83  12.79
-oracle: the rest known     15.45     0.852     0.698     420          13.87   15.59  16.67
+method                    ppg a pick   prec@10   prec@20   hits@20   picks   worst season  median   best
+the price itself            8.55     0.238     0.250      105     420           7.30    8.23   9.99
+points a game so far       11.17     0.410     0.343      144     420           9.50   11.03  12.77
+raw work share              8.24     0.319     0.288      121     420           7.69    8.19   9.18
+the in-season level        11.06     0.376     0.312      131     420          10.08   11.03  12.11
+the role level             10.60     0.290     0.269      113     420           9.87   10.59  11.30
+the model                  10.02     0.438     0.398      167     420           8.98   10.11  10.93
+the model over the curve    8.26     0.338     0.260      109     420           6.74    8.12   9.72
+the model's own line       11.58     0.414     0.350      147     420          10.37   11.83  12.79
+the model plus in-season   10.02     0.438     0.393      165     420           9.05   10.45  10.72
+plus in-season, own line   11.48     0.414     0.338      142     420          10.21   11.51  12.69
+oracle: the rest known     15.45     0.852     0.698      293     420          13.87   15.59  16.67
 ```
+
+The last four rows are the in-season update, which is written up further
+down. The script also prints every method at each cut on its own, where
+by position its picks went, and how close each line comes to the rest of
+the season over the same candidates.
 
 What the 2018 to 2024 fit weighs, in points a game for each standard
 deviation of a term:
@@ -1170,9 +1179,80 @@ quarterback outscores the average skill player at any price. That reads
 quarterback a claim against the board he has not earned, so the per
 position centre is what ships even though it scores worse on the points.
 
+## Whether the in-season update helps
+
+It does not. The update is the rest of season level from
+`src/features/inSeasonLevel.ts`: a preseason anchor moved by what a
+player's usage says his role pays and by his points a game so far. On
+this bench the anchor is the price curve's median at his price, and both
+the role level and the update weights are fitted on seasons before the
+one being scored. The candidates, the cuts and the definition of a hit
+are the ones above, untouched, and every number for the old methods comes
+out where it was.
+
+Three ways of adding it, all in the table above. The update on its own
+reads 11.06 a pick and 0.312 at twenty, so it beats the price and loses
+to points a game so far on both. The role level on its own, which is what
+the usage pays with the player's own scoring rate left out, reads 10.60
+and 0.269. Adding the two to the model as terms leaves it where it was:
+10.02 a pick either way, 165 hits against 167, 0.393 against 0.398. Each
+cut reads the same way: the pair is 54 hits against 56 after week 4,
+level at 55 after week 6, and level at 56 after week 8.
+
+The weights say why. Points a game so far falls from 2.22 to 1.83 and the
+work share from 0.60 to 0.50 when the two new terms arrive at 0.34 and
+0.22. The update is made of usage and points a game so far, the fit
+already reads both, so the terms take weight off what they are made of
+and the order barely moves.
+
+On the question the update was built for it does beat points a game so
+far over these candidates, and loses to the fit's own line, which is the
+measure that matters here since that line is what the ranking comes off:
+
+```
+rest of season over the cheap candidates, MAE then correlation
+                               week 4      week 6      week 8
+the price median            5.51 0.331   5.73 0.302   5.94 0.269
+points a game so far        2.83 0.632   2.70 0.643   2.65 0.647
+the in-season level         2.72 0.653   2.71 0.653   2.70 0.652
+the role level              2.76 0.633   2.76 0.626   2.74 0.625
+the model's own line        2.25 0.669   2.24 0.673   2.29 0.678
+plus in-season, own line    2.24 0.671   2.24 0.674   2.28 0.679
+```
+
+## Who the update finds and who it likes by mistake
+
+The update on its own and the role level on its own rank on points a game
+with nothing taken off, so they fill up on quarterbacks: 313 and 346 of
+their 420 picks, against the model's 68. That does open the blind spot.
+Between them they add 53 and 59 hits the model's top twenty never had,
+and the first dozen are all passers: Justin Herbert in 2020, Trevor
+Lawrence and Matthew Stafford in 2025, Ryan Tannehill in 2020, Bo Nix in
+2024, Justin Fields in 2022.
+
+It costs more than it pays. The same two orders add 198 and 240 misses,
+and those are passers too: Andy Dalton at 23.5 points a game in relief
+and nothing after it, Marcus Mariota, Jameis Winston, Joe Flacco, Dwayne
+Haskins, Deshaun Watson, Dorian Thompson-Robinson on a role level of 17.8
+off 1.2 points a game. Pass attempts pay a quarterback level whatever he
+does with them, and most of these lost the job or the season inside a
+week or two. They drop 89 and 113 hits to make room, among them Justin
+Jefferson in 2020 at every cut, Brian Thomas Jr. in 2024, Brock Bowers,
+Bucky Irving and Hunter Renfrow.
+
+Added to the model as terms, where the score is centred inside a position
+again, the two change almost nobody: 20 swaps out of 420. It adds
+Courtland Sutton after week 4 of 2024 and Zach Ertz after week 8, both
+hits, and drops Jefferson in 2020, Brock Purdy in 2023, Cole Kmet and Pat
+Freiermuth. The other 20 it adds all miss, and most are the same
+caretaker passers. So the earlier read is unchanged: the model still
+finds its hits through work share at back and tight end, 88 of its 167,
+still takes only 68 quarterbacks, and its worst calls are still one good
+game and a job that was never his.
+
 ## What to try next
 
-Three things, in the order they look most likely to pay.
+Four things, in the order they look most likely to pay.
 
 Fit the rest of a season per position rather than pooled with position
 offsets. Points a game so far is doing nearly all the work and its slope
@@ -1189,6 +1269,12 @@ at 0.81 and it is the only one pointing at the tier.
 Put the player's own remaining schedule in. Nothing here knows who he
 plays, and a cheap back with six soft fixtures left is a different bet
 from one with six hard ones.
+
+Ask whether the player still has the job in December. Most of what the
+in-season update added were passers who scored well and then stopped
+playing, and the model's own worst calls are the same story at back. A
+term for how likely he is to keep the work would help both, where a
+better read of the level did not.
 
 # What snap share and a short season are worth to the board
 

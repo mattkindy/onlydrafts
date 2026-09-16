@@ -5,6 +5,7 @@ import {
   rankSleepers,
   scoreSleeper,
   shareToRead,
+  sleeperTermNames,
   SLEEPER_TERMS,
   type PlayerCut,
   type SleeperExample,
@@ -40,6 +41,8 @@ const cut = (over: Partial<PlayerCut> = {}): PlayerCut => ({
   gamesPlayed: 6,
   pickSpread: 0.2,
   hasPickSpread: true,
+  inSeasonPpg: 9,
+  roleLevelPpg: 9,
   ...over,
 });
 
@@ -74,6 +77,8 @@ function madeUp(): SleeperExample[] {
         gamesPlayed: 4 + Math.floor(jitter(season, i, 5) * 3),
         pickSpread: jitter(season, i, 6) * 0.4,
         hasPickSpread: i % 7 !== 0,
+        inSeasonPpg: 0.5 * ppgSoFar + 20 * share,
+        roleLevelPpg: 30 * share,
       });
       examples.push({
         cut: his,
@@ -98,7 +103,7 @@ describe("fitSleepers", () => {
   });
 
   it("recovers a target that is a known sum of two terms", () => {
-    const fit = fitSleepers(examples, 1e-6);
+    const fit = fitSleepers(examples, { lambdaShare: 1e-6 });
     const off = examples.map((example) =>
       Math.abs(scoreSleeper(fit, example.cut).modelPpg
         - example.restOfSeasonPpg));
@@ -152,6 +157,26 @@ describe("scoreSleeper", () => {
 
     expect(scoreSleeper(fit, busy).score)
       .toBeGreaterThan(scoreSleeper(fit, lean).score);
+  });
+});
+
+describe("the in-season term set", () => {
+  it("reads two more terms than the shipped set", () => {
+    expect(sleeperTermNames("with in-season").length)
+      .toBe(SLEEPER_TERMS.length + 2);
+  });
+
+  it("gives the two extra terms reasons of their own", () => {
+    const fit = fitSleepers(examples, { terms: "with in-season" });
+    const terms = scoreSleeper(fit, examples[3]!.cut).reasons
+      .map((one) => one.term);
+
+    expect(terms).toContain("in-season level");
+    expect(terms).toContain("role level");
+  });
+
+  it("leaves the shipped fit alone", () => {
+    expect(fitSleepers(examples).weights.length).toBe(SLEEPER_TERMS.length + 1);
   });
 });
 

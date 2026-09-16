@@ -6,8 +6,9 @@
  * not drafted at all, every method picks its top twenty and is scored on
  * what those players went on to average and on how many of them finished
  * inside the tier a league starts. The rivals are the board's own order,
- * points a game so far, raw work share, and the model, with an oracle
- * that knew the rest of the season as the ceiling.
+ * points a game so far, raw work share, the in-season update and the role
+ * level under it, and the model with and without those two as terms, with
+ * an oracle that knew the rest of the season as the ceiling.
  *
  * Run: npx tsx scripts/sleeperEval.ts [--seasons 2016-2025]
  */
@@ -17,43 +18,64 @@ import {
 } from "../src/backtest/sleeperBench.js";
 import { seasonsAsked } from "../src/data/seasons.js";
 import {
-  fitSleepersAsOf, rankSleepers, SLEEPER_TERMS,
+  fitSleepersAsOf, rankSleepers, sleeperTermNames,
   type SleeperExample, type SleeperFit, type SleeperScore,
+  type SleeperTermSet,
 } from "../src/model/sleepers.js";
 
 /** how deep each method picks, and where precision is read */
 const PICKS = 20;
 const AT = [10, 20];
 
+const TERM_SETS: SleeperTermSet[] = ["shipped", "with in-season"];
+
 /* ---------- the methods, and what each one is scored on ---------- */
 
+/** one fit's scores for one cut, keyed by player */
+type Scored = Map<SleeperTermSet, Map<string, SleeperScore>>;
+
 /** what one method ranks by, biggest first */
-type Order = (row: Row, scored: Map<string, SleeperScore>) => number;
+type Order = (row: Row, scored: Scored) => number;
+
+const by = (
+  terms: SleeperTermSet, row: Row, scored: Scored,
+): SleeperScore | undefined => scored.get(terms)?.get(row.cut.playerId);
 
 const METHODS: Record<string, Order> = {
   "the price itself": (row) => -row.cut.price,
   "points a game so far": (row) => row.cut.ppgSoFar,
   "raw work share": (row) => row.cut.rawWorkShare,
+  "the in-season level": (row) => row.cut.inSeasonPpg,
+  "the role level": (row) => row.cut.roleLevelPpg,
   "the model": (row, scored) =>
-    scored.get(row.cut.playerId)?.score ?? -Infinity,
+    by("shipped", row, scored)?.score ?? -Infinity,
   // Two ways of taking the price off the same fit, since the module's own
   // score is one reading of "what his price says" and the curve's median
   // at that price is the other.
   "the model over the curve": (row, scored) => {
-    const his = scored.get(row.cut.playerId);
+    const his = by("shipped", row, scored);
 
     return his === undefined ? -Infinity : his.modelPpg - his.priceMedian;
   },
   "the model's own line": (row, scored) =>
-    scored.get(row.cut.playerId)?.modelPpg ?? -Infinity,
+    by("shipped", row, scored)?.modelPpg ?? -Infinity,
+  "the model plus in-season": (row, scored) =>
+    by("with in-season", row, scored)?.score ?? -Infinity,
+  "plus in-season, own line": (row, scored) =>
+    by("with in-season", row, scored)?.modelPpg ?? -Infinity,
   "oracle: the rest known": (row) => row.restOfSeasonPpg,
 };
 
 const NAMES = Object.keys(METHODS);
 
-function topPicks(
-  rows: Row[], order: Order, scored: Map<string, SleeperScore>,
-): Row[] {
+/** the pairs whose swapped picks are named, the old one first */
+const COMPARED: [string, string][] = [
+  ["the model", "the model plus in-season"],
+  ["the model", "the in-season level"],
+  ["the model", "the role level"],
+];
+
+function topPicks(rows: Row[], order: Order, scored: Scored): Row[] {
   return [...rows]
     .sort((a, b) => {
       const gap = order(b, scored) - order(a, scored);
@@ -94,6 +116,47 @@ const perPick = (tally: Tally) =>
 const precision = (tally: Tally, deep: number) =>
   (tally.of[deep] ?? 0) === 0 ? 0 : (tally.hits[deep] ?? 0) / tally.of[deep]!;
 
+/** every tally one run keeps, pooled and cut up three ways */
+interface Kept {
+  pooled: Map<string, Tally>;
+  bySeason: Map<string, Map<number, Tally>>;
+  byCut: Map<string, Map<number, Tally>>;
+  byPosition: Map<string, Map<string, Tally>>;
+  /** each method's picks, one array per cut, in the same order for all */
+  picked: Map<string, Row[][]>;
+}
+
+const emptyKept = (): Kept => ({
+  pooled: new Map(NAMES.map((name) => [name, emptyTally()])),
+  bySeason: new Map(NAMES.map((name) => [name, new Map<number, Tally>()])),
+  byCut: new Map(NAMES.map((name) => [name, new Map<number, Tally>()])),
+  byPosition: new Map(NAMES.map((name) => [name, new Map<string, Tally>()])),
+  picked: new Map(NAMES.map((name) => [name, []])),
+});
+
+function into<K>(tallies: Map<K, Tally>, key: K, picks: Row[]): void {
+  const tally = tallies.get(key) ?? emptyTally();
+  tallied(tally, picks);
+  tallies.set(key, tally);
+}
+
+function keep(
+  kept: Kept, name: string, season: number, week: number, picks: Row[],
+): void {
+  tallied(kept.pooled.get(name)!, picks);
+  into(kept.bySeason.get(name)!, season, picks);
+  into(kept.byCut.get(name)!, week, picks);
+  kept.picked.get(name)!.push(picks);
+
+  for (const position of new Set(picks.map((row) => row.cut.position))) {
+    into(
+      kept.byPosition.get(name)!,
+      position,
+      picks.filter((row) => row.cut.position === position),
+    );
+  }
+}
+
 /* ---------- printing ---------- */
 
 const middleOf = (values: number[]) => {
@@ -102,27 +165,67 @@ const middleOf = (values: number[]) => {
   return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0;
 };
 
-function reportPooled(
-  pooled: Map<string, Tally>, bySeason: Map<string, Map<number, Tally>>,
-): void {
+function reportPooled(kept: Kept): void {
   console.log(
-    "\nmethod                    ppg a pick   prec@10   prec@20   picks" +
-    "   worst season  median   best",
+    "\nmethod                    ppg a pick   prec@10   prec@20   hits@20" +
+    "   picks   worst season  median   best",
   );
 
   for (const name of NAMES) {
-    const tally = pooled.get(name)!;
-    const seasons = [...(bySeason.get(name) ?? new Map()).values()]
+    const tally = kept.pooled.get(name)!;
+    const seasons = [...(kept.bySeason.get(name) ?? new Map()).values()]
       .map(perPick);
     console.log(
       `${name.padEnd(25)} ${perPick(tally).toFixed(2).padStart(6)}` +
       `   ${precision(tally, 10).toFixed(3).padStart(7)}` +
       `   ${precision(tally, 20).toFixed(3).padStart(7)}` +
+      `   ${String(tally.hits[20] ?? 0).padStart(6)}` +
       `   ${String(tally.picks).padStart(5)}` +
       `   ${Math.min(...seasons).toFixed(2).padStart(12)}` +
       `  ${middleOf(seasons).toFixed(2).padStart(6)}` +
       `  ${Math.max(...seasons).toFixed(2).padStart(5)}`,
     );
+  }
+}
+
+/** every method at every cut, since week 4 and week 8 are not one question */
+function reportByCut(kept: Kept): void {
+  console.log(
+    `\nby cut. ppg a pick, then hits of ${PICKS} a cut and precision at ` +
+    `${PICKS}`,
+  );
+  console.log(
+    "".padEnd(25) + CUTS.map((week) => `        week ${week}`).join(""),
+  );
+
+  for (const name of NAMES) {
+    const cells = CUTS.map((week) => {
+      const tally = kept.byCut.get(name)!.get(week) ?? emptyTally();
+
+      return `  ${perPick(tally).toFixed(2).padStart(5)} ` +
+        `${String(tally.hits[20] ?? 0).padStart(3)} ` +
+        `${precision(tally, 20).toFixed(3)}`;
+    });
+    console.log(`${name.padEnd(25)}${cells.join("")}`);
+  }
+}
+
+const POSITIONS = ["QB", "RB", "WR", "TE"];
+
+/** who each method picks, since the old model is known to skip passers */
+function reportByPosition(kept: Kept): void {
+  console.log("\nwhere the picks went, as hits of picks by position");
+  console.log(
+    "".padEnd(25) + POSITIONS.map((one) => one.padStart(11)).join(""),
+  );
+
+  for (const name of NAMES) {
+    const cells = POSITIONS.map((position) => {
+      const tally = kept.byPosition.get(name)!.get(position) ?? emptyTally();
+
+      return `${String(tally.hits[20] ?? 0)} of ${tally.picks}`.padStart(11);
+    });
+    console.log(`${name.padEnd(25)}${cells.join("")}`);
   }
 }
 
@@ -132,28 +235,29 @@ function reportPooled(
  * three of seven says so.
  */
 function reportHeadToHead(
-  bySeason: Map<string, Map<number, Tally>>,
+  kept: Kept,
   measure: string,
   read: (tally: Tally) => number,
 ): void {
+  const bySeason = kept.bySeason;
   const seasons = [...(bySeason.get(NAMES[0]!) ?? new Map()).keys()].sort();
   console.log(`\nseasons won on ${measure}, out of ${seasons.length}`);
   console.log(
-    `${"".padEnd(25)}${NAMES.map((n) => n.slice(0, 8).padStart(9)).join("")}`,
+    `${"".padEnd(25)}${NAMES.map((n) => n.slice(0, 7).padStart(8)).join("")}`,
   );
 
   for (const name of NAMES) {
     const mine = bySeason.get(name)!;
     const cells = NAMES.map((other) => {
       if (other === name) {
-        return "-".padStart(9);
+        return "-".padStart(8);
       }
 
       const theirs = bySeason.get(other)!;
       const won = seasons.filter((season) =>
         read(mine.get(season)!) > read(theirs.get(season)!)).length;
 
-      return String(won).padStart(9);
+      return String(won).padStart(8);
     });
     console.log(`${name.padEnd(25)}${cells.join("")}`);
   }
@@ -164,16 +268,17 @@ function reportHeadToHead(
  * deviation, so the terms can be read against each other.
  */
 function reportWeights(fit: SleeperFit): void {
+  const terms = sleeperTermNames(fit.terms);
   console.log(
     `\nwhat the ${fit.trainedOn[0]} to ` +
-    `${fit.trainedOn[fit.trainedOn.length - 1]} fit weighs, in points a ` +
-    "game per deviation",
+    `${fit.trainedOn[fit.trainedOn.length - 1]} ${fit.terms} fit weighs, in ` +
+    "points a game per deviation",
   );
   console.log(`  intercept${" ".repeat(15)}${fit.weights[0]!.toFixed(2)}`);
 
-  for (let i = 0; i < SLEEPER_TERMS.length; i++) {
+  for (let i = 0; i < terms.length; i++) {
     console.log(
-      `  ${SLEEPER_TERMS[i]!.padEnd(24)}${fit.weights[i + 1]!.toFixed(2)}`,
+      `  ${terms[i]!.padEnd(24)}${fit.weights[i + 1]!.toFixed(2)}`,
     );
   }
 }
@@ -200,16 +305,130 @@ function reportReasons(
   }
 }
 
+/* ---------- how well each line predicts the rest of the season ---------- */
+
+/** what one reader says a candidate does from here */
+const LINES: Record<string, (row: Row, scored: Scored) => number> = {
+  "the price median": (row) => row.cut.priceMedian,
+  "points a game so far": (row) => row.cut.ppgSoFar,
+  "the in-season level": (row) => row.cut.inSeasonPpg,
+  "the role level": (row) => row.cut.roleLevelPpg,
+  "the model's own line": (row, scored) =>
+    by("shipped", row, scored)?.modelPpg ?? 0,
+  "plus in-season, own line": (row, scored) =>
+    by("with in-season", row, scored)?.modelPpg ?? 0,
+};
+
+const mean = (values: number[]) =>
+  values.reduce((sum, one) => sum + one, 0) / Math.max(1, values.length);
+
+function correlation(said: number[], was: number[]): number {
+  const middleSaid = mean(said);
+  const middleWas = mean(was);
+  const together = said
+    .map((one, i) => (one - middleSaid) * (was[i]! - middleWas));
+  const spread = (values: number[], middle: number) =>
+    values.map((one) => (one - middle) ** 2);
+
+  return mean(together) / Math.sqrt(
+    mean(spread(said, middleSaid)) * mean(spread(was, middleWas)),
+  );
+}
+
+/** one reader's numbers at one cut, against what the players went on to do */
+interface Said {
+  said: number[];
+  was: number[];
+}
+
+/**
+ * A ranking says nothing about whether the level itself is any good, and
+ * the in-season update was built to answer the rest of the season, so it
+ * is marked on that here over the same candidates.
+ */
+function reportLines(lines: Map<string, Map<number, Said>>): void {
+  console.log(
+    "\nrest of season over the cheap candidates, MAE then correlation",
+  );
+  console.log(
+    "".padEnd(25) + CUTS.map((week) => `      week ${week}`).join(""),
+  );
+
+  for (const [name, byCut] of lines) {
+    const cells = CUTS.map((week) => {
+      const kept = byCut.get(week) ?? { said: [], was: [] };
+      const off = kept.said.map((one, i) => Math.abs(one - kept.was[i]!));
+
+      return `  ${mean(off).toFixed(2).padStart(5)} ` +
+        `${correlation(kept.said, kept.was).toFixed(3)}`;
+    });
+    console.log(`${name.padEnd(25)}${cells.join("")}`);
+  }
+}
+
+/* ---------- who the two orders disagree about ---------- */
+
+const SHOWN = 12;
+
+const named = (row: Row): string => {
+  const cut = row.cut;
+  const price = cut.drafted ? `pick ${cut.price.toFixed(0)}` : "undrafted";
+
+  return `  ${cut.playerName.slice(0, 20).padEnd(20)} ${cut.position} ` +
+    `${String(cut.season)} wk${String(cut.week).padStart(2)} ` +
+    `${price.padEnd(10)} ppg ${cut.ppgSoFar.toFixed(1).padStart(5)}` +
+    `  level ${cut.inSeasonPpg.toFixed(1).padStart(5)}` +
+    `  role ${cut.roleLevelPpg.toFixed(1).padStart(5)}` +
+    `  rest ${row.restOfSeasonPpg.toFixed(1).padStart(5)}` +
+    `  ${row.hit ? "hit" : "no "}`;
+};
+
+function listed(title: string, rows: Row[]): void {
+  console.log(`  ${title}: ${rows.length}`);
+
+  for (const row of rows.slice(0, SHOWN)) {
+    console.log(named(row));
+  }
+}
+
+/** the players one order picks and the other does not, and how they went */
+function reportSwaps(kept: Kept, before: string, after: string): void {
+  const gained: Row[] = [];
+  const lost: Row[] = [];
+  const old = kept.picked.get(before)!;
+
+  kept.picked.get(after)!.forEach((picks, i) => {
+    const had = new Set((old[i] ?? []).map((row) => row.cut.playerId));
+    const has = new Set(picks.map((row) => row.cut.playerId));
+    gained.push(...picks.filter((row) => !had.has(row.cut.playerId)));
+    lost.push(...(old[i] ?? [])
+      .filter((row) => !has.has(row.cut.playerId)));
+  });
+
+  const worst = (rows: Row[]) => [...rows]
+    .sort((a, b) => a.tierMargin - b.tierMargin);
+  const best = (rows: Row[]) => [...rows]
+    .sort((a, b) => b.restOfSeasonPpg - a.restOfSeasonPpg);
+  console.log(`\n${after} against ${before}, over the same ${PICKS} a cut`);
+  listed("added and hit", best(gained.filter((row) => row.hit)));
+  listed("added and missed", worst(gained.filter((row) => !row.hit)));
+  listed("dropped, and they hit", best(lost.filter((row) => row.hit)));
+  console.log(
+    `  dropped and they missed: ${lost.filter((row) => !row.hit).length}`,
+  );
+}
+
+/* ---------- main ---------- */
+
 async function main(): Promise<void> {
   const seasons = seasonsAsked(process.argv, SEASONS);
   const { rows, priced, skipped } = await build(seasons);
   const examples: SleeperExample[] = rows.map((row) => ({
     cut: row.cut, restOfSeasonPpg: row.restOfSeasonPpg,
   }));
-  const pooled = new Map(NAMES.map((name) => [name, emptyTally()]));
-  const bySeason = new Map(
-    NAMES.map((name) => [name, new Map<number, Tally>()]),
-  );
+  const kept = emptyKept();
+  const lines = new Map(Object.keys(LINES).map((name) =>
+    [name, new Map(CUTS.map((week) => [week, { said: [], was: [] } as Said]))]));
   const scorable = priced.filter((season) => season > (priced[0] ?? Infinity));
   let last: { season: number; week: number; picks: SleeperScore[] } | undefined;
 
@@ -227,33 +446,48 @@ async function main(): Promise<void> {
   }
 
   for (const season of scorable) {
-    const fit = fitSleepersAsOf(season, examples);
+    const fits = new Map(TERM_SETS.map((terms) =>
+      [terms, fitSleepersAsOf(season, examples, { terms })]));
 
     for (const week of CUTS) {
       const population = rows.filter((row) =>
         row.cut.season === season && row.cut.week === week && cheap(row));
-      const ranked = rankSleepers(fit, population.map((row) => row.cut));
-      const scored = new Map(ranked.map((one) => [one.playerId, one]));
+      const scored: Scored = new Map();
 
-      for (const name of NAMES) {
-        const picks = topPicks(population, METHODS[name]!, scored);
-        tallied(pooled.get(name)!, picks);
-        const seasons = bySeason.get(name)!;
-        const tally = seasons.get(season) ?? emptyTally();
-        tallied(tally, picks);
-        seasons.set(season, tally);
+      for (const [terms, fit] of fits) {
+        const ranked = rankSleepers(fit, population.map((row) => row.cut));
+        scored.set(terms, new Map(ranked.map((one) => [one.playerId, one])));
+
+        if (terms === "shipped") {
+          last = { season, week, picks: ranked.slice(0, 5) };
+        }
       }
 
-      last = { season, week, picks: ranked.slice(0, 5) };
+      for (const name of NAMES) {
+        keep(
+          kept, name, season, week,
+          topPicks(population, METHODS[name]!, scored),
+        );
+      }
+
+      for (const [name, line] of Object.entries(LINES)) {
+        const mark = lines.get(name)!.get(week)!;
+
+        for (const row of population) {
+          mark.said.push(line(row, scored));
+          mark.was.push(row.restOfSeasonPpg);
+        }
+      }
     }
   }
 
-  const fitted = fitSleepersAsOf(scorable[scorable.length - 1]!, examples);
+  const lastSeason = scorable[scorable.length - 1]!;
   console.log(
     `weeks ${CUTS.join(", ")} of ${scorable[0]} to ` +
-    `${scorable[scorable.length - 1]}, over the players priced past ` +
+    `${lastSeason}, over the players priced past ` +
     `${TOP_PRICED} or undrafted, in PPR. Each method picks ${PICKS}.`,
   );
+  const fitted = fitSleepersAsOf(lastSeason, examples);
   console.log(
     `${rows.length} player cuts over ${priced.length} seasons, ` +
     `${rows.filter(cheap).length} of them cheap enough to be picked from. ` +
@@ -272,11 +506,20 @@ async function main(): Promise<void> {
     );
   }
 
-  reportPooled(pooled, bySeason);
-  reportHeadToHead(bySeason, "the points a pick returned", perPick);
-  reportHeadToHead(bySeason, "precision at 20", (tally) =>
-    precision(tally, 20));
-  reportWeights(fitted);
+  reportPooled(kept);
+  reportByCut(kept);
+  reportByPosition(kept);
+  reportHeadToHead(kept, "the points a pick returned", perPick);
+  reportHeadToHead(kept, "precision at 20", (tally) => precision(tally, 20));
+  reportLines(lines);
+
+  for (const terms of TERM_SETS) {
+    reportWeights(fitSleepersAsOf(lastSeason, examples, { terms }));
+  }
+
+  for (const [before, after] of COMPARED) {
+    reportSwaps(kept, before, after);
+  }
 
   if (last) {
     reportReasons(last.season, last.week, last.picks);
