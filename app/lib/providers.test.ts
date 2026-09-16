@@ -134,6 +134,35 @@ describe("this week's matchups on Sleeper", () => {
     });
   });
 
+  it("takes the lineup off the roster when the week has none on it", async () => {
+    serve({
+      "/players/nfl": SLEEPER_MEN,
+      "/matchups/4": [
+        { matchup_id: 1, roster_id: 1, points: 0, starters: null, players: ["100", "200"] },
+        {
+          matchup_id: 1, roster_id: 2, points: 0,
+          starters: ["300", "400"], players: ["300", "400"],
+        },
+      ],
+      "/rosters": [
+        {
+          roster_id: 1, owner_id: "u1", players: ["100", "200"],
+          starters: ["100", "200"],
+        },
+        { roster_id: 2, owner_id: "u2", players: ["300", "400"] },
+      ],
+    });
+
+    const { PROVIDERS } = await import("./providers.ts");
+    const league = leagueLike({
+      slots: ["QB", "RB"], members: { u1: "one", u2: "two" },
+    });
+    const games = await PROVIDERS["sleeper"]!.matchupsFor!(league, 4);
+
+    expect(games[0]!.sides[0]!.starters.map((s) => s.name))
+      .toEqual(["Josh Allen", "Bijan Robinson"]);
+  });
+
   it("pairs the two sides, names the owners and scores the starters", async () => {
     const { PROVIDERS } = await import("./providers.ts");
     const league = leagueLike({
