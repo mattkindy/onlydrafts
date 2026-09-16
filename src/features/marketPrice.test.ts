@@ -238,7 +238,10 @@ describe("disagreement", () => {
   });
 });
 
-describe("marketPriceAsOf", () => {
+// each of these reads a decade of drafts off disk and fits them, which
+// runs close to the five second default on a quiet machine and over it
+// on a busy one
+describe("marketPriceAsOf", { timeout: 30_000 }, () => {
   it("reads nothing from the season it is asked about", async () => {
     const fitted = await marketPriceAsOf(2019);
 
