@@ -4,20 +4,62 @@
  *
  * Usage is his own recent workload per game, mixed with his previous
  * season while he has fewer than three games behind him. Rates come from
- * the same history, shrunk toward the league average for his position, so
- * a back with three carries reads as an average back instead of as those
- * three carries.
+ * the same history, shrunk toward the league average for his position.
  *
- * The site ships this for weeks 1 to 4, where a season-anchored line has
- * almost nothing of this season to anchor to. From week 5 the ridge model
- * takes over.
+ * The site leans on this early, where a season anchor has almost nothing
+ * of the year to stand on, then fades it out in favor of the ridge model
+ * by COMPONENT_FADE_TO_WEEK, so the two lines cross over instead of
+ * swapping in one jump.
  */
 
 import type { PlayerWeekStats } from "../data/nflverse.js";
 import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
 
-/** the last week the component line beats the season-anchored one */
-export const COMPONENT_THROUGH_WEEK = 4;
+/** the last week the component line runs at full weight */
+export const COMPONENT_FADE_FROM_WEEK = 2;
+
+/** the week the season-anchored line has taken over completely */
+export const COMPONENT_FADE_TO_WEEK = 6;
+
+/**
+ * How much of a week's number comes from the component line rather than
+ * the season anchor: 1 through COMPONENT_FADE_FROM_WEEK, falling in a
+ * straight line to 0 by COMPONENT_FADE_TO_WEEK. Four weeks is long enough
+ * that a player's chart bends instead of jumping at the seam, and short
+ * enough that the season anchor is fully in charge well before enough
+ * of the season has been played to trust it on its own.
+ */
+export function componentWeight(week: number): number {
+  if (week <= COMPONENT_FADE_FROM_WEEK) {
+    return 1;
+  }
+
+  if (week >= COMPONENT_FADE_TO_WEEK) {
+    return 0;
+  }
+
+  return (COMPONENT_FADE_TO_WEEK - week) /
+    (COMPONENT_FADE_TO_WEEK - COMPONENT_FADE_FROM_WEEK);
+}
+
+/**
+ * A week's number, cross faded between the component line and the
+ * season anchor. `component` is left out where there is no history
+ * to build it from, so the anchor is used alone.
+ */
+export function blendWithComponent(
+  week: number,
+  component: number | undefined,
+  anchored: number,
+): number {
+  const weight = componentWeight(week);
+
+  if (weight <= 0 || component === undefined) {
+    return anchored;
+  }
+
+  return weight * component + (1 - weight) * anchored;
+}
 
 /** how many of a player's own games the trailing window reads */
 const COMPONENT_WINDOW = 4;

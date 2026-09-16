@@ -49,7 +49,8 @@ import {
   componentPoints,
   historiesForWeek,
   positionRatePriors,
-  COMPONENT_THROUGH_WEEK,
+  blendWithComponent,
+  COMPONENT_FADE_TO_WEEK,
   type History,
   type Rates,
 } from "../src/features/componentWeek.js";
@@ -143,9 +144,9 @@ async function componentPriors(season: number): Promise<Map<string, Rates>> {
 }
 
 /**
- * The component line through week 4 and the season-anchored ridge line
- * from week 5, which is the split the weekly bench settled. A player with no
- * history behind him would come out at nothing, so he keeps the ridge.
+ * The component line and the season-anchored ridge line, cross faded by
+ * week so the chart bends instead of jumping at a seam. A player with no
+ * history behind him, or past the fade window, keeps the ridge alone.
  */
 function earlyWeekLine(
   week: number,
@@ -155,14 +156,13 @@ function earlyWeekLine(
   priors: Map<string, Rates>,
 ): number {
   const prior = priors.get(position);
+  const points = history && prior
+    ? componentPoints(history, prior, scoring())
+    : undefined;
 
-  if (week > COMPONENT_THROUGH_WEEK || !history || !prior) {
-    return ridge;
-  }
-
-  const points = componentPoints(history, prior, scoring());
-
-  return points > 0 ? points : ridge;
+  return blendWithComponent(
+    week, points !== undefined && points > 0 ? points : undefined, ridge,
+  );
 }
 
 /**
@@ -844,13 +844,13 @@ async function main(): Promise<void> {
     ? await loadPlayerStats(season)
     : [];
   /**
-   * What each player had behind him going into each of the first four
-   * weeks. Before a season is played that is his previous one alone,
-   * which is what the 2026 week 1 slate is built from.
+   * What each player had behind him going into each week the component
+   * line still counts for something. Before a season is played that is
+   * his previous one alone.
    */
   const earlyHistories = new Map<number, Map<string, History>>();
 
-  for (let w = 1; w <= COMPONENT_THROUGH_WEEK; w++) {
+  for (let w = 1; w < COMPONENT_FADE_TO_WEEK; w++) {
     earlyHistories.set(
       w, historiesForWeek(thisSeason, prevStats, w, scoring()));
   }
@@ -1312,10 +1312,10 @@ async function main(): Promise<void> {
     });
 
     /**
-     * Weeks 1 to 4 come off his usage and his rates instead of his
-     * season anchor. So early there is almost nothing of this season
-     * for the anchor to stand on, and the bench has the component line
-     * ahead at every position by a fifth of a point a week.
+     * The early weeks lean on his usage and his rates instead of his
+     * season anchor, fading out as the season anchor takes over, since
+     * so early there is almost nothing of this season for it to stand
+     * on yet.
      */
     weeklyByPlayer.set(
       p.playerId,
