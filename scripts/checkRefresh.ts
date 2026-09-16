@@ -121,7 +121,12 @@ async function checkSlate(season: number, week: number): Promise<void> {
   }
 }
 
-/** how many players the clubs listed that week, straight off the file */
+/**
+ * How many players the clubs gave a status that week. A row with the
+ * status left blank is a club filing its practice report before it has
+ * ruled anybody in or out, and a week of those says nothing about
+ * whether the slate should have somebody questionable on it.
+ */
 async function injuryRowsFor(season: number, week: number): Promise<number> {
   const text = await readFile(
     join(import.meta.dirname, "..", "data", "raw", `injuries_${season}.csv`),
@@ -133,11 +138,17 @@ async function injuryRowsFor(season: number, week: number): Promise<number> {
   }
 
   const lines = text.split("\n");
-  const at = (lines[0] ?? "").split(",").indexOf("week");
+  const head = (lines[0] ?? "").split(",");
+  const at = head.indexOf("week");
+  const saying = head.indexOf("report_status");
 
   return lines
     .slice(1)
-    .filter((line) => Number(line.split(",")[at]) === week)
+    .filter((line) => {
+      const cells = line.split(",");
+
+      return Number(cells[at]) === week && (cells[saying] ?? "").trim() !== "";
+    })
     .length;
 }
 
