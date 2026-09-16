@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { defenceLineSays, statLineSays } from "../lib/boxScore.ts";
 import {
-  lineFor, standingFor, starterState,
+  hasLineup, lineFor, standingFor, starterState,
   type GameState, type InGameStatus, type Lines,
 } from "../lib/matchups.ts";
 import type { Matchup, PlayerWeek, Roster, Side } from "../lib/providers.ts";
@@ -247,8 +247,16 @@ export function Game(
         <div class={"team" + (at ? " away" : "")} key={side.owner + at}>
           <span class="nm">{side.owner}</span>
           <span class="big">{scoredSays(side.points)}</span>
-          <span class="val" title="projected">{scoredSays(projected[at]!)}</span>
-          <span class="val win">{said[at]}</span>
+          {hasLineup(side)
+            ? (
+              <>
+                <span class="val" title="projected">
+                  {scoredSays(projected[at]!)}
+                </span>
+                <span class="val win">{said[at]}</span>
+              </>
+            )
+            : <span class="val hint">no lineup set</span>}
         </div>
       ))}
       <div

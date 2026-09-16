@@ -954,6 +954,15 @@ export function myGameIn(
 export const playersOf = (matchup: Matchup) =>
   matchup.sides.flatMap((side) => [...side.starters, ...side.bench]);
 
+/**
+ * Whether a side has set a lineup at all. Sleeper fills every slot of an
+ * unset lineup with the player id "0", which drops out with no starter
+ * left behind, and ESPN can hand back a side with an empty roster the
+ * same way. Either way the side has nobody in it yet, so its zero is
+ * not a projection.
+ */
+export const hasLineup = (side: Side) => side.starters.length > 0;
+
 /** what a side ends the week on, draw by draw */
 export function sideTotals(
   side: Matchup["sides"][number],
@@ -1009,7 +1018,11 @@ export function standingFor(
   const live = liveDraws(playersOf(matchup), rows, states, draws, lines, remainder);
   const home = sideTotals(matchup.sides[0], rows, states, draws, live);
   const away = sideTotals(matchup.sides[1], rows, states, draws, live);
-  const p = winChance(home, away);
+  // a side with no lineup has not lost the week, it has not set one yet,
+  // so the odds stay a coin flip until both sides have a lineup to score
+  const p = hasLineup(matchup.sides[0]) && hasLineup(matchup.sides[1])
+    ? winChance(home, away)
+    : 0.5;
   const toCome = new Map(
     matchup.sides.flatMap((side) => side.starters)
       .map((starter) => [starter.key, mean(live.toCome(starter.key))]),

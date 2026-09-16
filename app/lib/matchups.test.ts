@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, hurtFrom,
-  initialForm, liveDraws, myGameIn,
+  alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, hasLineup,
+  hurtFrom, initialForm, liveDraws, myGameIn,
   oddsFor, standingFor, sideTotals, situationsFrom, spreadOf, starterState,
   statesFrom, stockLine,
 } from "./matchups.ts";
@@ -719,6 +719,22 @@ describe("standingFor", () => {
     const card = standingFor({ sides: [theirs, mine] }, rows, now);
 
     expect(card.odds).toEqual([1, 0]);
+  });
+
+  it("reports no lineup rather than a zero projection for an empty side", () => {
+    const rows = rowsFor(row("qb2", "KC", 24, "QB", "DEN"));
+    const now = states({ KC: { where: "pre", left: 1 }, DEN: { where: "pre", left: 1 } });
+    const empty = side("me", 0, []);
+    const theirs = side("them", 0, [{ key: "qb2", points: 0, slot: "QB" }]);
+
+    expect(hasLineup(empty)).toBe(false);
+
+    const standing = standingFor({ sides: [empty, theirs] }, rows, now);
+
+    expect(standing.projected[0]).toBe(0);
+    // nobody has played and the empty side may still set a lineup, so
+    // one side having nobody in it does not decide the game
+    expect(standing.odds).toEqual([0.5, 0.5]);
   });
 });
 

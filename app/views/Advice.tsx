@@ -9,7 +9,7 @@
 import { useMemo } from "preact/hooks";
 
 import {
-  bestLineupFor, standingFor, type GameState, type Lines,
+  bestLineupFor, hasLineup, standingFor, type GameState, type Lines,
 } from "../lib/matchups.ts";
 import { wholePair } from "../lib/pctPair.ts";
 import type { Side } from "../lib/providers.ts";
@@ -131,6 +131,14 @@ export function Advice(
       : odds,
     [odds, side, against, rows, states, lines, played],
   );
+
+  if (!hasLineup(side)) {
+    return (
+      <div class="advice">
+        <b>no lineup set.</b> nothing to advise until you start somebody.
+      </div>
+    );
+  }
 
   if (!best.swaps.length) {
     return (

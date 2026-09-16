@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { render } from "preact";
 
-import { pct, pctPair } from "./Advice.tsx";
+import type { Side } from "../lib/providers.ts";
+import { Advice, pct, pctPair } from "./Advice.tsx";
+
+const side = (owner: string, starters: Side["starters"]): Side => ({
+  owner, points: 0, starters, bench: [],
+});
 
 describe("pct", () => {
   it("rounds to a whole percent in the middle", () => {
@@ -38,5 +44,28 @@ describe("pctPair", () => {
   it("keeps the tenths when a game is nearly settled", () => {
     expect(pctPair(0.9985)).toEqual(["99.8%", "0.2%"]);
     expect(pctPair(0.003)).toEqual(["0.3%", "99.7%"]);
+  });
+});
+
+describe("Advice", () => {
+  it("says no lineup is set rather than pricing an empty one", () => {
+    const container = document.createElement("div");
+    const mine = side("me", []);
+    const opp = side("them", [{ key: "qb", points: 10, slot: "QB" }]);
+
+    render(
+      <Advice
+        side={mine}
+        against={opp}
+        slots={null}
+        rows={new Map()}
+        states={new Map()}
+        lines={new Map()}
+      />,
+      container,
+    );
+
+    expect(container.textContent).toContain("no lineup set");
+    expect(container.textContent).not.toContain("wins");
   });
 });
