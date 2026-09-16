@@ -6,28 +6,29 @@
  * season while he has fewer than three games behind him. Rates come from
  * the same history, shrunk toward the league average for his position.
  *
- * The site leans on this early, where a season anchor has almost nothing
- * of the year to stand on, then fades it out in favor of the ridge model
- * by COMPONENT_FADE_TO_WEEK, so the two lines cross over instead of
- * swapping in one jump.
+ * The season anchor used to sit on the August number all year, so this
+ * line used to carry the early weeks on its own. Now the anchor moves
+ * with the games played (updateBoardLevels in inSeasonBoard.ts), and
+ * scripts/crossFadeAnchorEval.ts found it beats this line even at week
+ * 1, so the fade below is off.
  */
 
 import type { PlayerWeekStats } from "../data/nflverse.js";
 import { fantasyPoints, type ScoringRules } from "../scoring/fantasyPoints.js";
 
-/** the last week the component line runs at full weight */
-export const COMPONENT_FADE_FROM_WEEK = 2;
+/** the last week the component line would run at full weight, were the fade on */
+export const COMPONENT_FADE_FROM_WEEK = 0;
 
-/** the week the season-anchored line has taken over completely */
-export const COMPONENT_FADE_TO_WEEK = 6;
+/** the week the season anchor takes over; 0 here turns the fade off entirely */
+export const COMPONENT_FADE_TO_WEEK = 0;
 
 /**
  * How much of a week's number comes from the component line rather than
  * the season anchor: 1 through COMPONENT_FADE_FROM_WEEK, falling in a
- * straight line to 0 by COMPONENT_FADE_TO_WEEK. Four weeks is long enough
- * that a player's chart bends instead of jumping at the seam, and short
- * enough that the season anchor is fully in charge well before enough
- * of the season has been played to trust it on its own.
+ * straight line to 0 by COMPONENT_FADE_TO_WEEK. With both at 0, week is
+ * never at or below COMPONENT_FADE_FROM_WEEK and always at or above
+ * COMPONENT_FADE_TO_WEEK, so this returns 0 for every real week and the
+ * component line never runs for a week numbered 1 or higher.
  */
 export function componentWeight(week: number): number {
   if (week <= COMPONENT_FADE_FROM_WEEK) {

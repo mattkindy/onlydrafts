@@ -29,7 +29,6 @@ import {
   historiesForWeek,
   positionRatePriors,
   blendWithComponent,
-  COMPONENT_FADE_TO_WEEK,
   type History,
   type Rates,
 } from "../src/features/componentWeek.js";
@@ -119,7 +118,9 @@ async function weeksFor(season: number): Promise<SeasonLines> {
   const prevStats = await loadPlayerStats(season - 1).catch(() => []);
   const historiesByWeek = new Map<number, Map<string, History>>();
 
-  for (let w = 1; w < COMPONENT_FADE_TO_WEEK; w++) {
+  // oldWeekLine below needs history through OLD_COMPONENT_THROUGH_WEEK
+  // regardless of where the shipped fade is set today
+  for (let w = 1; w <= OLD_COMPONENT_THROUGH_WEEK; w++) {
     historiesByWeek.set(
       w, historiesForWeek(thisSeason, prevStats, w, scoring()),
     );
