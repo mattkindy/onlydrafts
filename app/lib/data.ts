@@ -38,7 +38,7 @@ interface FileRow {
   minus?: string[];
   game?: Record<string, number> | null;
   sim?: (Record<string, number> & { games: number }) | null;
-  weeks?: { w: number; opp: string; of: number }[];
+  weeks?: { w: number; opp: string; of: number; played?: Record<string, number> | null }[];
 }
 
 export interface Board {

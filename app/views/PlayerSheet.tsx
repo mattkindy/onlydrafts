@@ -2,7 +2,8 @@
 
 import { useEffect } from "preact/hooks";
 
-import type { Player } from "../lib/scoring.ts";
+import type { Pays, Player } from "../lib/scoring.ts";
+import { payFor } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
 import { lineOver, movedBy } from "../lib/statLine.ts";
 
@@ -11,6 +12,7 @@ interface Props {
   plus: string[];
   minus: string[];
   teams: number;
+  pays?: Pays;
   onClose: () => void;
 }
 
@@ -20,7 +22,7 @@ interface Props {
  * each week stretches that shape by its own matchup, so a soft one
  * shows a lower box and a shorter tail, not only a shorter bar.
  */
-function WeekByWeek({ p }: { p: Player }) {
+function WeekByWeek({ p, pays }: { p: Player; pays: Pays }) {
   const games = p.weeks ?? [];
 
   if (!games.length) {
@@ -35,17 +37,26 @@ function WeekByWeek({ p }: { p: Player }) {
   // a week is a multiple of his own average, so the league's own
   // scoring is already in the number the card shows
   const points = games.map((w) => w.of * (p.ppg ?? 0));
-  const max = Math.max(...points.map((n) => n * spread.high)) || 1;
+  // what he actually scored, under this league's rules, in a week
+  // already played; a week not yet played has nothing to score
+  const played = games.map((w) => w.played ? payFor(w.played, pays) : null);
+  const max = Math.max(
+    ...points.map((n) => n * spread.high),
+    ...played.filter((n): n is number => n !== null),
+  ) || 1;
   const pct = (v: number) => (v / max) * 100;
 
   return (
     <>
       <h2>week by week</h2>
       <div class="hint">
-        Projection and usual range each week.
+        Projection and usual range each week, with what he scored in a
+        week already played.
       </div>
       {games.map((w, i) => {
         const pts = points[i]!;
+        const got = played[i] ?? null;
+        const beat = got !== null ? got >= pts : null;
 
         return (
           <div class="wk" key={w.w}>
@@ -61,11 +72,20 @@ function WeekByWeek({ p }: { p: Player }) {
                 right: (100 - pct(pts * spread.q3)) + "%",
               }} />
               <b style={{ left: pct(pts) + "%" }} />
+              {got !== null && (
+                <s class={beat ? "up" : "down"} style={{ left: pct(got) + "%" }} />
+              )}
             </span>
             <span class="wkpts">
               {pts.toFixed(1)}
               <em>{(pts * spread.low).toFixed(0)} to {(pts * spread.high).toFixed(0)}</em>
             </span>
+            {got !== null && (
+              <span class="wkline">
+                <b class={beat ? "up" : "down"}>{got.toFixed(1)}</b>
+                <i>{beat ? "+" : ""}{(got - pts).toFixed(1)} vs projection</i>
+              </span>
+            )}
           </div>
         );
       })}
@@ -154,7 +174,7 @@ export function PlayerSheet(props: Props) {
           </>
         )}
 
-        <WeekByWeek p={p} />
+        <WeekByWeek p={p} pays={props.pays ?? {}} />
       </div>
     </div>
   );

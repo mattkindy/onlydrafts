@@ -444,6 +444,45 @@ describe("a week row keeps its shape", () => {
     const said = row.querySelector(".wkpts")!;
     expect(said.querySelector("em")!.textContent).toMatch(/\d+ to \d+/);
   });
+
+  it("shows what he actually scored in a week already played", () => {
+    const p: Player = {
+      name: "Test Wideout", key: "test-wideout", position: "WR", team: "AAA",
+      ppg: 10,
+      game: { ev: 10, mid: 10, low: 5, q1: 8, q3: 12, high: 15 },
+      weeks: [
+        // catches five for eighty and a score, well past what a ten
+        // point week says he was due
+        { w: 1, opp: "v AAA", of: 1, played: { receptions: 5, recYds: 80, recTd: 1 } },
+        // a quiet week under the ten points projected
+        { w: 2, opp: "@ BBB", of: 1, played: { receptions: 2, recYds: 10 } },
+        // not played yet, so nothing to show beyond the range
+        { w: 3, opp: "v CCC", of: 1 },
+      ],
+    };
+    const pays = { rec: 1, rec_yd: 0.1, rec_td: 6 };
+
+    render(
+      <PlayerSheet
+        p={p} plus={[]} minus={[]} teams={12} pays={pays} onClose={() => {}}
+      />,
+      where,
+    );
+
+    const rows = Array.from(where.querySelectorAll(".wk"));
+    const [week1, week2, week3] = rows;
+
+    expect(week1!.querySelector(".bar s.up")).not.toBeNull();
+    expect(week1!.querySelector(".wkline b")!.textContent).toBe("19.0");
+    expect(week1!.querySelector(".wkline b")!.className).toBe("up");
+
+    expect(week2!.querySelector(".bar s.down")).not.toBeNull();
+    expect(week2!.querySelector(".wkline b")!.textContent).toBe("3.0");
+    expect(week2!.querySelector(".wkline b")!.className).toBe("down");
+
+    expect(week3!.querySelector(".bar s")).toBeNull();
+    expect(week3!.querySelector(".wkline")).toBeNull();
+  });
 });
 
 /**
