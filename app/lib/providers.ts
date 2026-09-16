@@ -445,6 +445,7 @@ interface SleeperRoster {
   roster_id: number;
   owner_id: string;
   players?: string[];
+  starters?: string[] | null;
   keepers?: string[] | null;
   settings?: {
     wins?: number; losses?: number; ties?: number;
@@ -664,11 +665,17 @@ async function sleeperMatchups(
   const userOf = new Map(
     (rosters as SleeperRoster[] ?? []).map((r) => [r.roster_id, r.owner_id]),
   );
+  // Sleeper sometimes sends a week's matchup with no lineup on it even
+  // though the team has one, and the roster keeps the same lineup, so
+  // an empty side here means nobody has started anybody anywhere
+  const lineupOf = new Map(
+    (rosters as SleeperRoster[] ?? []).map((r) => [r.roster_id, r.starters]),
+  );
   const slots = sleeperStartingSlots(league.slots);
 
   const sideOf = (side: SleeperMatchup): Side => {
     const scored = side.players_points ?? {};
-    const starting = side.starters ?? [];
+    const starting = side.starters ?? lineupOf.get(side.roster_id) ?? [];
     const starters: Side["starters"] = [];
 
     for (const [i, id] of starting.entries()) {
