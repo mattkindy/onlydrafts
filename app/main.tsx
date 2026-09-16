@@ -1085,6 +1085,7 @@ function App() {
           plus={board?.plusMinus.get(showing.key)?.plus ?? []}
           minus={board?.plusMinus.get(showing.key)?.minus ?? []}
           teams={active?.size ?? 12}
+          pays={active?.pays ?? {}}
           onClose={() => setShowing(null)}
         />
       )}

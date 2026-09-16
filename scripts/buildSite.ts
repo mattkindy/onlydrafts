@@ -843,6 +843,21 @@ async function main(): Promise<void> {
   const thisSeason = hasPlayerStats(season)
     ? await loadPlayerStats(season)
     : [];
+  // What he actually did in a week already played, in the same
+  // categories `projected` uses, so a reader's league scores it by its
+  // own rules. A stat he did not touch is left out rather than zero.
+  const playedByPlayer = new Map<string, Map<number, Record<string, number>>>();
+
+  for (const s of thisSeason) {
+    const parts = Object.fromEntries(
+      Object.entries(s.statLine).filter(([, n]) => n !== 0)
+        .map(([stat, n]) => [stat, Number(n.toFixed(2))]),
+    );
+    const byWeek = playedByPlayer.get(s.playerId) ?? new Map();
+
+    byWeek.set(s.week, parts);
+    playedByPlayer.set(s.playerId, byWeek);
+  }
   /**
    * What each player had behind him going into each week the component
    * line still counts for something. Before a season is played that is
@@ -1465,6 +1480,7 @@ async function main(): Promise<void> {
             of: p.projectedPpg >= 1
               ? Number((w.points / p.projectedPpg).toFixed(3))
               : 1,
+            played: playedByPlayer.get(p.playerId)?.get(w.week) ?? null,
           })),
       };
     })

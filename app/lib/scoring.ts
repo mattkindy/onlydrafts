@@ -19,8 +19,12 @@ export interface Player {
   projected?: Parts | null;
   /** and what the played out games say */
   simulated?: Parts | null;
-  /** how his weeks vary against his own average, one per week */
-  weeks?: { w: number; opp: string; of: number }[];
+  /**
+   * how his weeks vary against his own average, one per week, and what
+   * he actually did in a week already played, under the same categories
+   * `projected` and `simulated` use
+   */
+  weeks?: { w: number; opp: string; of: number; played?: Parts | null }[];
   /** the spread of a game of his, as the file scored it */
   game?: Record<string, number> | null;
   /** and of a season, with the games he is expected to play */
