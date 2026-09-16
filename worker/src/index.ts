@@ -20,7 +20,7 @@ const ESPN = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons";
 
 /** every view the page is allowed to ask for, so nobody asks for more */
 const VIEWS = [
-  "mTeam", "mSettings", "mRoster", "mDraftDetail", "mMatchupScore",
+  "mTeam", "mSettings", "mRoster", "mDraftDetail", "mMatchup", "mMatchupScore",
 ];
 
 /** what the draft page reads, used when a caller asks for no views */

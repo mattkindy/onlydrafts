@@ -1233,7 +1233,11 @@ interface EspnGame {
 /** ESPN's numbers for the bench and for injured reserve */
 const ESPN_BENCH = new Set([20, 21]);
 
-const ESPN_VIEWS = ["mTeam", "mMatchupScore", "mRoster"];
+/**
+ * mMatchupScore alone gives the schedule and the two totals, and ESPN
+ * only puts the week's lineups in it when mMatchup is asked for too.
+ */
+const ESPN_VIEWS = ["mTeam", "mMatchup", "mMatchupScore", "mRoster"];
 
 /**
  * The week's games, both sides of each, as ESPN has them now.
