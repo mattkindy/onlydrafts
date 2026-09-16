@@ -435,10 +435,15 @@ describe("a week row keeps its shape", () => {
       where,
     );
 
-    const row = where.querySelector(".wk")!;
+    // the last week of the season, since a week already played says
+    // what he scored in it and this is about the ones still ahead
+    const weeks = Array.from(where.querySelectorAll(".wk"))
+      .filter((one) => one.querySelector(".wkpts"));
+    const row = weeks[weeks.length - 1]!;
+
     expect(Array.from(row.children).map((k) => k.className || "plain"))
       .toEqual(["plain", "plain", "bar", "wkpts"]);
-    expect(where.querySelector(".wkline")).toBeNull();
+    expect(row.querySelector(".wkline")).toBeNull();
 
     // the average barely moves, so the row has to say the swing as well
     const said = row.querySelector(".wkpts")!;
