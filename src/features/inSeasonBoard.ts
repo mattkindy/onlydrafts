@@ -16,8 +16,11 @@ import { loadPlayerStats, loadSnapCounts } from "../data/nflverse.js";
 import { normalizeName } from "../data/names.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { scoring } from "../scoring/active.js";
+import { updateParts } from "./inSeasonParts.js";
+import type { StatParts } from "./seasonSummary.js";
 import {
   fitRoleLevel,
+  summarizeWindow,
   updateLevel,
   type InSeasonFit,
   type PlayedWeek,
@@ -154,6 +157,7 @@ interface BoardPlayer {
   playerId: string;
   position: string;
   projectedPpg: number;
+  projectedParts?: StatParts;
 }
 
 /**
@@ -181,11 +185,19 @@ export async function updateBoardLevels(
       continue;
     }
 
-    player.projectedPpg = updateLevel(fit, {
-      anchor: player.projectedPpg,
-      position: player.position,
-      weeks,
-    }).ppg;
+    const anchor = player.projectedPpg;
+    const level = updateLevel(fit, { anchor, position: player.position, weeks });
+    player.projectedPpg = level.ppg;
+
+    if (player.projectedParts && anchor > 0) {
+      player.projectedParts = updateParts({
+        anchor: player.projectedParts,
+        observed: summarizeWindow(weeks, fit.shape).usage,
+        fromSeason: level.weightOnRole + level.weightOnPoints,
+        levelRatio: level.ppg / anchor,
+      });
+    }
+
     moved++;
   }
 

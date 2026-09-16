@@ -4,6 +4,11 @@ import {
   loadWeeklyRosters,
 } from "../data/nflverse.js";
 import { normalizeName } from "../data/names.js";
+import {
+  fantasySpot,
+  isFantasyPosition,
+  listedPositions,
+} from "../data/listedPositions.js";
 import { mapPosition } from "../graph/build.js";
 import { scoring } from "../scoring/active.js";
 import {
@@ -204,8 +209,49 @@ async function loadSnapShare(season: number): Promise<Map<string, number>> {
   return result;
 }
 
+/**
+ * The same summaries with a two way player moved to the side of the
+ * ball he scored on, since his stat rows file him at the other one and
+ * every reader of this map keeps only the four fantasy positions.
+ */
+async function atListedPosition(
+  summaries: Map<string, SeasonSummary>,
+  season: number,
+  options: SeasonDataOptions,
+): Promise<Map<string, SeasonSummary>> {
+  if (options.fromStatRowsOnly === true) {
+    return summaries;
+  }
+
+  const listed = await listedPositions(season);
+
+  for (const summary of summaries.values()) {
+    if (isFantasyPosition(summary.position)) {
+      continue;
+    }
+
+    const spot = fantasySpot(summary.position, listed.get(summary.playerId));
+
+    if (spot) {
+      summary.position = spot;
+    }
+  }
+
+  return summaries;
+}
+
+export interface SeasonDataOptions {
+  /**
+   * Take every position from the weekly stat rows, which files a two way
+   * player on defence and drops him off the board. Here so an eval can
+   * mark the board with the roster's listing against the board without.
+   */
+  fromStatRowsOnly?: boolean;
+}
+
 export async function buildSeasonData(
   seasons: number[],
+  options: SeasonDataOptions = {},
 ): Promise<Map<number, SeasonData>> {
   const data = new Map<number, SeasonData>();
 
@@ -263,7 +309,9 @@ export async function buildSeasonData(
 
     data.set(season, {
       stats,
-      summaries: summarizeSeason(stats, scoring()),
+      summaries: await atListedPosition(
+        summarizeSeason(stats, scoring()), season, options,
+      ),
       snapShare: await loadSnapShare(season).catch(() => new Map<string, number>()),
       healthyPpg: new Map(
         [...healthy.entries()]
