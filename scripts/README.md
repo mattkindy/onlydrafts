@@ -34,7 +34,8 @@ says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `knowableWeekEval.ts`, `mechanicsCarryEval.ts`, `walkWeekCache.ts`,
 `jointProjectionEval.ts`, `playLayerEval.ts`, `estimateCorrelation.ts`,
 `exemptCheck.ts`, `leverageUsageProbe.ts`, `marketPriceProbe.ts`,
-`sleeperEval.ts`, `seasonShrinkEval.ts` and `simAgreement.ts`.
+`sleeperEval.ts`, `seasonShrinkEval.ts`, `inSeasonLevelEval.ts` and
+`simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
@@ -1245,3 +1246,110 @@ him.
 Take the same idea into the parts model. The board's own points a game
 is the parts line scored by the league rules, and the parts are still
 scaled off a short season at face value.
+
+# Updating the level once the season is running
+
+The board's preseason number never moved on its own. Weeks 1 and 2 came
+off usage times rates, weeks 3 to 5 faded between that and the preseason
+projection, and from week 6 the preseason projection had the line to
+itself. So by October the model was saying August was right whatever the
+player had done since.
+
+`inSeasonLevelEval.ts` asks the question that settles it. Standing at the
+end of week W, how well does each reader predict a player's points a game
+from week W plus 1 to week 18? Marked over 2019 to 2025, QB, RB, WR and
+TE, everyone with a game before the cut and at least three after it.
+Every fit, the anchor included, is trained on seasons before the one it
+predicts.
+
+Mean absolute error, points a game:
+
+| after week | anchor | season to date | the update | oracle | players |
+| --- | --- | --- | --- | --- | --- |
+| 2 | 2.730 | 3.723 | 2.500 | 0 | 2292 |
+| 4 | 2.803 | 3.130 | 2.474 | 0 | 2482 |
+| 6 | 2.888 | 2.903 | 2.496 | 0 | 2524 |
+| 8 | 2.980 | 2.867 | 2.541 | 0 | 2501 |
+| 10 | 3.103 | 2.883 | 2.619 | 0 | 2417 |
+
+Correlation with what happened:
+
+| after week | anchor | season to date | the update |
+| --- | --- | --- | --- |
+| 2 | .797 | .720 | .832 |
+| 4 | .783 | .771 | .833 |
+| 6 | .769 | .787 | .827 |
+| 8 | .753 | .795 | .823 |
+| 10 | .734 | .791 | .811 |
+
+The anchor gets worse every week it is left alone, which is the bug. A
+player's average so far starts far worse and catches the anchor at week
+6. The update beats both at every cut, and beats the better of the two by
+between .23 and .33 points a game.
+
+The quarter of players whose usage says the furthest from where August
+had them is where it matters. Error on them, points a game:
+
+| after week | anchor | season to date | the update |
+| --- | --- | --- | --- |
+| 2 | 3.206 | 4.033 | 2.573 |
+| 4 | 3.405 | 3.382 | 2.558 |
+| 6 | 3.431 | 3.126 | 2.566 |
+| 8 | 3.541 | 2.996 | 2.525 |
+| 10 | 3.719 | 2.969 | 2.623 |
+
+Correlation on that quarter goes from .46 for the anchor at week 6 to
+.73 for the update, and at week 10 from .37 to .72.
+
+## What each part is worth
+
+Usage first, points second. The usage term takes half its weight after
+one to three games and the points term after five, fitted separately
+every season and landing in the same place each time. Switching the
+usage term off costs .055 at week 2, .018 at week 4 and .009 at week 6,
+and by week 10 it is worth nothing at all, 2.620 without it against
+2.619 with it. So the role reading pays for itself in September and
+stops mattering once there are enough games for the points to speak.
+
+Recency and the changepoint barely earn their keep. A decay of 0.9 on
+the latest game is picked every season, and the break threshold is only
+picked from 2025 on. Switching both off costs nothing before week 6 and
+.027 at week 10. They stay because they are what makes the update move
+fast when a role changes outright, which is the case it is for, but the
+pooled number does not see it.
+
+## Travis Hunter
+
+He is the case that started this. His rows in the weekly file are filed
+at cornerback, so the season model never sees him and his board number
+comes from the rookie model, which has him at 15.5 in 2025 and 14.7 in
+2026 and never moves. What the update says, reading his usage under the
+receiver role model:
+
+| cut | games | snap share | to date | role says | update | what happened |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2 | 2 | .61 | 7.1 | 11.8 | 13.2 | 9.9 |
+| 4 | 4 | .58 | 6.1 | 8.7 | 10.7 | 13.0 |
+| 6 | 6 | .63 | 6.6 | 8.6 | 9.9 | 24.1 |
+
+The rest of season figure at week 6 is off the two games he played
+before he was hurt, so it is not much of a target. The point is the
+anchor sat at 15.5 all year while his snaps and targets said a ten point
+receiver. In 2026 he played four offensive snaps in week 1, seven per
+cent, and the update takes him from 14.7 to 11.3 off that one game.
+
+## What to try next
+
+Read the team as well as the player. A receiver whose own share is
+steady on a side that has started throwing forty times a game is a
+different player from one on a side that has stopped, and nothing here
+sees that.
+
+Fit the role model on the horizon instead of the same games. It learns
+what a role paid over the season it was measured in, which is the right
+thing to point at a three game window but not obviously the right thing
+to predict the next twelve weeks with.
+
+Split the shrinkage by why a player's games are short, the same way the
+season model still wants. A player back from a four week absence and a
+player who has been rotational all year both come out at six games.
