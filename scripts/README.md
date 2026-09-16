@@ -34,7 +34,7 @@ says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `knowableWeekEval.ts`, `mechanicsCarryEval.ts`, `walkWeekCache.ts`,
 `jointProjectionEval.ts`, `playLayerEval.ts`, `estimateCorrelation.ts`,
 `exemptCheck.ts`, `leverageUsageProbe.ts`, `marketPriceProbe.ts`,
-`sleeperEval.ts` and `simAgreement.ts`.
+`sleeperEval.ts`, `seasonShrinkEval.ts` and `simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
@@ -1188,3 +1188,60 @@ at 0.81 and it is the only one pointing at the tier.
 Put the player's own remaining schedule in. Nothing here knows who he
 plays, and a cheap back with six soft fixtures left is a different bet
 from one with six hard ones.
+
+# What snap share and a short season are worth to the board
+
+`seasonShrinkEval.ts` prints this in about eight minutes. It covers
+2086 players over 2019 to 2025, PPR points a game, with the fit for
+each season taught only on transitions that had finished before it.
+
+The season model used to start from a player's own points a game and
+never ask how many games that came off or how much of the offence he
+was on the field for. Snap share reached the trees but not the level
+the trees scale, and the two halves are averaged, so it moved a
+projection barely at all.
+
+Two changes, and the numbers with the model as it was beside them:
+
+| | error | correlation | ordering | part time | under 11 games |
+| --- | --- | --- | --- | --- | --- |
+| his own last season | 2.795 | .802 | .795 | 2.406 | 2.649 |
+| the model as it was | 2.485 | .834 | .824 | 2.201 | 2.223 |
+| snaps read, short seasons shrunk | 2.453 | .838 | .831 | 2.157 | 2.178 |
+| a reader who knew the answer | 0 | 1 | 1 | 0 | 0 |
+
+Part time means a player who took under half his side's snaps. The
+change wins six of the seven seasons and loses 2023 by .03.
+
+## Where the level should pull toward
+
+Toward what his snap share pays, not toward his position's mean. Both
+were measured on the level alone, before the ridge and the trees. The
+position mean is best at a shrinkage of two games and gets worse from
+there, and it makes part time players worse, 2.396 against 2.356,
+because it drags a rotational receiver up toward a starter. The snap
+share line still wins at twenty games, and it is the part time players
+it helps most.
+
+Adding targets, carries and air yards to that line is worse than snap
+share alone, 2.671 against 2.656. Volume per game is measured over the
+same short season the points are, so it repeats the noise it was meant
+to temper.
+
+## How much to shrink
+
+The fit picks it, so nothing is hand chosen: whichever shrinkage
+predicts the training seasons best, over nothing to twenty games. Nine
+seasons of players land on five, and the whole model scores 2.447 to
+2.454 anywhere from two to eight, so the answer is not delicate.
+
+## What to try next
+
+Split the shrinkage by why the season was short. A player who was hurt
+in week nine and a player who was inactive for eight weeks both come
+out with nine games, and the first one's average is the better read of
+him.
+
+Take the same idea into the parts model. The board's own points a game
+is the parts line scored by the league rules, and the parts are still
+scaled off a short season at face value.

@@ -112,13 +112,42 @@ export interface SeasonData {
 }
 
 interface SeasonModelFit {
-  weight: number;
+  baseline: Baseline;
   ratios: Map<Group, number>;
   ridgeWeights: number[];
   gbm: GbmModel;
 }
 
-const SEASON_RIDGE_FEATURES = [
+/**
+ * The level a season projection starts from, before the ridge and the
+ * trees move it.
+ *
+ * A player's own scoring last season is most of it. Two things temper
+ * that: how many games it was measured over, and how much of the
+ * offence he was on the field for.
+ */
+interface Baseline {
+  /** how much of the read comes from the season before last */
+  weight: number;
+  level: RoleLevel;
+  /** games before a player's own average is taken at face value */
+  steadyGames: number;
+}
+
+/**
+ * What players at a position scored at each snap share, as a straight
+ * line per position with the position's mean behind it.
+ *
+ * Someone who played a third of the snaps is not a poor starter, he is
+ * a part time player, and the position's mean is the wrong place to
+ * pull his small sample toward. What his snap share usually pays is
+ * the right place.
+ */
+interface RoleLevel {
+  byPosition: Map<string, { weights: number[]; mean: number }>;
+}
+
+export const SEASON_RIDGE_FEATURES = [
   "intercept",
   "isQB",
   "isRB",
@@ -148,6 +177,9 @@ const SEASON_RIDGE_FEATURES = [
   "softShadowShare",
   "positionGroupShare",
   "rivalOverMe",
+  "snapShare",
+  "snapsOnFile",
+  "scoringOverSnapShare",
 ] as const;
 
 async function loadSnapShare(season: number): Promise<Map<string, number>> {
@@ -612,7 +644,54 @@ function ageOf(
   return born === undefined ? undefined : target - born;
 }
 
-function blended(example: SeasonExample, weight: number): number {
+/** the fewest players with snaps on file before a position gets a line */
+const ENOUGH_FOR_ROLE = 30;
+
+/** the widest shrinkage the fit will consider, in games */
+const MOST_SHRINKAGE = 20;
+
+const roleRow = (e: SeasonExample): number[] => [1, e.snapPct];
+
+function fitRoleLevel(examples: SeasonExample[]): RoleLevel {
+  const byPosition = new Map<string, { weights: number[]; mean: number }>();
+
+  for (const position of SEASON_POSITIONS) {
+    const rows = examples.filter((e) => e.position === position);
+
+    if (rows.length === 0) {
+      continue;
+    }
+
+    const mean = rows.reduce((s, e) => s + e.prevPpg, 0) / rows.length;
+    const onFile = rows.filter((e) => e.snapPct > 0);
+    byPosition.set(position, {
+      mean,
+      weights:
+        onFile.length >= ENOUGH_FOR_ROLE
+          ? fitRidge(onFile.map(roleRow), onFile.map((e) => e.prevPpg), 1)
+          : [],
+    });
+  }
+
+  return { byPosition };
+}
+
+/** what his position usually scores at his snap share */
+function roleLevel(level: RoleLevel, e: SeasonExample): number {
+  const fitted = level.byPosition.get(e.position);
+
+  if (!fitted) {
+    return 0;
+  }
+
+  if (e.snapPct <= 0 || fitted.weights.length === 0) {
+    return fitted.mean;
+  }
+
+  return Math.max(0, predictRidge(fitted.weights, roleRow(e)));
+}
+
+function ownAverage(example: SeasonExample, weight: number): number {
   if (example.prev2Ppg === undefined) {
     return example.prevPpg;
   }
@@ -620,13 +699,29 @@ function blended(example: SeasonExample, weight: number): number {
   return (1 - weight) * example.prevPpg + weight * example.prev2Ppg;
 }
 
-export function fitBlendWeight(examples: SeasonExample[]): number {
+function blended(example: SeasonExample, base: Baseline): number {
+  const own = ownAverage(example, base.weight);
+
+  if (base.steadyGames <= 0) {
+    return own;
+  }
+
+  const trust = example.gamesPrev / (example.gamesPrev + base.steadyGames);
+
+  return trust * own + (1 - trust) * roleLevel(base.level, example);
+}
+
+function fitBlendWeight(
+  examples: SeasonExample[],
+  level: RoleLevel,
+  steadyGames: number,
+): number {
   let bestWeight = 0;
   let bestScore = -Infinity;
 
   for (let weight = 0; weight <= 0.5; weight += 0.05) {
     const score = spearman(
-      examples.map((e) => blended(e, weight)),
+      examples.map((e) => blended(e, { weight, level, steadyGames })),
       examples.map((e) => e.actualPpg),
     );
 
@@ -637,6 +732,34 @@ export function fitBlendWeight(examples: SeasonExample[]): number {
   }
 
   return bestWeight;
+}
+
+/**
+ * How many games of his own it takes before a player's average is read
+ * at face value, chosen by whichever shrinkage predicts the training
+ * seasons best. Nine seasons of players land it around five, and
+ * anything from two to eight scores about the same.
+ */
+function fitSteadyGames(
+  examples: SeasonExample[],
+  level: RoleLevel,
+): number {
+  let best = 0;
+  let bestError = Infinity;
+
+  for (let steadyGames = 0; steadyGames <= MOST_SHRINKAGE; steadyGames++) {
+    const base: Baseline = { weight: 0, level, steadyGames };
+    const error =
+      examples.reduce((s, e) => s + Math.abs(blended(e, base) - e.actualPpg), 0) /
+      Math.max(1, examples.length);
+
+    if (error < bestError) {
+      bestError = error;
+      best = steadyGames;
+    }
+  }
+
+  return best;
 }
 
 function meanRatio(pairs: [number, number][]): number {
@@ -653,7 +776,7 @@ function meanRatio(pairs: [number, number][]): number {
 
 function fitGroupRatios(
   examples: SeasonExample[],
-  weight: number,
+  base: Baseline,
 ): Map<Group, number> {
   const fallback = new Map<boolean, number>();
 
@@ -663,7 +786,7 @@ function fitGroupRatios(
       meanRatio(
         examples
           .filter((e) => e.moved === moved)
-          .map((e) => [blended(e, weight), e.actualPpg]),
+          .map((e) => [blended(e, base), e.actualPpg]),
       ),
     );
   }
@@ -681,7 +804,7 @@ function fitGroupRatios(
 
     ratios.set(
       group,
-      meanRatio(members.map((e) => [blended(e, weight), e.actualPpg])),
+      meanRatio(members.map((e) => [blended(e, base), e.actualPpg])),
     );
   }
 
@@ -727,17 +850,24 @@ export function seasonRidgeRow(e: SeasonExample): number[] {
     e.softShadow,
     e.ownShare,
     e.prevPpg > 0 ? Math.min(2, e.rivalPpg / Math.max(4, e.prevPpg)) : 0,
+    e.snapPct,
+    e.snapPct > 0 ? 1 : 0,
+    // scoring against the snap share it came off, so a part time player
+    // who scored like a starter is read as the outlier he is
+    e.snapPct > 0
+      ? Math.log(Math.max(e.prevPpg, 0.5) / Math.max(e.snapPct, 0.05))
+      : 0,
   ];
 }
 
 function fitRatioModel(
   examples: SeasonExample[],
-  weight: number,
+  base: Baseline,
 ): number[] {
-  const usable = examples.filter((e) => blended(e, weight) > 1);
+  const usable = examples.filter((e) => blended(e, base) > 1);
   const X = usable.map(seasonRidgeRow);
   const y = usable.map((e) =>
-    Math.log(Math.min(Math.max(e.actualPpg / blended(e, weight), 0.2), 3)),
+    Math.log(Math.min(Math.max(e.actualPpg / blended(e, base), 0.2), 3)),
   );
 
   return fitRidge(X, y, 5);
@@ -782,26 +912,32 @@ export function seasonGbmRow(e: SeasonExample): number[] {
 }
 
 export function fitSeasonModel(examples: SeasonExample[]): SeasonModelFit {
-  const weight = fitBlendWeight(examples);
-  const usable = examples.filter((e) => blended(e, weight) > 1);
+  const level = fitRoleLevel(examples);
+  const steadyGames = fitSteadyGames(examples, level);
+  const baseline: Baseline = {
+    weight: fitBlendWeight(examples, level, steadyGames),
+    level,
+    steadyGames,
+  };
+  const usable = examples.filter((e) => blended(e, baseline) > 1);
   const gbm = fitGbm(
     usable.map(seasonGbmRow),
     usable.map((e) =>
-      Math.log(Math.min(Math.max(e.actualPpg / blended(e, weight), 0.2), 3)),
+      Math.log(Math.min(Math.max(e.actualPpg / blended(e, baseline), 0.2), 3)),
     ),
     { trees: 200, depth: 3, rate: 0.05, minLeaf: 40 },
   );
 
   return {
-    weight,
-    ratios: fitGroupRatios(examples, weight),
-    ridgeWeights: fitRatioModel(examples, weight),
+    baseline,
+    ratios: fitGroupRatios(examples, baseline),
+    ridgeWeights: fitRatioModel(examples, baseline),
     gbm,
   };
 }
 
 function predictSeasonGbm(fit: SeasonModelFit, e: SeasonExample): number {
-  return blended(e, fit.weight) * Math.exp(predictGbm(fit.gbm, seasonGbmRow(e)));
+  return blended(e, fit.baseline) * Math.exp(predictGbm(fit.gbm, seasonGbmRow(e)));
 }
 
 /** ridge and trees average their log adjustments, bracket-oracle style */
@@ -811,12 +947,12 @@ export function predictSeasonBlend(
 ): number {
   const ridgeAdj = predictRidge(fit.ridgeWeights, seasonRidgeRow(e));
   const gbmAdj = predictGbm(fit.gbm, seasonGbmRow(e));
-  return blended(e, fit.weight) * Math.exp((ridgeAdj + gbmAdj) / 2);
+  return blended(e, fit.baseline) * Math.exp((ridgeAdj + gbmAdj) / 2);
 }
 
 function predictSeason(fit: SeasonModelFit, e: SeasonExample): number {
   return (
-    blended(e, fit.weight) *
+    blended(e, fit.baseline) *
     Math.exp(predictRidge(fit.ridgeWeights, seasonRidgeRow(e)))
   );
 }
