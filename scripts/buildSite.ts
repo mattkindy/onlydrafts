@@ -54,6 +54,7 @@ import {
   type History,
   type Rates,
 } from "../src/features/componentWeek.js";
+import { updateBoardLevels } from "../src/features/inSeasonBoard.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import {
   buildResidualModel,
@@ -922,6 +923,9 @@ async function main(): Promise<void> {
   // season draft board with replacement value, for the draft view
   const world = await buildPreseasonWorld(season);
   await takePasserLines(world.players, season);
+  // what the season has shown so far moves the level everything else is
+  // worked out from, so it has to land before anybody reads it
+  await updateBoardLevels(world.players, season);
 
   const { projectDraftExamples } = await import("../src/features/seasonModel.js");
   const draftExamples = await projectDraftExamples(season, world.data);
