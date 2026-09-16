@@ -156,6 +156,7 @@ when you want to measure it again.
 | --- | --- | --- |
 | `DEALT_WIDER`, how much wider a player's week runs than the walk deals it | `features/walkWeek.ts` | `scripts/walkBandEval.ts` |
 | `SLEEPER_QB_BIAS`, and the blend weight beside it | `features/sleeperBlend.ts` | the Sleeper blend finding in `scripts/README.md` |
+| The season level pulling a short season toward what his snap share pays | `features/seasonModel.ts` | `scripts/seasonShrinkEval.ts` |
 | The two point and extra point tables | `features/afterTouchdown.ts` | `scripts/twoPointEval.ts` |
 | Which board source ships, the fitted one or the walked one | `features/boardSource.ts` | `scripts/sourceCompare.ts` |
 | Which parts of a week's setting survive, the roof and the kickoff time | `features/weekSetting.ts` | `scripts/knowableWeekEval.ts` |
