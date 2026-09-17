@@ -6,8 +6,8 @@ import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import {
-  comingWeek, currentSeason, hasPlayerStats, loadGames, loadPlayerStats,
-  loadTeamDefenceWeeks, loadWeeklyRosters,
+  comingWeek, currentSeason, hasPlayerStats, loadGames, loadKickerWeeks,
+  loadPlayerStats, loadTeamDefenceWeeks, loadWeeklyRosters,
 } from "../src/data/nflverse.js";
 import type { GameRow, PlayerWeekStats } from "../src/data/nflverse.js";
 import {
@@ -69,6 +69,19 @@ import {
 } from "../src/features/walkWeek.js";
 import { kickerParts, BANDS } from "../src/features/kickerFromWalk.js";
 import { kickerSeason, type Fixture } from "../src/features/kickerSeason.js";
+import {
+  historyOf, loadKickerJobs, type KickerJob,
+} from "../src/features/kickerJobs.js";
+import {
+  drawKickerWeeks,
+  KICKER_PARTS,
+  LEAGUE_PAID,
+  payKicker,
+  projectKickerWeek,
+  STANDARD_KICKER_PAYS,
+  TRAILING_WEEKS as KICKER_TRAILING_WEEKS,
+} from "../src/features/kickerWeek.js";
+import type { Venue } from "../src/features/kickingVenue.js";
 import { fitClimate } from "../src/features/climate.js";
 import { readingsFrom, kickoffsIn } from "../src/data/gameWeather.js";
 import { settingLift, sharedOut, type Setting } from "../src/features/weekSetting.js";
@@ -245,6 +258,7 @@ const IMPLIED_WITHOUT_A_LINE = 22.3;
 const SLEEPER_THROUGH_WEEK = 4;
 
 const DEFENCE_DRAWS = 2000;
+const KICKER_DRAWS = 2000;
 
 /** one defence's paid week, brackets and all */
 const paidDefenceWeek = (parts: DefenceTally, allowed: number) =>
@@ -432,6 +446,124 @@ async function defenceSlateRows(
       absenceShare: 0,
     };
   });
+}
+
+/** two kickers from the slate, so a run can be read at a glance */
+function sayKickerRows(rows: SlateRowShape[]): void {
+  for (const row of rows.filter((r) => r.position === "K").slice(0, 2)) {
+    console.log(
+      `  ${row.name} ${row.team} ${row.opponent}: ours ${row.ours}, ` +
+      `floor ${row.floor}, ceiling ${row.ceiling}`,
+    );
+  }
+}
+
+/**
+ * A kicker's row in the slate, the same shape as a defence's.
+ *
+ * Almost nothing about a kicker's week can be told in advance. The
+ * kickerWeekEval bench puts this line at 0.08 correlation with what he
+ * goes on to kick, against 0.00 for calling every kicker average, so it
+ * barely orders them. It replaces the flat eight point week the
+ * start/sit view fell back on, which named no fixture and drew the same
+ * floor and ceiling for everybody.
+ *
+ * Sleeper is left null: the projections fetch asks for the skill
+ * positions and the defences, and never for kickers.
+ */
+async function kickerSlateRows(
+  season: number, week: number, games: GameRow[],
+): Promise<SlateRowShape[]> {
+  const jobs = await loadKickerJobs(season, week);
+  const soFar = (await loadKickerWeeks(season)).filter((w) => w.week < week);
+  const ownWeeks = new Map<string, typeof soFar>();
+
+  for (const w of [...soFar].sort((a, b) => a.week - b.week)) {
+    ownWeeks.set(w.playerId, [...(ownWeeks.get(w.playerId) ?? []), w]);
+  }
+
+  const fixtures = new Map<string, {
+    against: string; home: boolean; implied: number; venue: Venue;
+  }>();
+
+  for (const g of games) {
+    if (g.season !== season || g.week !== week) {
+      continue;
+    }
+
+    const venue: Venue = g.indoors
+      ? { indoors: true }
+      : { indoors: false, temperature: g.temp ?? 60, wind: g.wind ?? 6 };
+    const half = (g.totalLine ?? 0) / 2;
+    const tilt = (g.spreadLine ?? 0) / 2;
+    const known = g.totalLine !== undefined && g.spreadLine !== undefined;
+
+    fixtures.set(g.homeTeamId, {
+      against: g.awayTeamId,
+      home: true,
+      implied: known ? half - tilt : IMPLIED_WITHOUT_A_LINE,
+      venue,
+    });
+    fixtures.set(g.awayTeamId, {
+      against: g.homeTeamId,
+      home: false,
+      implied: known ? half + tilt : IMPLIED_WITHOUT_A_LINE,
+      venue,
+    });
+  }
+
+  const rowFor = (job: KickerJob): SlateRowShape[] => {
+    const fixture = fixtures.get(job.team);
+
+    if (!fixture) {
+      return [];
+    }
+
+    const own = (ownWeeks.get(job.record.playerId) ?? [])
+      .slice(-KICKER_TRAILING_WEEKS);
+    const lastYear = job.record.games > 0
+      ? payKicker(job.record.parts, STANDARD_KICKER_PAYS) / job.record.games
+      : LEAGUE_PAID;
+    const line = projectKickerWeek({
+      ownPaid: own.map((w) => payKicker(w.parts, STANDARD_KICKER_PAYS)),
+      lastYearPaid: lastYear,
+      ownParts: Object.fromEntries(KICKER_PARTS.map((part) => [
+        part,
+        own.reduce((sum, w) => sum + (w.parts[part] ?? 0), 0) /
+          Math.max(1, own.length),
+      ])),
+      ownGames: own.length,
+      impliedFor: fixture.implied,
+      venue: fixture.venue,
+    });
+    const key = normalizeName(job.record.name);
+    const weeks = drawKickerWeeks(
+      line.parts, STANDARD_KICKER_PAYS, seedOf(key), KICKER_DRAWS,
+    );
+    const at = (q: number) => Number(drawnQuantile(weeks, q).toFixed(1));
+
+    return [{
+      name: job.record.name,
+      key,
+      position: "K",
+      team: job.team,
+      opponent: (fixture.home ? "v " : "@ ") + fixture.against,
+      ours: Number(line.paid.toFixed(1)),
+      sleeper: null,
+      average: Number(line.paid.toFixed(1)),
+      floor: at(0.1),
+      ceiling: at(0.9),
+      q1: at(0.25),
+      q3: at(0.75),
+      catches: 0,
+      snaps: 100,
+      questionable: false,
+      gamesMissed: 0,
+      absenceShare: 0,
+    }];
+  };
+
+  return [...jobs.values()].flatMap(rowFor);
 }
 
 /** what the slate file says about itself, or nothing if it is unreadable */
@@ -907,6 +1039,7 @@ async function main(): Promise<void> {
     const rows = [
       ...players,
       ...(await defenceSlateRows(season, week, games)),
+      ...(await kickerSlateRows(season, week, games)),
     ].sort((a, b) => b.average - a.average);
 
     await writeSlate(
@@ -917,6 +1050,7 @@ async function main(): Promise<void> {
       },
     );
     sayDefenceRows(rows);
+    sayKickerRows(rows);
     index.push({ season, week });
   }
 
@@ -1383,6 +1517,7 @@ async function main(): Promise<void> {
     const rows = [
       ...players,
       ...(await defenceSlateRows(season, week, games)),
+      ...(await kickerSlateRows(season, week, games)),
     ].sort((a, b) => b.average - a.average);
 
     await writeSlate(
@@ -1393,6 +1528,7 @@ async function main(): Promise<void> {
       },
     );
     sayDefenceRows(rows);
+    sayKickerRows(rows);
     index.push({ season, week });
   }
 
@@ -1505,9 +1641,6 @@ async function main(): Promise<void> {
     "utf8",
   ).catch(() => ""));
   interface Tally { [part: string]: number }
-  const kicked = new Map<string, {
-    name: string; team: string; games: number; parts: Tally;
-  }>();
   const defended = new Map<string, { parts: Tally }>();
   const num = (row: Record<string, string | undefined>, key: string) =>
     Number(row[key] ?? 0) || 0;
@@ -1531,32 +1664,6 @@ async function main(): Promise<void> {
     }
 
     const team = row["team"] ?? "";
-
-    if (row["position"] === "K") {
-      const id = row["player_id"] ?? "";
-      const his = kicked.get(id) ?? {
-        name: row["player_display_name"] ?? id, team, games: 0,
-        parts: {} as Tally,
-      };
-      his.games++;
-      his.team = playsFor.get(id) ?? team;
-      const add = (part: string, n: number) => {
-        his.parts[part] = (his.parts[part] ?? 0) + n;
-      };
-      add("fgmYds", num(row, "fg_made_distance"));
-      add("xpm", num(row, "pat_made"));
-      add("xpmiss", num(row, "pat_missed"));
-
-      for (const band of ["0_19", "20_29", "30_39", "40_49", "50_59"]) {
-        add(`fgm_${band}`, num(row, `fg_made_${band}`));
-        add(`fgmiss_${band}`, num(row, `fg_missed_${band}`));
-      }
-
-      add("fgm_60p", num(row, "fg_made_60_"));
-      add("fgmiss_60p", num(row, "fg_missed_60_"));
-      kicked.set(id, his);
-    }
-
     // his work counts for whoever he plays for now
     const now = playsFor.get(row["player_id"] ?? "") ?? team;
 
@@ -1648,64 +1755,46 @@ async function main(): Promise<void> {
   const runsOver = walkWeeks * walkRuns;
 
   /**
-   * One kicker a side. Where two are on the roster the one who took
-   * more of them last season gets the attempts, since a club does not
-   * split them.
-   */
-  const kicksHere = new Map<string, typeof kicked extends Map<string, infer V> ? V : never>();
-
-  for (const [, his] of kicked) {
-    const already = kicksHere.get(his.team);
-
-    if (!already || (his.parts["xpm"] ?? 0) + (his.parts["fgmYds"] ?? 0) >
-        (already.parts["xpm"] ?? 0) + (already.parts["fgmYds"] ?? 0)) {
-      kicksHere.set(his.team, his);
-    }
-  }
-
-  /**
    * What a kicker who keeps the job plays. Three seasons of them come
    * out at a shade over fifteen, and giving him a full seventeen while
    * every skill player is cut to his own availability made a kicker's
    * season look worth more than it is.
+   *
+   * The kickerSeasonEval bench found nothing in the spring that picks
+   * out the kicker who will lose the job: last season's accuracy moves
+   * games played by a game and a bit, so one number for all of them is
+   * as good as it gets. What did matter was leaving out the kicker
+   * nobody has signed, which the job read now does.
    */
   const KICKER_GAMES = 15.3;
-  /** what a kicker makes from an extra point, and how many settle him */
-  const LEAGUE_EXTRA_POINT = 0.958;
-  const EXTRA_POINTS_SETTLE = 25;
+  // read through the coming week, so a kicker who lost the job in
+  // September stops being the club's kicker on the board too
+  const kickerJobs = await loadKickerJobs(season, comingWeek(games, season));
+  /** what he has already kicked this season, by week, for his card */
+  const kickedThisSeason = new Map<string, Map<number, Record<string, number>>>();
 
-  const extraPointRateOf = (made: number, missed: number) => {
-    const taken = made + missed;
-    const trust = taken / (taken + EXTRA_POINTS_SETTLE);
+  for (const w of await loadKickerWeeks(season)) {
+    const byWeek = kickedThisSeason.get(w.playerId) ?? new Map();
+    byWeek.set(w.week, Object.fromEntries(
+      Object.entries(w.parts).filter(([, n]) => n !== 0)));
+    kickedThisSeason.set(w.playerId, byWeek);
+  }
 
-    return trust * (taken > 0 ? made / taken : LEAGUE_EXTRA_POINT) +
-      (1 - trust) * LEAGUE_EXTRA_POINT;
-  };
+  for (const job of kickerJobs.values()) {
+    const his = job.record;
 
-  for (const [, his] of kicked) {
-    if (his.games < 6 || kicksHere.get(his.team) !== his) {
+    const key = normalizeName(his.name);
+    const its = kicksOf.get(job.team);
+
+    // with no walk behind his club and no season behind him there is
+    // nothing to put on a card
+    if (!its && his.games === 0) {
       continue;
     }
 
-    const key = normalizeName(his.name);
-    const its = kicksOf.get(his.team);
-    const asHim = {
-      attempts: his.parts["attempts"] ?? 0,
-      made: his.parts["made"] ?? 0,
-      byBand: BANDS.map((band) => ({
-        attempts: (his.parts[`fgm_${band.name}`] ?? 0) +
-          (his.parts[`fgmiss_${band.name}`] ?? 0),
-        made: his.parts[`fgm_${band.name}`] ?? 0,
-      })),
-      // leaned toward what every kicker makes until he has taken
-      // enough of them, the same way his field goals are. A player who
-      // went thirty from thirty is not a certainty next year.
-      extraPointRate: extraPointRateOf(
-        his.parts["xpm"] ?? 0, his.parts["xpmiss"] ?? 0,
-      ),
-    };
-    // his season played out game by game, so his card carries a spread
-    // and a season total like anybody else's
+    const asHim = historyOf(his);
+    // his season played out game by game, so his card gets a spread and
+    // a season total like anybody else's
     const walked = its
       ? kickerSeason(
           asHim,
@@ -1718,50 +1807,40 @@ async function main(): Promise<void> {
           // weather does. This puts the noise under 2%.
           20000,
           seededRng(29),
-          (fixturesFor.get(his.team) ?? []).sort((a, b) => a.week - b.week),
+          (fixturesFor.get(job.team) ?? []).sort((a, b) => a.week - b.week),
           climate,
         )
       : null;
     const asKicked = its
       ? kickerParts(
-          {
-            attempts: his.parts["attempts"] ?? 0,
-            made: his.parts["made"] ?? 0,
-            byBand: BANDS.map((band) => ({
-              attempts: (his.parts[`fgm_${band.name}`] ?? 0) +
-                (his.parts[`fgmiss_${band.name}`] ?? 0),
-              made: his.parts[`fgm_${band.name}`] ?? 0,
-            })),
-            extraPointRate: (his.parts["xpm"] ?? 0) > 0
-              ? (his.parts["xpm"] ?? 0) /
-                Math.max(1, (his.parts["xpm"] ?? 0) + (his.parts["xpmiss"] ?? 0))
-              : 0.96,
-          },
+          asHim,
           its.from.map((yardline) => yardline + 17),
           its.conversions * walkRuns,
           runsOver,
         )
       : null;
+    // a kicker in his first season has no last year to show
+    const perGame = his.games > 0
+      ? Object.fromEntries(Object.entries(his.parts)
+          .map(([part, n]) => [part, Number((n / his.games).toFixed(3))]))
+      : null;
 
     others.push({
-      name: his.name, key, position: "K", team: his.team,
+      name: his.name, key, position: "K", team: job.team,
       // what the walk hands him, with what he did last season beside it
-      simulated: walked?.parts ?? asKicked ?? Object.fromEntries(
-        Object.entries(his.parts)
-          .map(([part, n]) => [part, Number((n / his.games).toFixed(3))]),
-      ),
+      simulated: walked?.parts ?? asKicked ?? perGame,
       game: walked?.game ?? null,
       sim: walked?.sim ?? null,
-      weeks: (weekOpp.get(his.team) ?? []).map((w) => ({
+      weeks: (weekOpp.get(job.team) ?? []).map((w) => ({
         w: w.week,
         opp: (w.home ? "v " : "@ ") + w.opponent,
         of: walked?.byWeek.find((b) => b.w === w.week)?.of ?? 1,
+        played: kickedThisSeason.get(his.playerId)?.get(w.week) ?? null,
       })),
-      lastYear: Object.fromEntries(Object.entries(his.parts)
-        .map(([part, n]) => [part, Number((n / his.games).toFixed(3))])),
+      lastYear: perGame,
       fromWalk: Boolean(asKicked),
       adpBy: adpBoth.get(`${key}|K`) ?? null,
-      bye: world.byeWeek.get(his.team) ?? null,
+      bye: world.byeWeek.get(job.team) ?? null,
     });
   }
 

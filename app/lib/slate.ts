@@ -223,10 +223,9 @@ const NOTHING = {
  * What he put up before he limped off is counted separately from the
  * draws, so a player hurt at halftime keeps his half.
  *
- * A player the weekly model does not cover has no row to zero, and a kicker
- * or a defence is always one of those. Left alone he would fall through
- * to his season game or the position's stock week, so a row of zeros is
- * written for him instead.
+ * A player the week has no row for has none to zero. Left alone he
+ * would fall through to his season game or the position's stock week,
+ * so a row of zeros is written for him instead.
  */
 export function withOutPlayersZeroed(
   rows: Map<string, SlateRow>, listed: Map<string, Listed>,

@@ -173,6 +173,8 @@ when you want to measure it again.
 | Leverage weighted share not replacing raw share anywhere | `features/leverageUsage.ts` | the leverage finding in `scripts/README.md` |
 | The sleeper score taking the price off at all, and the form terms being centred per position | `model/sleepers.ts` | `scripts/sleeperEval.ts` |
 | Game script being left out of the week's setting | `scripts/buildSite.ts` | deleted, see `docs/scoreboard.md` |
+| `PAID_BASE` and the two weights beside it, and a kicker's week being nearly flat | `features/kickerWeek.ts` | `scripts/kickerWeekEval.ts` |
+| `KICKER_GAMES` staying one number for every kicker | `scripts/buildSite.ts` | `scripts/kickerSeasonEval.ts` |
 | The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
 
 ## What is still doubled up

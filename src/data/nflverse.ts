@@ -11,6 +11,7 @@ import { parseCsv } from "./csv.js";
 import type { Game } from "../graph/types.js";
 import type { RosterAppearance } from "../graph/build.js";
 import { emptyStatLine, type StatLine } from "../scoring/fantasyPoints.js";
+import { alsoCounted, BANDS } from "../features/kickerFromWalk.js";
 
 export const RAW_DIR = join(import.meta.dirname, "..", "..", "data", "raw");
 
@@ -309,6 +310,68 @@ interface TeamDefenceWeek {
   opponentId: string;
   /** what the club's defence counted that week, under the pay categories */
   parts: Record<string, number>;
+}
+
+export interface KickerWeek {
+  playerId: string;
+  name: string;
+  season: number;
+  week: number;
+  teamId: string;
+  opponentId: string;
+  /** what he kicked, in the categories a league pays for */
+  parts: Record<string, number>;
+}
+
+/**
+ * What a kicker did in a week, in the categories a league prices.
+ *
+ * A kicker's work is nowhere in the stat line every other position is
+ * read through, because that line only has passing, rushing and
+ * receiving in it. Reading a kicker that way gives him a week of zeros,
+ * which is why his card showed nothing for a week he had already
+ * kicked in.
+ */
+export async function loadKickerWeeks(
+  season: number,
+): Promise<KickerWeek[]> {
+  const rows = await readRows(`stats_player_week_${season}.csv`)
+    .catch(() => []);
+
+  return rows.flatMap((row): KickerWeek[] => {
+    const week = toNumber(row["week"]) ?? 0;
+
+    if (
+      row["position"] !== "K" || !week || week > 18 ||
+      row["season_type"] !== "REG"
+    ) {
+      return [];
+    }
+
+    const n = (key: string) => toNumber(row[key]) ?? 0;
+    const parts: Record<string, number> = {
+      fgmYds: n("fg_made_distance"),
+      xpm: n("pat_made"),
+      xpmiss: n("pat_missed"),
+    };
+
+    for (const { name } of BANDS) {
+      // the release spells the longest band `60_`, not `60p`
+      const column = name === "60p" ? "60_" : name;
+      parts[`fgm_${name}`] = n(`fg_made_${column}`);
+      parts[`fgmiss_${name}`] = n(`fg_missed_${column}`);
+    }
+
+    return [{
+      playerId: row["player_id"] ?? "",
+      name: row["player_display_name"] ?? row["player_name"] ?? "",
+      season: toNumber(row["season"]) ?? season,
+      week,
+      teamId: canonicalTeam(row["team"] ?? ""),
+      opponentId: canonicalTeam(row["opponent_team"] ?? ""),
+      parts: alsoCounted(parts),
+    }];
+  });
 }
 
 /**

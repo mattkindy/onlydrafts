@@ -14,7 +14,9 @@
  * is played at the ground it is played at, on a day drawn for that week.
  */
 
-import { BANDS, bandOf, type KickerHistory } from "./kickerFromWalk.js";
+import {
+  alsoCounted, BANDS, bandOf, type KickerHistory,
+} from "./kickerFromWalk.js";
 import { kickingVenue, type Venue } from "./kickingVenue.js";
 import { HOME, type Climate } from "./climate.js";
 
@@ -222,18 +224,13 @@ export function kickerSeason(
   }
 
   const everyGame = Math.max(1, perGame.length);
-  const parts: Record<string, number> = {};
+  const perGameTally: Record<string, number> = {};
 
   for (const [part, n] of Object.entries(tally)) {
-    parts[part] = Number((n / everyGame).toFixed(3));
+    perGameTally[part] = Number((n / everyGame).toFixed(3));
   }
 
-  // the same kicks counted the other ways a league counts them
-  parts["fgm"] = BANDS.reduce((s, b) => s + (parts[`fgm_${b.name}`] ?? 0), 0);
-  parts["fgmiss"] = BANDS.reduce((s, b) => s + (parts[`fgmiss_${b.name}`] ?? 0), 0);
-  parts["fgm_50p"] = (parts["fgm_50_59"] ?? 0) + (parts["fgm_60p"] ?? 0);
-  parts["fgmiss_50p"] = (parts["fgmiss_50_59"] ?? 0) + (parts["fgmiss_60p"] ?? 0);
-
+  const parts = alsoCounted(perGameTally);
   const overall = perGame.reduce((s, v) => s + v, 0) / everyGame;
   const byWeek = [...weekTotals.entries()]
     .sort((a, b) => a[0] - b[0])
