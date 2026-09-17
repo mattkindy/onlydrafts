@@ -566,11 +566,12 @@ export const stockLine = (position: string, team?: string): Line | null => {
 /**
  * What the week says about a player, and failing that what the board does.
  *
- * A slate covers the players a weekly model is run for, which leaves out
- * kickers and defences. Those two have a season long game of their own on
- * the board, in this league's scoring, and a game of that is a better
- * guess at the rest of his Sunday than nothing at all. The fixture does
- * not come with it, so he shares no factor with anybody.
+ * A slate covers the players some model was run for, which leaves out a
+ * backup and a kicker nobody has a record of. Those have a season long
+ * game of their own on the board, in this league's scoring, and a game
+ * of that is a better guess at the rest of his Sunday than nothing at
+ * all. The fixture does not come with it, so he shares no factor with
+ * anybody.
  */
 export function lineOf(
   key: string, rows: Map<string, SlateRow>, lines?: Lines, position?: string,

@@ -34,8 +34,8 @@ says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `knowableWeekEval.ts`, `mechanicsCarryEval.ts`, `walkWeekCache.ts`,
 `jointProjectionEval.ts`, `playLayerEval.ts`, `estimateCorrelation.ts`,
 `exemptCheck.ts`, `leverageUsageProbe.ts`, `marketPriceProbe.ts`,
-`sleeperEval.ts`, `seasonShrinkEval.ts`, `inSeasonLevelEval.ts` and
-`simAgreement.ts`.
+`sleeperEval.ts`, `seasonShrinkEval.ts`, `inSeasonLevelEval.ts`,
+`kickerSeasonEval.ts`, `kickerWeekEval.ts` and `simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
@@ -1439,3 +1439,137 @@ to predict the next twelve weeks with.
 Split the shrinkage by why a player's games are short, the same way the
 season model still wants. A player back from a four week absence and a
 player who has been rotational all year both come out at six games.
+
+# How much the kicker model is worth
+
+The kicker model had never been measured. `kickerSeasonEval.ts` and
+`kickerWeekEval.ts` measure it two ways: how well it predicts a kicker's
+points a game over a season, which is the draft question, and how well
+it predicts one week of his, which is the start or sit question.
+
+Both score under a middle of the road ladder: three for a field goal,
+four from forty, five from fifty, a point an extra point and a point off
+a miss, with nothing paid for yardage. The board itself pays a tenth a
+yard, which roughly doubles the spread between kickers and is what makes
+a long kicking club's kicker look worth reaching for.
+
+## Over a season
+
+Each season is predicted from the one before. The rates come from last
+season's kicking, the kicks a club is expected to take come from the
+walk it ran for the coming season, and nothing reads the season being
+predicted. 79 kicker seasons over 2023, 2024 and 2025, averaging 8.14
+points a game.
+
+```
+method                     MAE    corr    bias   spread
+the model                 1.11   0.458   -0.06   0.87
+last season, his own      1.34   0.130   -0.17   1.25
+the mean kicker           1.15  -0.000   -0.17   0.00
+an oracle                 0.00   1.000    0.00   1.54
+```
+
+The model beats looking up last year and it is not close: 0.458 against
+0.130 on ordering, and a fifth off the error. It does not beat calling
+every kicker average by anything that matters, 1.11 against 1.15 over 79
+seasons, because a kicker's points a game only vary by 1.54 to begin
+with and most of that is luck.
+
+Which reading is right depends on what you are asking. If the question
+is how many points he will score, assuming every kicker is average costs
+you almost nothing. If the question is which kicker to take, the mean
+has nothing to say and the model does.
+
+The ceiling puts the 0.458 in proportion. A kicker's first half season
+against his second reads 1.83 and 0.268, which by Spearman and Brown
+makes a full season's reliability about 0.42. The model correlates 0.458
+with a season it has not seen, which is at or above the reliability of
+the thing being predicted. There is not much left to win here.
+
+A leak check, since that number is higher than the ceiling suggests it
+should be. The walk's projected kick volume for a club correlates with
+the club's own kicking the season **before** more than with the season
+being projected, in all three seasons (0.21 against -0.09 for 2023, 0.30
+against 0.26 for 2024, 0.47 against 0.27 for 2025). The walk is
+projecting forward, not peeking.
+
+## Over one week
+
+2174 kicker weeks over 2022 to 2025, averaging 8.08 points. The line
+reads three things: what he has paid over his own recent weeks, what the
+line expects his side to score, and how willing a staff at that ground
+is to send him out.
+
+```
+method                       MAE    corr
+the shipped line            3.70   0.101
+the fit, held out           3.71   0.081
+his own recent weeks        4.11   0.046
+the mean kicker             3.72  -0.000
+his own season, hindsight   3.52   0.326
+an oracle                   0.00   1.000
+```
+
+Nothing about a kicker's week can be told in advance. Held out by
+season the fit reads 0.081 and saves a hundredth of a point of error
+against calling every kicker average. Even hindsight, his own average
+over the whole season including the week being predicted, only manages
+0.326.
+
+The line ships anyway, because a kicker on the slate gets a fixture, a
+floor, a ceiling and a score for a week already played, where before he
+fell through to a flat eight point week with none of those. It should
+not be read as ranking kickers.
+
+One number in the fit looks wrong and is not. Expecting a side to score
+more **costs** its kicker points, at 0.11 a point of implied total, and
+the column on its own reads -0.091 against what he goes on to kick. A
+drive that reaches the end zone pays him one and a drive that stalls in
+range pays him three.
+
+## What the flat 15.3 games is doing
+
+Every kicker on the board is given 15.3 games. Over the same three
+seasons the kickers who held a job in the spring played 15.0 on average,
+so the level is right, but the shape is not: the median one played all
+17, a quarter played 15 or fewer and a tenth played 9 or fewer. It is
+two populations, the kicker who keeps the job and the kicker who loses
+it, and 15.3 is the point between them.
+
+Nothing available in the spring separates them. Last season's accuracy
+barely moves it:
+
+```
+                    made   games played   under twelve
+least accurate third  79%          14.6         6 of 27
+middle third          88%          14.5         5 of 27
+most accurate third   95%          15.9         1 of 28
+```
+
+Age moves it less, at -0.136 against games played over 112 job holders.
+The kickers 34 and over played 14.5 games against 15.4 for everyone
+else, and the four oldest to hold a job played 15, 16, 17 and 14.
+
+So 15.3 stays. What the flat number was actually hiding was simpler and
+worse: a kicker with no job at all was getting it. Matt Prater was
+Buffalo's kicker on the 2026 board and Brandon McManus was Green Bay's,
+and neither is on an NFL roster. The job read now asks the roster file
+first, which drops both and picks up the five clubs whose kicker is new.
+
+## What to try next
+
+The board's make rate. Kickers really make about 84% of their attempts
+and the board has them at 87.9%. Attempt volume is right, 1.96 a game
+against 1.97 in life, so the excess is in the makes, which points at the
+distances the walk generates being short of life rather than at anybody's
+accuracy.
+
+Two seasons of kicking rather than one. A kicker who missed last season
+has no record at all, which is why Tyler Bass reads as a kicker with
+nothing behind him after a year out.
+
+Sleeper's kicker projections. `fetchSleeperProjections.ts` asks for the
+skill positions and the defences and never for kickers, so a kicker's
+slate row ships no rival number beside ours. Sleeper beat our defence
+line through week four and it would be worth knowing whether it beats a
+kicker line that reads 0.08.

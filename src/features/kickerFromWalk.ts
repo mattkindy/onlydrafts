@@ -37,6 +37,29 @@ export const bandOf = (yards: number) =>
   BANDS.findIndex((band) => yards <= band.upTo);
 
 /**
+ * The same kicks counted the other ways a league counts them.
+ *
+ * Some price every made kick the same, some lump fifty and beyond
+ * together, some charge a flat penalty for a miss. A league that uses
+ * one of those was reading zero off a board that only spoke in bands.
+ * Whichever a league does not use it sets to nothing, so nobody is
+ * paid twice.
+ */
+export function alsoCounted(
+  parts: Record<string, number>,
+): Record<string, number> {
+  const at = (part: string) => parts[part] ?? 0;
+
+  return {
+    ...parts,
+    fgm: BANDS.reduce((sum, b) => sum + at(`fgm_${b.name}`), 0),
+    fgmiss: BANDS.reduce((sum, b) => sum + at(`fgmiss_${b.name}`), 0),
+    fgm_50p: at("fgm_50_59") + at("fgm_60p"),
+    fgmiss_50p: at("fgmiss_50_59") + at("fgmiss_60p"),
+  };
+}
+
+/**
  * What he does in a game, in the categories a league pays for, from
  * the attempts his side is expected to give him.
  */
@@ -78,19 +101,5 @@ export function kickerParts(
   // he misses one now and then, and a league charges him for it
   out["xpmiss"] = (touchdowns / games) * (1 - him.extraPointRate);
 
-  /**
-   * The same kicks counted the other ways a league counts them.
-   *
-   * Some price every made kick the same, some lump fifty and beyond
-   * together, some charge a flat penalty for a miss. A league that uses
-   * one of those was reading zero off a board that only spoke in bands.
-   * Whichever a league does not use it sets to nothing, so nobody is
-   * paid twice.
-   */
-  out["fgm"] = BANDS.reduce((sum, b) => sum + (out[`fgm_${b.name}`] ?? 0), 0);
-  out["fgmiss"] = BANDS.reduce((sum, b) => sum + (out[`fgmiss_${b.name}`] ?? 0), 0);
-  out["fgm_50p"] = (out["fgm_50_59"] ?? 0) + (out["fgm_60p"] ?? 0);
-  out["fgmiss_50p"] = (out["fgmiss_50_59"] ?? 0) + (out["fgmiss_60p"] ?? 0);
-
-  return out;
+  return alsoCounted(out);
 }
