@@ -23,9 +23,9 @@ export interface Player {
   projected?: Parts | null;
   /**
    * What the August walk handed him in a game. A different question
-   * from `projected`, and not his rate: the walk runs a busy receiver
-   * at close to double the targets he really gets. It is one voice in
-   * where the board places him and nothing else reads it.
+   * from `projected`, and still not his rate: the walk throws about a
+   * quarter more at the men it likes most than they get. It is one
+   * voice in where the board places him and nothing else reads it.
    */
   walked?: Parts | null;
   /** a kicker's and a defence's line, who have no `projected` */

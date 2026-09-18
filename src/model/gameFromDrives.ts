@@ -13,7 +13,9 @@
  * runs. And a drive that ends badly leaves the other one a short field.
  */
 
-import { walkDrive, type FactorDrive, type Opening } from "./driveFromFactors.js";
+import {
+  walkDrive, type FactorDrive, type Opening, type Unaimed,
+} from "./driveFromFactors.js";
 import { standardNormal } from "../sim/rng.js";
 import type { PlayerLine } from "./playerWeek.js";
 import type { Call, PlayFactors } from "./playFactors.js";
@@ -151,6 +153,15 @@ export interface PlayedGame {
 }
 
 /**
+ * Which pass plays the league counts as an attempt. A ball thrown away
+ * is one, a sack is not, and a snap a flag wiped out is not a play at
+ * all.
+ */
+const COUNTS_AN_ATTEMPT: Record<Unaimed | "aimed", boolean> = {
+  aimed: true, away: true, sack: false, flag: false,
+};
+
+/**
  * The stat lines a played game produced, one per player who appeared.
  *
  * Nothing is decided here: each play already says who had it, whether
@@ -191,9 +202,12 @@ export function linesFrom(
         continue;
       }
 
-      // a throw nobody was named on is a sack or a ball away, which
-      // still costs the offence a down and still counts as an attempt
-      if (passer) {
+      // a snap a flag wiped out never happened, so nobody threw it
+      if (play.unaimed === "flag") {
+        continue;
+      }
+
+      if (passer && COUNTS_AN_ATTEMPT[play.unaimed ?? "aimed"]) {
         const threw = lineOf(passer);
         threw.passAtt = (threw.passAtt ?? 0) + 1;
       }

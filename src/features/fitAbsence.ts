@@ -30,7 +30,7 @@ const POSITIONS = ["QB", "RB", "WR", "TE"];
 /** a player counts toward the fit once he averages this many touches */
 const STEADY = 5;
 
-async function fitAbsence(seasons: number[]): Promise<Absence> {
+export async function fitAbsence(seasons: number[]): Promise<Absence> {
   const spells = new Map<string, number[]>();
   const starts = new Map<string, number>();
   const playingWeeks = new Map<string, number>();

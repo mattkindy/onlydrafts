@@ -126,15 +126,23 @@ const depthPool = (counted: CountedPlays) =>
   [...counted.cells.values()]
     .flatMap((cell) => [...cell.byDepth.values()].flat());
 
-describe("the pools kept by depth", () => {
+describe("the pools of what a throw gains", () => {
   it("leaves out the sacks and the balls thrown away", async () => {
     const countPlays = await countWith(false);
     const counted = countPlays([aThrow("Diggs", 12), aThrow("", -7)]);
 
     expect(depthPool(counted).every((yards) => yards === 12)).toBe(true);
-    // and the pool over the state itself still has the sack in it
     expect([...counted.cells.values()].some((cell) => cell.yards.includes(-7)))
-      .toBe(true);
+      .toBe(false);
+  });
+
+  it("counts a sack as a pass play all the same", async () => {
+    const countPlays = await countWith(false);
+    const counted = countPlays([aThrow("Diggs", 12), aThrow("", -7)]);
+    const here = [...counted.cells.values()]
+      .find((cell) => cell.yards.length === 1);
+
+    expect(here?.plays).toBe(2);
   });
 
   it("keeps them with the flag set", async () => {
@@ -142,6 +150,8 @@ describe("the pools kept by depth", () => {
     const counted = countPlays([aThrow("Diggs", 12), aThrow("", -7)]);
 
     expect(depthPool(counted)).toContain(-7);
+    expect([...counted.cells.values()].some((cell) => cell.yards.includes(-7)))
+      .toBe(true);
   });
 });
 

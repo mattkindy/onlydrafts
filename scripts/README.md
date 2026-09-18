@@ -25,6 +25,9 @@ mentions a script that is no longer here, it says so.
 - `start.ts` prints the start or sit comparison for named players at
   the terminal.
 - `seasonOutlook.ts` prints the projected season for all 32 teams.
+- `playedSeason.ts` plays a whole season over every core and writes
+  `data/kept/played-<season>.json`, which the board reads the walk's
+  opinion of a player out of. Rerun it when the play layer changes.
 
 **The benches that are still run.** These are not part of any build.
 `boardShareEval.ts`, `walkWeeklyEval.ts` and `scorePredictionEval.ts`
@@ -35,7 +38,8 @@ says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `jointProjectionEval.ts`, `playLayerEval.ts`, `estimateCorrelation.ts`,
 `exemptCheck.ts`, `leverageUsageProbe.ts`, `marketPriceProbe.ts`,
 `sleeperEval.ts`, `seasonShrinkEval.ts`, `inSeasonLevelEval.ts`,
-`kickerSeasonEval.ts`, `kickerWeekEval.ts` and `simAgreement.ts`.
+`kickerSeasonEval.ts`, `kickerWeekEval.ts`, `walkVolumeEval.ts` and
+`simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
@@ -274,6 +278,97 @@ back, is the fix. Everything else in here follows from it.
 Each one changes what the next is measured against, and the yardage has
 to come out within a percent or two at the end of it, so they want
 doing together with the box score evals beside them.
+
+## Step three, done on its own
+
+The sacks and the balls thrown away are in the walk now, out of turn,
+because what they were breaking was the line and not the drive. Two
+things were wrong and only one of them is football.
+
+`linesFrom` credited the passer with an attempt for every snap a flag
+wiped out, 4.5 a team game, which is why the walk threw 40.7 times a
+game where sides throw 33.7. That one is bookkeeping and costs nothing
+to put right.
+
+The other is that every pass play named a receiver, so the walk had no
+sack and no ball thrown away and a receiver was credited with all of
+it. How it is asked decides what it costs. Asked before the throw, the
+way the sweep above asked it, a sack is an extra failed pass play and
+the drives pay for it. Asked after the throw has already failed, it
+takes its share of the failures the pools already produce: 26.9% of
+failed pass plays had nobody on them, 59.4% of those were sacks, and a
+sack cost 7.09 yards. Then the only new thing is the yards a sack
+loses where the incompletion it replaces lost none.
+
+```
+                      before   asked before   asked after   2023   2025
+drives a side          11.26         12.08         11.43     11.02  10.45
+snaps a drive           5.54          5.22          5.47       5.88   6.04
+punt                   34%           41%           40%        38%    34%
+touchdown              23%           19%           20%        20%    23%
+kicks a side a game     1.93           -            1.95       -     1.97
+```
+
+The three walk columns are 2025's world, the first two at two passes
+through the season and the third at forty. Sides punted 38% of the
+time in 2023 and 34% in 2025, and the walk learns its drives off the
+four seasons before the one it plays, so which year it is being read
+against moves the answer as much as the change does. Asked after the
+throw it lands on 2023's endings and four points of punting above
+2025's. The drives are still half a drive long either way, which is the
+same half a drive the order above is about.
+
+The volume, a team game, walk over what the season had:
+
+```
+              2023          2024          2025
+          before after   before after   before after
+passAtt     1.21  1.01     1.24  1.04     1.26  1.05
+targets     1.13  1.02     1.15  1.04     1.17  1.05
+receptions  1.02  1.03     1.03  1.04     1.06  1.06
+carries     0.98  0.98     0.98  0.98     0.99  0.99
+passYds     1.01  1.02     1.05  1.06     1.10  1.11
+```
+
+Per player the attempts come right where they were worst. A top twelve
+quarterback threw 1.17, 1.20 and 1.20 times what he really threw and
+now throws 1.00 in all three seasons; the next twelve go from 1.32,
+1.37 and 1.35 to 1.14, 1.14 and 1.11. A top twelve receiver's targets
+go from 1.31, 1.15 and 1.20 to 1.18, 1.03 and 1.08. The catches and
+the yards barely move, which is the point: none of this was scoring.
+
+What is left is the flatness, which is step one. A receiver's targets a
+game over his own comes out at a median 1.07, 0.96 and 1.03 against
+1.18, 1.06 and 1.12 before, but over the 24 men the walk throws at most
+it is 1.26, 1.34 and 1.37 against 1.39, 1.51 and 1.53. The walk still
+picks its own favourites and overfeeds them, and relabelling the sacks
+does not touch that. Puka Nacua's 2026 goes from 256 targets to 218
+over the same fifteen games it deals him.
+
+What it cost, both benches run as a matched pair at the same time:
+
+```
+                                       before   after
+board, season, the shipped seat        .7519   .7530
+board, first 24                        .7147   .6989
+the walk's column, season              .7143   .7117
+the walk's column, first 24            .6266   .5059
+weekly, two seeds at forty draws       .365    .358
+```
+
+The board's ordering of a whole season is flat and its first 24 is
+inside the .03 two seeds of the same code move it. The walk's own
+column inside the first 24 is not: it falls in all three seasons,
+.619, .525 and .735 down to .572, .381 and .565. The likeliest reason
+is the other half of this change. Taking the sacks out of the state
+pools as well as the depth pools lifts what a throw to a man too thin
+to sample gains, and lifting the back of the roster is what closes the
+gap the first 24 is ordered on. Separating the two halves and reading
+them apart is the next thing to do, and it wants a fresh played season
+each way, which is an hour a side.
+
+Nothing was tuned to make this look better. The volume is what the fix
+was for and the volume came right.
 
 # Where the weekly points line has room left
 

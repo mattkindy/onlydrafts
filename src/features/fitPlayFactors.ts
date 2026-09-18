@@ -19,6 +19,7 @@ import type { Formation } from "./fitFormation.js";
 import type { Coverage } from "./fitCoverage.js";
 import type { Look } from "./fitLook.js";
 import type { AfterCatch } from "./fitAfterCatch.js";
+import type { Unaimed } from "./fitUnaimed.js";
 import { seededRng, standardNormal } from "../sim/rng.js";
 
 export interface PlayRow {
@@ -921,6 +922,8 @@ interface FactorExtras {
   look?: Look;
   /** what each player makes once the ball is his, near one */
   afterCatch?: AfterCatch;
+  /** how often a throw reaches nobody, and what a sack costs */
+  unaimed?: Unaimed;
   /**
    * Who resembles whom, nearest first, so a player too thin to sample
    * borrows plays from players like him before falling to the crowd. A
@@ -1137,11 +1140,21 @@ export function countPlays(
     const eitherLoose =
       `${Math.min(4, row.down)}|${Math.min(40, row.toGo)}` +
       `|${Math.min(99, row.yardline)}|any`;
+    /**
+     * A sack or a ball thrown away is a pass play nobody was on. A
+     * failed throw is offered one of those separately, so a pool that
+     * kept them would charge for them twice.
+     */
+    const wasted = row.call === "pass" && !row.player && !POOL_WASTE;
     const cell = cells.get(at) ?? emptyCounted();
     cell.plays++;
     if (row.call === "run") cell.runs++;
-    cell.yards.push(row.yards);
-    cell.from.push(row.yardline);
+
+    if (!wasted) {
+      cell.yards.push(row.yards);
+      cell.from.push(row.yardline);
+    }
+
     cell.scores += row.touchdown;
 
     if (row.call === "pass" && row.airYards !== undefined &&
@@ -1174,8 +1187,12 @@ export function countPlays(
     const anyTime = cells.get(loose) ?? emptyCounted();
     anyTime.plays++;
     if (row.call === "run") anyTime.runs++;
-    anyTime.yards.push(row.yards);
-    anyTime.from.push(row.yardline);
+
+    if (!wasted) {
+      anyTime.yards.push(row.yards);
+      anyTime.from.push(row.yardline);
+    }
+
     anyTime.scores += row.touchdown;
 
     if (row.call === "pass" && row.airYards !== undefined &&
@@ -1255,7 +1272,11 @@ export function countPlays(
         const side = into.get(key) ?? emptyCounted();
         side.plays++;
         if (row.call === "run") side.runs++;
-        side.yards.push(row.yards);
+
+        if (!wasted) {
+          side.yards.push(row.yards);
+        }
+
         side.scores += row.touchdown;
         into.set(key, side);
       }
@@ -1277,6 +1298,7 @@ export function fitPlayFactors(
   const {
     projected, split, lately, pairing, playLevel, depth, people, plays,
     alike, formation, coverage, look, afterCatch, positions, perPlayer, standIn,
+    unaimed,
   } = extras;
   const {
     cells, byOffence, byDefence, byPlayer, leagueOn, caughtAt, overall,
@@ -2878,6 +2900,9 @@ export function fitPlayFactors(
     hisOwnPlay,
     matchup: pairing,
     caught: wasCaught,
+    reachesNobody: unaimed
+      ? (state, uniform) => unaimed.reaches(state.down, uniform)
+      : undefined,
     runs: (state, offence, sides) => {
       const league = atCounts(state, settings.leastForCall);
       const leagueRate = league.plays === 0 ? 0.45 : league.runs / league.plays;

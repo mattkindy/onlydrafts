@@ -126,6 +126,14 @@ const CLOCK_DEFAULTS: ClockRules = {
   lastLength: (uniform) => 1 + Math.floor(uniform() * 12),
 };
 
+/**
+ * A pass play with no receiver on it. The league counts a ball thrown
+ * away as an attempt, a sack as neither an attempt nor a target, and a
+ * snap a flag wiped out as nothing at all, so whoever adds up a line
+ * has to be able to tell the three apart.
+ */
+export type Unaimed = "sack" | "away" | "flag";
+
 interface FactorPlay {
   state: PlayState;
   call: Call;
@@ -134,6 +142,8 @@ interface FactorPlay {
   scored: boolean;
   /** whether the throw was caught; a run always was */
   caught: boolean;
+  /** set when nobody was thrown to, saying why */
+  unaimed?: Unaimed;
 }
 
 export interface FactorDrive {
@@ -432,7 +442,7 @@ export function walkDrive(
       state.toGo = Math.min(10, state.yardline);
       plays.push({
         state: { ...state }, call: "pass", player: "", yards: 0, scored: false,
-        caught: false,
+        caught: false, unaimed: "flag",
       });
       tick("pass", 0);
       continue;
@@ -441,7 +451,7 @@ export function walkDrive(
     if (preSnapFlag(state, rules, uniform)) {
       plays.push({
         state: { ...state }, call: "pass", player: "", yards: 0, scored: false,
-        caught: false,
+        caught: false, unaimed: "flag",
       });
       tick("pass", 0);
       continue;
@@ -532,6 +542,34 @@ export function walkDrive(
     const caught = own
       ? own.caught
       : call === "run" || factors.caught(gained, uniform);
+    /**
+     * A failed throw with nobody on it: he was sacked, or he threw it
+     * away. Asked after the throw has already failed, so this moves
+     * who is credited rather than how often a pass play comes to
+     * nothing, and a sack costs the yards on top.
+     */
+    const nobody = !caught && call === "pass"
+      ? factors.reachesNobody?.(state, uniform)
+      : undefined;
+
+    if (nobody) {
+      plays.push({
+        state: { ...state }, call, player: "", yards: nobody.yards,
+        scored: false, caught: false,
+        unaimed: nobody.sack ? "sack" : "away",
+      });
+      tick(call, nobody.yards);
+      state.yardline = Math.min(99, state.yardline - nobody.yards);
+      state.toGo = Math.min(state.toGo - nobody.yards, state.yardline);
+      state.down++;
+
+      if (state.down > 4) {
+        return ended("downs", 100 - state.yardline);
+      }
+
+      continue;
+    }
+
     if (watchReach && call === "pass") {
       const y0 = state.yardline;
       const b0 = y0 <= 10 ? "inside 10" : y0 <= 20 ? "11-20" : y0 <= 30 ? "21-30"
