@@ -160,6 +160,58 @@ describe("scoreSleeper", () => {
   });
 });
 
+describe("the usage term sets", () => {
+  it("leaves the player's own scoring rate out", () => {
+    expect(sleeperTermNames("usage")).not.toContain("points a game so far");
+    expect(sleeperTermNames("usage with role"))
+      .not.toContain("points a game so far");
+  });
+
+  it("keeps every other form term the shipped set reads", () => {
+    const usage = sleeperTermNames("usage");
+
+    for (const term of SLEEPER_TERMS) {
+      if (term === "points a game so far") {
+        continue;
+      }
+
+      expect(usage).toContain(term);
+    }
+  });
+
+  it("adds the role level to the usage set and nothing else", () => {
+    expect(sleeperTermNames("usage with role"))
+      .toEqual([...sleeperTermNames("usage"), "role level"]);
+  });
+
+  it("splits the trend into the two kinds of work it was summed from", () => {
+    const split = sleeperTermNames("usage, split trend");
+
+    expect(split).not.toContain("trend");
+    expect(split).toContain("target trend");
+    expect(split).toContain("carry trend");
+    expect(split.length).toBe(sleeperTermNames("usage").length + 1);
+  });
+
+  it("gives a busier player a bigger claim with no points to read", () => {
+    const fit = fitSleepers(examples, { terms: "usage" });
+    const lean = cut({ rawWorkShare: 0.05, leverageWorkShare: 0.05 });
+    const busy = cut({ rawWorkShare: 0.28, leverageWorkShare: 0.28 });
+
+    expect(scoreSleeper(fit, busy).score)
+      .toBeGreaterThan(scoreSleeper(fit, lean).score);
+  });
+
+  it("does not move when only a player's scoring rate changes", () => {
+    const fit = fitSleepers(examples, { terms: "usage" });
+    const quiet = cut({ ppgSoFar: 3 });
+    const loud = cut({ ppgSoFar: 21 });
+
+    expect(scoreSleeper(fit, loud).score)
+      .toBeCloseTo(scoreSleeper(fit, quiet).score, 10);
+  });
+});
+
 describe("the in-season term set", () => {
   it("reads two more terms than the shipped set", () => {
     expect(sleeperTermNames("with in-season").length)

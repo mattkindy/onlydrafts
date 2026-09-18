@@ -56,6 +56,12 @@ average form, so the number left over is the claim against the board. It
 ranks who becomes startable better than points a game so far does and it
 ranks who scores the most worse, and `scripts/README.md` has the table.
 
+A fit can be taken over any of five term sets. The shipped set is the one
+above. One adds the in-season level and the role level. Three take the
+player's own scoring rate out and leave the fit his usage and the board.
+All four lose, on the tier read off total points and on the tier read off
+points over the games he played, so the shipped set still ships.
+
 Three decisions in there are worth knowing before reading the code.
 
 The quantiles are counted off the players rather than taken from a
