@@ -72,9 +72,11 @@ const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
   passShift: (e) => e.staff.passShift,
   // a new coordinator makes last season's average a poorer guide
   ocChangedPrev: (e) => (e.staff.ocChanged ? e.prevPpg : 0),
+  gamesBehind: (e) => Math.min(e.gamesBehind, 4),
+  gamesBehindLast4: (e) => Math.min(e.gamesBehind, 4) * e.last4,
 };
 
-const POSITION_EXTRAS: Record<string, readonly string[]> = {
+export const POSITION_EXTRAS: Record<string, readonly string[]> = {
   QB: ["spread", "snapSpread"],
   RB: ["spread", "rushYdsRecent", "absence", "carriesExpected", "targetsExpected"],
   WR: ["absence", "targetsExpected"],

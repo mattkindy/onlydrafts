@@ -1230,6 +1230,53 @@ This is the one place where a better input is clearly available and we
 do not have it. Until we do, the average of the two is how the man
 whose job changed gets a sane number.
 
+### The early weeks, where the ridge reads one game
+
+scripts/earlyWeekEval.ts, 2021 to 2025, every quarterback, back,
+receiver and tight end who played the week, scored on the players every
+line below covers. The ridge trains on rows where `last4` and the
+usage columns are means over four games, and in week 2 it is handed one
+box score through the same coefficients. Sam Darnold threw for 13 yards
+in the 2026 opener and the slate gave him 2.8 points for week 2 against
+Sleeper's 17.2; Kenneth Walker ran for 173 and two scores and got 28.4
+against 16.4.
+
+| the line | mae, wk 2-4 | mae, wk 5-8 | saved on the ridge, wk 2-4 | wk 5-8 |
+|---|---|---|---|---|
+| the ridge as it shipped | 4.728 | 4.527 | | |
+| the season anchor alone | 4.645 | 4.542 | +.083 (se .031) | -.015 (se .020) |
+| recent means pulled toward last season, k=1 | 4.668 | 4.531 | +.061 (se .015) | -.004 (se .006) |
+| the same, k=2 | 4.674 | 4.543 | +.054 (se .020) | -.016 (se .009) |
+| the same, k=3 | 4.686 | 4.557 | +.042 (se .024) | -.030 (se .011) |
+| retrained on one game rows, with games behind as a column | 4.693 | 4.549 | +.035 (se .017) | -.022 (se .006) |
+| last season's points a game | 5.284 | 5.245 | -.556 (se .051) | -.718 (se .041) |
+| a ridge fitted on the season it scores | 4.790 | 4.504 | -.062 (se .013) | +.023 (se .010) |
+
+Pulling each recent mean toward what the player did last season, by how
+many games he has behind him this one, is what ships, at one game of
+prior weight. It is the only candidate whose gain in weeks 2 to 4 is
+several standard errors from zero and whose cost from week 5 on is not.
+The season anchor saves more in weeks 2 to 4 and gives it back later,
+and it would have to be computed before the slate is written rather
+than after. A heavier pull, two or three games, buys a little more
+correlation early and loses error from week 5 on by more than its own
+standard error.
+
+Correlation with the outcome over weeks 2 to 4 goes .611 for the
+shipped ridge, .632 for the shrink at one game, .625 for the anchor and
+.547 for last season's average. The in-sample ridge is the ceiling here
+and it is worse than either in the early weeks, because it too is
+fitted on four game rows: the trouble is the scale of the columns, not
+which season taught the fit.
+
+Under the shipped shrink the 2026 week 2 slate reads Darnold 4.5,
+Walker 22.5, Ja'Marr Chase 12.7 against his 8.3, and Caleb Williams
+23.6 against his 26.9. Taken against Sleeper across the whole slate,
+the ratio of ours to theirs went from .50 and 1.54 at the tenth and
+ninetieth to .66 and 1.35, and the median player moved from 23% away
+from Sleeper to 14%. Darnold is still low, and one 13 yard game is not
+a thing any amount of shrinking fixes.
+
 ## One drive at a time, against the drive that happened
 
 Every bench above scores a season of totals, where a walk that is too

@@ -165,6 +165,7 @@ when you want to measure it again.
 | The season the board reads the walk out of | `data/kept/played-<season>.json` | written by `scripts/playedSeason.ts` |
 | How often a failed throw reached nobody, and what a sack cost | `features/fitUnaimed.ts` | `scripts/walkVolumeEval.ts` |
 | `COMPONENT_THROUGH_WEEK`, where the component line hands over to the ridge | `features/componentWeek.ts` | the component week finding in `scripts/README.md` |
+| `SHIPPED_PRIOR_GAMES`, how far a slate row's recent means are pulled toward last season | `features/recentPrior.ts` | `scripts/earlyWeekEval.ts` |
 | `SHIPPED_FIT`, whether the price curve is windowed or a line on log price | `features/marketPrice.ts` | `scripts/marketPriceProbe.ts` |
 | The game script effects being pooled over a side's fixtures | `features/gameScript.ts` | `scripts/aggregateGameScript.ts` |
 | Fitting every part of a player's season in one model | `features/jointParts.ts` | `scripts/jointProjectionEval.ts` |
