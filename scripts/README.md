@@ -345,27 +345,43 @@ picks its own favourites and overfeeds them, and relabelling the sacks
 does not touch that. Puka Nacua's 2026 goes from 256 targets to 218
 over the same fifteen games it deals him.
 
-What it cost, both benches run as a matched pair at the same time:
+## What it cost, and which half cost it
+
+Three arms, each with its own forty pass played season and both benches
+read off it: the walk before any of this, the walk with both halves,
+and the walk with the sacks left in the state pools. Per season, 2023,
+2024 and 2025.
 
 ```
-                                       before   after
-board, season, the shipped seat        .7519   .7530
-board, first 24                        .7147   .6989
-the walk's column, season              .7143   .7117
-the walk's column, first 24            .6266   .5059
-weekly, two seeds at forty draws       .365    .358
+                                before        both halves    sacks left in
+board, season                .7519 .761 .723 .771   .7530 .762 .723 .773   .7529 .761 .724 .773
+board, first 24              .7147 .667 .734 .744   .6989 .666 .687 .744   .6989 .666 .687 .744
+the walk's column, season    .7143 .730 .671 .742   .7117 .729 .662 .745   .7122 .727 .665 .744
+the walk's column, first 24  .6266 .619 .525 .735   .5059 .572 .381 .565   .4993 .566 .382 .549
+weekly, 2025, two seeds      .365                   .358                   .3635
 ```
 
-The board's ordering of a whole season is flat and its first 24 is
-inside the .03 two seeds of the same code move it. The walk's own
-column inside the first 24 is not: it falls in all three seasons,
-.619, .525 and .735 down to .572, .381 and .565. The likeliest reason
-is the other half of this change. Taking the sacks out of the state
-pools as well as the depth pools lifts what a throw to a man too thin
-to sample gains, and lifting the back of the roster is what closes the
-gap the first 24 is ordered on. Separating the two halves and reading
-them apart is the next thing to do, and it wants a fresh played season
-each way, which is an hour a side.
+The rivals read the same in all three, .7141 and .6083 for where adp
+had him and .6468 and .6589 for the walk at nothing, so the arms are
+comparable.
+
+The two halves are separable and the pools are not what costs the
+first 24. The volume comes out the same either way, to two decimals on
+every line, so the whole of it is the flag attempts and the sack draw.
+And the first 24 reads .6989 with the sacks in the pools and .6989 with
+them out, with the walk's own column a shade worse for keeping them.
+Leaving them in buys nothing and charges a fallback throw for the sack
+twice, so both halves ship.
+
+What the first 24 costs is the sack itself. The board's fall is one
+season, 2024, from .734 to .687, with 2023 and 2025 unmoved; the walk's
+own column falls in all three. The walk keeps twenty percent of a seat
+on the board, which is why the board only feels a fifth of it. A sack
+now takes seven yards off a drive where the incompletion it replaces
+took none, and the men the first 24 is ordered on are bunched tightly
+enough that a small change in points reorders them. That is the price
+of having sacks at all, and the plays say sides take 2.3 of them a
+game.
 
 Nothing was tuned to make this look better. The volume is what the fix
 was for and the volume came right.

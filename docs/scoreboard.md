@@ -78,11 +78,16 @@ change, and swept out to the whole board below.
 | and a pooled play counted by how near it was drawn from | .7477 | .7147 | .7030 | .3915 on 2025 alone |
 | the sack and the ball thrown away credited to nobody | .7530 | .6989 | .7117 | .358 on 2025 alone |
 
-That last row is a matched pair read at the same time, and the same run
-put the board it replaces at .7519, .7147, .7143 and .365, so the
+That last row is one of three arms read at the same time, and the same
+run put the board it replaces at .7519, .7147, .7143 and .365, so the
 season and the week are flat and the first 24 is what it cost. The
 column figures are the walk's own opinion under the same eval's name
 for it, the played out games with silent men at their regression.
+
+The third arm kept the sacks in the state pools and read .7529, .6989,
+.7122 and .3635, with the same volume to two decimals, so the pools
+were not what cost the first 24 and keeping them in buys nothing. The
+README beside the scripts has the three arms per season.
 
 These two rows belong together, and the pair is the best the walk has
 read. `ring` widens a pooled lookup when the exact cell is thin, and its
