@@ -166,6 +166,7 @@ when you want to measure it again.
 | How often a failed throw reached nobody, and what a sack cost | `features/fitUnaimed.ts` | `scripts/walkVolumeEval.ts` |
 | `COMPONENT_THROUGH_WEEK`, where the component line hands over to the ridge | `features/componentWeek.ts` | the component week finding in `scripts/README.md` |
 | `SHIPPED_PRIOR_GAMES`, how far a slate row's recent means are pulled toward last season | `features/recentPrior.ts` | `scripts/earlyWeekEval.ts` |
+| `ANCHOR_THROUGH_WEEK`, the last week the board's anchor writes the slate instead of the ridge | `scripts/buildSite.ts` | `scripts/earlyWeekEval.ts` |
 | `SHIPPED_FIT`, whether the price curve is windowed or a line on log price | `features/marketPrice.ts` | `scripts/marketPriceProbe.ts` |
 | The game script effects being pooled over a side's fixtures | `features/gameScript.ts` | `scripts/aggregateGameScript.ts` |
 | Fitting every part of a player's season in one model | `features/jointParts.ts` | `scripts/jointProjectionEval.ts` |
@@ -193,7 +194,7 @@ fields look like the same claim. Only one of them is.
 | `sim` | `sim/playerSeason.ts` | `games`, the par band | a mean season total and the games it dealt him. Divided out it is a couple of percent off `ppg`, because a mean product is not a product of means. |
 | `walked` | `scripts/buildSite.ts`, from `data/kept/played-<season>.json` | one voice in where the board places him | what the August walk handed him, over the games it dealt him. Not his rate: it throws about a quarter more at the men it likes most than they get. |
 | `simulated` | `scripts/buildSite.ts` | the card and the spread for kickers and defences | a kicker's and a defence's line, who have no `projected` |
-| `weeks[].of` | `scripts/buildSite.ts` | the card's week chart, `app/lib/spread.ts` | that week over his own average. A week a slate covers takes the slate's own line. |
+| `weeks[].of` | `scripts/buildSite.ts` | the card's week chart, `app/lib/spread.ts` | that week over his own average. A week a slate covers takes the slate's own line, and through week 2 the slate takes this, so the two agree by construction. |
 | `blend` | `features/boardOrder.ts` | the file's default sort, then recomputed by the app | a place on the board, not a rate |
 
 `projected` and `ppg` have to agree, and

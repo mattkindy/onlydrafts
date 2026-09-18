@@ -1239,43 +1239,53 @@ usage columns are means over four games, and in week 2 it is handed one
 box score through the same coefficients. Sam Darnold threw for 13 yards
 in the 2026 opener and the slate gave him 2.8 points for week 2 against
 Sleeper's 17.2; Kenneth Walker ran for 173 and two scores and got 28.4
-against 16.4.
+against 16.4. The board's season anchor is scored beside it, as his
+preseason level moved by the games played so far, times the same
+fixture factor the card's week chart uses.
 
-| the line | mae, wk 2-4 | mae, wk 5-8 | saved on the ridge, wk 2-4 | wk 5-8 |
-|---|---|---|---|---|
-| the ridge as it shipped | 4.728 | 4.527 | | |
-| the season anchor alone | 4.645 | 4.542 | +.083 (se .031) | -.015 (se .020) |
-| recent means pulled toward last season, k=1 | 4.668 | 4.531 | +.061 (se .015) | -.004 (se .006) |
-| the same, k=2 | 4.674 | 4.543 | +.054 (se .020) | -.016 (se .009) |
-| the same, k=3 | 4.686 | 4.557 | +.042 (se .024) | -.030 (se .011) |
-| retrained on one game rows, with games behind as a column | 4.693 | 4.549 | +.035 (se .017) | -.022 (se .006) |
-| last season's points a game | 5.284 | 5.245 | -.556 (se .051) | -.718 (se .041) |
-| a ridge fitted on the season it scores | 4.790 | 4.504 | -.062 (se .013) | +.023 (se .010) |
+| the line | mae wk2 | mae wk 2-4 | mae wk 5-8 | saved on the ridge, wk 2-4 | wk 5-8 |
+|---|---|---|---|---|---|
+| the ridge as it shipped | 4.98 | 4.728 | 4.527 | | |
+| the season anchor alone | 4.73 | 4.641 | 4.539 | +.087 (se .031) | -.012 (se .020) |
+| recent means pulled toward last season, k=1 | 4.84 | 4.668 | 4.531 | +.061 (se .015) | -.004 (se .006) |
+| the same, k=2 | 4.85 | 4.674 | 4.543 | +.054 (se .020) | -.016 (se .009) |
+| the same, k=3 | 4.86 | 4.686 | 4.557 | +.042 (se .024) | -.030 (se .011) |
+| retrained on one game rows, with games behind as a column | 4.89 | 4.693 | 4.549 | +.035 (se .017) | -.022 (se .006) |
+| **the anchor at week 2, k=1 after, which ships** | **4.73** | **4.631** | **4.531** | **+.097 (se .023)** | **-.004 (se .006)** |
+| last season's points a game | 5.32 | 5.284 | 5.245 | -.556 (se .051) | -.718 (se .041) |
+| a ridge fitted on the season it scores | 5.10 | 4.790 | 4.504 | -.062 (se .013) | +.023 (se .010) |
 
-Pulling each recent mean toward what the player did last season, by how
-many games he has behind him this one, is what ships, at one game of
-prior weight. It is the only candidate whose gain in weeks 2 to 4 is
-several standard errors from zero and whose cost from week 5 on is not.
-The season anchor saves more in weeks 2 to 4 and gives it back later,
-and it would have to be computed before the slate is written rather
-than after. A heavier pull, two or three games, buys a little more
-correlation early and loses error from week 5 on by more than its own
-standard error.
+Two different things are wrong and each week wants its own answer. At
+week 2 the ridge has one game and the board's anchor, which is his
+preseason level moved by that one game, beats it by a quarter of a
+point a player. From week 3 the ridge is ahead of the anchor again, and
+what helps it is pulling each recent mean toward what the player did
+last season by how many games he has behind him. Both ship: week 2 is
+the anchor, week 3 on is the ridge with the pull at one game of prior
+weight. The pair saves .097 a player over weeks 2 to 4 with a standard
+error of .023, and costs .004 from week 5 on, which is nothing. A
+heavier pull, two or three games, buys a little more correlation early
+and loses error from week 5 on by more than its own standard error.
 
-Correlation with the outcome over weeks 2 to 4 goes .611 for the
-shipped ridge, .632 for the shrink at one game, .625 for the anchor and
-.547 for last season's average. The in-sample ridge is the ceiling here
-and it is worse than either in the early weeks, because it too is
-fitted on four game rows: the trouble is the scale of the columns, not
-which season taught the fit.
+Correlation with the outcome over weeks 2 to 4 goes .611 for the ridge
+as it was, .636 for the pair that ships, .632 for the pull alone, .626
+for the anchor alone and .547 for last season's average. The in-sample
+ridge is the ceiling and it is worse than any of them in the early
+weeks, because it too is fitted on four game rows: the trouble is the
+scale of the columns, not which season taught the fit.
 
-Under the shipped shrink the 2026 week 2 slate reads Darnold 4.5,
-Walker 22.5, Ja'Marr Chase 12.7 against his 8.3, and Caleb Williams
-23.6 against his 26.9. Taken against Sleeper across the whole slate,
-the ratio of ours to theirs went from .50 and 1.54 at the tenth and
-ninetieth to .66 and 1.35, and the median player moved from 23% away
-from Sleeper to 14%. Darnold is still low, and one 13 yard game is not
-a thing any amount of shrinking fixes.
+Week 2 on a card and week 2 on the slate are the same number, because
+the slate now reads the board's own week chart rather than a second
+construction of it. `updateBoardLevels` moved ahead of the slate loop
+in buildSite.ts so that it can.
+
+On the 2026 week 2 slate 353 of 357 players take the anchor and four
+keep the ridge. Sam Darnold reads 11.3 where the ridge said 2.8,
+Kenneth Walker 15.5 where it said 28.4, Ja'Marr Chase 16.9 where it
+said 8.3, and Caleb Williams 20.3 where it said 26.9. Against Sleeper
+across the whole slate, the ratio of ours to theirs went from .50 and
+1.54 at the tenth and ninetieth to .70 and 1.29, and the median player
+moved from 23% away from Sleeper to 14%.
 
 ## One drive at a time, against the drive that happened
 
