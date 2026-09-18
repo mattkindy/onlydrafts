@@ -180,6 +180,7 @@ export function preseasonWeeklyExamples(
         targetRushYds: 0,
         // last season's rates stand in for this season's recent form
         last4: ppg,
+        gamesBehind: 0,
         seasonPpg: ppg,
         prevPpg: e?.prevPpg ?? ppg,
         targetsRecent: e?.targetsPerGame ?? 0,
