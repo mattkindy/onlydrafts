@@ -15,14 +15,25 @@ export interface Player {
   key: string;
   position: string;
   team?: string | null;
-  /** what the regression says he does in a game */
+  /**
+   * What the model says he does in a game. This is his line: the points
+   * a game beside it are this line scored, and every spread on his card
+   * hangs off it.
+   */
   projected?: Parts | null;
-  /** and what the played out games say */
+  /**
+   * What the August walk handed him in a game. A different question
+   * from `projected`, and not his rate: the walk runs a busy receiver
+   * at close to double the targets he really gets. It is one voice in
+   * where the board places him and nothing else reads it.
+   */
+  walked?: Parts | null;
+  /** a kicker's and a defence's line, who have no `projected` */
   simulated?: Parts | null;
   /**
    * how his weeks vary against his own average, one per week, and what
    * he actually did in a week already played, under the same categories
-   * `projected` and `simulated` use
+   * `projected` uses
    */
   weeks?: { w: number; opp: string; of: number; played?: Parts | null }[];
   /** the spread of a game of his, as the file scored it */
@@ -175,16 +186,17 @@ export function paidFor(stats: Record<string, number>, pays: Pays): number {
 }
 
 /**
- * What he scores in a game here. The simulation's line leads wherever it
- * played the player, and the regression covers the players it never saw.
+ * What he scores in a game here, which is his own line scored by this
+ * league. Kickers and defences have no projected line and ship what the
+ * walk kicked and what the defence gave up instead.
  */
 export function scoredHere(p: Player, pays: Pays): number {
-  if (p.simulated) {
-    return payFor(p.simulated, pays);
-  }
-
   if (p.projected) {
     return payFor(p.projected, pays);
+  }
+
+  if (p.simulated) {
+    return payFor(p.simulated, pays);
   }
 
   return p.ppg ?? 0;

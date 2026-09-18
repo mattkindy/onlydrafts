@@ -16,7 +16,7 @@ import { loadPlayerStats, loadSnapCounts } from "../data/nflverse.js";
 import { normalizeName } from "../data/names.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { scoring } from "../scoring/active.js";
-import { updateParts } from "./inSeasonParts.js";
+import { pointsOfLine, updateParts } from "./inSeasonParts.js";
 import type { StatParts } from "./seasonSummary.js";
 import {
   fitRoleLevel,
@@ -196,6 +196,10 @@ export async function updateBoardLevels(
         fromSeason: level.weightOnRole + level.weightOnPoints,
         levelRatio: level.ppg / anchor,
       });
+      // the line is what the board ships and what the page scores, so
+      // where the rescale could not reach the level the level follows
+      // the line rather than the two being shipped apart
+      player.projectedPpg = pointsOfLine(player.projectedParts);
     }
 
     moved++;

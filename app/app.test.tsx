@@ -331,7 +331,7 @@ describe("the line on the card adds up", () => {
         // the number is the line the card shows scored by his league,
         // not whatever the value curve said at his rank
         expect(
-          Math.abs(payFor(p.simulated ?? p.projected!, at(rec)) - (p.ppg ?? 0)),
+          Math.abs(payFor(p.projected!, at(rec)) - (p.ppg ?? 0)),
           p.name,
         ).toBeLessThan(0.06);
       }
@@ -371,7 +371,7 @@ describe("the line on the card adds up", () => {
       // what a reader works out from the line on his card, scaled the
       // way the card scales it
       const { movedBy } = await import("./lib/statLine.ts");
-      const shown = p.simulated ?? p.projected!;
+      const shown = p.projected!;
       const scaled = Object.fromEntries(
         Object.entries(shown).map(([k, v]) => [k, v * movedBy(p)]),
       );

@@ -200,11 +200,15 @@ it("scores every category the board ships", async () => {
   const { scorable } = await import("./lib/scoring.ts");
   const file = JSON.parse(
     readFileSync(join(DATA, "board-2026.json"), "utf8"),
-  ) as { players: { projected?: Record<string, number>; simulated?: Record<string, number> }[] };
+  ) as { players: {
+    projected?: Record<string, number>;
+    walked?: Record<string, number>;
+    simulated?: Record<string, number>;
+  }[] };
   const unknown = new Set<string>();
 
   for (const p of file.players) {
-    for (const parts of [p.projected, p.simulated]) {
+    for (const parts of [p.projected, p.walked, p.simulated]) {
       for (const category of Object.keys(parts ?? {})) {
         if (!scorable(category)) {
           unknown.add(category);

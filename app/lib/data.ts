@@ -25,6 +25,7 @@ interface FileRow {
   position: string;
   team?: string | null;
   projected?: Record<string, number> | null;
+  walked?: Record<string, number> | null;
   simulated?: Record<string, number> | null;
   ppg?: number;
   touches?: number | null;
@@ -72,6 +73,7 @@ export async function loadBoard(season: number): Promise<Board> {
       position: row.position,
       team: row.team ?? null,
       projected: row.projected ?? null,
+      walked: row.walked ?? null,
       simulated: row.simulated ?? null,
       weeks: row.weeks ?? [],
       adp: row.adp ?? null,

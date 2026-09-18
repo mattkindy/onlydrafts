@@ -28,6 +28,7 @@ import { scoring } from "../scoring/active.js";
 import {
   fitPartsModel, predictParts, partsByPosition, blankParts,
 } from "./partsModel.js";
+import { partsAtLevel, pointsOfLine } from "./inSeasonParts.js";
 import {
   fitWeeklyByPosition,
   type WeeklyByPosition,
@@ -282,13 +283,23 @@ export async function buildPreseasonWorld(
       continue;
     }
 
+    /**
+     * The season model sets his level and the parts model sets his
+     * line, and the two used to be shipped side by side without ever
+     * being reconciled. The line is moved onto the level and the level
+     * is then read back off the line, so a reader scoring the line
+     * himself gets the number printed beside it.
+     */
+    const line = partsAtLevel(
+      predictParts(partsFit, e, partFloors), predictSeasonBlend(fit, e));
+
     players.push({
       playerId: e.playerId,
       name: summaries.get(e.playerId)?.playerName ?? e.playerName ?? e.playerId,
       position: e.position,
       teamId: team,
-      projectedPpg: predictSeasonBlend(fit, e),
-      projectedParts: predictParts(partsFit, e, partFloors),
+      projectedPpg: pointsOfLine(line),
+      projectedParts: line,
       gamesPool: gamesPools.get(bucketOf(e.gamesPrev))!,
       expectedGames: expectedGames.get(e.playerId),
     });
@@ -315,19 +326,22 @@ export async function buildPreseasonWorld(
     const worth = fantasyPoints(
       { ...shape, fumblesLost: 0, twoPointConversions: 0 }, scoring(),
     );
+    // his chances scale with his yards, since a rookie's whole line is
+    // the position's shape rather than anything measured about him
     const scale = worth > 0 ? says / worth : 0;
+    const rookieLine = PART_NAMES.reduce((out: StatParts, part) => {
+      out[part] = shape[part] * scale;
+
+      return out;
+    }, blankParts());
 
     players.push({
       playerId: r.playerId,
       name: r.name,
       position: r.position,
       teamId: team,
-      projectedPpg: says,
-      projectedParts: PART_NAMES.reduce((out: StatParts, part) => {
-        out[part] = shape[part] * scale;
-
-        return out;
-      }, blankParts()),
+      projectedPpg: pointsOfLine(rookieLine),
+      projectedParts: rookieLine,
       gamesPool: gamesPools.get(rookieBucket(r.overall))!,
       rookie: r.rookie,
       expectedGames: expectedGames.get(r.playerId),
