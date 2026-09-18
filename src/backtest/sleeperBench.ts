@@ -2,15 +2,15 @@
  * The rows the sleeper bench is scored on: every priced player at a cut
  * week, what was known about him by then, and what he went on to do.
  *
- * `scripts/sleeperEval.ts` scores methods over these rows and
- * `scripts/sleeperLog.ts` prints the named picks. They share this
- * module so both read the same candidates and the same definition of a
- * hit: a candidate is a player at a priced position with at least one
- * game by the cut whose club still has games left, priced at
- * `UNDRAFTED_PRICE` when no board took him, and a hit is a finish
- * inside the position's starter tier over the rest of the season,
- * ranked on total points so missed weeks count against him. Each row
- * also has the in-season update on it, fitted on earlier seasons only.
+ * `scripts/sleeperEval.ts` and `scripts/sleeperLog.ts` share this
+ * module so both read the same candidates: a player at a priced
+ * position with at least one game by the cut whose club still has games
+ * left, priced at `UNDRAFTED_PRICE` when no board took him.
+ *
+ * Two flags say how the rest went. `hit` ranks the starter tier on
+ * total points, so missed weeks count against a player. `hitPerGame`
+ * ranks it on points over the games he played, so a breakout who got
+ * hurt keeps the credit for the job he took.
  */
 
 import { loadAdp, type AdpEntry } from "../data/adp.js";
@@ -163,8 +163,12 @@ export interface Row {
   gamesAfter: number;
   restOfSeasonPpg: number;
   restOfSeasonTotal: number;
+  /** his points over the games he played, and 0 when he played none */
+  restOfSeasonPerGame: number;
   /** he finished inside his position's starter tier over those weeks */
   hit: boolean;
+  /** and the same tier taken on the rate, among the players who kept playing */
+  hitPerGame: boolean;
   /** his total over the rest against the last total inside the tier */
   tierMargin: number;
 }
@@ -231,6 +235,8 @@ function cutsFor(input: SeasonInput, week: number): Row[] {
         rawWorkShare: mine?.rawWorkShare ?? 0,
         leverageWorkShare: mine?.workShare ?? 0,
         trend: (mine?.targetTrend ?? 0) + (mine?.carryTrend ?? 0),
+        targetTrend: mine?.targetTrend ?? 0,
+        carryTrend: mine?.carryTrend ?? 0,
         ppgSoFar: already.points / already.games,
         gamesPlayed: already.games,
         pickSpread: entry?.stdev === undefined
@@ -244,7 +250,9 @@ function cutsFor(input: SeasonInput, week: number): Row[] {
       gamesAfter: rest.games,
       restOfSeasonPpg: rest.points / left,
       restOfSeasonTotal: rest.points,
+      restOfSeasonPerGame: rest.games === 0 ? 0 : rest.points / rest.games,
       hit: false,
+      hitPerGame: false,
       tierMargin: 0,
     });
   }
@@ -253,24 +261,36 @@ function cutsFor(input: SeasonInput, week: number): Row[] {
 }
 
 /**
- * Who finished inside the starter tier over the rest of the season, on
- * total points rather than on a rate, so the weeks a player missed count
- * against him the way they do in a league.
+ * How many games after the cut a player has to play before his rate is
+ * read. One big afternoon off a bench would otherwise land him inside a
+ * tier, and the rest of a season runs ten to fourteen weeks from these
+ * cuts, so four games is short enough to keep the players who got hurt
+ * and long enough that nobody arrives on a fluke.
  */
+export const MIN_GAMES_AFTER = 4;
+
+/** what the tier is cut at, and Infinity where the position has no tier */
+const cutAt = (values: number[], tier: number | undefined): number =>
+  tier === undefined
+    ? Infinity
+    : [...values].sort((a, b) => b - a)[tier - 1] ?? -Infinity;
+
+/** who finished inside the starter tier over the rest, read both ways */
 function marked(rows: Row[]): Row[] {
   for (const position of PRICED_POSITIONS) {
     const tier = STARTER_TIER[position];
-    const ranked = rows
-      .filter((row) => row.cut.position === position)
-      .sort((a, b) => b.restOfSeasonTotal - a.restOfSeasonTotal);
-    const tierCut = tier === undefined
-      ? Infinity
-      : ranked[tier - 1]?.restOfSeasonTotal ?? -Infinity;
+    const mine = rows.filter((row) => row.cut.position === position);
+    const played = (row: Row) => row.gamesAfter >= MIN_GAMES_AFTER;
+    const onTotal = cutAt(mine.map((row) => row.restOfSeasonTotal), tier);
+    const onRate = cutAt(
+      mine.filter(played).map((row) => row.restOfSeasonPerGame), tier,
+    );
 
-    for (const row of ranked) {
-      row.hit = row.restOfSeasonTotal >= tierCut;
-      row.tierMargin = Number.isFinite(tierCut)
-        ? row.restOfSeasonTotal - tierCut
+    for (const row of mine) {
+      row.hit = row.restOfSeasonTotal >= onTotal;
+      row.hitPerGame = played(row) && row.restOfSeasonPerGame >= onRate;
+      row.tierMargin = Number.isFinite(onTotal)
+        ? row.restOfSeasonTotal - onTotal
         : 0;
     }
   }

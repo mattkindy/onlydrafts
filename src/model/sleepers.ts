@@ -58,6 +58,9 @@ export interface PlayerCut {
   leverageWorkShare: number;
   /** his last three weeks of share against everything before them */
   trend: number;
+  /** the same two trends apart, for the fits that read them separately */
+  targetTrend?: number;
+  carryTrend?: number;
   /** PPR points a game over the weeks he played up to the cut */
   ppgSoFar: number;
   gamesPlayed: number;
@@ -147,6 +150,24 @@ const FORM_TERMS: Term[] = [
 ];
 
 /**
+ * A player can score well and then get hurt, and he can score badly on
+ * work that pays in December, so the sets below take his own scoring
+ * rate back out and leave the fit the usage and the board.
+ */
+const SCORING_RATE = "points a game so far";
+
+const USAGE_TERMS = FORM_TERMS.filter((term) => term.name !== SCORING_RATE);
+
+/** the trend split back into the two kinds of work it was summed from */
+const SPLIT_TREND: Term[] = [
+  { name: "target trend", of: (cut) => cut.targetTrend ?? 0 },
+  { name: "carry trend", of: (cut) => cut.carryTrend ?? 0 },
+];
+
+const withSplitTrend = (terms: Term[]): Term[] =>
+  terms.flatMap((term) => (term.name === "trend" ? SPLIT_TREND : [term]));
+
+/**
  * What the in-season update says, which the rest of the form terms only
  * see the ingredients of. Kept apart from `FORM_TERMS` so a fit can be
  * taken with them and without them and the two compared.
@@ -156,20 +177,35 @@ const IN_SEASON_TERMS: Term[] = [
   { name: "role level", of: (cut) => cut.roleLevelPpg },
 ];
 
+const ROLE_LEVEL = IN_SEASON_TERMS[1]!;
+
 /** which form terms a fit reads */
-export type SleeperTermSet = "shipped" | "with in-season";
+export type SleeperTermSet =
+  | "shipped"
+  | "with in-season"
+  | "usage"
+  | "usage with role"
+  | "usage, split trend";
 
 const FORM_TERMS_BY_SET: Record<SleeperTermSet, Term[]> = {
   shipped: FORM_TERMS,
   "with in-season": [...FORM_TERMS, ...IN_SEASON_TERMS],
+  usage: USAGE_TERMS,
+  // The role level is what his usage pays with his own scoring rate left
+  // out, so it belongs with the usage sets rather than with the points.
+  "usage with role": [...USAGE_TERMS, ROLE_LEVEL],
+  "usage, split trend": withSplitTrend(USAGE_TERMS),
 };
 
 const allTerms = (terms: SleeperTermSet): Term[] =>
   [...PRICE_TERMS, ...FORM_TERMS_BY_SET[terms]];
 
+/** what a caller who does not ask for a set gets */
+export const SHIPPED_TERM_SET: SleeperTermSet = "shipped";
+
 /** every term a fit reads, in the order its weights come in */
 export const sleeperTermNames = (
-  terms: SleeperTermSet = "shipped",
+  terms: SleeperTermSet = SHIPPED_TERM_SET,
 ): readonly string[] => allTerms(terms).map((term) => term.name);
 
 export const SLEEPER_TERMS = sleeperTermNames();
@@ -179,7 +215,7 @@ const PRICE_COLUMNS = PRICE_TERMS.length + 1;
 
 /** the raw value of every term, in `sleeperTermNames` order */
 export const termValues = (
-  cut: PlayerCut, terms: SleeperTermSet = "shipped",
+  cut: PlayerCut, terms: SleeperTermSet = SHIPPED_TERM_SET,
 ): number[] => allTerms(terms).map((term) => term.of(cut));
 
 /** what each term averaged and varied by over the rows behind a fit */
@@ -247,7 +283,7 @@ export function fitSleepers(
   examples: SleeperExample[],
   options: SleeperFitOptions = {},
 ): SleeperFit {
-  const { lambdaShare = LAMBDA_SHARE, terms = "shipped" } = options;
+  const { lambdaShare = LAMBDA_SHARE, terms = SHIPPED_TERM_SET } = options;
   const columns = allTerms(terms);
 
   if (examples.length <= columns.length) {

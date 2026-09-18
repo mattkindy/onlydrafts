@@ -1192,13 +1192,31 @@ reasons come back with the score: each one is a term's weight times how
 far the player is from an average player at his position, and they add up
 to the score exactly.
 
-Points a game over the rest of a season divides by the games the player's
-club played rather than by the ones he played, so a back who tore
-something in November is worth what he was worth. Finishing inside the
-tier is read off total points over the same weeks against every player at
-the position, not only the cheap ones, which is why the oracle stops at
-0.698 and not at 1: a player can be the best of the cheap ones and still
-miss the top 24 receivers.
+Every method is scored under two readings of what happened after the cut,
+because the first one pays a ranking for durability nobody could see in
+week 6.
+
+The first reading is the one this bench has always used. Points a game
+divides by the games the player's club played rather than by the ones he
+played, and the starter tier is taken on total points, so a back who tore
+something in November falls out of the tier.
+
+The second reading divides by the games he played and takes the tier on
+that rate, among the candidates who played at least four games after the
+cut. Four is the floor because the rest of a season runs ten to fourteen
+weeks from these cuts: two big afternoons off a bench would otherwise
+land a player inside a tier, and six would throw away most of the players
+the reading exists to keep. 6776 of the 9110 cheap candidates clear it.
+Moving the floor to two or to six leaves every ordering below unchanged.
+
+The two readings agree about most players. 412 cheap candidates are
+inside the tier both ways, 146 only on the total, and 99 only on the
+rate.
+
+Either way the tier is read against every player at the position, not
+only the cheap ones, which is why the oracle stops at 0.698 and not at 1:
+a player can be the best of the cheap ones and still miss the top 24
+receivers.
 
 The bench covers 2019 to 2025 rather than 2016 to 2025. A price curve
 wants three earlier boards and the first board on disk is 2015, so 2018
@@ -1206,24 +1224,31 @@ is the earliest season that has one, and 2018 is then the earliest season
 with cuts, so there is nothing before it for a fit to read.
 
 ```
-method                    ppg a pick   prec@10   prec@20   hits@20   picks   worst season  median   best
-the price itself            8.55     0.238     0.250      105     420           7.30    8.23   9.99
-points a game so far       11.17     0.410     0.343      144     420           9.50   11.03  12.77
-raw work share              8.24     0.319     0.288      121     420           7.69    8.19   9.18
-the in-season level        11.06     0.376     0.312      131     420          10.08   11.03  12.11
-the role level             10.60     0.290     0.269      113     420           9.87   10.59  11.30
-the model                  10.02     0.438     0.398      167     420           8.98   10.11  10.93
-the model over the curve    8.26     0.338     0.260      109     420           6.74    8.12   9.72
-the model's own line       11.58     0.414     0.350      147     420          10.37   11.83  12.79
-the model plus in-season   10.02     0.438     0.393      165     420           9.05   10.45  10.72
-plus in-season, own line   11.48     0.414     0.338      142     420          10.21   11.51  12.69
-oracle: the rest known     15.45     0.852     0.698      293     420          13.87   15.59  16.67
+                         club games, on the total  games played, on the rate
+method                       ppg  p@10   p@20  h@20    ppg  p@10   p@20  h@20   picks
+the price itself            8.55  0.238  0.250  105  10.07  0.229  0.236   99     420
+points a game so far       11.17  0.410  0.343  144  13.43  0.410  0.329  138     420
+raw work share              8.24  0.319  0.288  121   9.68  0.267  0.231   97     420
+the in-season level        11.06  0.376  0.312  131  13.56  0.357  0.295  124     420
+the role level             10.60  0.290  0.269  113  13.09  0.276  0.233   98     420
+the model                  10.02  0.438  0.398  167  11.65  0.405  0.364  153     420
+the model over the curve    8.26  0.338  0.260  109   9.77  0.310  0.236   99     420
+the model's own line       11.58  0.414  0.350  147  13.73  0.438  0.345  145     420
+the model plus in-season   10.02  0.438  0.393  165  11.69  0.395  0.355  149     420
+plus in-season, own line   11.48  0.414  0.338  142  13.67  0.443  0.336  141     420
+usage, no points            9.00  0.386  0.343  144  10.46  0.343  0.310  130     420
+usage plus role             9.45  0.405  0.360  151  11.07  0.357  0.310  130     420
+usage, split trend          9.04  0.376  0.345  145  10.47  0.338  0.310  130     420
+usage, own line            10.96  0.338  0.321  135  12.74  0.376  0.312  131     420
+oracle: the rest known     15.45  0.852  0.698  293  16.23  0.762  0.626  263     420
+oracle: the rate known     13.99  0.686  0.562  236  17.14  0.790  0.586  246     420
 ```
 
-The last four rows are the in-season update, which is written up further
-down. The script also prints every method at each cut on its own, where
-by position its picks went, and how close each line comes to the rest of
-the season over the same candidates.
+The four in-season rows are written up further down and the four usage
+rows after them. The script also prints every method at each cut on its
+own under both readings, the spread across seasons, where by position its
+picks went, and how close each line comes to the rest of the season over
+the same candidates.
 
 What the 2018 to 2024 fit weighs, in points a game for each standard
 deviation of a term:
@@ -1252,6 +1277,16 @@ so far on precision at twenty in five seasons of seven. Those are two
 different questions and the score wins the second one. A league that
 needs a startable flex every week cares about that one, and a league
 chasing points at any position cares about the first.
+
+Some of that lead was the outcome and most of it was not. Taking the tier
+on the rate over the games each player played, the score reads 0.364
+against 0.329, so the gap narrows from 5.5 points of precision to 3.5 and
+the score still wins, four seasons of seven rather than five. The same
+happens to every method that ranks on who is scoring: points a game so
+far loses 6 of its 144 hits when a player is no longer punished for
+missing December, and the score loses 14 of its 167. So the score was
+being paid a little for picking players who stayed healthy, and it keeps
+the win without that.
 
 The plain projection wins the points outright. "The model's own line" is
 the same fit with nothing taken off, and it averages 11.58 a pick against
@@ -1360,6 +1395,54 @@ caretaker passers. So the earlier read is unchanged: the model still
 finds its hits through work share at back and tight end, 88 of its 167,
 still takes only 68 quarterbacks, and its worst calls are still one good
 game and a job that was never his.
+
+## Taking the points back out of the terms
+
+Points a game so far is the biggest term in the shipped fit, and a player
+can score well and then get hurt or score badly on work that pays in
+December. So three more fits drop it. "usage, no points" is the shipped
+set without it. "usage plus role" adds the role level back, which is what
+his usage pays with his own scoring rate left out. "usage, split trend"
+is the first one with the trend split into the target trend and the carry
+trend it was summed from.
+
+None of them ship. Against the shipped 0.398 at twenty they read 0.343,
+0.360 and 0.345, and on the rate against 0.364 all three read 0.310. The
+per-game outcome was where they had the best case and it does not arrive.
+They lose the points a pick too, 9.00 and 9.45 against 10.02.
+
+Splitting the trend changes nothing: 0.345 against 0.343, with the target
+trend at 0.19 and the carry trend at 0.30 where the sum was 0.38.
+
+With the points gone the work share takes the weight, 1.68 against 0.60,
+the price hit rate goes to 1.16 and games played to 0.78. The usage set
+swaps 167 of the model's 420 picks. It adds 37 hits and 130 misses and
+drops 60 hits and 107 misses, so it is not finding a different kind of
+player so much as a worse-ordered one. What it adds are backs whose share
+arrived before the points did, Bucky Irving in 2024 at weeks 4 and 6 and
+Courtland Sutton in 2024, and what it drops are quarterbacks who were
+already scoring and went on scoring, Josh Allen in 2020, Baker Mayfield
+in 2024 at three cuts, Dak Prescott in 2019 at all three.
+
+That is the finding underneath. The worry is a player whose points so far
+are a lie, and the fit's own answer is that most of the time they are
+not. A cheap player scoring 20 a game in week 6 usually keeps a good part
+of it, and the four to eight weeks the cut reads are long enough that
+this is true more often than it is false. Dropping the term to avoid the
+Andy Daltons costs more Dak Prescotts than it saves.
+
+The role level is the closest thing to a usage-only term that works, at
+0.360, and it gets there by being made of usage: a 2.00 weight on it in
+the usage fit against the 0.22 it takes beside the points. It is still
+under the shipped 0.398.
+
+The script prints the top ten after week 6 of 2025 under all three sets,
+so the swap can be read player by player. The shipped set leads with
+Javonte Williams, Rico Dowdle, Cam Skattebo, Jake Ferguson and Dallas
+Goedert, the first two on points a game so far. The usage set keeps
+Dowdle, Williams and Skattebo, all of them on work share, drops both
+tight ends, and brings in Jordan Mason, Kenny Gainwell and Jacory
+Croskey-Merritt. Adding the role level puts Goedert and Ferguson back.
 
 ## What to try next
 
