@@ -297,8 +297,8 @@ export function rescore(
   // the simulation speaks about rookies too, drawing them from the pools
   // at the share their draft slot buys
   const simAt = placesBy(onTheCurve, (p) =>
-    p.simulated
-      ? payFor(p.simulated, pays) - (bar[p.position] ?? 0)
+    p.walked
+      ? payFor(p.walked, pays) - (bar[p.position] ?? 0)
       : null);
 
   // kickers and defences are ours to order and the room's to place,

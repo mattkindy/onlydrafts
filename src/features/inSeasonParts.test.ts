@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { updateParts } from "./inSeasonParts.js";
+import { partsAtLevel, pointsOfLine, updateParts } from "./inSeasonParts.js";
 import { blankParts } from "./partsModel.js";
 import type { StatParts } from "./seasonSummary.js";
 import type { UsagePerGame } from "./inSeasonLevel.js";
@@ -85,5 +85,41 @@ describe("updateParts", () => {
     });
 
     expect(moved.receptions).toBeLessThanOrEqual(moved.targets);
+  });
+});
+
+describe("partsAtLevel", () => {
+  it("scores the level it was asked for", () => {
+    for (const ppg of [0.4, 4, 12.2, 30]) {
+      expect(pointsOfLine(partsAtLevel(anchor(), ppg))).toBeCloseTo(ppg, 4);
+    }
+  });
+
+  it("leaves the chances he gets where they are", () => {
+    const moved = partsAtLevel(anchor(), 6);
+
+    expect(moved.targets).toBeCloseTo(8, 5);
+    expect(moved.receptions).toBeLessThan(5);
+  });
+
+  it("raises his targets to cover the catches the level buys", () => {
+    const thin = { ...anchor(), targets: 5.2 };
+    const moved = partsAtLevel(thin, 4 * pointsOfLine(thin));
+
+    expect(moved.receptions).toBeGreaterThan(5.2);
+    expect(moved.targets).toBeGreaterThanOrEqual(moved.receptions);
+  });
+
+  it("stops at the cap rather than scaling a line off nothing", () => {
+    const moved = partsAtLevel(anchor(), 500);
+
+    expect(pointsOfLine(moved)).toBeLessThan(500);
+    expect(pointsOfLine(moved)).toBeCloseTo(5 * pointsOfLine(anchor()), 4);
+  });
+
+  it("leaves a line nothing pays for alone", () => {
+    const empty = { ...blankParts(), targets: 3 };
+
+    expect(partsAtLevel(empty, 9).targets).toBe(3);
   });
 });

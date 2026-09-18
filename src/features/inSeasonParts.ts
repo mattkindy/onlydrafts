@@ -1,16 +1,16 @@
 /**
- * The stat line behind an in-season level, moved with it.
+ * The stat line behind a level, and how the two are kept in step.
  *
- * The level update reads this season and lowers a player whose role
- * shrank, but his card still showed the preseason targets and yards, so
- * the page said eleven points a game off a hundred and seven targets.
+ * A player's level and his stat line come out of different fits, and
+ * nothing used to make them agree: the board shipped a receiver at
+ * eleven points of line beside one point a game. `partsAtLevel` is the
+ * one place that reconciles them, and every writer of a projection
+ * calls it and then reads the level back off the line it returns.
  *
- * Usage leads. Targets, carries and attempts per game come from what he
- * has been given this season, blended with the preseason line by the
- * same weight the level gives the season. Yards, catches and touchdowns
- * follow their opportunity, and then the scored parts move together
- * until the line rises and falls by the same ratio as the level. A
- * player who lost his role shows fewer targets, not a worse rate.
+ * The in-season update is the other half. Usage leads: targets,
+ * carries and attempts come from what he has been given this season,
+ * yards and catches and touchdowns follow their opportunity, and the
+ * scored parts then move together to meet the level.
  */
 
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
@@ -50,7 +50,8 @@ const MOST_RESCALE = 5;
  */
 const MIN_OPPORTUNITY = 0.5;
 
-function pointsOf(parts: StatParts): number {
+/** what the run's own league pays for one game of this line */
+export function pointsOfLine(parts: StatParts): number {
   return fantasyPoints(
     { ...parts, fumblesLost: 0, twoPointConversions: 0 },
     scoring(),
@@ -63,6 +64,40 @@ function blank(): StatParts {
 
     return out;
   }, {} as StatParts);
+}
+
+/**
+ * The line moved so that scoring it comes out at `ppg`.
+ *
+ * The scored parts move together, which leaves his rates where they
+ * stand against each other, and the chances he gets rise to cover the
+ * catches and completions the level buys him.
+ *
+ * Where the move would be wilder than MOST_RESCALE the line stops
+ * there, so a caller has to read the level back off what comes out
+ * rather than assume it landed on the level it asked for.
+ */
+export function partsAtLevel(parts: StatParts, ppg: number): StatParts {
+  const now = pointsOfLine(parts);
+
+  if (now <= 0 || ppg <= 0) {
+    return { ...parts };
+  }
+
+  const scale = Math.min(MOST_RESCALE, ppg / now);
+  const moved = { ...parts };
+
+  for (const part of SCORED) {
+    moved[part] *= scale;
+  }
+
+  // a catch needs a throw at him, and the level is what pays, so the
+  // chances follow the catches rather than the catches being cut back
+  // to chances nothing scaled with them
+  moved.targets = Math.max(moved.targets, moved.receptions);
+  moved.passAtt = Math.max(moved.passAtt, moved.passCmp);
+
+  return moved;
 }
 
 export interface PartsUpdate {
@@ -111,20 +146,5 @@ export function updateParts(update: PartsUpdate): StatParts {
     moved[part] = anchor[part] * (opportunityRatio.get(from) ?? 1);
   }
 
-  const was = pointsOf(anchor);
-  const now = pointsOf(moved);
-  const rescale =
-    was > 0 && now > 0
-      ? Math.min(MOST_RESCALE, (levelRatio * was) / now)
-      : 1;
-
-  for (const part of SCORED) {
-    moved[part] *= rescale;
-  }
-
-  // a catch he was never thrown is not a catch
-  moved.receptions = Math.min(moved.receptions, moved.targets);
-  moved.passCmp = Math.min(moved.passCmp, moved.passAtt);
-
-  return moved;
+  return partsAtLevel(moved, levelRatio * pointsOfLine(anchor));
 }

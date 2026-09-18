@@ -15,6 +15,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import {
+  disagreements, type StatedPlayer,
+} from "../src/features/boardAgreement.js";
+import { presets, type ScoringRules } from "../src/scoring/fantasyPoints.js";
+
 const run = promisify(execFile);
 
 /** how much of a board may go missing before it is wrong */
@@ -35,8 +40,17 @@ interface Slate {
 }
 
 interface Board {
-  players: unknown[];
+  players: StatedPlayer[];
+  /** the rules the build scored the board under, absent on an older file */
+  scoredBy?: ScoringRules;
 }
+
+/**
+ * How many players may disagree with their own stat line. None: two
+ * numbers for the same player is the fault this exists to catch, and a
+ * board that ships one of them has a broken fit behind it.
+ */
+const MOST_AT_ODDS = 0;
 
 const complaints: string[] = [];
 
@@ -91,6 +105,35 @@ async function checkBoard(season: number): Promise<void> {
     grumble(
       `the ${season} board fell from ${was} players to ${now.players.length}`);
   }
+}
+
+/**
+ * Whether each player's points a game are what his own stat line
+ * scores. The card prints both, the page prices him off one and the
+ * lineup advice off the other, so two different numbers for the same
+ * player is a bug wherever it comes from.
+ */
+async function checkBoardAgrees(season: number): Promise<void> {
+  const board = await read<Board>(`docs/data/board-${season}.json`);
+  // an older board did not say what it was scored under, and PPR is
+  // what a refresh without a league uses
+  const argued = disagreements(board.players, board.scoredBy ?? presets.ppr);
+
+  if (argued.length <= MOST_AT_ODDS) {
+    return;
+  }
+
+  const worst = [...argued]
+    .sort((a, b) => Math.abs(b.said - b.worth) - Math.abs(a.said - a.worth))
+    .slice(0, 5)
+    .map((said) =>
+      `${said.who} (${said.about}: ${said.worth.toFixed(1)} against ` +
+        `${said.said.toFixed(1)})`)
+    .join(", ");
+
+  grumble(
+    `${argued.length} players on the ${season} board disagree with their ` +
+      `own stat line: ${worst}`);
 }
 
 async function checkSlate(season: number, week: number): Promise<void> {
@@ -181,6 +224,7 @@ async function main(): Promise<void> {
   }
 
   await checkBoard(season);
+  await checkBoardAgrees(season);
   await checkWeekWentForward(index, season);
 
   if (complaints.length === 0) {

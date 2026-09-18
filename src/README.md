@@ -177,6 +177,28 @@ when you want to measure it again.
 | `KICKER_GAMES` staying one number for every kicker | `scripts/buildSite.ts` | `scripts/kickerSeasonEval.ts` |
 | The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
 
+## What the board says a player does in a game
+
+The board file is the only thing the site reads, and several of its
+fields look like the same claim. Only one of them is.
+
+| Field | Written by | Read by | What it means |
+| --- | --- | --- | --- |
+| `projected` | `features/preseason.ts`, the passers in `scripts/buildSite.ts`, then moved by `features/inSeasonBoard.ts` | the card, the sheet, `scoredHere`, `regressionPpg` | his line in a game. This is the answer. |
+| `ppg` | `scripts/buildSite.ts`, from the same line | recomputed by the app in the league in front of it | `projected` scored by the build's own rules |
+| `game` | `scripts/buildSite.ts`, `ev` off `ppg` and the spread off the walk's dealt games | the card's spread | the spread of one game of his |
+| `sim` | `sim/playerSeason.ts` | `games`, the par band | a mean season total and the games it dealt him. Divided out it is a couple of percent off `ppg`, because a mean product is not a product of means. |
+| `walked` | `scripts/buildSite.ts`, from `data/kept/played-<season>.json` | one voice in where the board places him | what the August walk handed him. Not his rate: it runs a busy receiver at close to double the targets he gets. |
+| `simulated` | `scripts/buildSite.ts` | the card and the spread for kickers and defences | a kicker's and a defence's line, who have no `projected` |
+| `weeks[].of` | `scripts/buildSite.ts` | the card's week chart, `app/lib/spread.ts` | that week over his own average. A week a slate covers takes the slate's own line. |
+| `blend` | `features/boardOrder.ts` | the file's default sort, then recomputed by the app | a place on the board, not a rate |
+
+`projected` and `ppg` have to agree, and
+`features/boardAgreement.ts` fails a refresh that ships a board where
+they do not. Whatever writes a projection calls `partsAtLevel` and
+then reads the level back off the line, so there is one number and not
+two.
+
 ## What is still doubled up
 
 Three drive walks exist. `drive.ts` came first and takes yards from a

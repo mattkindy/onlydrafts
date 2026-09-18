@@ -338,9 +338,8 @@ function Facts({ p, teams, costs, aside, slim }: {
  * against when it looks too big.
  */
 function StatLine({ p }: { p: Player }) {
-  // the simulation's line leads, since it is the model the board trusts
-  // most; the regression speaks only for players it never saw
-  const parts = p.simulated ?? p.projected;
+  // his own projected line, which is what the points beside it score
+  const parts = p.projected ?? p.simulated;
   const moved = movedBy(p);
   const season = lineOver(parts, p.position, p.games ?? 17, moved);
   const game = lineOver(parts, p.position, 1, moved);

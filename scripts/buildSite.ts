@@ -55,6 +55,8 @@ import {
   type Rates,
 } from "../src/features/componentWeek.js";
 import { updateBoardLevels } from "../src/features/inSeasonBoard.js";
+import { pointsOfLine } from "../src/features/inSeasonParts.js";
+import { disagreements } from "../src/features/boardAgreement.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import {
   buildResidualModel,
@@ -63,10 +65,7 @@ import {
 } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
 import { parseCsv } from "../src/data/csv.js";
-import { buildWorld } from "../src/features/playedWorld.js";
-import {
-  walkWeek, WEEKLY_WALK_SHARE, DEALT_WIDER,
-} from "../src/features/walkWeek.js";
+import { DEALT_WIDER } from "../src/features/walkWeek.js";
 import { kickerParts, BANDS } from "../src/features/kickerFromWalk.js";
 import { kickerSeason, type Fixture } from "../src/features/kickerSeason.js";
 import {
@@ -828,15 +827,9 @@ async function takePasserLines(
       continue;
     }
 
-    const line = fitted.says(his, "QB");
-    p.projectedParts = line as unknown as StatParts;
-    p.projectedPpg = fantasyPoints({
-      passYds: line.passYds, passTd: line.passTd,
-      interceptions: line.interceptions,
-      rushYds: line.rushYds, rushTd: line.rushTd,
-      receptions: line.receptions, recYds: line.recYds, recTd: line.recTd,
-      fumblesLost: 0, twoPointConversions: 0,
-    }, scoring());
+    const line = fitted.says(his, "QB") as unknown as StatParts;
+    p.projectedParts = line;
+    p.projectedPpg = pointsOfLine(line);
     taken++;
   }
 
@@ -965,12 +958,12 @@ async function main(): Promise<void> {
 
   const index: { season: number; week: number }[] = [];
 
-  const fixtures = weeks.length
-    ? parseCsv(await readFile(
-        join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"))
-    : [];
-  /** each walked week's points per player, for the weekly mix below */
-  const weekWalked = new Map<number, Map<string, number>>();
+  /**
+   * Our own line for each week a slate was written, by player, so the
+   * board's card and the slate a lineup is set against say the same
+   * thing about the same week.
+   */
+  const slateLine = new Map<number, Map<string, number>>();
   const priors = await componentPriors(season);
   const prevStats = await loadPlayerStats(season - 1);
   const thisSeason = hasPlayerStats(season)
@@ -1004,38 +997,30 @@ async function main(): Promise<void> {
   }
 
   for (const week of weeks) {
-    /**
-     * The week played out by the walk. It is no longer part of the slate,
-     * which ranks on our projection and Sleeper's, but the board's weekly
-     * numbers still mix it in, so the weeks asked for here are walked.
-     */
-    const walkPositions = new Map<string, string>();
-
-    for (const s of await loadPlayerStats(season - 1)) {
-      walkPositions.set(s.playerId, s.position);
-    }
-
-    const walkWorld = await buildWorld(season, week, true, walkPositions);
-    const walked = walkWeek(walkWorld, season, week, fixtures, scoring(), 60);
-    weekWalked.set(week, walked.points);
-    console.log(`  the walk played ${walked.played} fixtures of week ${week}`);
-
     const histories = earlyHistories.get(week) ?? new Map<string, History>();
+    const ours = new Map<string, number>();
     const players = (await weeklyProspectiveForWeek(season, week, games))
-      .map((e) =>
-        slateRow(
+      .map((e) => {
+        const line = earlyWeekLine(
+          week,
+          e.position,
+          predictWeeklyByPosition(weekly, e),
+          histories.get(e.playerId),
+          priors,
+        );
+
+        ours.set(e.playerId, line);
+
+        return slateRow(
           residuals,
           e,
-          earlyWeekLine(
-            week,
-            e.position,
-            predictWeeklyByPosition(weekly, e),
-            histories.get(e.playerId),
-            priors,
-          ),
+          line,
           projections.get(projectionKey(season, week, e.playerId)),
           quiet.has(projectionKey(season, week, e.playerId)),
-        ));
+        );
+      });
+
+    slateLine.set(week, ours);
     const rows = [
       ...players,
       ...(await defenceSlateRows(season, week, games)),
@@ -1445,24 +1430,7 @@ async function main(): Promise<void> {
     const lifts = sharedOut(his.map((w) =>
       settingLift(p.position, settingOf(p.teamId, w.week))));
 
-    /**
-     * The weeks the walk has played mix its number in, at the shares
-     * the weekly bench settled: even at running back, a quarter
-     * elsewhere. Mixed as views of the same week the two order it
-     * better than either alone, .414 pooled against .330 and .401.
-     */
-    const share = WEEKLY_WALK_SHARE[p.position] ?? 0.25;
-    const mixed = his.map((w, i) => {
-      const ridgePoints = w.points * lifts[i]!;
-      const walkPoints = weekWalked.get(w.week)?.get(p.playerId);
-
-      return {
-        ...w,
-        points: walkPoints === undefined
-          ? ridgePoints
-          : share * walkPoints + (1 - share) * ridgePoints,
-      };
-    });
+    const lifted = his.map((w, i) => ({ ...w, points: w.points * lifts[i]! }));
 
     /**
      * The early weeks lean on his usage and his rates instead of his
@@ -1470,18 +1438,34 @@ async function main(): Promise<void> {
      * so early there is almost nothing of this season for it to stand
      * on yet.
      */
+    const shape = anchorToSeason(lifted, p.projectedPpg).map((w) => ({
+      ...w,
+      points: earlyWeekLine(
+        w.week,
+        p.position,
+        w.points,
+        earlyHistories.get(w.week)?.get(p.playerId),
+        priors,
+      ),
+    }));
+
+    /**
+     * A week a slate covers takes the slate's own number.
+     *
+     * The board used to mix the live walk into the one week it had
+     * walked and leave the other sixteen on the season shape, so
+     * Jeremiyah Love's card read 26.3 for week 2 against 16.6 for his
+     * season and 10.4 on the slate a lineup is set against.
+     */
     weeklyByPlayer.set(
       p.playerId,
-      anchorToSeason(mixed, p.projectedPpg).map((w) => ({
-        ...w,
-        points: earlyWeekLine(
-          w.week,
-          p.position,
-          w.points,
-          earlyHistories.get(w.week)?.get(p.playerId),
-          priors,
-        ),
-      })),
+      shape.map((w) => {
+        const said = slateLine.get(w.week)?.get(p.playerId);
+
+        // the slate lets a fringe player go under zero, and a week on
+        // the card is a multiple of his own average, which does not
+        return said === undefined ? w : { ...w, points: Math.max(0, said) };
+      }),
     );
   }
 
@@ -1926,11 +1910,27 @@ async function main(): Promise<void> {
    * the walk's opinion is taken the same way. The bar per position is
    * the last player a twelve team league starts.
    */
+  /**
+   * Scored here rather than taken from the file's own total, which was
+   * written under standard rules: every one of the 416 totals in the
+   * 2026 file matches a line scored at nothing a catch, so a PPR board
+   * was placing receivers by a walk that paid them nothing for 130
+   * catches. The stored total covers the players the file has no line
+   * for.
+   */
   const walkSaid = new Map<string, number>();
 
   for (const p of board) {
     const id = idOf.get(p.key);
-    const says = id === undefined ? undefined : walkSays.get(id);
+
+    if (id === undefined) {
+      continue;
+    }
+
+    const made = walkMade.get(id);
+    const says = made
+      ? pointsOfLine(made as unknown as StatParts)
+      : walkSays.get(id);
 
     if (says !== undefined) {
       walkSaid.set(p.key, says);
@@ -1961,15 +1961,16 @@ async function main(): Promise<void> {
   }
 
   /**
-   * What the walk says he does in a game, before anybody scores it.
+   * What the walk handed him in a game, under its own name because it
+   * is not his rate. The walk runs the busiest receivers at close to
+   * double the targets they really get, so a page that led with it said
+   * Puka Nacua scored 35.9 a game where the model has him at 21.5. Only
+   * the board's ordering reads it now, and it travels as parts because
+   * a league paying a point a catch orders receivers differently from
+   * one paying nothing.
    *
-   * A league paying a point a catch orders receivers differently from
-   * one paying nothing, so the parts travel and the page applies its
-   * own rules to them.
-   */
-  /**
-   * Divided by the games the walk really dealt him, not the fixtures
-   * on the calendar. The absences live inside the season now, so a
+   * Divided by the games the walk really dealt him, not the fixtures on
+   * the calendar. The absences live inside the season now, so a
    * calendar divisor diluted a fragile player's game and his expected
    * games then priced the missing weeks a second time.
    */
@@ -1986,7 +1987,7 @@ async function main(): Promise<void> {
       : ((walkSampled.get(id) ?? 0) / passes) || (walkGames.get(id) ?? 0);
 
     if (made && dealt > 0) {
-      (p as unknown as { simulated: Record<string, number> }).simulated =
+      (p as unknown as { walked: Record<string, number> }).walked =
         Object.fromEntries(Object.entries(made)
           .map(([part, n]) => [part, Number((n / dealt).toFixed(2))]));
     }
@@ -2025,11 +2026,32 @@ async function main(): Promise<void> {
     schedule[team] = its;
   }
 
+  /**
+   * The rules the file was scored under travel with it. Every page
+   * rescores the parts in the league in front of it, so nothing on the
+   * site reads these, but a reader cannot tell whether ppg and the line
+   * beside it agree without knowing what a catch was paid.
+   */
   await writeFile(
     join(DOCS, "data", `board-${season}.json`),
-    JSON.stringify({ season, players: [...board, ...others], schedule }),
+    JSON.stringify({
+      season, scoredBy: scoring(), players: [...board, ...others], schedule,
+    }),
   );
   console.log(`board: ${board.length} players`);
+
+  const argued = disagreements(board, scoring());
+
+  for (const said of argued.slice(0, 10)) {
+    console.warn(
+      `  ${said.who}: ${said.about} says ${said.worth.toFixed(1)} where the ` +
+        `board says ${said.said.toFixed(1)}`);
+  }
+
+  console.log(
+    argued.length === 0
+      ? "every player's points a game match his own line"
+      : `${argued.length} players do not agree with their own line`);
 
   await writeFile(
     join(DOCS, "data", "index.json"),
