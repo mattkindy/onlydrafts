@@ -55,6 +55,7 @@ import {
   type Rates,
 } from "../src/features/componentWeek.js";
 import { updateBoardLevels } from "../src/features/inSeasonBoard.js";
+import { takePasserLines } from "../src/features/passerLine.js";
 import { pointsOfLine } from "../src/features/inSeasonParts.js";
 import { disagreements } from "../src/features/boardAgreement.js";
 import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
@@ -121,7 +122,7 @@ import {
   blendedPlace, leanFor, placesBy, spreadOver,
 } from "../src/features/boardOrder.js";
 import {
-  fitJoint, fitJointLine, LINE_PARTS, type LinePart, type Parts,
+  fitJoint, type Parts,
 } from "../src/features/jointParts.js";
 import type { StatParts } from "../src/features/seasonSummary.js";
 import { partsIn } from "../src/data/advancedParts.js";
@@ -255,6 +256,13 @@ const IMPLIED_WITHOUT_A_LINE = 22.3;
 
 /** Sleeper ranks the early weeks better than our own line does */
 const SLEEPER_THROUGH_WEEK = 4;
+
+/**
+ * The last week the board's season anchor writes the slate instead of
+ * the weekly ridge. scripts/earlyWeekEval.ts has the anchor ahead by
+ * 0.25 points a player at week 2 and behind from week 3 on.
+ */
+const ANCHOR_THROUGH_WEEK = 2;
 
 const DEFENCE_DRAWS = 2000;
 const KICKER_DRAWS = 2000;
@@ -740,103 +748,6 @@ async function partsSays<T extends { position: string }>(
 }
 
 /**
- * A quarterback's stat line comes from one model over the parts of his
- * play. Marked on 2024 and 2025 against the regression the board
- * shipped, the joint line wins passers both seasons, 3.8 and 4.0
- * points of error against 4.2 and 4.7, with everything else split, so
- * the passers move and the other positions keep the regression's line.
- */
-async function takePasserLines(
-  players: { playerId: string; position: string; projectedPpg: number;
-    projectedParts?: StatParts }[],
-  season: number,
-): Promise<void> {
-  const learn: {
-    parts: Parts; position: string; line: Record<LinePart, number>;
-  }[] = [];
-
-  for (let year = 2018; year < season - 1; year++) {
-    const before = await partsIn(year);
-    const after = new Map<string, {
-      games: number; line: Record<LinePart, number>;
-    }>();
-    const isQb = new Set<string>();
-
-    for (const s of await loadPlayerStats(year + 1)) {
-      if (s.week > 18) {
-        continue;
-      }
-
-      if (s.position === "QB") {
-        isQb.add(s.playerId);
-      }
-
-      const so = after.get(s.playerId) ?? {
-        games: 0,
-        line: Object.fromEntries(LINE_PARTS.map((p) => [p, 0])) as
-          Record<LinePart, number>,
-      };
-      so.games++;
-      so.line.passYds += s.statLine.passYds;
-      so.line.passTd += s.statLine.passTd;
-      so.line.interceptions += s.statLine.interceptions;
-      so.line.rushYds += s.statLine.rushYds;
-      so.line.rushTd += s.statLine.rushTd;
-      so.line.receptions += s.statLine.receptions;
-      so.line.recYds += s.statLine.recYds;
-      so.line.recTd += s.statLine.recTd;
-      so.line.passAtt += s.passing.attempts;
-      so.line.passCmp += s.passing.completions;
-      so.line.carries += s.carries;
-      so.line.targets += s.targets;
-      after.set(s.playerId, so);
-    }
-
-    for (const [who, his] of before) {
-      const next = after.get(who);
-
-      if (!next || next.games < 6 || his.games < 4 || !isQb.has(who)) {
-        continue;
-      }
-
-      learn.push({
-        parts: his,
-        position: "QB",
-        line: Object.fromEntries(LINE_PARTS.map((p) =>
-          [p, next.line[p] / next.games])) as Record<LinePart, number>,
-      });
-    }
-  }
-
-  if (learn.length < 60) {
-    return;
-  }
-
-  const fitted = fitJointLine(learn);
-  const lastYear = await partsIn(season - 1);
-  let taken = 0;
-
-  for (const p of players) {
-    if (p.position !== "QB") {
-      continue;
-    }
-
-    const his = lastYear.get(p.playerId);
-
-    if (!his || his.games < 4) {
-      continue;
-    }
-
-    const line = fitted.says(his, "QB") as unknown as StatParts;
-    p.projectedParts = line;
-    p.projectedPpg = pointsOfLine(line);
-    taken++;
-  }
-
-  console.log(`${taken} passers take the joint line`);
-}
-
-/**
  * Vite cannot empty docs first, since the data lives there too, so a
  * scheduled build would collect a stale bundle a week forever.
  */
@@ -996,6 +907,94 @@ async function main(): Promise<void> {
       w, historiesForWeek(thisSeason, prevStats, w, scoring()));
   }
 
+  // season draft board with replacement value, for the draft view
+  const world = await buildPreseasonWorld(season);
+  console.log(
+    `${await takePasserLines(world.players, season)} passers take the joint line`,
+  );
+  // what the season has shown so far moves the level everything else is
+  // worked out from, so it has to land before anybody reads it, and the
+  // slate below is one of the readers
+  await updateBoardLevels(world.players, season);
+
+  const { projectDraftExamples } = await import("../src/features/seasonModel.js");
+  const draftExamples = await projectDraftExamples(season, world.data);
+  const exampleById = new Map(draftExamples.map((e) => [e.playerId, e]));
+
+  // where and when each fixture is played, so a kicker's week can be a
+  // freezing night in Buffalo rather than another mild afternoon
+  const gameRows = parseCsv(await readFile(
+    join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
+  const whereEach = new Map<string, Setting>();
+
+  for (const k of kickoffsIn(gameRows, season)) {
+    const indoors = k.indoors;
+
+    for (const [team, rest] of [
+      [k.homeTeam, k.homeRest], [k.awayTeam, k.awayRest],
+    ] as [string, number][]) {
+      whereEach.set(`${team}|${k.week}`, {
+        indoors, night: k.hour >= 18, restDays: rest,
+      });
+    }
+  }
+
+  const settingOf = (team: string, week: number): Setting =>
+    whereEach.get(`${team}|${week}`) ??
+      { indoors: false, night: false, restDays: 7 };
+
+  const saidInput = await preseasonWeeklyInput(world, exampleById);
+  const saidWeekly = preseasonWeekly(saidInput);
+
+  /**
+   * Each player's season shaped over his fixtures and then rescaled so
+   * it averages the level the season so far has moved him to. This is
+   * the board's own week chart, and week 2 of the slate is read off it.
+   */
+  const anchoredWeeks = new Map<string, WeeklyProjection[]>();
+
+  for (const p of world.players) {
+    const his = saidWeekly.get(p.playerId);
+
+    if (!his) {
+      continue;
+    }
+
+    /**
+     * The roof, the kickoff time and the short week, and nothing else.
+     *
+     * Game script was in here and it is out again. It is a true thing
+     * about football, and the part of it that survives to August does
+     * not predict a week: against 2025 it went with what happened at
+     * -0.004, and it dragged the roof from 0.050 down to 0.038.
+     */
+    const lifts = sharedOut(his.map((w) =>
+      settingLift(p.position, settingOf(p.teamId, w.week))));
+    const lifted = his.map((w, i) => ({ ...w, points: w.points * lifts[i]! }));
+
+    anchoredWeeks.set(p.playerId, anchorToSeason(lifted, p.projectedPpg));
+  }
+
+  /**
+   * Week 2 is where the weekly ridge is worst: it reads one box score
+   * through coefficients learned on four game means, and the board's
+   * anchor beats it there by a quarter of a point a player. From week 3
+   * the ridge is ahead again. A player the board has no level for keeps
+   * the ridge whatever the week.
+   */
+  const slateLineFor = (week: number, e: WeeklyExample): number => {
+    const ridge = predictWeeklyByPosition(weekly, e);
+
+    if (week > ANCHOR_THROUGH_WEEK) {
+      return ridge;
+    }
+
+    const anchored = anchoredWeeks.get(e.playerId)
+      ?.find((w) => w.week === week);
+
+    return anchored ? anchored.points : ridge;
+  };
+
   for (const week of weeks) {
     const histories = earlyHistories.get(week) ?? new Map<string, History>();
     const ours = new Map<string, number>();
@@ -1004,7 +1003,7 @@ async function main(): Promise<void> {
         const line = earlyWeekLine(
           week,
           e.position,
-          predictWeeklyByPosition(weekly, e),
+          slateLineFor(week, e),
           histories.get(e.playerId),
           priors,
         );
@@ -1039,17 +1038,6 @@ async function main(): Promise<void> {
     index.push({ season, week });
   }
 
-  // season draft board with replacement value, for the draft view
-  const world = await buildPreseasonWorld(season);
-  await takePasserLines(world.players, season);
-  // what the season has shown so far moves the level everything else is
-  // worked out from, so it has to land before anybody reads it
-  await updateBoardLevels(world.players, season);
-
-  const { projectDraftExamples } = await import("../src/features/seasonModel.js");
-  const draftExamples = await projectDraftExamples(season, world.data);
-  const exampleById = new Map(draftExamples.map((e) => [e.playerId, e]));
-
   const weekOpp = new Map<string, { week: number; opponent: string; home: boolean }[]>();
 
   for (const game of world.games) {
@@ -1069,10 +1057,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // where and when each fixture is played, so a kicker's week can be a
-  // freezing night in Buffalo rather than another mild afternoon
-  const gameRows = parseCsv(await readFile(
-    join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
   const climate = fitClimate(readingsFrom(gameRows));
   const fixturesFor = new Map<string, Fixture[]>();
 
@@ -1084,24 +1068,6 @@ async function main(): Promise<void> {
       ]);
     }
   }
-
-  const whereEach = new Map<string, Setting>();
-
-  for (const k of kickoffsIn(gameRows, season)) {
-    const indoors = k.indoors;
-
-    for (const [team, rest] of [
-      [k.homeTeam, k.homeRest], [k.awayTeam, k.awayRest],
-    ] as [string, number][]) {
-      whereEach.set(`${team}|${k.week}`, {
-        indoors, night: k.hour >= 18, restDays: rest,
-      });
-    }
-  }
-
-  const settingOf = (team: string, week: number): Setting =>
-    whereEach.get(`${team}|${week}`) ??
-      { indoors: false, night: false, restDays: 7 };
 
   const factors = (playerId: string, ppg: number) => {
     const e = exampleById.get(playerId);
@@ -1409,28 +1375,13 @@ async function main(): Promise<void> {
    * constant chosen by hand says.
    */
   const weeklyByPlayer = new Map<string, WeeklyProjection[]>();
-  const saidInput = await preseasonWeeklyInput(world, exampleById);
-  const saidWeekly = preseasonWeekly(saidInput);
 
   for (const p of world.players) {
-    const his = saidWeekly.get(p.playerId);
+    const anchored = anchoredWeeks.get(p.playerId);
 
-    if (!his) {
+    if (!anchored) {
       continue;
     }
-
-    /**
-     * The roof, the kickoff time and the short week, and nothing else.
-     *
-     * Game script was in here and it is out again. It is a true thing
-     * about football, and the part of it that survives to August does
-     * not predict a week: against 2025 it went with what happened at
-     * -0.004, and it dragged the roof from 0.050 down to 0.038.
-     */
-    const lifts = sharedOut(his.map((w) =>
-      settingLift(p.position, settingOf(p.teamId, w.week))));
-
-    const lifted = his.map((w, i) => ({ ...w, points: w.points * lifts[i]! }));
 
     /**
      * The early weeks lean on his usage and his rates instead of his
@@ -1438,7 +1389,7 @@ async function main(): Promise<void> {
      * so early there is almost nothing of this season for it to stand
      * on yet.
      */
-    const shape = anchorToSeason(lifted, p.projectedPpg).map((w) => ({
+    const shape = anchored.map((w) => ({
       ...w,
       points: earlyWeekLine(
         w.week,

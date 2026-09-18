@@ -2,13 +2,13 @@
  * What belongs on the slate in weeks 2 to 4, when the weekly ridge is
  * reading one box score through coefficients learned on four game means.
  *
- * Five lines are scored against what players actually did: the ridge as
- * the slate builds it today, the moving season anchor the board keeps,
- * the ridge with its recent columns pulled toward each player's previous
- * season, the ridge retrained so it sees one game rows, and last
- * season's points a game as the rival. The ceiling is a ridge fitted on
- * the season it is scoring. Weeks 5 to 8 run as a control.
- * Everything fitted is fitted on seasons before the one being scored.
+ * Lines scored against what players actually did: the ridge as it was,
+ * the season anchor the board keeps, the ridge with its recent columns
+ * pulled toward each player's previous season, the ridge retrained on
+ * one game rows, the pair the slate now ships, and last season's points
+ * a game as the rival. The ceiling is a ridge fitted on the season it
+ * scores. Weeks 5 to 8 are a control, and everything fitted is fitted
+ * on seasons before the one being scored.
  *
  * Run: npx tsx scripts/earlyWeekEval.ts
  */
@@ -97,12 +97,20 @@ const shrunkLabel = (k: number) => `C shrunk, k=${k}`;
 const RETRAINED = "D retrained on one game rows";
 const RIVAL = "rival prevPpg";
 const CEILING = "ceiling in-sample ridge";
+const COMBINED = "shipped: B at wk2, C k=1 after";
+
+/** how much prior weight the shipped line uses from week 3 on */
+const SHIPPED_K = 1;
+
+/** the last week the shipped line takes the anchor instead of the ridge */
+const ANCHOR_THROUGH_WEEK = 2;
 
 const LABELS = [
   RIDGE,
   ANCHOR,
   ...PRIOR_GRID.map(shrunkLabel),
   RETRAINED,
+  COMBINED,
   RIVAL,
   CEILING,
 ];
@@ -378,6 +386,17 @@ for (const season of EVAL_SEASONS) {
           actual,
         });
       }
+
+      record(COMBINED, week, {
+        predicted:
+          week <= ANCHOR_THROUGH_WEEK
+            ? anchored
+            : predictWeeklyByPosition(
+              models.get(shrunkLabel(SHIPPED_K))!,
+              shrinkRecentMeans(raw, priors, SHIPPED_K),
+            ),
+        actual,
+      });
     }
   }
 }
@@ -391,7 +410,7 @@ function tableOf(
   of: (pairs: Scored[]) => number,
   digits: number,
 ): void {
-  const header = ["line".padEnd(28)]
+  const header = ["line".padEnd(32)]
     .concat(WEEKS.map((w) => `wk${w}`.padEnd(6)))
     .concat(["wk2-4".padEnd(7), "wk5-8"]);
   console.log(header.join(" "));
@@ -403,7 +422,7 @@ function tableOf(
     );
     console.log(
       [
-        label.padEnd(28),
+        label.padEnd(32),
         ...cells,
         of(pooled(label, EARLY_WEEKS)).toFixed(3).padEnd(7),
         of(pooled(label, CONTROL_WEEKS)).toFixed(3),
@@ -447,12 +466,12 @@ function pairedAgainstRidge(label: string, weeks: number[]): string {
 }
 
 console.log("\nerror saved against the shipped ridge, same rows:\n");
-console.log(["line".padEnd(28), "weeks 2-4".padEnd(20), "weeks 5-8"].join(" "));
+console.log(["line".padEnd(32), "weeks 2-4".padEnd(20), "weeks 5-8"].join(" "));
 
 for (const label of LABELS) {
   console.log(
     [
-      label.padEnd(28),
+      label.padEnd(32),
       pairedAgainstRidge(label, EARLY_WEEKS).padEnd(20),
       pairedAgainstRidge(label, CONTROL_WEEKS),
     ].join(" "),
