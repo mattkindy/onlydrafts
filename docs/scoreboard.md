@@ -27,10 +27,13 @@ Every row is the same three instruments:
 
 | | board, season | board, first 24 | walk column, season | weekly, pooled |
 |---|---|---|---|---|
-| now | .7477 | .7147 | .7030 | .3915 on 2025 alone |
+| now | .7530 | .6989 | .7117 | .358 on 2025 alone |
 
 The weekly figure is a two seed mean at forty draws on 2025 by itself,
-where the yardstick of a man's average so far is .380. The walk passed
+where the yardstick of a man's average so far read .380 when the rows
+above it were taken and reads .341 now, so a figure from an older row
+cannot be held against a new one. The pair either side of a change,
+read at the same time, is the only comparison that means anything. The walk passed
 it for the first time in September 2026, on the change that draws a
 man's cut of the touches once a game. Before that it had never beaten
 the yardstick, and the earlier readings that said it had were noise.
@@ -73,6 +76,13 @@ change, and swept out to the whole board below.
 | a thin man leaning the way his position leans there | .7476 | .7128 | .7024 | .388 on 2025 alone |
 | a thin spot's window grown outward instead of in shells | .7474 | .7128 | .7013 | .379 on 2025 alone |
 | and a pooled play counted by how near it was drawn from | .7477 | .7147 | .7030 | .3915 on 2025 alone |
+| the sack and the ball thrown away credited to nobody | .7530 | .6989 | .7117 | .358 on 2025 alone |
+
+That last row is a matched pair read at the same time, and the same run
+put the board it replaces at .7519, .7147, .7143 and .365, so the
+season and the week are flat and the first 24 is what it cost. The
+column figures are the walk's own opinion under the same eval's name
+for it, the played out games with silent men at their regression.
 
 These two rows belong together, and the pair is the best the walk has
 read. `ring` widens a pooled lookup when the exact cell is thin, and its

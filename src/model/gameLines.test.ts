@@ -75,6 +75,41 @@ describe("linesFrom", () => {
     expect(linesFrom(game, sides).get("thrower")?.interceptions).toBe(1);
   });
 
+  /** one of each kind of pass play with no receiver on it */
+  const unaimedGame = (): PlayedGame => ({
+    points: { A: 0, B: 0 }, drives: { A: 1, B: 0 },
+    possessions: [{
+      team: "A", margin: 0, startedAt: 75,
+      drive: drive({
+        plays: [
+          {
+            state, call: "pass", player: "", yards: -7, scored: false,
+            caught: false, unaimed: "sack",
+          },
+          {
+            state, call: "pass", player: "", yards: 0, scored: false,
+            caught: false, unaimed: "away",
+          },
+          {
+            state, call: "pass", player: "", yards: 0, scored: false,
+            caught: false, unaimed: "flag",
+          },
+        ],
+      }),
+    }],
+  });
+
+  it("counts the ball thrown away as the only attempt of the three", () => {
+    expect(linesFrom(unaimedGame(), sides).get("thrower")?.passAtt).toBe(1);
+  });
+
+  it("throws to nobody on a play nobody was on", () => {
+    const lines = linesFrom(unaimedGame(), sides);
+
+    expect([...lines.values()].every((line) => (line.targets ?? 0) === 0))
+      .toBe(true);
+  });
+
   it("leaves a run-away turnover off the passer", () => {
     const game: PlayedGame = {
       points: { A: 0, B: 0 }, drives: { A: 1, B: 0 },

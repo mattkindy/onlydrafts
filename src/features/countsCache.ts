@@ -135,7 +135,7 @@ export async function countsFor(
   // the counting changes shape sometimes, and an older file would come
   // back missing whatever was added since. What the depth pools keep
   // is in the name for the same reason.
-  const at = join(KEPT, `counts15${POOL_WASTE ? "w" : ""}` +
+  const at = join(KEPT, `counts16${POOL_WASTE ? "w" : ""}` +
     `-${maxSeason}-${Math.round(stamp)}.json`);
   const already = await readFile(at, "utf8").catch(() => "");
 

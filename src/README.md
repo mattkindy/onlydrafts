@@ -162,6 +162,8 @@ when you want to measure it again.
 | Which parts of a week's setting survive, the roof and the kickoff time | `features/weekSetting.ts` | `scripts/knowableWeekEval.ts` |
 | `KEEPS`, how much of each mechanic a player takes into next season | `features/mechanicsProjection.ts` | `scripts/mechanicsCarryEval.ts` |
 | The walk's weekly numbers being cached on disk at all | `features/walkWeeklyCache.ts` | written by `scripts/walkWeekCache.ts` |
+| The season the board reads the walk out of | `data/kept/played-<season>.json` | written by `scripts/playedSeason.ts` |
+| How often a failed throw reached nobody, and what a sack cost | `features/fitUnaimed.ts` | `scripts/walkVolumeEval.ts` |
 | `COMPONENT_THROUGH_WEEK`, where the component line hands over to the ridge | `features/componentWeek.ts` | the component week finding in `scripts/README.md` |
 | `SHIPPED_FIT`, whether the price curve is windowed or a line on log price | `features/marketPrice.ts` | `scripts/marketPriceProbe.ts` |
 | The game script effects being pooled over a side's fixtures | `features/gameScript.ts` | `scripts/aggregateGameScript.ts` |
@@ -188,7 +190,7 @@ fields look like the same claim. Only one of them is.
 | `ppg` | `scripts/buildSite.ts`, from the same line | recomputed by the app in the league in front of it | `projected` scored by the build's own rules |
 | `game` | `scripts/buildSite.ts`, `ev` off `ppg` and the spread off the walk's dealt games | the card's spread | the spread of one game of his |
 | `sim` | `sim/playerSeason.ts` | `games`, the par band | a mean season total and the games it dealt him. Divided out it is a couple of percent off `ppg`, because a mean product is not a product of means. |
-| `walked` | `scripts/buildSite.ts`, from `data/kept/played-<season>.json` | one voice in where the board places him | what the August walk handed him. Not his rate: it runs a busy receiver at close to double the targets he gets. |
+| `walked` | `scripts/buildSite.ts`, from `data/kept/played-<season>.json` | one voice in where the board places him | what the August walk handed him, over the games it dealt him. Not his rate: it throws about a quarter more at the men it likes most than they get. |
 | `simulated` | `scripts/buildSite.ts` | the card and the spread for kickers and defences | a kicker's and a defence's line, who have no `projected` |
 | `weeks[].of` | `scripts/buildSite.ts` | the card's week chart, `app/lib/spread.ts` | that week over his own average. A week a slate covers takes the slate's own line. |
 | `blend` | `features/boardOrder.ts` | the file's default sort, then recomputed by the app | a place on the board, not a rate |

@@ -1962,8 +1962,8 @@ async function main(): Promise<void> {
 
   /**
    * What the walk handed him in a game, under its own name because it
-   * is not his rate. The walk runs the busiest receivers at close to
-   * double the targets they really get, so a page that led with it said
+   * is not his rate. It throws about a quarter more at the men it likes
+   * most than they really get, so a page that led with it said
    * Puka Nacua scored 35.9 a game where the model has him at 21.5. Only
    * the board's ordering reads it now, and it travels as parts because
    * a league paying a point a catch orders receivers differently from

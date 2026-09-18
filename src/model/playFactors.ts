@@ -92,6 +92,15 @@ export interface PlayFactors {
   /** whether a throw for this many yards was caught, drawn */
   caught: (gained: number, uniform: () => number) => boolean;
   /**
+   * Whether this failed throw reached nobody at all, and what it cost
+   * when it did. Asked only of a throw already drawn as incomplete, so
+   * a sack and a ball thrown away take their share of those rather
+   * than adding to them.
+   */
+  reachesNobody?: (
+    state: PlayState, uniform: () => number,
+  ) => { yards: number; sack: boolean } | undefined;
+  /**
    * A whole play drawn as the player's own, yards and catch together,
    * or nothing when he is too thin to sample and the pooled path
    * should answer instead.

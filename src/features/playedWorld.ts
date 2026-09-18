@@ -32,6 +32,7 @@ import {
   type PerPlayerLevel, type PlayRow,
 } from "./fitPlayFactors.js";
 import { fitFourthDown, climbTo, type FourthRow } from "./fitFourthDown.js";
+import { fitUnaimed } from "./fitUnaimed.js";
 import { fitPlayClock, timeBetween } from "./fitPlayClock.js";
 import { fitTargetDepth } from "./targetDepth.js";
 import { fitFormation } from "./fitFormation.js";
@@ -499,6 +500,7 @@ export async function buildWorld(
     split, lately, pairing: pairing.bend, counted, positions,
     perPlayer: options.componentRates ? component?.perPlayer : undefined,
     standIn: options.standIn ? component?.standIn : undefined,
+    unaimed: fitUnaimed(learnRows),
     /**
      * Where a side stands before the snap. It says nothing about the
      * call that the pools do not already know, and a great deal about
