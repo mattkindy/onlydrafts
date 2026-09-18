@@ -28,6 +28,13 @@ const LEAST_KEPT = 0.9;
 /** below this many players a slate is broken however the count moved */
 const LEAST_ON_A_SLATE = 200;
 
+/**
+ * How many players a week's injury report has to doubt before a slate
+ * with nobody questionable reads as a failed fetch. One or two of them
+ * are often backups the slate never lists.
+ */
+const ENOUGH_DOUBTED = 5;
+
 interface Index {
   weeks: { season: number; week: number }[];
   boardSeason: number;
@@ -157,18 +164,25 @@ async function checkSlate(season: number, week: number): Promise<void> {
   // report already covers can be judged this way.
   const reported = await injuryRowsFor(season, week);
 
-  if (reported > 0 && skill.length > 0 && !skill.some((p) => p.questionable)) {
+  if (
+    reported >= ENOUGH_DOUBTED && skill.length > 0 &&
+    !skill.some((p) => p.questionable)
+  ) {
     grumble(
       `nobody on the ${season} week ${week} slate is questionable, though ` +
       `the injury file lists ${reported} players that week`);
   }
 }
 
+/** the positions a slate lists, so a hurt guard is not counted here */
+const ON_A_SLATE = ["QB", "RB", "FB", "WR", "TE", "K"];
+
 /**
- * How many players the clubs gave a status that week. A row with the
- * status left blank is a club filing its practice report before it has
- * ruled anybody in or out, and a week of those says nothing about
- * whether the slate should have somebody questionable on it.
+ * How many players the clubs listed as questionable that week at a
+ * position a slate covers. A row with the status left blank is a club
+ * filing its practice report before it has ruled anybody in or out, and
+ * a week where the only doubts are a safety and two linemen says
+ * nothing about whether the slate should have somebody questionable.
  */
 async function injuryRowsFor(season: number, week: number): Promise<number> {
   const text = await readFile(
@@ -184,13 +198,16 @@ async function injuryRowsFor(season: number, week: number): Promise<number> {
   const head = (lines[0] ?? "").split(",");
   const at = head.indexOf("week");
   const saying = head.indexOf("report_status");
+  const plays = head.indexOf("position");
 
   return lines
     .slice(1)
     .filter((line) => {
       const cells = line.split(",");
 
-      return Number(cells[at]) === week && (cells[saying] ?? "").trim() !== "";
+      return Number(cells[at]) === week &&
+        (cells[saying] ?? "").trim() === "Questionable" &&
+        ON_A_SLATE.includes((cells[plays] ?? "").trim());
     })
     .length;
 }
