@@ -1810,8 +1810,9 @@ Full            638   0.745
 
 A questionable player who does play scores 86% of what the same player
 averaged over his weeks that season with nothing said about him, 7.1
-points against 8.3, over 1,997 weeks. That is a further markdown the app
-does not yet take.
+points against 8.3, over 1,997 weeks. Whether that belongs on a
+projection as a second discount, past what `playChance` already prices
+in, is measured below.
 
 Four rules for the chance he plays, fitted on 2018 to 2022 and scored by
 Brier score on 2023 to 2025, against an oracle that knew the scoring
@@ -1833,14 +1834,38 @@ of each other, and practice participation buys a further 0.001. The app
 ships the measured rates by status, since the live providers send the
 status word and never say who practised.
 
-## What to try next
+## Whether the 0.86 belongs on a line
 
-Fold the 0.86 in. A questionable player is worth 0.64 of a week times
-0.86 of his usual rate, which is 0.55, not 0.64. The reason to wait is
-that neither projection is independent of the injury: Sleeper's number
-already reacts to the word, so multiplying both by the same rate may be
-counting it twice. Measuring the two projections against what the player
-scored, split by status, would settle it.
+`questionablePlayedEval.ts` measured the two lines against what a
+questionable player who played then scored, PPR, for 2024 to 2026, the
+seasons `data/curated/sleeperWeekly.csv` covers. 382 questionable
+listings matched both a stat row and a Sleeper number; 8,082 unlisted
+players the same weeks are the control.
+
+```
+line        factor 1.0   0.86        fit factor   ceiling
+ours             4.686       4.620    4.620 (0.86)     4.611 (0.9)
+sleeper          4.651       4.548    4.546 (0.88)    4.546 (0.88)
+```
+
+Multiplying either line by 0.86 does lower its error. It also lowers the
+control group's error by nearly as much: 0.86 knocks 0.066 points of MAE
+off the questionable group's ridge line and 0.063 off the control
+group's, and it knocks 0.103 off questionable's Sleeper line against
+0.143 off control's. A skewed week of fantasy points rewards any
+across-the-board discount, and the control group has nothing wrong with
+it, so most of what 0.86 buys is that skew rather than anything about
+being questionable. Netting the control group's own drop out of the
+questionable group's leaves 0.003 of MAE for the ridge line and -0.039
+for Sleeper's, both inside noise. Split by practice, questionable's own
+ridge ratio runs from 0.82 at DNP to 1.00 at Limited to 0.87 at Full,
+which does not look like a rate a single factor should chase either.
+
+Neither line gets a `QUESTIONABLE_PLAYED_SHARE` constant. `playChance`
+already prices how often he plays; the app does not fold a second
+discount into what he scores when he does.
+
+## What to try next
 
 Practice participation from a live source. It is worth 0.001 on the
 Brier score, which is nothing, but the split is wide: 43% for a player
