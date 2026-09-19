@@ -44,6 +44,12 @@ interface Said {
 }
 
 export interface WaiverPrices {
+  /**
+   * Every free agent the filter lets through. A player worth nothing to
+   * your lineup this season can still be the one the draft board got
+   * wrong, so the sleepers table reads this rather than the capped list.
+   */
+  wire: Add[];
   /** the wire the page shows: the filter and the cap applied */
   listed: Add[];
   drops: Drop[];
@@ -102,12 +108,11 @@ export function useWaiverPrices(
     };
   }, [players, league, schedule]);
 
-  const listed = useMemo(
-    () => (said?.adds ?? [])
-      .filter((row) => matchesFilter(row.p, posFilter))
-      .slice(0, LISTED),
+  const wire = useMemo(
+    () => (said?.adds ?? []).filter((row) => matchesFilter(row.p, posFilter)),
     [said, posFilter],
   );
+  const listed = useMemo(() => wire.slice(0, LISTED), [wire]);
   const top = useMemo(() => listed.slice(0, PRICED), [listed]);
   const wanted = top.map((row) => row.p.key).join("|");
 
@@ -141,5 +146,7 @@ export function useWaiverPrices(
     [top, nets],
   );
 
-  return { listed, drops: said?.drops ?? [], priced, working: said === null };
+  return {
+    wire, listed, drops: said?.drops ?? [], priced, working: said === null,
+  };
 }

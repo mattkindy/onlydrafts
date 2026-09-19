@@ -17,6 +17,7 @@ import { useMemo, useState } from "preact/hooks";
 
 import { normalizeName } from "../lib/store.ts";
 import type { Player } from "../lib/scoring.ts";
+import { claimWords, reasonWords } from "../lib/sleeperWords.ts";
 import type { League, Matchup } from "../lib/providers.ts";
 import { myGameIn, type Lines } from "../lib/matchups.ts";
 import type { Slate, SlateRow } from "../lib/slate.ts";
@@ -339,6 +340,66 @@ function missingWeek(
 /** the positions a reader filters by, the way the draft board lists them */
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
 
+/** how far down the sleeper list one screen goes */
+const SLEEPERS_SHOWN = 8;
+
+/**
+ * The free agents the draft board underpriced, biggest claim first.
+ *
+ * The rest of this page prices a move by what it does to how often you
+ * win, which says nothing about whether a player is about to be worth
+ * more than he cost. This asks that instead: who is taking a starter's
+ * work on a late round price.
+ */
+function Sleepers(
+  { rows, onMore }: { rows: Add[]; onMore: (p: Player) => void },
+) {
+  const ranked = rows
+    .filter((row) => (row.p.sleeper?.score ?? 0) > 0)
+    .sort((a, b) => b.p.sleeper!.score - a.p.sleeper!.score)
+    .slice(0, SLEEPERS_SHOWN);
+
+  if (ranked.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <h2>sleepers</h2>
+      <p class="hint">
+        What the model makes of each free agent against what he cost on
+        draft day, as of week {ranked[0]!.p.sleeper!.week}.
+      </p>
+      <table class="line pairs">
+        <thead>
+          <tr>
+            <th>player</th>
+            <th>pos</th>
+            <th>over his price</th>
+            <th>why</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ranked.map((row) => {
+            const said = row.p.sleeper!;
+
+            return (
+              <tr key={row.p.key} onClick={() => onMore(row.p)}>
+                <td data-label="player">
+                  <span class="who link">{row.p.name}</span>
+                </td>
+                <td data-label="pos">{row.p.position}</td>
+                <td data-label="over his price">{claimWords(said)}</td>
+                <td data-label="why">{reasonWords(said)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
 export function Waivers(props: Props) {
   const { players, league, posFilter, rows, games } = props;
   const [query, setQuery] = useState("");
@@ -349,7 +410,7 @@ export function Waivers(props: Props) {
   const { states, trouble } = useScoreboard(
     props.season ?? undefined, props.week ?? undefined);
 
-  const { drops, listed, priced, working } = useWaiverPrices(
+  const { drops, listed, priced, wire, working } = useWaiverPrices(
     players, league, props.schedule, posFilter);
 
   const lines: Lines = useMemo(
@@ -391,6 +452,8 @@ export function Waivers(props: Props) {
   const hidden = listed.length - worth.length - rest.length;
   const best = worth[0] ?? null;
   const wanted = normalizeName(query.trim());
+  const matching = (row: { p: Player }) =>
+    !wanted || normalizeName(row.p.name).includes(wanted);
   const paidFor = new Map(priced.map(({ row, paid }) => [row.p.key, paid]));
 
   /**
@@ -401,7 +464,7 @@ export function Waivers(props: Props) {
    */
   const adds = useMemo(() => {
     const every = [...worth.map(({ row }) => row), ...rest]
-      .filter((row) => !wanted || normalizeName(row.p.name).includes(wanted))
+      .filter(matching)
       .map((row) => ({ row, paid: paidFor.get(row.p.key) ?? null }));
 
     if (span === "season") {
@@ -416,8 +479,7 @@ export function Waivers(props: Props) {
       .sort((a, b) => b.by - a.by);
   }, [worth, rest, wanted, span, week]);
 
-  const yours = drops
-    .filter((row) => !wanted || normalizeName(row.p.name).includes(wanted));
+  const yours = drops.filter(matching);
   const missing = missingWeek(
     props.week, rows, states, ours, props.gamesStatus);
   const dropSlot = "who takes his slot";
@@ -608,6 +670,8 @@ export function Waivers(props: Props) {
           {hidden} hidden
         </p>
       )}
+
+      <Sleepers rows={wire.filter(matching)} onMore={props.onMore} />
 
       <h2>what dropping each of yours costs</h2>
       <table class="line pairs">

@@ -48,7 +48,7 @@ const LAST_WEEK = 18;
 /* ---------- one season, read once ---------- */
 
 /** everything one season's stat file says, keyed by player id */
-interface SeasonWeeks {
+export interface SeasonWeeks {
   positions: Map<string, string>;
   names: Map<string, string>;
   points: Map<string, Map<number, number>>;
@@ -58,7 +58,7 @@ interface SeasonWeeks {
   clubBy: Map<string, Map<number, string>>;
 }
 
-function readSeason(weeks: PlayerWeekStats[]): SeasonWeeks {
+export function readSeason(weeks: PlayerWeekStats[]): SeasonWeeks {
   const read: SeasonWeeks = {
     positions: new Map(), names: new Map(), points: new Map(),
     clubWeeks: new Map(), clubBy: new Map(),
@@ -87,7 +87,9 @@ function readSeason(weeks: PlayerWeekStats[]): SeasonWeeks {
 }
 
 /** the board keyed by name alone, since a stat file and a board can disagree */
-function boardByName(board: Map<string, AdpEntry>): Map<string, AdpEntry[]> {
+export function boardByName(
+  board: Map<string, AdpEntry>,
+): Map<string, AdpEntry[]> {
   const byName = new Map<string, AdpEntry[]>();
 
   for (const entry of board.values()) {
@@ -174,7 +176,7 @@ export interface Row {
 }
 
 /** everything one season needs before its cuts can be written out */
-interface SeasonInput {
+export interface SeasonInput {
   season: number;
   read: SeasonWeeks;
   curve: MarketPrice;
@@ -186,7 +188,7 @@ interface SeasonInput {
   inSeason: InSeasonFit;
 }
 
-function cutsFor(input: SeasonInput, week: number): Row[] {
+export function cutsFor(input: SeasonInput, week: number): Row[] {
   const { season, read, curve, byName, counted } = input;
   const usage = leverageUsage(counted, {
     season, through: week, positions: read.positions,
@@ -350,7 +352,7 @@ function casesFrom(
  * priced season has no candidates behind it to fit weights on and takes
  * the shipped constants, which is why it stays out of the scoring.
  */
-function inSeasonFitFor(
+export function inSeasonFitFor(
   season: number, played: Map<number, PlayedSeason>, earlier: Row[],
 ): InSeasonFit {
   const roleRows: RoleLevelRow[] = [];
@@ -386,7 +388,7 @@ export interface Built {
 }
 
 /** every season's games the update can read, the training years included */
-async function playedFor(
+export async function playedFor(
   seasons: number[],
 ): Promise<Map<number, PlayedSeason>> {
   const first = Math.min(...seasons) - ROLE_SEASONS;

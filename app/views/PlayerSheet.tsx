@@ -5,6 +5,7 @@ import { useEffect } from "preact/hooks";
 import type { Pays, Player } from "../lib/scoring.ts";
 import { payFor } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
+import { claimWords, reasonWords } from "../lib/sleeperWords.ts";
 import { lineOver, movedBy } from "../lib/statLine.ts";
 
 interface Props {
@@ -104,6 +105,8 @@ export function PlayerSheet(props: Props) {
   const { p, teams } = props;
   const g = p.game;
   const sim = p.sim;
+  const said = p.sleeper;
+  const why = said ? reasonWords(said) : "";
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -141,6 +144,14 @@ export function PlayerSheet(props: Props) {
               </>
             : " · undrafted"}
         </div>
+
+        {said && (
+          <div class="fact">
+            against his price: <b>{claimWords(said)}</b> as of week{" "}
+            {said.week}
+            {why && `, on ${why}`}
+          </div>
+        )}
 
         {p.games !== undefined && (
           <>

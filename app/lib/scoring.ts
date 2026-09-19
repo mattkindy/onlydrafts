@@ -10,6 +10,28 @@
 export type Parts = Record<string, number>;
 export type Pays = Record<string, number>;
 
+/** one term of the sleeper claim, and what it is worth in points a game */
+export interface SleeperReason {
+  term: string;
+  points: number;
+}
+
+/**
+ * What the model makes of a player against what he cost on draft day,
+ * as of a week already played. `score` is the gap: the points a game he
+ * is worth over a player bought at the same price whose form is average
+ * for his position.
+ */
+export interface Sleeper {
+  week: number;
+  price: number;
+  score: number;
+  modelPpg: number;
+  pricePpg: number;
+  /** the terms behind the gap, biggest first */
+  reasons: SleeperReason[];
+}
+
 export interface Player {
   name: string;
   key: string;
@@ -47,6 +69,8 @@ export interface Player {
   bye?: number | null;
   touches?: number | null;
   rookie?: boolean;
+  /** absent before a week has been played, and on a player nobody counted */
+  sleeper?: Sleeper | null;
   games?: number;
   /** worked out for the league in front of you */
   ppg?: number;

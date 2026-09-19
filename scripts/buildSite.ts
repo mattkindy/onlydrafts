@@ -55,6 +55,7 @@ import {
   type Rates,
 } from "../src/features/componentWeek.js";
 import { updateBoardLevels } from "../src/features/inSeasonBoard.js";
+import { sleepersNow, type SleepersNow } from "../src/features/sleepersNow.js";
 import { takePasserLines } from "../src/features/passerLine.js";
 import { pointsOfLine } from "../src/features/inSeasonParts.js";
 import { disagreements } from "../src/features/boardAgreement.js";
@@ -138,6 +139,34 @@ const OLD = join(DOCS, "weekly");
 function argOf(flag: string, fallback: string): string {
   const index = process.argv.indexOf(flag);
   return index === -1 ? fallback : process.argv[index + 1]!;
+}
+
+/** how many of the terms behind a sleeper claim the board writes out */
+const REASONS_KEPT = 3;
+
+/**
+ * What a player is worth against his draft price, rounded to what the
+ * page shows. A player nobody counted work for has no claim, and the
+ * board leaves him a null the way it does for the rest of his card.
+ */
+function sleeperOf(claims: SleepersNow, playerId: string) {
+  const said = claims.scores.get(playerId);
+
+  if (!said) {
+    return null;
+  }
+
+  return {
+    week: said.week,
+    price: Math.round(said.price),
+    score: Number(said.score.toFixed(1)),
+    modelPpg: Number(said.modelPpg.toFixed(1)),
+    pricePpg: Number(said.pricePpg.toFixed(1)),
+    reasons: said.reasons.slice(0, REASONS_KEPT).map((one) => ({
+      term: one.term,
+      points: Number(one.points.toFixed(1)),
+    })),
+  };
 }
 
 /** how many seasons of weeks the component model's rate priors read */
@@ -1481,6 +1510,17 @@ async function main(): Promise<void> {
     dealtGames,
   );
   const simById = new Map(sims.map((s) => [s.playerId, s]));
+  // the last week everybody has finished, since a week half played
+  // would read a Thursday night game as a whole round of them
+  const claims = await sleepersNow(
+    season, comingWeek(games, season) - 1, games,
+  );
+
+  if (claims.skipped) {
+    console.log(`no sleeper scores on the board: ${claims.skipped}`);
+  } else {
+    console.log(`sleeper scores: ${claims.scores.size} players`);
+  }
 
   const board = world.players
     .map((p) => {
@@ -1523,6 +1563,7 @@ async function main(): Promise<void> {
         adpBy: adpBoth.get(`${normalizeName(p.name)}|${p.position}`) ?? null,
         bye: world.byeWeek.get(p.teamId) ?? null,
         rookie: p.rookie ?? false,
+        sleeper: sleeperOf(claims, p.playerId),
         game: {
           ev: Number(p.projectedPpg.toFixed(1)),
           q1: perGame(0.25, shape?.q1),

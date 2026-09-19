@@ -202,6 +202,17 @@ fields look like the same claim. Only one of them is.
 | `simulated` | `scripts/buildSite.ts` | the card and the spread for kickers and defences | a kicker's and a defence's line, who have no `projected` |
 | `weeks[].of` | `scripts/buildSite.ts` | the card's week chart, `app/lib/spread.ts` | that week over his own average. A week a slate covers takes the slate's own line, and through week 2 the slate takes this, so the two agree by construction. |
 | `blend` | `features/boardOrder.ts` | the file's default sort, then recomputed by the app | a place on the board, not a rate |
+| `sleeper` | `features/sleepersNow.ts`, through `scripts/buildSite.ts` | the waiver page's sleepers table and the player card | what he is worth against what he cost, as of the last week everybody finished |
+
+`sleeper` is `{ week, price, score, modelPpg, pricePpg, reasons }`, and
+`reasons` is the three biggest terms as `{ term, points }`. `score` is
+the gap between `modelPpg` and `pricePpg`: the points a game he beats a
+player bought at the same price whose form is average for his position.
+It says nothing about `projected` and nothing reads it back, so a board
+with it and a board without it are the same board everywhere else. It
+is null before a week has been played, on a player nobody counted work
+for, and for the whole board when the season has no price curve or no
+rows in `data/curated/leverage.csv` yet.
 
 `projected` and `ppg` have to agree, and
 `features/boardAgreement.ts` fails a refresh that ships a board where
