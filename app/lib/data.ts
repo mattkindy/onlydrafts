@@ -6,7 +6,7 @@
  * knows the file's field names.
  */
 
-import type { Player } from "./scoring.ts";
+import type { Player, Sleeper } from "./scoring.ts";
 
 export interface Meta {
   /**
@@ -35,6 +35,7 @@ interface FileRow {
   adpBy?: Player["adpBy"];
   bye?: number | null;
   rookie?: boolean;
+  sleeper?: Sleeper | null;
   plus?: string[];
   minus?: string[];
   game?: Record<string, number> | null;
@@ -83,6 +84,7 @@ export async function loadBoard(season: number): Promise<Board> {
       bye: row.bye ?? null,
       touches: row.touches ?? null,
       rookie: row.rookie ?? false,
+      sleeper: row.sleeper ?? null,
       game: row.game ?? null,
       sim: row.sim ?? null,
       ppg: row.ppg ?? 0,

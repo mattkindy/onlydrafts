@@ -105,6 +105,24 @@ const showTable = (at: HTMLElement) => {
 /** the board itself, apart from the cards of your own drafted players */
 const shortlist = (at: HTMLElement) => at.querySelector(".cards")!;
 
+/** what each section of a page is called, in the order they are drawn */
+const headings = (at: HTMLElement) =>
+  Array.from(at.querySelectorAll("h2")).map((h) => h.textContent);
+
+/** a sleeper claim of the shape the board writes */
+const A_CLAIM: Player["sleeper"] = {
+  week: 1,
+  price: 143,
+  score: 2.1,
+  modelPpg: 11.4,
+  pricePpg: 9.3,
+  reasons: [
+    { term: "work share", points: 1.6 },
+    { term: "points a game so far", points: 0.9 },
+    { term: "games played", points: -0.4 },
+  ],
+};
+
 describe("the views", () => {
   const league = aLeague();
   const players = boardFor(league);
@@ -142,9 +160,44 @@ describe("the views", () => {
       await new Promise((settle) => setTimeout(settle, 25));
     }
 
-    expect(where.querySelectorAll("h2").length).toBe(2);
+    // by heading rather than by count, since a board with sleeper
+    // claims on it draws a third table between these two
+    expect(headings(where)).toContain("waiver wire adds");
+    expect(headings(where)).toContain("what dropping each of yours costs");
     expect(where.querySelectorAll("table.line tbody tr").length)
       .toBeGreaterThan(5);
+  });
+
+  it("lists the free agents the board underpriced", async () => {
+    const taken = new Set(
+      league.allRosters.flatMap((r) => r.keys.map((m) => m.key)));
+    // one claim and no others, so the table is the same whatever the
+    // board on disk happens to say this week
+    const only = players.map((p) => ({ ...p, sleeper: null }));
+    const free = only.find((p) => !taken.has(p.key))!;
+
+    render(
+      <Waivers
+        players={only.map((p) => p.key === free.key
+          ? { ...p, sleeper: A_CLAIM } : p)}
+        league={league} posFilter="ALL" rows={new Map()}
+        games={[]} schedule={null} season={2026} week={null}
+        slate={null} roster={null} listed={new Map()}
+        onMore={() => {}}
+      />,
+      where,
+    );
+
+    for (let i = 0; i < 40 && !where.querySelector("h2"); i++) {
+      await new Promise((settle) => setTimeout(settle, 25));
+    }
+
+    expect(headings(where)).toContain("sleepers");
+    expect(where.textContent).toContain(free.name);
+    expect(where.textContent).toContain("+2.1 a game over his price");
+    expect(where.textContent).toContain("work share, scoring so far");
+    // the term dragging his claim down is not a reason to add him
+    expect(where.textContent).not.toContain("games played");
   });
 
   it("draws the draft board", async () => {
@@ -169,13 +222,28 @@ describe("the views", () => {
   it("draws one player's card", () => {
     render(
       <PlayerSheet
-        p={players[0]!} plus={["a factor"]} minus={[]} teams={12}
-        onClose={() => {}}
+        p={{ ...players[0]!, sleeper: null }} plus={["a factor"]} minus={[]}
+        teams={12} onClose={() => {}}
       />,
       where,
     );
     expect(where.textContent).toContain(players[0]!.name);
     expect(where.querySelectorAll(".wk").length).toBeGreaterThan(5);
+    expect(where.textContent).not.toContain("against his price");
+  });
+
+  it("says what a card's player is worth against his price", () => {
+    render(
+      <PlayerSheet
+        p={{ ...players[0]!, sleeper: A_CLAIM }} plus={[]} minus={[]}
+        teams={12} onClose={() => {}}
+      />,
+      where,
+    );
+    expect(where.textContent).toContain(
+      "against his price: +2.1 a game over his price as of week 1, " +
+        "on work share, scoring so far",
+    );
   });
 });
 
