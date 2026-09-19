@@ -2,9 +2,13 @@
  * Putting the in-season update on the board.
  *
  * The model itself is arithmetic over a player's games. This reads
- * those games out of the weekly stats and the snap counts, fits the
- * role model on earlier seasons, and moves each player's projection to
- * what the season so far says he is worth from here.
+ * those games out of the weekly stats, the snap counts and the roster,
+ * fits the role model on earlier seasons, and moves each player's
+ * projection to what the season so far says he is worth from here.
+ *
+ * A week a player dressed for and has no stat row in counts as a game
+ * that paid nothing, so a backup comes down the board while his club
+ * plays on without him.
  *
  * The weights are fitted rather than picked, by the rest-of-season
  * backtest that marks this against the preseason anchor, against a
@@ -12,8 +16,18 @@
  * answer.
  */
 
-import { loadPlayerStats, loadSnapCounts } from "../data/nflverse.js";
+import {
+  loadPlayerStats,
+  loadSnapCounts,
+  type PlayerWeekStats,
+  type SnapCountWeek,
+} from "../data/nflverse.js";
 import { normalizeName } from "../data/names.js";
+import {
+  dressedKey,
+  loadDressedWeeks,
+  type DressedWeek,
+} from "./dressedWeeks.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { scoring } from "../scoring/active.js";
 import { pointsOfLine, updateParts } from "./inSeasonParts.js";
@@ -59,10 +73,16 @@ export interface SeasonWeeks {
   filedAt: Map<string, string>;
 }
 
-/** a season's games as the update reads them */
-export async function readPlayedWeeks(season: number): Promise<SeasonWeeks> {
-  const stats = await loadPlayerStats(season).catch(() => []);
-  const snaps = await loadSnapCounts(season).catch(() => []);
+/**
+ * A season's games, from the stat rows and from the weeks a player was
+ * available for but has no stat row in. The second kind are games he
+ * played for nothing, which is what a backup's season is made of.
+ */
+export function weeksFrom(
+  stats: PlayerWeekStats[],
+  snaps: SnapCountWeek[],
+  dressed: DressedWeek[],
+): SeasonWeeks {
   const share = new Map<string, number>();
 
   for (const snap of snaps) {
@@ -74,6 +94,7 @@ export async function readPlayedWeeks(season: number): Promise<SeasonWeeks> {
   const weeks = new Map<string, PlayedWeek[]>();
   const byName = new Map<string, string>();
   const filedAt = new Map<string, string>();
+  const scored = new Set<string>();
 
   for (const row of stats) {
     if (row.week > LAST_WEEK) {
@@ -82,6 +103,7 @@ export async function readPlayedWeeks(season: number): Promise<SeasonWeeks> {
 
     byName.set(row.playerId, row.playerName);
     filedAt.set(row.playerId, row.position);
+    scored.add(dressedKey(row.playerId, row.week));
 
     const his = weeks.get(row.playerId) ?? [];
     his.push({
@@ -97,11 +119,46 @@ export async function readPlayedWeeks(season: number): Promise<SeasonWeeks> {
     weeks.set(row.playerId, his);
   }
 
+  for (const week of dressed) {
+    if (week.week > LAST_WEEK || scored.has(dressedKey(week.playerId, week.week))) {
+      continue;
+    }
+
+    // the stat rows never name him, so his own file has to
+    if (!byName.has(week.playerId)) {
+      byName.set(week.playerId, week.name);
+      filedAt.set(week.playerId, week.position);
+    }
+
+    const his = weeks.get(week.playerId) ?? [];
+    his.push({
+      week: week.week,
+      points: 0,
+      snapShare:
+        share.get(`${normalizeName(week.name)}|${week.teamId}|${week.week}`) ?? 0,
+      targets: 0,
+      carries: 0,
+      airYards: 0,
+      passAttempts: 0,
+    });
+    weeks.set(week.playerId, his);
+  }
+
   for (const his of weeks.values()) {
     his.sort((a, b) => a.week - b.week);
   }
 
   return { weeks, byName, filedAt };
+}
+
+/** a season's games as the update reads them */
+export async function readPlayedWeeks(season: number): Promise<SeasonWeeks> {
+  const [stats, snaps] = await Promise.all([
+    loadPlayerStats(season).catch(() => []),
+    loadSnapCounts(season).catch(() => []),
+  ]);
+
+  return weeksFrom(stats, snaps, await loadDressedWeeks(season, stats));
 }
 
 /**
@@ -181,6 +238,8 @@ export async function updateBoardLevels(
   for (const player of players) {
     const weeks = read.weeks.get(player.playerId);
 
+    // nobody has dressed him and he has not scored, so the season says
+    // nothing about him and he keeps his August number
     if (!weeks || weeks.length === 0) {
       continue;
     }

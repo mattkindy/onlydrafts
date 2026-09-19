@@ -55,6 +55,7 @@ import {
   type Rates,
 } from "../src/features/componentWeek.js";
 import { updateBoardLevels } from "../src/features/inSeasonBoard.js";
+import { loadDressedWeeks } from "../src/features/dressedWeeks.js";
 import { sleepersNow, type SleepersNow } from "../src/features/sleepersNow.js";
 import { takePasserLines } from "../src/features/passerLine.js";
 import { pointsOfLine } from "../src/features/inSeasonParts.js";
@@ -923,6 +924,20 @@ async function main(): Promise<void> {
 
     byWeek.set(s.week, parts);
     playedByPlayer.set(s.playerId, byWeek);
+  }
+
+  // A man who dressed and never touched the ball played that game and
+  // scored nothing, which the card should say rather than leaving his
+  // week blank the way it does for one nobody has played yet.
+  for (const dressed of await loadDressedWeeks(season, thisSeason)) {
+    const byWeek = playedByPlayer.get(dressed.playerId) ?? new Map();
+
+    if (byWeek.has(dressed.week)) {
+      continue;
+    }
+
+    byWeek.set(dressed.week, {});
+    playedByPlayer.set(dressed.playerId, byWeek);
   }
   /**
    * What each player had behind him going into each week the component
