@@ -42,13 +42,24 @@ interface Term {
 const at = (position: string) => (cut: BenchCut) =>
   cut.position === position ? 1 : 0;
 
+/**
+ * What the three terms about a pair are called. The sleeper fit reads the
+ * same three, so both sides name them from here and a reader comparing
+ * two sets of weights sees one term rather than two.
+ */
+export const BENCH_TERM_NAMES = {
+  starterGap: "the starter against his price",
+  capital: "the backup's draft capital",
+  snapTrend: "his snaps over three weeks",
+} as const;
+
 const BENCH_TERMS: Term[] = [
-  { name: "the starter against his price", of: (cut) => cut.starterGap },
+  { name: BENCH_TERM_NAMES.starterGap, of: (cut) => cut.starterGap },
   {
-    name: "the backup's draft capital",
+    name: BENCH_TERM_NAMES.capital,
     of: (cut) => (cut.backupCapital ? 1 : 0),
   },
-  { name: "his snaps over three weeks", of: (cut) => cut.snapTrend },
+  { name: BENCH_TERM_NAMES.snapTrend, of: (cut) => cut.snapTrend },
   { name: "is RB", of: at("RB") },
   { name: "is WR", of: at("WR") },
   { name: "is TE", of: at("TE") },

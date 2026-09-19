@@ -448,3 +448,40 @@ export async function build(seasons: number[]): Promise<Built> {
 
 export const cheap = (row: Row): boolean =>
   !row.cut.drafted || row.cut.price > TOP_PRICED;
+
+/**
+ * How many of a list of `picks` each position is allowed, in proportion
+ * to the starter-tier hits it accounted for in `rows`.
+ *
+ * A league starts about three receivers for every tight end, so splitting
+ * a list evenly across the four positions hands the tight ends more of it
+ * than the position has ever paid back. The whole numbers go out largest
+ * remainder first, so the list always adds up to `picks`.
+ */
+export function positionQuota(
+  rows: Row[], picks: number,
+): Record<string, number> {
+  const hits = PRICED_POSITIONS.map((position) => rows
+    .filter((row) => row.cut.position === position && row.hit).length);
+  const total = hits.reduce((sum, one) => sum + one, 0);
+
+  if (total === 0) {
+    return Object.fromEntries(PRICED_POSITIONS.map((position) =>
+      [position, Math.floor(picks / PRICED_POSITIONS.length)]));
+  }
+
+  const wanted = PRICED_POSITIONS.map((position, i) => ({
+    position, share: ((hits[i] ?? 0) / total) * picks,
+  }));
+  const quota = Object.fromEntries(wanted.map((one) =>
+    [one.position, Math.floor(one.share)]));
+  const given = Object.values(quota).reduce((sum, one) => sum + one, 0);
+
+  for (const one of [...wanted]
+    .sort((a, b) => (b.share % 1) - (a.share % 1))
+    .slice(0, picks - given)) {
+    quota[one.position] = (quota[one.position] ?? 0) + 1;
+  }
+
+  return quota;
+}

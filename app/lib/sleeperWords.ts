@@ -18,6 +18,10 @@ const PHRASES: Record<string, string> = {
   "pick spread": "the room disagreed",
   "in-season level": "his level so far",
   "role level": "his role",
+  "the benching chance": "the job may come free",
+  "the backup's draft capital": "his club paid for him",
+  "his snaps over three weeks": "his snaps are rising",
+  "the starter against his price": "the starter is scoring below his price",
 };
 
 /** how many reasons a row has room for on a phone */

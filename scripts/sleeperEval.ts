@@ -15,13 +15,14 @@
  */
 
 import {
-  build, cheap, CUTS, SEASONS, TOP_PRICED, type Row,
+  build, cheap, CUTS, positionQuota, SEASONS, TOP_PRICED, type Row,
 } from "../src/backtest/sleeperBench.js";
 import {
   buildContingent, isBackup, STARTER_SNAPS, type ContingentRow,
 } from "../src/backtest/contingentBench.js";
 import {
-  benchExamples, benchingKey, buildBenching, missWorldFor,
+  benchExamples, benchFits, benchingBy, benchingKey, buildBenching,
+  fillBenchingTerms, missWorldFor,
   type BenchingCase, type MissWorld,
 } from "../src/backtest/expectedBench.js";
 import { seasonsAsked } from "../src/data/seasons.js";
@@ -31,7 +32,7 @@ import {
   type ContingentScore, type Marked, type RoleChanceFit,
 } from "../src/model/contingentSleepers.js";
 import {
-  benchChance, benchWeights, expectedAdded, fitBenchingAsOf,
+  benchChance, benchWeights, expectedAdded,
   type BenchFit, type ExpectedScore,
 } from "../src/model/expectedSleepers.js";
 import {
@@ -53,7 +54,14 @@ const AT = [10, 20];
 
 const TERM_SETS: SleeperTermSet[] = [
   "shipped", "with in-season", "usage", "usage with role",
-  "usage, split trend",
+  "usage, split trend", "with benching", "with benching chance",
+];
+
+/** the sets whose twenty are also taken a few at a position */
+const IN_PROPORTION: [string, SleeperTermSet][] = [
+  ["the model, in proportion", "shipped"],
+  ["plus benching, in proportion", "with benching"],
+  ["plus bench chance, in proportion", "with benching chance"],
 ];
 
 /** the cut whose top ten is printed with its reasons, and under which sets */
@@ -76,6 +84,8 @@ interface AtCut {
   onThePoints: Map<string, ContingentScore>;
   /** what the job is worth to him in points over the rest of the season */
   expected: Map<string, ExpectedScore>;
+  /** how many of the twenty each position gets, for the orders that split */
+  quota: Record<string, number>;
 }
 
 /**
@@ -149,6 +159,12 @@ const METHODS: Record<string, Order> = {
     by("usage, split trend", row, at)?.score ?? -Infinity,
   "usage, own line": (row, at) =>
     by("usage", row, at)?.modelPpg ?? -Infinity,
+  "the model plus benching": (row, at) =>
+    by("with benching", row, at)?.score ?? -Infinity,
+  "the model plus bench chance": (row, at) =>
+    by("with benching chance", row, at)?.score ?? -Infinity,
+  ...Object.fromEntries(IN_PROPORTION.map(([name, terms]): [string, Order] =>
+    [name, (row, at) => by(terms, row, at)?.score ?? -Infinity])),
   "would average": (row, at) =>
     contingent(row, at)?.wouldAverage ?? -Infinity,
   "the chance it opens": (row, at) =>
@@ -177,6 +193,8 @@ const NAMES = Object.keys(METHODS);
 /** the methods that pick five at each position rather than twenty anywhere */
 const SPREAD_OF: Record<string, Spread> = {
   "the chance, five a position": "by position",
+  ...Object.fromEntries(IN_PROPORTION.map(([name]): [string, Spread] =>
+    [name, "in proportion"])),
 };
 
 /** the pairs whose swapped picks are named, the old one first */
@@ -201,7 +219,7 @@ function sorted(rows: Row[], order: Order, at: AtCut): Row[] {
  * position, which is what a reader hunting a handcuff wants and what a
  * list of nineteen receivers cannot give him.
  */
-type Spread = "the league" | "by position";
+type Spread = "the league" | "by position" | "in proportion";
 
 const SPREADS: Record<
   Spread, (rows: Row[], order: Order, at: AtCut) => Row[]
@@ -210,7 +228,11 @@ const SPREADS: Record<
   "by position": (rows, order, at) => POSITIONS.flatMap((position) =>
     sorted(rows.filter((row) => row.cut.position === position), order, at)
       .slice(0, PICKS / POSITIONS.length)),
+  "in proportion": (rows, order, at) => POSITIONS.flatMap((position) =>
+    sorted(rows.filter((row) => row.cut.position === position), order, at)
+      .slice(0, at.quota[position] ?? 0)),
 };
+
 
 function topPicks(name: string, rows: Row[], at: AtCut): Row[] {
   return SPREADS[SPREAD_OF[name] ?? "the league"](rows, METHODS[name]!, at);
@@ -821,11 +843,11 @@ function reportWeights(fit: SleeperFit): void {
     `${fit.trainedOn[fit.trainedOn.length - 1]} ${fit.terms} fit weighs, in ` +
     "points a game per deviation",
   );
-  console.log(`  intercept${" ".repeat(15)}${fit.weights[0]!.toFixed(2)}`);
+  console.log(`  ${"intercept".padEnd(30)}${fit.weights[0]!.toFixed(2)}`);
 
   for (let i = 0; i < terms.length; i++) {
     console.log(
-      `  ${terms[i]!.padEnd(24)}${fit.weights[i + 1]!.toFixed(2)}`,
+      `  ${terms[i]!.padEnd(30)}${fit.weights[i + 1]!.toFixed(2)}`,
     );
   }
 }
@@ -850,6 +872,29 @@ function reportReasons(
     console.log(
       `      ${pick.reasons.slice(0, 3)
         .map((one) => `${one.term} ${said(one.points)}`).join(", ")}`,
+    );
+  }
+}
+
+/** one method's whole twenty at one cut, with what each went on to do */
+function reportPicks(
+  title: string, picks: Row[], at: AtCut, terms: SleeperTermSet,
+): void {
+  console.log(`\n${title}`);
+
+  for (const pick of picks) {
+    const his = by(terms, pick, at);
+    const price = pick.cut.drafted
+      ? `pick ${pick.cut.price.toFixed(0)}`
+      : "undrafted";
+    console.log(
+      `  ${pick.cut.playerName.slice(0, 20).padEnd(20)} ` +
+      `${pick.cut.position} ${price.padEnd(9)} ` +
+      `score ${(his?.score ?? 0).toFixed(2).padStart(5)}; went on to ` +
+      `${pick.restOfSeasonPerGame.toFixed(1).padStart(4)} a game over ` +
+      `${String(pick.gamesAfter).padStart(2)} games, ` +
+      `${pick.restOfSeasonTotal.toFixed(0).padStart(3)} points, ` +
+      `${pick.hit ? "inside the tier" : "outside it"}`,
     );
   }
 }
@@ -979,9 +1024,14 @@ async function main(): Promise<void> {
   const contingentRows = (await buildContingent(rows, CUTS)).rows;
   const backups = contingentRows.filter(isBackup);
   const benchCases = await buildBenching(BENCHING_SEASONS, CUTS);
-  const benchBy = new Map(benchCases.map((one) =>
-    [benchingKey(one.season, one.week, one.playerId), one]));
+  const benchBy = benchingBy(benchCases);
   const benchTeaching = benchExamples(benchCases);
+  const benchFitFor = benchFits(priced, benchTeaching);
+  fillBenchingTerms(rows, benchBy, (season, cut) => {
+    const fit = benchFitFor(season);
+
+    return fit === undefined ? 0 : benchChance(fit, cut);
+  });
   const misses = await missWorldFor(priced);
   const benchMarked: Marked[] = [];
   const chances: Chances[] = [];
@@ -991,6 +1041,7 @@ async function main(): Promise<void> {
     at: AtCut;
     caseOf: (row: Row) => BenchingCase | undefined;
   } | undefined;
+  let shownBenching: { at: AtCut; population: Row[] } | undefined;
   const spots = emptySpotKept();
   const atCut = (season: number, week: number, playerId: string) =>
     `${season}|${week}|${playerId}`;
@@ -1039,7 +1090,10 @@ async function main(): Promise<void> {
     const pointsFit = fitRoleChanceAsOf(
       season, backups, { outcome: "a starter's points" },
     );
-    const benchFit = fitBenchingAsOf(season, benchTeaching);
+    const benchFit = benchFitFor(season)!;
+    const quota = positionQuota(
+      rows.filter((row) => row.cut.season < season && cheap(row)), PICKS,
+    );
     lastChanceFit = chanceFit;
     lastIncumbentFit = incumbentFit;
     lastPointsFit = pointsFit;
@@ -1069,6 +1123,7 @@ async function main(): Promise<void> {
         .filter((one): one is ContingentRow => one !== undefined);
       const at: AtCut = {
         scored,
+        quota,
         contingent: new Map(mine.map((one) =>
           [one.cut.playerId, scoreContingent(chanceFit, one.cut)])),
         fromTheIncumbent: new Map(mine.map((one) =>
@@ -1159,6 +1214,7 @@ async function main(): Promise<void> {
       }
 
       if (season === SHOWN_CUT.season && week === SHOWN_CUT.week) {
+        shownBenching = { at, population };
         shownExpected = {
           picks: topPicks("expected points added", population, at),
           at,
@@ -1306,6 +1362,30 @@ async function main(): Promise<void> {
 
   for (const [terms, picks] of shown) {
     reportReasons(SHOWN_CUT.season, SHOWN_CUT.week, picks, terms);
+  }
+
+  if (shownBenching) {
+    console.log(
+      `\nhow the twenty are split by position in ${SHOWN_CUT.season}: ` +
+      `${POSITIONS.map((one) => `${one} ${shownBenching!.at.quota[one] ?? 0}`)
+        .join(", ")}`,
+    );
+
+    const shownPicks: [string, SleeperTermSet][] = [
+      ["the model", "shipped"],
+      ["the model plus benching", "with benching"],
+      ["the model plus bench chance", "with benching chance"],
+      ...IN_PROPORTION.filter(([name]) => name !== "the model, in proportion"),
+    ];
+
+    for (const [name, terms] of shownPicks) {
+      reportPicks(
+        `${name} in ${SHOWN_CUT.season} after week ${SHOWN_CUT.week}`,
+        topPicks(name, shownBenching.population, shownBenching.at),
+        shownBenching.at,
+        terms,
+      );
+    }
   }
 
   if (nearest) {

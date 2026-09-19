@@ -7,6 +7,7 @@ import {
   shareToRead,
   sleeperTermNames,
   SLEEPER_TERMS,
+  termValues,
   type PlayerCut,
   type SleeperExample,
 } from "./sleepers.js";
@@ -129,7 +130,7 @@ describe("scoreSleeper", () => {
 
     expect(scored.reasons.map((one) => one.term).sort()).toEqual([
       "games played", "leverage lift", "pick spread",
-      "points a game so far", "trend", "work share",
+      "points a game so far", "the benching chance", "trend", "work share",
     ]);
   });
 
@@ -170,7 +171,7 @@ describe("the usage term sets", () => {
   it("keeps every other form term the shipped set reads", () => {
     const usage = sleeperTermNames("usage");
 
-    for (const term of SLEEPER_TERMS) {
+    for (const term of sleeperTermNames("shipped")) {
       if (term === "points a game so far") {
         continue;
       }
@@ -215,7 +216,7 @@ describe("the usage term sets", () => {
 describe("the in-season term set", () => {
   it("reads two more terms than the shipped set", () => {
     expect(sleeperTermNames("with in-season").length)
-      .toBe(SLEEPER_TERMS.length + 2);
+      .toBe(sleeperTermNames("shipped").length + 2);
   });
 
   it("gives the two extra terms reasons of their own", () => {
@@ -229,6 +230,52 @@ describe("the in-season term set", () => {
 
   it("leaves the shipped fit alone", () => {
     expect(fitSleepers(examples).weights.length).toBe(SLEEPER_TERMS.length + 1);
+  });
+});
+
+describe("the benching term sets", () => {
+  it("adds the three things the benching fit reads", () => {
+    expect(sleeperTermNames("with benching"))
+      .toEqual([...sleeperTermNames("shipped"),
+        "the backup's draft capital", "his snaps over three weeks",
+        "the starter against his price"]);
+  });
+
+  it("adds the chance those three add up to, on its own", () => {
+    expect(sleeperTermNames("with benching chance"))
+      .toEqual([...sleeperTermNames("shipped"), "the benching chance"]);
+  });
+
+  it("reads zero for a player with nobody in front of him", () => {
+    const terms = sleeperTermNames("with benching");
+    const values = termValues(cut(), "with benching");
+
+    for (const term of ["the backup's draft capital",
+      "his snaps over three weeks", "the starter against his price"]) {
+      expect(values[terms.indexOf(term)]).toBe(0);
+    }
+  });
+
+  it("pays a backup whose club is likelier to move on", () => {
+    const behind = examples.map((example, i) => ({
+      ...example,
+      cut: { ...example.cut, benchedChance: (i % 10) / 20 },
+      restOfSeasonPpg: example.restOfSeasonPpg + ((i % 10) / 20) * 12,
+    }));
+    const fit = fitSleepers(behind, { terms: "with benching chance" });
+    const chancy = cut({ benchedChance: 0.45 });
+    const settled = cut({ benchedChance: 0 });
+
+    expect(scoreSleeper(fit, chancy).score)
+      .toBeGreaterThan(scoreSleeper(fit, settled).score);
+  });
+
+  it("gives the chance a reason of its own", () => {
+    const fit = fitSleepers(examples, { terms: "with benching chance" });
+    const terms = scoreSleeper(fit, examples[3]!.cut).reasons
+      .map((one) => one.term);
+
+    expect(terms).toContain("the benching chance");
   });
 });
 

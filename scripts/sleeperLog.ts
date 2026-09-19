@@ -15,6 +15,10 @@ import {
   build, cheap, CUTS, SEASONS, type Row,
 } from "../src/backtest/sleeperBench.js";
 import {
+  benchExamples, benchFits, benchingBy, buildBenching, fillBenchingTerms,
+} from "../src/backtest/expectedBench.js";
+import { benchChance } from "../src/model/expectedSleepers.js";
+import {
   fitSleepersAsOf, rankSleepers,
   type SleeperExample, type SleeperScore,
 } from "../src/model/sleepers.js";
@@ -121,6 +125,13 @@ function reportCut(
 async function main(): Promise<void> {
   const [seasonArg, weekArg] = process.argv.slice(2).map(Number);
   const { rows, priced, skipped } = await build(SEASONS);
+  const cases = await buildBenching(priced, CUTS);
+  const fitFor = benchFits(priced, benchExamples(cases));
+  fillBenchingTerms(rows, benchingBy(cases), (season, cut) => {
+    const fit = fitFor(season);
+
+    return fit === undefined ? 0 : benchChance(fit, cut);
+  });
   const examples: SleeperExample[] = rows.map((row) => ({
     cut: row.cut, restOfSeasonPpg: row.restOfSeasonPpg,
   }));

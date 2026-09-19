@@ -21,6 +21,11 @@ import {
   buildContingent, contingentRows, contingentSeasonFor, isBackup,
   STARTER_SNAPS,
 } from "../backtest/contingentBench.js";
+import {
+  benchExamples, benchFits, benchingBy, benchingFor, buildBenching,
+  fillBenchingTerms,
+} from "../backtest/expectedBench.js";
+import { benchChance, type BenchCut } from "../model/expectedSleepers.js";
 import { loadAdp } from "../data/adp.js";
 import { loadPlayerStats, type GameRow } from "../data/nflverse.js";
 import { loadLeverage } from "./leverageUsage.js";
@@ -122,6 +127,7 @@ export async function sleepersNow(
   }
 
   const built = await build(earlier);
+  const benching = await benchingWorld(season, built.priced, built.rows);
   const examples: SleeperExample[] = built.rows.map((row) => ({
     cut: row.cut,
     restOfSeasonPpg: row.restOfSeasonPpg,
@@ -142,6 +148,8 @@ export async function sleepersNow(
   const scores = new Map<string, SleeperScore>();
   const rows = cutsFor(input, week);
 
+  await benching.fill(rows, week);
+
   for (const row of rows) {
     scores.set(row.cut.playerId, scoreSleeper(fit, row.cut));
   }
@@ -149,6 +157,42 @@ export async function sleepersNow(
   return {
     scores,
     contingent: await contingentFor(season, week, rows, built.rows),
+  };
+}
+
+/** what a backup and the man in front of him say about each other */
+interface BenchingWorld {
+  /** puts the four benching terms onto one cut's rows, zero for everybody else */
+  fill: (rows: Row[], week: number) => Promise<void>;
+}
+
+/**
+ * The benching side of the score, for the seasons behind us and for the
+ * week in front of us.
+ *
+ * The fit for a season reads only the pairs of earlier ones, the same as
+ * every other fit the score is made of, and a row with nobody in front of
+ * him keeps the zeros the term set gives him.
+ */
+async function benchingWorld(
+  season: number, priced: number[], earlier: Row[],
+): Promise<BenchingWorld> {
+  const cases = await buildBenching(priced, CUTS);
+  const fitFor = benchFits([...priced, season], benchExamples(cases));
+  const chanceOf = (year: number, cut: BenchCut) => {
+    const fit = fitFor(year);
+
+    return fit === undefined ? 0 : benchChance(fit, cut);
+  };
+
+  fillBenchingTerms(earlier, benchingBy(cases), chanceOf);
+
+  return {
+    fill: async (rows, week) => {
+      fillBenchingTerms(
+        rows, benchingBy(await benchingFor(season, [week])), chanceOf,
+      );
+    },
   };
 }
 

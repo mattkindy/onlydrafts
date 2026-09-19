@@ -56,11 +56,19 @@ average form, so the number left over is the claim against the board. It
 ranks who becomes startable better than points a game so far does and it
 ranks who scores the most worse, and `scripts/README.md` has the table.
 
-A fit can be taken over any of five term sets. The shipped set is the one
-above. One adds the in-season level and the role level. Three take the
-player's own scoring rate out and leave the fit his usage and the board.
-All four lose, on the tier read off total points and on the tier read off
-points over the games he played, so the shipped set still ships.
+A fit can be taken over any of seven term sets. The shipped set is the
+one above plus the benching chance, which is what `model/expectedSleepers.ts`
+makes of a backup's draft capital, his snap trend and the man in front's
+scoring against his price. One set adds the in-season level and the role
+level. Three take the player's own scoring rate out and leave the fit his
+usage and the board. One takes the three benching features raw instead of
+the chance they add up to, and it loses.
+
+`backtest/sleeperBench.ts` also hands each position its share of a top
+twenty in proportion to the starter-tier hits that position accounted for
+in the training seasons, which is how the bench picks its twenty. Over
+seven seasons that pair finds 171 players a league starts against the old
+167, and returns 113.9 points a roster spot against 109.0.
 
 Three decisions in there are worth knowing before reading the code.
 
@@ -217,7 +225,9 @@ seasons now train the role model on what a role that never plays is
 worth.
 
 `sleeper` is `{ week, price, score, modelPpg, pricePpg, reasons }`, and
-`reasons` is the three biggest terms as `{ term, points }`. `score` is
+`reasons` is the three biggest terms as `{ term, points }`. One of those
+terms is the benching chance, so a card can say the job in front of him
+may come free, and `app/lib/sleeperWords.ts` puts it in a reader's words. `score` is
 the gap between `modelPpg` and `pricePpg`: the points a game he beats a
 player bought at the same price whose form is average for his position.
 It says nothing about `projected` and nothing reads it back, so a board

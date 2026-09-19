@@ -2359,6 +2359,163 @@ playing, and the model's own worst calls are the same story at back. A
 term for how likely he is to keep the work would help both, where a
 better read of the level did not.
 
+## Putting the benching fit into the score, and splitting the list by position
+
+The benching fit is the one thing about the man in front that has ever
+predicted anything on this page, so it goes into the sleeper fit as
+terms. Two ways of doing that. "With benching" adds the three features
+the benching fit reads: whether a club spent a top hundred pick on the
+backup in the last two drafts, how far his share of the snaps moved over
+the three weeks to the cut, and the man in front's points a game against
+what a player at his price averages. "With benching chance" adds the one
+number those three add up to instead. A player who is not ranked second
+or third at his position has no man in front, so all four come out zero
+for him.
+
+Nothing new is measured. `expectedBench.ts` already builds the pair for
+every backup at every cut, and the chance for a season comes off a fit
+that read only the seasons before it, the same as every other fit here.
+
+The second change is how the twenty are picked. Every method above takes
+the best twenty in the league, which hands a position whatever share of
+the list its scores happen to win. The new rule gives each position a
+number of the twenty in proportion to the starter-tier hits that position
+accounted for in the seasons the fit was taught on. For 2025 that is five
+quarterbacks, four backs, five receivers and six tight ends.
+
+What the 2018 to 2024 fits weigh on the new terms, in points a game for
+each deviation, with the shipped set's own weights unmoved beside them:
+
+```
+  with benching                         with benching chance
+    the backup's draft capital  0.28      the benching chance   0.12
+    his snaps over three weeks  0.17
+    the starter against his price -0.18
+```
+
+All three signs are the ones the benching fit had. Nothing else in either
+set moves by more than six hundredths: points a game so far reads 2.24
+and 2.23 against the shipped 2.22, and the work share 0.58 and 0.60
+against 0.60.
+
+```
+                         club games, on the total  games played, on the rate
+method                       ppg  p@10   p@20  h@20    ppg  p@10   p@20  h@20
+the price itself            8.55  0.238  0.250  105  10.07  0.229  0.236   99
+points a game so far       11.17  0.410  0.343  144  13.43  0.410  0.329  138
+the in-season level        11.69  0.400  0.343  144  14.02  0.371  0.314  132
+the model                  10.02  0.438  0.398  167  11.65  0.405  0.364  153
+the model plus in-season   10.52  0.452  0.417  175  12.17  0.414  0.374  157
+the model plus benching     9.66  0.429  0.376  158  11.26  0.395  0.343  144
+the model plus bench chance 9.80  0.448  0.386  162  11.42  0.414  0.345  145
+the model, in proportion   10.44  0.429  0.395  166  12.14  0.433  0.374  157
+plus benching, in proportion 10.35 0.424  0.402  169  12.04  0.429  0.374  157
+plus bench chance, in prop 10.48  0.443  0.407  171  12.17  0.448  0.381  160
+oracle: the rest known     15.45  0.852  0.698  293  16.23  0.762  0.626  263
+```
+
+Across the league the terms lose. The three features drop nine hits and
+the chance drops five, and both lose a third of a point a pick. Split by
+position they win: 169 and 171 against 166 for the same rule over the
+shipped terms, and 171 against the shipped model's 167.
+
+On the roster spot:
+
+```
+method                       total   a spot   week 4   week 6   week 8   jobs opened   ppg when open
+the price itself             39363     93.7    15514    13042    10807          111           9.62
+points a game so far         51096    121.7    19497    17232    14367           64          11.58
+the in-season level          53722    127.9    21079    17674    14970           39          11.98
+the model                    45796    109.0    17605    15425    12766           69          11.78
+the model plus in-season     48107    114.5    18596    15962    13549           55          11.87
+the model plus benching      44069    104.9    17019    14798    12252          107          11.20
+the model plus bench chance  44672    106.4    17300    14843    12528           88          11.54
+the model, in proportion     47672    113.5    18293    15944    13435           58          11.79
+plus benching, in proportion 47201    112.4    18120    15672    13410           87          11.36
+plus bench chance, in prop   47820    113.9    18315    15943    13563           68          11.85
+oracle: the rest known       70959    168.9    27013    23703    20244          115          15.83
+```
+
+The same shape. Across the league both sets return less a spot than the
+model, 104.9 and 106.4 against 109.0. Split by position they return more,
+113.9 at the top against 109.0, which is most of the way to what the
+in-season level returns by picking quarterbacks who are already scoring.
+
+The benching terms do find players whose job is about to open. The three
+features raw take 107 picks whose job opened against the model's 69,
+which is the most of anything in the bench that is not built for it, and
+the chance takes 88. Those openings pay less than the ones the model
+already finds, 11.20 and 11.54 a game against 11.78, which is the same
+thing the contingent score kept running into: the backups nearest a job
+are on clubs that do not score.
+
+By cut, nothing rests on one week. The winner reads 57, 57 and 57 hits at
+weeks 4, 6 and 8 against the model's 56, 55 and 56, and on the rate 51,
+50 and 59 against 51, 48 and 54.
+
+### Reading it
+
+The split by position is doing most of the work and the terms are doing
+the rest. Take the shipped terms and split the list: 166 hits against
+167, which is a hit of 420, and 113.5 points a spot against 109.0,
+which is four and a half points a spot for nothing. Then add the benching
+chance on top: five more hits and another four tenths of a point. Neither
+half clears the gate alone, and the pair clears it on both measures.
+
+Where the split sends the list is why it pays. The model across the
+league takes 68 quarterbacks of 420 and 106 tight ends; in proportion it
+takes 111 and 123. The quarterbacks it adds hit half the time, 55 of 111
+against a 0.40 hit rate over the whole list, because a cheap quarterback
+who is playing clears a twelve deep tier far more often than a cheap
+receiver clears a thirty six deep one. The old list was leaving those
+seats empty and spending them on the fourth best cheap back.
+
+The three features raw are the worse of the two sets everywhere: 158
+against 162 across the league and 169 against 171 split by position, and
+they cost a point a spot both ways. Rolling them into one chance is what
+the benching fit is for, and a ridge that has already weighed them
+against each other beats three columns fighting for their own weight
+inside a much bigger fit.
+
+The 2025 week 6 list says what the two changes do to a reader's page. The
+old twenty were two quarterbacks, nine backs, three receivers and six
+tight ends. The new twenty are five, four, five and six. The five backs
+that went were Travis Etienne, Rachaad White, Kenny Gainwell, Jordan
+Mason and Jacory Croskey-Merritt, of whom Etienne and Gainwell finished
+inside the tier. The five that came in were Justin Fields, Daniel Jones
+and Matthew Stafford at quarterback and Romeo Doubs and Wan'Dale Robinson
+at receiver, of whom Stafford at 22.1 a game and Robinson at 14.2
+finished inside it. So the same seven of twenty at this cut, from a very
+different list: the ranking pays over seven seasons rather than in any
+one week of one of them.
+
+### What shipped
+
+`SHIPPED_TERM_SET` is now "with benching chance", `sleepersNow.ts` builds
+the pair for the week being scored and the chance off a fit that read
+only earlier seasons, and `positionQuota` in `sleeperBench.ts` is the
+rule the bench picks its twenty by. `sleeperWords.ts` says "the job may
+come free" for the new term.
+
+The waivers page still sorts its eight free agents on the score alone.
+The quota was measured on twenty picked from every cheap player in the
+league; a league's waiver wire has eight names on it and the page already
+filters by position, so there is nothing there for the rule to divide up.
+
+### What to try next on this
+
+Fit the quota rather than reading it off the hits. The share of hits a
+position accounts for is not the share of a list that should go to it:
+what matters is how far down each position's order the marginal pick is
+still worth more than the next position's. A per-position score threshold
+would answer that directly, and it would move with the week rather than
+with a seven season average.
+
+Ask the benching chance inside a position. It is one number for the whole
+league and the population it was fitted on is three quarters pass
+catchers, so a quarterback's chance is being read off a line that mostly
+describes receivers.
+
 # What snap share and a short season are worth to the board
 
 `seasonShrinkEval.ts` prints this in about eight minutes. It covers

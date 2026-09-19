@@ -14,6 +14,7 @@
  */
 
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
+import { BENCH_TERM_NAMES } from "./expectedSleepers.js";
 
 /**
  * Where a rotational player stops and a starter begins, which is the cut
@@ -78,6 +79,19 @@ export interface PlayerCut {
   inSeasonPpg: number;
   /** what his usage alone pays, with his own scoring rate left out */
   roleLevelPpg: number;
+  /**
+   * The man in front's points a game so far less what a player bought at
+   * his price averages. Only a player ranked second or third at his
+   * position has a man in front, and everybody else reads zero, which is
+   * a starter scoring exactly what he cost.
+   */
+  starterGap?: number;
+  /** the player went in the top hundred and is in his first two seasons */
+  backupCapital?: boolean;
+  /** how far his share of the snaps moved over the last three weeks */
+  snapTrend?: number;
+  /** what the benching fit makes of those three, as one chance */
+  benchedChance?: number;
 }
 
 /** one cut week and what the player went on to do after it */
@@ -179,13 +193,35 @@ const IN_SEASON_TERMS: Term[] = [
 
 const ROLE_LEVEL = IN_SEASON_TERMS[1]!;
 
+/**
+ * What the benching fit reads about a backup and the man in front of him.
+ * A player who is not ranked second or third has no man in front, so all
+ * three come out zero for him and the fit treats him as a starter whose
+ * scoring matches his price with nobody climbing behind him.
+ */
+const BENCHING_TERMS: Term[] = [
+  {
+    name: BENCH_TERM_NAMES.capital,
+    of: (cut) => (cut.backupCapital ? 1 : 0),
+  },
+  { name: BENCH_TERM_NAMES.snapTrend, of: (cut) => cut.snapTrend ?? 0 },
+  { name: BENCH_TERM_NAMES.starterGap, of: (cut) => cut.starterGap ?? 0 },
+];
+
+/** the same three rolled up into the one chance the benching fit gives back */
+const BENCHING_CHANCE: Term[] = [
+  { name: "the benching chance", of: (cut) => cut.benchedChance ?? 0 },
+];
+
 /** which form terms a fit reads */
 export type SleeperTermSet =
   | "shipped"
   | "with in-season"
   | "usage"
   | "usage with role"
-  | "usage, split trend";
+  | "usage, split trend"
+  | "with benching"
+  | "with benching chance";
 
 const FORM_TERMS_BY_SET: Record<SleeperTermSet, Term[]> = {
   shipped: FORM_TERMS,
@@ -195,13 +231,19 @@ const FORM_TERMS_BY_SET: Record<SleeperTermSet, Term[]> = {
   // out, so it belongs with the usage sets rather than with the points.
   "usage with role": [...USAGE_TERMS, ROLE_LEVEL],
   "usage, split trend": withSplitTrend(USAGE_TERMS),
+  "with benching": [...FORM_TERMS, ...BENCHING_TERMS],
+  "with benching chance": [...FORM_TERMS, ...BENCHING_CHANCE],
 };
 
 const allTerms = (terms: SleeperTermSet): Term[] =>
   [...PRICE_TERMS, ...FORM_TERMS_BY_SET[terms]];
 
-/** what a caller who does not ask for a set gets */
-export const SHIPPED_TERM_SET: SleeperTermSet = "shipped";
+/**
+ * What a caller who does not ask for a set gets. The benching chance is
+ * in because a list split by position finds four more players a league
+ * starts with it than without it, over seven benched seasons.
+ */
+export const SHIPPED_TERM_SET: SleeperTermSet = "with benching chance";
 
 /** every term a fit reads, in the order its weights come in */
 export const sleeperTermNames = (

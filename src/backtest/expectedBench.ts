@@ -19,9 +19,12 @@ import { readAvailability } from "../features/availabilityData.js";
 import {
   marketPriceAsOf, type SeasonPrices,
 } from "../features/marketPrice.js";
-import type { BenchCut, BenchExample } from "../model/expectedSleepers.js";
+import {
+  fitBenchingAsOf,
+  type BenchCut, type BenchExample, type BenchFit,
+} from "../model/expectedSleepers.js";
 import { UNDRAFTED_PRICE } from "../model/sleepers.js";
-import { boardByName, pricedAs } from "./sleeperBench.js";
+import { boardByName, pricedAs, type Row } from "./sleeperBench.js";
 import {
   MEANINGFUL_PER_GAME, peckingOrders, readOpportunities, rosterFactsFor,
   listedWeeksFor, snapsById, STARTER_SNAPS,
@@ -353,9 +356,34 @@ export const benchingKey = (
 ): string => `${season}|${week}|${playerId}`;
 
 /**
- * Every pair of every season, with the price side filled in for the
- * seasons a curve can be fitted for and left out for the ones before it.
+ * Every pair of one season at the cuts asked for, with the price side
+ * filled in when a curve can be fitted for that season and left out when
+ * it cannot.
  */
+export async function benchingFor(
+  season: number, cuts: number[],
+  cache = new Map<number, SeasonPrices | null>(),
+): Promise<BenchingCase[]> {
+  const input = await benchingSeasonFor(season);
+  const curve = await marketPriceAsOf(season, { counted: cache })
+    .catch(() => undefined);
+  const byName = boardByName(
+    await loadAdp(season, "ppr").catch(() => new Map()),
+  );
+  const priceOf: PriceOf | undefined = curve === undefined
+    ? undefined
+    : (playerId, position) => {
+      const entry = pricedAs(
+        byName, input.read.names.get(playerId) ?? "", position,
+      );
+
+      return curve.quantiles(position, entry?.adp ?? UNDRAFTED_PRICE).p50;
+    };
+
+  return benchingIn(input, cuts, priceOf);
+}
+
+/** the same over a run of seasons, oldest first */
 export async function buildBenching(
   seasons: number[], cuts: number[],
 ): Promise<BenchingCase[]> {
@@ -363,26 +391,75 @@ export async function buildBenching(
   const out: BenchingCase[] = [];
 
   for (const season of [...seasons].sort((a, b) => a - b)) {
-    const input = await benchingSeasonFor(season);
-    const curve = await marketPriceAsOf(season, { counted: cache })
-      .catch(() => undefined);
-    const byName = boardByName(
-      await loadAdp(season, "ppr").catch(() => new Map()),
-    );
-    const priceOf: PriceOf | undefined = curve === undefined
-      ? undefined
-      : (playerId, position) => {
-        const entry = pricedAs(
-          byName, input.read.names.get(playerId) ?? "", position,
-        );
-
-        return curve.quantiles(position, entry?.adp ?? UNDRAFTED_PRICE).p50;
-      };
-
-    out.push(...benchingIn(input, cuts, priceOf));
+    out.push(...await benchingFor(season, cuts, cache));
   }
 
   return out;
+}
+
+/** the cases keyed the way a bench row looks one up */
+export const benchingBy = (
+  cases: BenchingCase[],
+): Map<string, BenchingCase> => new Map(cases.map((one) =>
+  [benchingKey(one.season, one.week, one.playerId), one]));
+
+/**
+ * The benching fit for each season, as a reader could have had it before
+ * that season kicked off.
+ *
+ * The earliest priced season has no earlier pairs behind it and reads the
+ * fit from the season after. Its rows only ever teach a later season's
+ * sleeper fit, so nothing being scored is read by a fit that saw the
+ * season it is scoring.
+ */
+export function benchFits(
+  priced: number[], teaching: BenchExample[],
+): (season: number) => BenchFit | undefined {
+  const ordered = [...priced].sort((a, b) => a - b);
+  const earliest = ordered[1];
+  const fits = new Map<number, BenchFit>();
+
+  return (season) => {
+    if (earliest === undefined) {
+      return undefined;
+    }
+
+    const asOf = Math.max(season, earliest);
+
+    if (!fits.has(asOf)) {
+      fits.set(asOf, fitBenchingAsOf(asOf, teaching));
+    }
+
+    return fits.get(asOf);
+  };
+}
+
+/**
+ * Puts what the benching sweep knows about a pair onto the bench row for
+ * the backup, so the sleeper fit can read the same three features and the
+ * chance they add up to without building any of them again.
+ *
+ * A row with no pair keeps its zeros, which is every player who is not
+ * ranked second or third at his position.
+ */
+export function fillBenchingTerms(
+  rows: Row[],
+  cases: Map<string, BenchingCase>,
+  chanceOf: (season: number, cut: BenchCut) => number,
+): void {
+  for (const row of rows) {
+    const { season, week, playerId } = row.cut;
+    const his = cases.get(benchingKey(season, week, playerId));
+
+    if (!his) {
+      continue;
+    }
+
+    row.cut.starterGap = his.cut.starterGap;
+    row.cut.backupCapital = his.cut.backupCapital;
+    row.cut.snapTrend = his.cut.snapTrend;
+    row.cut.benchedChance = chanceOf(season, his.cut);
+  }
 }
 
 /** the cases a fit can be taught on: priced, and with the four weeks played */

@@ -31,6 +31,22 @@ describe("reasonWords", () => {
   it("names the terms holding the score up and skips the rest", () => {
     expect(reasonWords(aSleeper())).toBe("work share, scoring so far");
   });
+
+  it("says what the benching terms mean", () => {
+    const said = aSleeper({
+      reasons: [
+        { term: "the starter against his price", points: 0.8 },
+        { term: "his snaps over three weeks", points: 0.5 },
+        { term: "the benching chance", points: 0.3 },
+        { term: "the backup's draft capital", points: 0.2 },
+      ],
+    });
+
+    expect(reasonWords(said, 4)).toBe(
+      "the starter is scoring below his price, his snaps are rising, " +
+      "the job may come free, his club paid for him",
+    );
+  });
 });
 
 describe("roleWords", () => {
