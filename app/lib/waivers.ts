@@ -21,11 +21,11 @@ import {
 } from "./winShare.ts";
 
 /**
- * Under half a point of win chance is inside the noise of a few thousand
- * drawn weeks, so a page that lists such a player is inviting a move that
+ * Under a point of win chance is inside the noise of a few thousand drawn
+ * weeks, so a page that lists such a player is inviting a move that
  * changes nothing.
  */
-export const WORTH_ADDING = 0.005;
+export const WORTH_ADDING = 0.01;
 
 /**
  * A player who is in the lineup less often than this is a bench player, and
