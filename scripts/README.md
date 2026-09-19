@@ -1444,6 +1444,250 @@ Dowdle, Williams and Skattebo, all of them on work share, drops both
 tight ends, and brings in Jordan Mason, Kenny Gainwell and Jacory
 Croskey-Merritt. Adding the role level puts Goedert and Ferguson back.
 
+## Whether a contingent score finds the player one injury away
+
+Everything above ranks a player who has already outscored his price. By
+week 6 the rest of the league can see him too, so what the score has
+found is a waiver pickup. A different question is who would score a lot
+if the job in front of him came free. `src/model/contingentSleepers.ts`
+takes that one in two parts and `sleeperEval.ts` benches both on the same
+cuts, against the same rivals, with the same oracles.
+
+The first part is what he would average with the job. Take his points per
+opportunity this season and last, pull it toward what the position gets
+per opportunity by how few opportunities he has behind it, and multiply
+by the opportunities a game the busiest player at his position on his
+club is getting. An opportunity is a target or a carry, and a pass
+attempt or a carry for a quarterback. Sixty opportunities is where a
+player is read half off himself and half off his position, and a hundred
+and fifty for a passer, who gets thirty a game rather than six. Where he
+was drafted and how old he is move the prior he starts from, by at most
+fifteen percent of the position mean either way, which washes out by the
+time he has fifty touches of his own.
+
+The second part is the chance the job opens. A ridge fit on earlier
+seasons is asked, for every player ranked second or third at his position
+at the cut, how likely he is to go on to average half his club's
+offensive snaps over the weeks he plays after it. A player's rank comes
+off the work his club has actually handed out through the cut rather than
+off the published depth chart, which changed shape in 2025 and lags a
+club by a week or two either way. 3768 of the cheap candidates are second or third
+at their position, and the job came to 1187 of them.
+
+The score is the chance times what the job would be worth over what a
+player at his price averages. Both sides of that subtraction are points
+over the games a player played, which is the mismatch that made the same
+subtraction wrong for the score above.
+
+What the 2018 to 2024 fit weighs, in chance per standard deviation:
+
+```
+  depth rank                -0.045     the position base rate    0.004
+  players ahead of him       0.013     weeks left                0.005
+  snap share so far          0.226     is RB                    -0.050
+  in a committee            -0.044     is WR                     0.044
+  the starter's age          0.022     is TE                    -0.026
+  games the starter missed  -0.000
+```
+
+Snap share is nearly the whole fit. Everything else together is worth
+less than a fifth of what it is worth, and how many games the man in
+front has missed over the last two seasons comes out at nothing at all.
+The fit is not finding an old starter about to break down. It is finding
+a backup who is already on the field.
+
+The chance still means what it says. Every number here came from a fit
+that had not seen the season it scored, in deciles of the chance:
+
+```
+  band          players    said     was
+  0.02 to 0.02      376   0.020   0.013
+  0.02 to 0.08      377   0.048   0.048
+  0.08 to 0.13      377   0.106   0.109
+  0.13 to 0.17      377   0.151   0.114
+  0.17 to 0.22      377   0.196   0.156
+  0.22 to 0.31      376   0.262   0.218
+  0.31 to 0.46      377   0.387   0.393
+  0.46 to 0.61      377   0.540   0.573
+  0.61 to 0.76      377   0.682   0.676
+  0.76 to 0.95      377   0.846   0.849
+```
+
+The two ends are close and the middle four bands run three to five points
+high, so a player the fit puts at one in four is nearer one in five.
+
+### On the outcome the bench already had, it loses
+
+The five new rows drop into the same table. Nothing else in it moved.
+
+```
+                         club games, on the total  games played, on the rate
+method                       ppg  p@10   p@20  h@20    ppg  p@10   p@20  h@20
+the price itself            8.55  0.238  0.250  105  10.07  0.229  0.236   99
+points a game so far       11.17  0.410  0.343  144  13.43  0.410  0.329  138
+the model                  10.02  0.438  0.398  167  11.65  0.405  0.364  153
+would average               5.66  0.110  0.114   48   6.74  0.119  0.117   49
+the chance it opens        10.60  0.238  0.248  104  12.75  0.200  0.219   92
+contingent                  7.49  0.138  0.140   59   8.86  0.119  0.131   55
+model plus contingent       9.19  0.271  0.264  111  10.60  0.271  0.250  105
+better of the two           8.04  0.162  0.193   81   9.47  0.157  0.181   76
+oracle: the rest known     15.45  0.852  0.698  293  16.23  0.762  0.626  263
+```
+
+The contingent score reads 0.140 at twenty against the model's 0.398 and
+the price alone's 0.250. It loses to everything, including doing nothing.
+Neither blend saves it: adding it to the model costs the model 134 of its
+167 hits, and taking the better of the two costs 86. It is the same story
+at every cut, 0.179, 0.107 and 0.136 at weeks 4, 6 and 8. That is a loss
+and nothing about it is close.
+
+### On whether the job came to him, it wins
+
+The second outcome takes the players ranked second or third at their
+position at the cut, has every method pick its top twenty out of only
+them, and asks how many went on to average half the snaps and what they
+averaged when they did.
+
+```
+method                     starters  of picks   rate   ppg when they did   ppg overall
+the price itself                188       420  0.448              10.14          7.63
+points a game so far            292       420  0.695              10.55          8.97
+raw work share                  157       420  0.374              10.41          7.73
+the in-season level             302       420  0.719              10.44          8.84
+the role level                  296       420  0.705              10.53          8.68
+the model                       291       420  0.693               9.89          8.96
+the model over the curve        210       420  0.500              10.42          8.51
+the model's own line            291       420  0.693              10.24          9.11
+the model plus in-season        292       420  0.695               9.95          8.98
+plus in-season, own line        292       420  0.695              10.19          9.11
+usage, no points                269       420  0.640               9.58          8.52
+usage plus role                 295       420  0.702               9.80          8.86
+usage, split trend              268       420  0.638               9.60          8.54
+usage, own line                 244       420  0.581               9.91          8.32
+would average                   145       420  0.345               9.48          5.86
+the chance it opens             354       420  0.843               9.16          8.15
+contingent                      326       420  0.776               8.95          7.85
+model plus contingent           339       420  0.807               9.27          8.56
+better of the two               320       420  0.762               9.18          8.13
+oracle: the rest known          345       420  0.821              12.93         12.57
+oracle: the rate known          343       420  0.817              13.65         13.46
+```
+
+The chance on its own takes 354 of 420, which is 0.843, against 0.693 for
+the model and 0.821 for an oracle that knew the rest of the season. It is
+the only method here that beats the oracle, and it beats it because the
+oracle is answering a different question: a player can score a lot over
+the rest of a season without ever taking half the snaps.
+
+Most of a rank 2 or 3 player is a second receiver who already has the job
+and keeps it, so the table above is partly a test of whether a method can
+spot a man who is already playing. Cutting it to the ones under half the
+snaps at the cut leaves the question the owner asked, which is whether an
+opening is coming. 2622 candidates, and the job came to 377 of them.
+
+```
+method                     starters  of picks   rate   ppg when they did   ppg overall
+the price itself                 58       420  0.138              10.39          5.86
+points a game so far            100       420  0.238               9.64          6.56
+raw work share                   55       420  0.131              10.53          6.46
+the in-season level             108       420  0.257              10.28          6.94
+the role level                  102       420  0.243              10.55          6.95
+the model                        96       420  0.229               8.84          6.40
+the model over the curve         66       420  0.157              10.49          6.61
+the model's own line             91       420  0.217               9.97          6.85
+the model plus in-season         96       420  0.229               9.03          6.46
+plus in-season, own line         90       420  0.214              10.09          6.96
+usage, no points                 99       420  0.236               9.07          6.41
+usage plus role                  96       420  0.229               9.02          6.48
+usage, split trend               99       420  0.236               9.07          6.42
+usage, own line                  85       420  0.202              10.46          6.26
+would average                    55       420  0.131              10.32          4.81
+the chance it opens             143       420  0.340               7.78          5.16
+contingent                       87       420  0.207               8.63          5.46
+model plus contingent           104       420  0.248               9.11          6.61
+better of the two                96       420  0.229               9.03          6.15
+oracle: the rest known          178       420  0.424              11.23          9.66
+oracle: the rate known          201       420  0.479              11.71         10.72
+```
+
+The chance wins here too, 0.340 against 0.257 for the best rival and
+0.229 for the model, with the oracle at 0.424. The contingent score does
+not: multiplying the chance by what the job would be worth drops it to
+0.207, below the model. So the part that works is the chance on its own,
+and the part that breaks it is the value it gets multiplied by.
+
+### Reading it
+
+The chance finds role changes and it does not find valuable ones. Its
+picks in the second table average 7.78 a game when the job comes to them
+where the price alone's picks average 10.39 and the in-season level's
+average 10.28. It is picking the third receiver who gets promoted on a
+club that throws for nothing. A league does not want that player, so a
+method that finds him more often than anybody else has still not earned
+a place on the page by itself.
+
+The value half is worse. "Would average" on its own is the worst column
+in either table, 0.114 at twenty on the points outcome and 0.131 on the
+role outcome, both below the price alone. The reason shows up the moment
+the top twenty is read by eye. In 2025 after week 6 it is nineteen
+receivers and Justice Hill, and the biggest numbers in the whole bench
+belong to backup backs behind a workhorse: Jeremy McNichols in 2021
+behind Derrick Henry comes out at 28.3 points a game, because the model
+gives him every one of Henry's twenty eight touches at a receiver of
+league average efficiency. He went on to average 3.9. The assumption that
+a backup inherits the whole job at his own rate is wrong in both
+directions and wrong hardest exactly where the number is largest.
+
+The 2025 week 6 list the score itself puts up is more sensible and still
+not something to draft off. Quentin Johnston leads it at 88% and 16.5
+with the job, and he did take the job and averaged 10.6. Andrei Iosivas,
+Jalen Nailor, Darnell Mooney and Rashid Shaheed all took jobs and
+averaged between 5.6 and 6.3, which is what a WR2 on a bad passing game
+is worth. Alec Pierce at 13.7 and Tory Horton at 10.4 are the two that
+paid, and Jordan Whittington, Brandin Cooks, Josh Reynolds and Dyami
+Brown are dead weight. Twelve of the twenty took a job and the twenty
+averaged 6.0 a game, where the shipped score's twenty at the same cut
+averaged over ten.
+
+So the shipped score keeps the board. The chance on its own is what
+survives: it is well calibrated, it beats everything at the question it
+was built for, and it says something the board could not say before,
+which is that a player is one injury away. It ships as two extra fields
+on the sleeper claim, `wouldAverage` and `roleChance`, and the card says
+"would average 14.2 with the job, about a 35% chance it opens" under any
+claim where the chance clears one in five. It does not touch the order of
+anything.
+
+The board writes those two only for a player ranked second or third who
+is under half the snaps, which in 2025 after week 6 is 141 of the 494
+scored players. The fit was taught on backups, so asking it about the man
+who already has the job gets 0.95 back, and a card that told a reader
+there was a 95% chance Dak Prescott's job was about to open would be
+worse than saying nothing. The same caveat applies to the "chance it
+opens" column in the first table, which ranks over every cheap candidate
+and so puts established cheap starters near the top: that column's 10.60
+a pick is mostly it finding players who already have the work.
+
+### What to try next on this
+
+Fit the chance on somebody other than the player. Snap share so far is
+nearly the whole fit, which means it is mostly asking whether he is
+already playing. The features that describe the man in front, his age and
+his missed games, come out at 0.022 and nothing. Either the two seasons
+of missed games are too coarse a measure of who breaks down, or the whole
+idea that an opening is predictable from the incumbent is wrong, and the
+`injuries_<season>.csv` file would settle which.
+
+Cap what a backup inherits. A back behind a workhorse gets nowhere near
+the workhorse's touches when the job opens, and the score currently hands
+him all of them. Measuring what the next man up actually got in the
+seasons where a job did open would give the right multiplier, and it is
+the single biggest error in the value half.
+
+Rank the chance inside a position rather than across the league. The fit
+weighs "is RB" at -0.050 and "is WR" at +0.044, and a list that is
+nineteen receivers deep is no use to somebody looking for a handcuff.
+
 ## What to try next
 
 Four things, in the order they look most likely to pay.

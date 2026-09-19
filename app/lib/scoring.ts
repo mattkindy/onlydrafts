@@ -30,6 +30,14 @@ export interface Sleeper {
   pricePpg: number;
   /** the terms behind the gap, biggest first */
   reasons: SleeperReason[];
+  /**
+   * What he would average a game with the job in front of him, and the
+   * chance from nought to one that it opens before the season ends. A
+   * different claim from `score`, which is about what he is doing now.
+   * Absent for a player with no club or no rank at his position.
+   */
+  wouldAverage?: number | null;
+  roleChance?: number | null;
 }
 
 export interface Player {

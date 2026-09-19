@@ -14,13 +14,20 @@
  */
 
 import {
-  build, cutsFor, boardByName, inSeasonFitFor, playedFor, readSeason,
-  SEASONS, type SeasonInput, type SeasonWeeks,
+  build, cutsFor, boardByName, CUTS, inSeasonFitFor, playedFor, readSeason,
+  SEASONS, type Row, type SeasonInput, type SeasonWeeks,
 } from "../backtest/sleeperBench.js";
+import {
+  buildContingent, contingentRows, contingentSeasonFor, isBackup,
+  STARTER_SNAPS,
+} from "../backtest/contingentBench.js";
 import { loadAdp } from "../data/adp.js";
 import { loadPlayerStats, type GameRow } from "../data/nflverse.js";
 import { loadLeverage } from "./leverageUsage.js";
 import { marketPriceAsOf } from "./marketPrice.js";
+import {
+  fitRoleChanceAsOf, scoreContingent, type ContingentScore,
+} from "../model/contingentSleepers.js";
 import {
   fitSleepersAsOf, scoreSleeper, type SleeperExample, type SleeperScore,
 } from "../model/sleepers.js";
@@ -37,12 +44,19 @@ export const FIRST_SLEEPER_WEEK = 3;
 export interface SleepersNow {
   /** every scored player, by the id the stat file files him under */
   scores: Map<string, SleeperScore>;
+  /**
+   * What each one would average with the job in front of him and the
+   * chance it opens. Only the players with a club and a rank at their
+   * position are in here, which is most of them but not all.
+   */
+  contingent: Map<string, ContingentScore>;
   /** what the season is missing, when nobody could be scored */
   skipped?: string;
 }
 
 const nobody = (skipped: string): SleepersNow => ({
   scores: new Map(),
+  contingent: new Map(),
   skipped,
 });
 
@@ -126,10 +140,42 @@ export async function sleepersNow(
     inSeason: inSeasonFitFor(season, played, built.rows),
   };
   const scores = new Map<string, SleeperScore>();
+  const rows = cutsFor(input, week);
 
-  for (const row of cutsFor(input, week)) {
+  for (const row of rows) {
     scores.set(row.cut.playerId, scoreSleeper(fit, row.cut));
   }
 
-  return { scores };
+  return {
+    scores,
+    contingent: await contingentFor(season, week, rows, built.rows),
+  };
+}
+
+/**
+ * The two contingent parts for the same cut, for the players ranked
+ * second or third who are not already taking a starter's share of the
+ * snaps. The fit was taught on backups, and a man who already has the job
+ * gets a near certainty back from it that a card would print as a chance
+ * of something opening.
+ *
+ * The chance is fitted on earlier seasons and the base rate comes from
+ * those same seasons, so neither reads a week of the season being played.
+ */
+async function contingentFor(
+  season: number, week: number, rows: Row[], behind: Row[],
+): Promise<Map<string, ContingentScore>> {
+  const earlier = await buildContingent(behind, CUTS);
+  const backups = earlier.rows.filter(isBackup);
+
+  if (backups.length === 0) {
+    return new Map();
+  }
+
+  const fit = fitRoleChanceAsOf(season, backups);
+  const input = await contingentSeasonFor(season, earlier.openRate);
+
+  return new Map(contingentRows(input, rows, week)
+    .filter((one) => isBackup(one) && one.cut.snapShare < STARTER_SNAPS)
+    .map((one) => [one.cut.playerId, scoreContingent(fit, one.cut)]));
 }
