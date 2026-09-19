@@ -57,9 +57,13 @@ it("the shipped files load and score end to end", async () => {
   const worthReading = withWeeks.filter((p) => (p.ownPpg ?? 0) >= 4);
   expect(worthReading.length).toBeGreaterThan(200);
 
+  // a week at exactly zero is a player his club ruled out, which the
+  // build writes on purpose so the app does not start him
   for (const p of worthReading) {
     for (const w of p.weeks!) {
-      expect(w.of > 0.02 && w.of < 3, `${p.name} w${w.w} ${w.of}`).toBe(true);
+      expect(
+        w.of === 0 || (w.of > 0.02 && w.of < 3), `${p.name} w${w.w} ${w.of}`,
+      ).toBe(true);
     }
   }
 

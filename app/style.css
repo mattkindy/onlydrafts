@@ -562,8 +562,8 @@
      arrow between them are one reading, so they never break apart */
   .swing { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .starting { display: block; }
-  .starting i { display: block; font-style: normal; color: var(--faint);
-    font-size: var(--t1); }
+  .starting i, .outscores { display: block; font-style: normal;
+    color: var(--faint); font-size: var(--t1); }
 
   /* the slots you have left, and what the room has taken, so neither
      has to be counted off the draft board in another tab */

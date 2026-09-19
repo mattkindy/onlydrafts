@@ -116,6 +116,8 @@ interface Figures {
   points: number;
   /** the slot that changes hands, and who it changes hands with */
   slot: string;
+  /** how often he outscores the player he replaces, when there is one */
+  outscores?: number | null;
   before: number;
   after: number;
   delta: number;
@@ -172,6 +174,7 @@ const weekAdd = (his: WeekAdd, nameFor: (key: string) => string): Figures => ({
   slot: his.displaced
     ? `${nameFor(his.displaced)} at ${slotName(his.slot ?? "")}`
     : his.slot ? "an open starting spot" : "would not start",
+  outscores: his.outscores,
   before: his.before,
   after: his.after,
   delta: his.added,
@@ -216,7 +219,12 @@ function Figured(
         />
       </td>
       <td data-label="pts">{points(figures.points)}</td>
-      <td data-label={slotLabel}>{figures.slot}</td>
+      <td data-label={slotLabel}>
+        {figures.slot}
+        {figures.outscores != null && (
+          <i class="outscores"> outscores him {pct(figures.outscores)}</i>
+        )}
+      </td>
     </>
   );
 }

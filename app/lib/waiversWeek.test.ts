@@ -148,6 +148,8 @@ describe("adding a player off the wire this week", () => {
     expect(his.displaced).toBe("flex");
     expect(his.brings).toBeGreaterThan(0);
     expect(his.added).toBeGreaterThan(0);
+    expect(his.outscores).toBeGreaterThan(0.5);
+    expect(his.outscores).toBeLessThanOrEqual(1);
   });
 
   it("leaves a player nobody would start out of the lineup", () => {
@@ -159,6 +161,7 @@ describe("adding a player off the wire this week", () => {
     expect(his.displaced).toBeNull();
     expect(his.brings).toBe(0);
     expect(his.added).toBe(0);
+    expect(his.outscores).toBeNull();
   });
 
   it("says nothing about a player the week has no line on", () => {

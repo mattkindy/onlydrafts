@@ -16,8 +16,9 @@
 import { factorsOf, type Mix } from "./copula.ts";
 import { chanceWith, type Opening } from "./explain.ts";
 import {
-  bestLineupFor, CHOICE_DRAWS, lineFor, liveDraws, slotTakesIn, sideTotals,
-  starterState, type Drawing, type GameState, type Lines, type Starter,
+  bestLineupFor, CHOICE_DRAWS, lineFor, liveDraws, outscoreShare, slotTakesIn,
+  sideTotals, starterState, type Drawing, type GameState, type Lines,
+  type Starter,
 } from "./matchups.ts";
 import type { Side } from "./providers.ts";
 import type { Player } from "./scoring.ts";
@@ -44,6 +45,12 @@ export interface WeekAdd {
   displaced: string | null;
   /** the points your lineup gains this week with him */
   brings: number;
+  /**
+   * How often he outscores the player he pushes out, on his own. The win
+   * figure already counts how he fits with the rest of the lineup and the
+   * other side, so this says how much of it is the player himself.
+   */
+  outscores: number | null;
   before: number;
   after: number;
   added: number;
@@ -300,7 +307,7 @@ export function weekPricesFor(
 
     if (!found) {
       adds.set(p.key, {
-        slot: null, displaced: null, brings: 0,
+        slot: null, displaced: null, brings: 0, outscores: null,
         before: odds, after: odds, added: 0,
       });
 
@@ -311,6 +318,9 @@ export function weekPricesFor(
       slot: lineup[found.at]!.slot,
       displaced: found.displaced?.key ?? null,
       brings: mean(his.column) - mean(found.displaced?.column ?? []),
+      outscores: found.displaced
+        ? outscoreShare(his.column, found.displaced.column)
+        : null,
       before: found.before,
       after: found.after,
       added: found.after - found.before,
