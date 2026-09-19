@@ -995,6 +995,28 @@ export const LIVE_DRAWS = 4000;
 const mean = (its: number[]) =>
   its.reduce((sum, n) => sum + n, 0) / Math.max(1, its.length);
 
+/**
+ * How often the bench player beats the starter, over the draws they were
+ * both read off. A tie counts half, since either owner would have taken it.
+ */
+export function outscoreShare(instead: number[], his: number[]): number {
+  if (!instead.length) {
+    return 0;
+  }
+
+  const won = instead.reduce((sum, mine, i) => {
+    const theirs = his[i] ?? 0;
+
+    if (mine > theirs) {
+      return sum + 1;
+    }
+
+    return mine === theirs ? sum + 0.5 : sum;
+  }, 0);
+
+  return won / instead.length;
+}
+
 export interface Standing {
   /** how often each side wins it from here */
   odds: [number, number];
@@ -1052,6 +1074,8 @@ export interface Swap {
   slot: string;
   /** what the change is worth, as win chance */
   gains: number;
+  /** and how often the bench player puts up more points than the starter */
+  outscores: number;
 }
 
 export interface Best {
@@ -1118,6 +1142,8 @@ export function bestLineupFor(
     starters.reduce((sum, player) => sum + scoredBy(player, i), 0));
   let odds = winChance(totals, theirs);
   const swaps: Swap[] = [];
+  const drawsFor = (player: { key: string; points: number }) =>
+    Array.from({ length: draws }, (_, i) => scoredBy(player, i));
 
   for (;;) {
     let found: { swap: Swap; totals: number[] } | null = null;
@@ -1143,7 +1169,13 @@ export function bestLineupFor(
 
         if (gains > (found?.swap.gains ?? 0)) {
           found = {
-            swap: { starts: player.key, benches: starter.key, slot: starter.slot, gains },
+            swap: {
+              starts: player.key,
+              benches: starter.key,
+              slot: starter.slot,
+              gains,
+              outscores: outscoreShare(drawsFor(player), drawsFor(starter)),
+            },
             totals: swapped,
           };
         }
@@ -1217,6 +1249,8 @@ export interface Alternative {
   position: string;
   /** what starting him instead would do to the win chance */
   gains: number;
+  /** and how often he puts up more points than the starter does */
+  outscores: number;
   /** his game has kicked off, so the league will not take the change */
   locked: boolean;
   /**
@@ -1308,6 +1342,7 @@ export function alternativesFor(
           name: one.player.name,
           position: one.line!.position,
           gains,
+          outscores: outscoreShare(instead, hisPoints),
           locked: shut || locked(one.player, rows, states, lines),
           why,
         };

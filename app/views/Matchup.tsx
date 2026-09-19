@@ -23,7 +23,7 @@ import {
 import type { Matchup, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import { hurtWord, type Slate, type SlateRow, type WeekRef } from "../lib/slate.ts";
-import { Advice, gainPct, nameOf } from "./Advice.tsx";
+import { Advice, gainPct, nameOf, pct } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
 import { PlayerName } from "./PlayerName.tsx";
 import { Game } from "./Matchups.tsx";
@@ -228,6 +228,7 @@ function Slot(
                   <span class="fig delta up">
                     <i>win %</i>{signed(option.gains)}
                   </span>
+                  <Fig label="outscores him">{pct(option.outscores)}</Fig>
                   {option.locked && <span class="badge even">locked</span>}
                   {option.why && <Why why={option.why} />}
                 </li>

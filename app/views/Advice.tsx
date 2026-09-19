@@ -166,7 +166,11 @@ export function Advice(
               name={nameOf(swap.benches, rows, lines, said.get(swap.benches))}
               onOpen={onMore ? () => onMore(swap.benches) : undefined}
             />{" "}
-            at {swap.slot} <span class="gain">({gainPct(swap.gains)})</span>
+            at {swap.slot}{" "}
+            <span class="gain">
+              ({gainPct(swap.gains)} to win, outscores him{" "}
+              {pct(swap.outscores)} of the time)
+            </span>
           </li>
         ))}
       </ul>

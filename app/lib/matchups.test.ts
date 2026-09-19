@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import {
   alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, hasLineup,
-  hurtFrom, initialForm, liveDraws, myGameIn,
+  hurtFrom, initialForm, liveDraws, myGameIn, outscoreShare,
   oddsFor, standingFor, sideTotals, situationsFrom, spreadOf, starterState,
   statesFrom, stockLine,
 } from "./matchups.ts";
@@ -274,6 +274,28 @@ describe("alternativesFor", () => {
 
     expect(shut[1]!.options.find((o) => o.key === "stud")!.locked).toBe(true);
   });
+
+  it("says how often each bench player beats the starter", () => {
+    const [stud, scrub] = choices[1]!.options;
+
+    expect(stud!.outscores).toBeGreaterThan(0.6);
+    expect(scrub!.outscores).toBeLessThan(0.4);
+  });
+});
+
+describe("outscoreShare", () => {
+  it("counts the draws the bench player takes", () => {
+    expect(outscoreShare([10, 2, 9, 1], [4, 8, 3, 7])).toBe(0.5);
+    expect(outscoreShare([10, 12, 9, 11], [4, 8, 3, 7])).toBe(1);
+  });
+
+  it("splits a tie between the two of them", () => {
+    expect(outscoreShare([6, 6, 9, 1], [6, 6, 3, 7])).toBe(0.5);
+  });
+
+  it("gives nothing away with no draws to read", () => {
+    expect(outscoreShare([], [])).toBe(0);
+  });
 });
 
 function corr(a: number[], b: number[]): number {
@@ -450,6 +472,7 @@ describe("bestLineupFor", () => {
     expect(best.swaps[0]).toMatchObject({ starts: "stud", benches: "scrub", slot: "WR" });
     expect(best.starters.map((s) => s.key)).toEqual(["stud"]);
     expect(best.odds).toBeGreaterThan(0.5);
+    expect(best.swaps[0]!.outscores).toBeGreaterThan(0.8);
   });
 
   it("leaves a starter whose game has kicked off where he is", () => {
