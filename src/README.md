@@ -201,8 +201,20 @@ fields look like the same claim. Only one of them is.
 | `walked` | `scripts/buildSite.ts`, from `data/kept/played-<season>.json` | one voice in where the board places him | what the August walk handed him, over the games it dealt him. Not his rate: it throws about a quarter more at the men it likes most than they get. |
 | `simulated` | `scripts/buildSite.ts` | the card and the spread for kickers and defences | a kicker's and a defence's line, who have no `projected` |
 | `weeks[].of` | `scripts/buildSite.ts` | the card's week chart, `app/lib/spread.ts` | that week over his own average. A week a slate covers takes the slate's own line, and through week 2 the slate takes this, so the two agree by construction. |
+| `weeks[].played` | `scripts/buildSite.ts` | the card's week chart, through `app/lib/scoring.ts` | what he actually did that week, in the same categories `projected` uses, so a reader's league scores it by its own rules. Null where the week has not been played. Empty where he dressed and never touched the ball, which the card shows as nothing scored rather than as no game. |
 | `blend` | `features/boardOrder.ts` | the file's default sort, then recomputed by the app | a place on the board, not a rate |
 | `sleeper` | `features/sleepersNow.ts`, through `scripts/buildSite.ts` | the waiver page's sleepers table and the player card | what he is worth against what he cost, as of the last week everybody finished. Absent until three weeks are played out, since before that the score sorts on noise and loses to the price alone. |
+
+`features/inSeasonBoard.ts` moves `projected` off a player's games, and
+a game is not only a week he has a stat row in. A week he was active for
+a game his club played, and his club had not ruled him Out or Doubtful,
+is one of his games too, and it pays nothing. `features/dressedWeeks.ts`
+says which weeks those are, off the roster file, the injury report and
+the box scores. Without them the weekly stats never mention a man who
+did not touch the ball, so a quarterback's backup kept his August number
+however many games his club played without him, and the same zero
+seasons now train the role model on what a role that never plays is
+worth.
 
 `sleeper` is `{ week, price, score, modelPpg, pricePpg, reasons }`, and
 `reasons` is the three biggest terms as `{ term, points }`. `score` is
