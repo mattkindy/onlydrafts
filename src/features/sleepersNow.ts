@@ -25,6 +25,15 @@ import {
   fitSleepersAsOf, scoreSleeper, type SleeperExample, type SleeperScore,
 } from "../model/sleepers.js";
 
+/**
+ * The first week the score is worth showing. Benched at cuts 2, 3 and 4,
+ * the model's top twenty after week 2 hit 38 times against 40 for the
+ * price alone, since one or two games leave the points term sorting on
+ * noise. After week 3 it hits 46 against the price's 39 and 41 for
+ * points a game so far, and it stays ahead from there.
+ */
+export const FIRST_SLEEPER_WEEK = 3;
+
 export interface SleepersNow {
   /** every scored player, by the id the stat file files him under */
   scores: Map<string, SleeperScore>;
@@ -74,8 +83,11 @@ function withGamesToCome(
 export async function sleepersNow(
   season: number, week: number, games: GameRow[],
 ): Promise<SleepersNow> {
-  if (week < 1) {
-    return nobody("no week has been played out yet");
+  if (week < FIRST_SLEEPER_WEEK) {
+    return nobody(
+      `only ${week} of the ${FIRST_SLEEPER_WEEK} weeks the score needs ` +
+        "have been played out",
+    );
   }
 
   const earlier = SEASONS.filter((one) => one < season);
