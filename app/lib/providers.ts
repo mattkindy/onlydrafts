@@ -274,17 +274,17 @@ export type SleeperPlayers = Record<string, SleeperPlayer>;
 
 const HOUR = 60 * 60 * 1000;
 
-/** the days a game is played, as a browser numbers them */
-const GAME_DAYS = new Set([0, 1, 4]);
+/** the days a designation lands or a game is played, as a browser numbers them */
+const GAME_DAYS = new Set([0, 1, 4, 5, 6]);
 
 /**
  * How long a player file is good for.
  *
  * A day most of the time, because the list gains players every week of
  * the year: rookies at the draft, signings all summer. Sleeper asks for
- * one pull a day and this stays inside that. Thursday, Sunday and Monday
- * are the exception, since that is when a player is ruled out a couple of
- * hours before kickoff and an owner setting a lineup needs to hear it.
+ * one pull a day and this stays inside that. Thursday through Monday are
+ * the exception: clubs publish the final report on Friday and rule players
+ * out on Saturday or an hour before kickoff, and an owner has to hear it.
  */
 export function playerFileGoodFor(now: Date = new Date()): number {
   return GAME_DAYS.has(now.getDay()) ? 3 * HOUR : 24 * HOUR;

@@ -363,11 +363,9 @@ describe("listedPlayers", () => {
 describe("how long a cached player file is good for", () => {
   const hours = (at: string) => playerFileGoodFor(new Date(at)) / (60 * 60 * 1000);
 
-  it("keeps it for the day away from the games", () => {
+  it("keeps it for the day early in the week", () => {
     expect(hours("2026-09-15T10:00:00")).toBe(24);
     expect(hours("2026-09-16T10:00:00")).toBe(24);
-    expect(hours("2026-09-18T10:00:00")).toBe(24);
-    expect(hours("2026-09-19T10:00:00")).toBe(24);
   });
 
   /** a player ruled out ninety minutes before kickoff has to get through */
@@ -375,5 +373,10 @@ describe("how long a cached player file is good for", () => {
     expect(hours("2026-09-17T10:00:00")).toBe(3);
     expect(hours("2026-09-20T10:00:00")).toBe(3);
     expect(hours("2026-09-21T10:00:00")).toBe(3);
+  });
+
+  it("pulls it again every three hours once the final report is out", () => {
+    expect(hours("2026-09-18T10:00:00")).toBe(3);
+    expect(hours("2026-09-19T10:00:00")).toBe(3);
   });
 });
