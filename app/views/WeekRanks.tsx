@@ -13,8 +13,8 @@
 import { useMemo, useState } from "preact/hooks";
 
 import {
-  isSplit, onRoster, splitBy, splitNote, verdict, SPLIT_AT, STARTER_OUT_AT,
-  type Slate, type SlateRow,
+  hurtWord, isSplit, onRoster, splitBy, splitNote, verdict, SPLIT_AT,
+  STARTER_OUT_AT, type Slate, type SlateRow,
 } from "../lib/slate.ts";
 import type { Listed } from "../lib/availability.ts";
 import { normalizeName } from "../lib/store.ts";
@@ -37,7 +37,7 @@ interface Props {
 
 /** what the injury report and his side's injuries say about one player */
 function Chips({ row, his }: { row: SlateRow; his: Listed | undefined }) {
-  const badge = injuryBadge(his);
+  const badge = injuryBadge(hurtWord(his, row));
   const chance = row.playChance;
   // the word alone does not say why his number moved, so the chance rides
   // along with it

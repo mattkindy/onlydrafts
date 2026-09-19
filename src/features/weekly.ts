@@ -108,6 +108,13 @@ export interface WeeklyExample {
   staff: StaffChange;
   /** his club listed him Questionable on this week's report */
   questionable: boolean;
+  /**
+   * his club ruled him Out or Doubtful. Only a slate row is ever set,
+   * since he never played the week there is nothing to train on.
+   */
+  ruledOut: boolean;
+  /** the word on this week's report, empty where his club said nothing */
+  status: string;
   /** he was limited in practice this week, or did not practice */
   limitedPractice: boolean;
   /**
@@ -425,6 +432,7 @@ export function buildWeeklyExamples(
     reference: PlayerWeekStats,
     target: PlayerWeekStats | undefined,
     least = windows.trainWeeks,
+    prospective = false,
   ): WeeklyExample | undefined => {
     const earlier = rows.filter((r) => r.week < week);
 
@@ -484,8 +492,10 @@ export function buildWeeklyExamples(
 
     const status = availability?.status.get(`${playerId}|${week}`);
 
-    // a player his club ruled out is not on anyone's slate
-    if (status?.out) {
+    // He did not play, so there is nothing to learn from. The slate keeps
+    // him at zero, because leaving him off let the app fall back to his
+    // season-long game and start him.
+    if (status?.out && !prospective) {
       return undefined;
     }
 
@@ -543,6 +553,8 @@ export function buildWeeklyExamples(
       passTendency: tendencyFor(teamId, week),
       staff: tendencies?.staff?.get(teamId) ?? NO_CHANGE,
       questionable: status?.questionable ?? false,
+      ruledOut: status?.out ?? false,
+      status: status?.report ?? "",
       limitedPractice: status?.limitedPractice ?? false,
       absenceShare: groups.shareOut(teamId, reference.position, week),
       qbAbsenceShare:
@@ -585,7 +597,8 @@ export function buildWeeklyExamples(
       }
 
       const example = assemble(
-        playerId, rows, prospectiveWeek, last, undefined, windows.slateWeeks);
+        playerId, rows, prospectiveWeek, last, undefined, windows.slateWeeks,
+        true);
 
       if (example) {
         prospective.push(example);

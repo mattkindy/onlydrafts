@@ -43,6 +43,13 @@ export interface SlateRow {
   /** the receptions behind his points, so another scoring can move them */
   catches: number;
   questionable: boolean;
+  /**
+   * his club ruled him Out or Doubtful when the build ran, so his points
+   * are zero and no lineup should start him
+   */
+  ruledOut: boolean;
+  /** the word his club used, where it said anything */
+  status?: string;
   gamesMissedRecent: number;
   absenceShare: number;
   /**
@@ -131,6 +138,8 @@ interface FileRow {
   q3?: number;
   catches?: number;
   questionable?: boolean;
+  ruledOut?: boolean;
+  status?: string;
   gamesMissedRecent?: number;
   gamesMissed?: number;
   absenceShare?: number;
@@ -166,6 +175,8 @@ function readRow(row: FileRow): SlateRow {
     q3: row.q3,
     catches: row.catches ?? 0,
     questionable: Boolean(row.questionable),
+    ruledOut: Boolean(row.ruledOut),
+    status: row.status || undefined,
     gamesMissedRecent: row.gamesMissedRecent ?? row.gamesMissed ?? 0,
     absenceShare: row.absenceShare ?? 0,
   };
@@ -299,6 +310,8 @@ export function withOutPlayersZeroed(
       ...NOTHING,
       catches: 0,
       questionable: false,
+      ruledOut: true,
+      status: his.status,
       gamesMissedRecent: 0,
       absenceShare: 0,
       playChance: 0,
@@ -309,11 +322,18 @@ export function withOutPlayersZeroed(
   // is a week old by Sunday, so it speaks only for a player the connected
   // league has said nothing about.
   for (const [key, row] of rows) {
-    if (!row.questionable || listed.has(key)) {
+    if (listed.has(key)) {
       continue;
     }
 
-    sat.push([key, scaledBy(row, playChance("Questionable"))]);
+    if (row.ruledOut) {
+      sat.push([key, { ...row, ...NOTHING, playChance: 0 }]);
+      continue;
+    }
+
+    if (row.questionable) {
+      sat.push([key, scaledBy(row, playChance("Questionable"))]);
+    }
   }
 
   // the same map comes back when nobody is marked down, since callers key
@@ -323,6 +343,21 @@ export function withOutPlayersZeroed(
   }
 
   return new Map([...rows, ...sat]);
+}
+
+/**
+ * The word on what is wrong with him: the league's own, and failing that
+ * the one the build wrote down. The league's player file can sit a day
+ * behind a designation that landed on Friday or Saturday.
+ */
+export function hurtWord(
+  his: Listed | undefined, row: SlateRow | undefined,
+): { status: string; part?: string } | undefined {
+  if (his) {
+    return his;
+  }
+
+  return row?.ruledOut ? { status: row.status ?? "Out" } : undefined;
 }
 
 export async function loadSlate(file: string): Promise<Slate> {

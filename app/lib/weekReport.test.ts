@@ -24,6 +24,7 @@ const row = (
   ceiling: blend * 1.8,
   catches: 0,
   questionable: false,
+  ruledOut: false,
   gamesMissedRecent: 0,
   absenceShare: 0,
 });

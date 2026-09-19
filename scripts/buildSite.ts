@@ -233,18 +233,23 @@ function slateRow(
   projection: SleeperProjection | undefined,
   quiet: boolean,
 ) {
-  const sleeper = projection
+  const said = projection
     ? sleeperPointsUnder(projection, scoring().receptions)
     : quiet ? 0 : undefined;
+  // his club has said he is not playing, so there is no week to project.
+  // He stays on the slate with the word they used, since leaving him off
+  // sent the app to his season-long game and it started him.
+  const level = e.ruledOut ? 0 : ours;
+  const sleeper = e.ruledOut ? 0 : said;
   // Sleeper leaves a player blank when he is not going to play, and a
   // half of our number would still rank him over players who will
   const average =
     sleeper === undefined
-      ? ours
+      ? level
       : sleeper === 0
         ? 0
         : blendPoints(
-          ours, debiasedSleeper(e.position, sleeper), SHIPPED_BLEND_WEIGHT);
+          level, debiasedSleeper(e.position, sleeper), SHIPPED_BLEND_WEIGHT);
   // a player who is not playing has no week to draw around
   const quantile = (q: number) =>
     average === 0 ? 0 : outcomeQuantile(residuals, e.position, average, q);
@@ -255,7 +260,7 @@ function slateRow(
     position: e.position,
     team: e.teamId,
     opponent: (e.home ? "v " : "@ ") + e.opponent,
-    ours: Number(ours.toFixed(1)),
+    ours: Number(level.toFixed(1)),
     sleeper: sleeper === undefined ? null : Number(sleeper.toFixed(1)),
     average: Number(average.toFixed(1)),
     floor: Number(quantile(0.1).toFixed(1)),
@@ -265,6 +270,8 @@ function slateRow(
     catches: Number((projection?.catches ?? e.receptionsRecent).toFixed(2)),
     snaps: Math.round(e.snapRecent * 100),
     questionable: e.questionable,
+    ruledOut: e.ruledOut,
+    status: e.status,
     gamesMissed: e.gamesMissedRecent,
     absenceShare: Number(e.absenceShare.toFixed(2)),
   };
@@ -479,6 +486,8 @@ async function defenceSlateRows(
       catches: 0,
       snaps: 100,
       questionable: false,
+      ruledOut: false,
+      status: "",
       gamesMissed: 0,
       absenceShare: 0,
     };
@@ -595,6 +604,8 @@ async function kickerSlateRows(
       catches: 0,
       snaps: 100,
       questionable: false,
+      ruledOut: false,
+      status: "",
       gamesMissed: 0,
       absenceShare: 0,
     }];
@@ -1052,7 +1063,8 @@ async function main(): Promise<void> {
           priors,
         );
 
-        ours.set(e.playerId, line);
+        // his card says what the slate says, and the slate has him at zero
+        ours.set(e.playerId, e.ruledOut ? 0 : line);
 
         return slateRow(
           residuals,

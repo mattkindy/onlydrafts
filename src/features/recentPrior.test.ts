@@ -60,6 +60,8 @@ function example(over: Partial<WeeklyExample> = {}): WeeklyExample {
     passTendency: 0.57,
     staff: { ocChanged: false, hcChanged: false, passShift: 0 },
     questionable: false,
+    ruledOut: false,
+    status: "",
     limitedPractice: false,
     absenceShare: 0,
     qbAbsenceShare: 0,

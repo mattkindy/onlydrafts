@@ -22,7 +22,7 @@ import {
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
-import type { Slate, SlateRow, WeekRef } from "../lib/slate.ts";
+import { hurtWord, type Slate, type SlateRow, type WeekRef } from "../lib/slate.ts";
 import { Advice, gainPct, nameOf } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
 import { PlayerName } from "./PlayerName.tsx";
@@ -109,8 +109,10 @@ function Numbers(
  * What the injury report says about him, next to his name, so a player
  * projected at zero is not a mystery.
  */
-function InjuryBadge({ his }: { his: Listed | undefined }) {
-  const badge = injuryBadge(his);
+function InjuryBadge(
+  { his, row }: { his: Listed | undefined; row?: SlateRow | undefined },
+) {
+  const badge = injuryBadge(hurtWord(his, row));
 
   if (!badge) {
     return null;
@@ -188,7 +190,10 @@ function Slot(
           team={his.line?.team}
           onOpen={onMore ? () => onMore(choice.starter.key) : undefined}
         />
-        <InjuryBadge his={listed.get(choice.starter.key)} />
+        <InjuryBadge
+          his={listed.get(choice.starter.key)}
+          row={rows.get(choice.starter.key)}
+        />
         {choice.locked && <span class="badge even">locked</span>}
       </h3>
 
@@ -216,7 +221,10 @@ function Slot(
                     onOpen={onMore ? () => onMore(option.key) : undefined}
                   />
                   <Numbers line={other.line} left={other.left} />
-                  <InjuryBadge his={listed.get(option.key)} />
+                  <InjuryBadge
+                    his={listed.get(option.key)}
+                    row={rows.get(option.key)}
+                  />
                   <span class="fig delta up">
                     <i>win %</i>{signed(option.gains)}
                   </span>

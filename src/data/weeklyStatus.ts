@@ -22,6 +22,11 @@ import { RAW_DIR } from "./nflverse.js";
 export interface WeekStatus {
   /** ruled Out or Doubtful, so he is not expected to play */
   out: boolean;
+  /**
+   * The word his club used, so a lineup can show it rather than only
+   * knowing that something is wrong with him.
+   */
+  report: string;
   questionable: boolean;
   /** limited in practice, or did not practice at all */
   limitedPractice: boolean;
@@ -62,6 +67,7 @@ export async function loadWeeklyInjuryStatus(
 
     byWeek.set(statusKey(playerId, week), {
       out: RULED_OUT.includes(report),
+      report,
       questionable: report === "Questionable",
       limitedPractice:
         practice.includes("limited") || practice.includes("did not"),

@@ -171,9 +171,12 @@ describe("backfield share", () => {
   });
 });
 
-function ruledOut(playerIds: string[], week: number): WeeklyAvailability {
+function ruledOut(
+  playerIds: string[], week: number, report = "Out",
+): WeeklyAvailability {
   const blank: WeekStatus = {
     out: true,
+    report,
     questionable: false,
     limitedPractice: false,
     team: "DET",
@@ -336,5 +339,41 @@ describe("depth chart join", () => {
     );
 
     expect(examples[0]!.depthKnown).toBe(false);
+  });
+});
+
+describe("a player his club ruled out this week", () => {
+  const games = [1, 2, 3, 4, 5].map(game);
+  const rows = [1, 2, 3, 4, 5].flatMap((w) => [
+    backWeek("starter", w, 12, 3),
+    backWeek("backup", w, 4, 1),
+  ]);
+  const slate = (report: string) => buildWeeklyExamples(
+    2023, rows, new Map(), games, [], presets.ppr, undefined, 5,
+    ruledOut(["starter"], 5, report),
+  );
+
+  it("stays on the slate with the word his club used", () => {
+    const his = slate("Doubtful").find((e) => e.playerId === "starter");
+
+    expect(his).toBeDefined();
+    expect(his!.ruledOut).toBe(true);
+    expect(his!.status).toBe("Doubtful");
+  });
+
+  it("leaves a teammate nobody listed unflagged", () => {
+    const his = slate("Out").find((e) => e.playerId === "backup");
+
+    expect(his!.ruledOut).toBe(false);
+    expect(his!.status).toBe("");
+  });
+
+  it("is still left out of the weeks the model trains on", () => {
+    const examples = buildWeeklyExamples(
+      2023, rows, new Map(), games, [], presets.ppr, undefined, undefined,
+      ruledOut(["starter"], 5, "Doubtful"),
+    );
+
+    expect(examples.map((e) => e.playerId)).toEqual(["backup"]);
   });
 });

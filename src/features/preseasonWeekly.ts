@@ -211,6 +211,8 @@ export function preseasonWeeklyExamples(
         // in August no club has published an injury report for December,
         // so out of season this is false for everyone
         questionable: input.isQuestionable(playerId, slot.week),
+        ruledOut: false,
+        status: "",
         limitedPractice: false,
         // no position group has lost anyone yet, so there is no share to move
         absenceShare: 0,

@@ -42,7 +42,10 @@ function ruledOut(playerId: string, week: number): Map<string, WeekStatus> {
   return new Map([
     [
       `${playerId}|${week}`,
-      { out: true, questionable: false, limitedPractice: false, team: "DET", position: "RB" },
+      {
+        out: true, report: "Out", questionable: false, limitedPractice: false,
+        team: "DET", position: "RB",
+      },
     ],
   ]);
 }

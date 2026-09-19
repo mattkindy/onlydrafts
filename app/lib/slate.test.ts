@@ -269,6 +269,50 @@ describe("a player the injury report is unsure about", () => {
     expect(back.ceiling).toBe(0);
   });
 
+  it("keeps a doubtful player's word on his row through the read", () => {
+    const flagged = readSlate({
+      season: 2026,
+      week: 2,
+      perCatch: 0.5,
+      players: [{
+        name: "Zay Flowers", position: "WR", team: "BAL", opponent: "v CLE",
+        ours: 0, sleeper: 0, average: 0, floor: 0, ceiling: 0,
+        q1: 0, q3: 0, catches: 4, ruledOut: true, status: "Doubtful",
+      }],
+    });
+
+    expect(flagged.rows[0]!.ruledOut).toBe(true);
+    expect(flagged.rows[0]!.status).toBe("Doubtful");
+  });
+
+  /**
+   * A designation landing on Saturday can sit in the league's own player
+   * file for a day, and the build's word is the only one we have until it
+   * catches up.
+   */
+  it("holds a ruled out player at zero when the league has said nothing", () => {
+    const flowers = normalizeName("Zay Flowers");
+    const flagged = readSlate({
+      season: 2026,
+      week: 2,
+      perCatch: 0.5,
+      players: [{
+        name: "Zay Flowers", position: "WR", team: "BAL", opponent: "v CLE",
+        ours: 14, sleeper: 13, average: 13.5, floor: 7, ceiling: 24,
+        q1: 10, q3: 18, catches: 4, ruledOut: true, status: "Doubtful",
+      }],
+    });
+    const rows = withOutPlayersZeroed(rowsOf(flagged), new Map());
+    const row = rows.get(flowers)!;
+    const live = liveDraws([{ key: flowers }], rows, new Map(), 50);
+
+    expect(row.blend).toBe(0);
+    expect(row.ceiling).toBe(0);
+    expect(row.playChance).toBe(0);
+    expect(lineOf(flowers, rows)!.blend).toBe(0);
+    expect(live.toCome(flowers).every((week) => week === 0)).toBe(true);
+  });
+
   it("marks down a player only the build had listed", () => {
     const listed = readSlate({
       season: 2026,
