@@ -16,7 +16,14 @@
 import {
   build, cheap, CUTS, SEASONS, TOP_PRICED, type Row,
 } from "../src/backtest/sleeperBench.js";
+import {
+  buildContingent, isBackup, STARTER_SNAPS, type ContingentRow,
+} from "../src/backtest/contingentBench.js";
 import { seasonsAsked } from "../src/data/seasons.js";
+import {
+  calibration, fitRoleChanceAsOf, roleChanceWeights, scoreContingent,
+  type ContingentScore, type RoleChanceFit,
+} from "../src/model/contingentSleepers.js";
 import {
   fitSleepersAsOf, rankSleepers, sleeperTermNames,
   type SleeperExample, type SleeperFit, type SleeperScore,
@@ -41,12 +48,25 @@ const SHOWN_SETS: SleeperTermSet[] = ["shipped", "usage", "usage with role"];
 /** one fit's scores for one cut, keyed by player */
 type Scored = Map<SleeperTermSet, Map<string, SleeperScore>>;
 
+/** everything a method may read about the players at one cut */
+interface AtCut {
+  scored: Scored;
+  /** the contingent parts, absent for a player with no club or no rank */
+  contingent: Map<string, ContingentScore>;
+}
+
 /** what one method ranks by, biggest first */
-type Order = (row: Row, scored: Scored) => number;
+type Order = (row: Row, at: AtCut) => number;
 
 const by = (
-  terms: SleeperTermSet, row: Row, scored: Scored,
-): SleeperScore | undefined => scored.get(terms)?.get(row.cut.playerId);
+  terms: SleeperTermSet, row: Row, at: AtCut,
+): SleeperScore | undefined => at.scored.get(terms)?.get(row.cut.playerId);
+
+const contingent = (row: Row, at: AtCut): ContingentScore | undefined =>
+  at.contingent.get(row.cut.playerId);
+
+const shippedScore = (row: Row, at: AtCut): number =>
+  by("shipped", row, at)?.score ?? -Infinity;
 
 const METHODS: Record<string, Order> = {
   "the price itself": (row) => -row.cut.price,
@@ -54,30 +74,38 @@ const METHODS: Record<string, Order> = {
   "raw work share": (row) => row.cut.rawWorkShare,
   "the in-season level": (row) => row.cut.inSeasonPpg,
   "the role level": (row) => row.cut.roleLevelPpg,
-  "the model": (row, scored) =>
-    by("shipped", row, scored)?.score ?? -Infinity,
+  "the model": shippedScore,
   // Two ways of taking the price off the same fit, since the module's own
   // score is one reading of "what his price says" and the curve's median
   // at that price is the other.
-  "the model over the curve": (row, scored) => {
-    const his = by("shipped", row, scored);
+  "the model over the curve": (row, at) => {
+    const his = by("shipped", row, at);
 
     return his === undefined ? -Infinity : his.modelPpg - his.priceMedian;
   },
-  "the model's own line": (row, scored) =>
-    by("shipped", row, scored)?.modelPpg ?? -Infinity,
-  "the model plus in-season": (row, scored) =>
-    by("with in-season", row, scored)?.score ?? -Infinity,
-  "plus in-season, own line": (row, scored) =>
-    by("with in-season", row, scored)?.modelPpg ?? -Infinity,
-  "usage, no points": (row, scored) =>
-    by("usage", row, scored)?.score ?? -Infinity,
-  "usage plus role": (row, scored) =>
-    by("usage with role", row, scored)?.score ?? -Infinity,
-  "usage, split trend": (row, scored) =>
-    by("usage, split trend", row, scored)?.score ?? -Infinity,
-  "usage, own line": (row, scored) =>
-    by("usage", row, scored)?.modelPpg ?? -Infinity,
+  "the model's own line": (row, at) =>
+    by("shipped", row, at)?.modelPpg ?? -Infinity,
+  "the model plus in-season": (row, at) =>
+    by("with in-season", row, at)?.score ?? -Infinity,
+  "plus in-season, own line": (row, at) =>
+    by("with in-season", row, at)?.modelPpg ?? -Infinity,
+  "usage, no points": (row, at) =>
+    by("usage", row, at)?.score ?? -Infinity,
+  "usage plus role": (row, at) =>
+    by("usage with role", row, at)?.score ?? -Infinity,
+  "usage, split trend": (row, at) =>
+    by("usage, split trend", row, at)?.score ?? -Infinity,
+  "usage, own line": (row, at) =>
+    by("usage", row, at)?.modelPpg ?? -Infinity,
+  "would average": (row, at) =>
+    contingent(row, at)?.wouldAverage ?? -Infinity,
+  "the chance it opens": (row, at) =>
+    contingent(row, at)?.roleChance ?? -Infinity,
+  "contingent": (row, at) => contingent(row, at)?.score ?? -Infinity,
+  "model plus contingent": (row, at) =>
+    shippedScore(row, at) + (contingent(row, at)?.score ?? 0),
+  "better of the two": (row, at) =>
+    Math.max(shippedScore(row, at), contingent(row, at)?.score ?? -Infinity),
   "oracle: the rest known": (row) => row.restOfSeasonPpg,
   "oracle: the rate known": (row) => row.restOfSeasonPerGame,
 };
@@ -93,10 +121,10 @@ const COMPARED: [string, string][] = [
   ["the model", "usage plus role"],
 ];
 
-function topPicks(rows: Row[], order: Order, scored: Scored): Row[] {
+function topPicks(rows: Row[], order: Order, at: AtCut): Row[] {
   return [...rows]
     .sort((a, b) => {
-      const gap = order(b, scored) - order(a, scored);
+      const gap = order(b, at) - order(a, at);
 
       return gap === 0 ? a.cut.playerId.localeCompare(b.cut.playerId) : gap;
     })
@@ -210,6 +238,127 @@ function keep(
       kept.byPosition.get(name)!,
       position,
       picks.filter((row) => row.cut.position === position),
+    );
+  }
+}
+
+/* ---------- the second outcome: did the job come to him ---------- */
+
+/** what one method's picks did about taking a job, over one population */
+interface RoleTally {
+  picks: number;
+  /** how many went on to average a starter's share of the snaps */
+  started: number;
+  /** what those ones averaged over the games they played */
+  pointsWhenStarted: number;
+  /** and what all the picks averaged */
+  points: number;
+}
+
+const emptyRole = (): RoleTally => ({
+  picks: 0, started: 0, pointsWhenStarted: 0, points: 0,
+});
+
+function talliedRole(
+  into: RoleTally, picks: Row[], opened: Map<string, ContingentRow>,
+): void {
+  for (const pick of picks) {
+    const his = opened.get(pick.cut.playerId);
+    into.picks++;
+    into.points += pick.restOfSeasonPerGame;
+
+    if (his?.becameStarter) {
+      into.started++;
+      into.pointsWhenStarted += pick.restOfSeasonPerGame;
+    }
+  }
+}
+
+/** every method over the backups, and how many of them the job came to */
+interface RoleKept {
+  pooled: Map<string, RoleTally>;
+  candidates: number;
+  opened: number;
+}
+
+const emptyRoleKept = (): RoleKept => ({
+  pooled: new Map(NAMES.map((name) => [name, emptyRole()])),
+  candidates: 0,
+  opened: 0,
+});
+
+function reportRole(kept: RoleKept, title: string): void {
+  console.log(
+    `\n${title}: ${kept.candidates} candidates, ${kept.opened} of them went ` +
+    `on to average ${(STARTER_SNAPS * 100).toFixed(0)}% of the snaps`,
+  );
+  console.log(
+    `${"method".padEnd(25)}  starters  of picks   rate   ppg when they did` +
+    "   ppg overall",
+  );
+
+  for (const name of NAMES) {
+    const tally = kept.pooled.get(name)!;
+    const rate = tally.picks === 0 ? 0 : tally.started / tally.picks;
+    const when = tally.started === 0
+      ? 0 : tally.pointsWhenStarted / tally.started;
+    console.log(
+      `${name.padEnd(25)}  ${String(tally.started).padStart(8)}` +
+      `  ${String(tally.picks).padStart(8)}  ${rate.toFixed(3)}` +
+      `  ${when.toFixed(2).padStart(17)}` +
+      `  ${per(tally.points, tally.picks).toFixed(2).padStart(12)}`,
+    );
+  }
+}
+
+/**
+ * What the chance is built on and whether it means what it says. Every
+ * chance here came from a fit that had not seen the season it scored, so
+ * the deciles are out of sample.
+ */
+function reportChance(
+  fit: RoleChanceFit,
+  marked: { chance: number; becameStarter: boolean }[],
+): void {
+  console.log(
+    `\nwhat the ${fit.trainedOn[0]} to ` +
+    `${fit.trainedOn[fit.trainedOn.length - 1]} role chance fit weighs, in ` +
+    "chance per deviation",
+  );
+
+  for (const { term, weight } of roleChanceWeights(fit)) {
+    console.log(`  ${term.padEnd(26)}${weight.toFixed(3)}`);
+  }
+
+  console.log("\nthe chance against what happened, in deciles of the chance");
+  console.log("  band          players    said     was");
+
+  for (const bin of calibration(marked)) {
+    console.log(
+      `  ${bin.low.toFixed(2)} to ${bin.high.toFixed(2)}` +
+      `  ${String(bin.players).padStart(7)}` +
+      `   ${bin.predicted.toFixed(3)}   ${bin.realized.toFixed(3)}`,
+    );
+  }
+}
+
+/** the contingent picks at one cut, for reading by eye */
+function reportNearest(
+  title: string, picks: ContingentScore[],
+  opened: Map<string, ContingentRow>,
+): void {
+  console.log(`\n${title}`);
+
+  for (const pick of picks) {
+    const his = opened.get(pick.playerId);
+    console.log(
+      `  ${pick.playerName.slice(0, 20).padEnd(20)} ${pick.position} ` +
+      `${(pick.roleChance * 100).toFixed(0).padStart(3)}% chance, would ` +
+      `average ${pick.wouldAverage.toFixed(1)} against the ` +
+      `${pick.pricePpg.toFixed(1)} his price says, score ` +
+      `${pick.score.toFixed(2)}; ` +
+      `${his?.becameStarter ? "took the job" : "did not"}, ` +
+      `${his?.row.restOfSeasonPerGame.toFixed(1) ?? "0.0"} a game after`,
     );
   }
 }
@@ -392,15 +541,15 @@ function reportReasons(
 /* ---------- how well each line predicts the rest of the season ---------- */
 
 /** what one reader says a candidate does from here */
-const LINES: Record<string, (row: Row, scored: Scored) => number> = {
+const LINES: Record<string, (row: Row, at: AtCut) => number> = {
   "the price median": (row) => row.cut.priceMedian,
   "points a game so far": (row) => row.cut.ppgSoFar,
   "the in-season level": (row) => row.cut.inSeasonPpg,
   "the role level": (row) => row.cut.roleLevelPpg,
-  "the model's own line": (row, scored) =>
-    by("shipped", row, scored)?.modelPpg ?? 0,
-  "plus in-season, own line": (row, scored) =>
-    by("with in-season", row, scored)?.modelPpg ?? 0,
+  "the model's own line": (row, at) =>
+    by("shipped", row, at)?.modelPpg ?? 0,
+  "plus in-season, own line": (row, at) =>
+    by("with in-season", row, at)?.modelPpg ?? 0,
 };
 
 const mean = (values: number[]) =>
@@ -511,6 +660,19 @@ async function main(): Promise<void> {
   const examples: SleeperExample[] = rows.map((row) => ({
     cut: row.cut, restOfSeasonPpg: row.restOfSeasonPpg,
   }));
+  const contingentRows = (await buildContingent(rows, CUTS)).rows;
+  const backups = contingentRows.filter(isBackup);
+  const atCut = (season: number, week: number, playerId: string) =>
+    `${season}|${week}|${playerId}`;
+  const byPlayer = new Map(contingentRows.map((one) =>
+    [atCut(one.cut.season, one.cut.week, one.cut.playerId), one]));
+  const roleKept = emptyRoleKept();
+  const stillBehind = emptyRoleKept();
+  const marked: { chance: number; becameStarter: boolean }[] = [];
+  let lastChanceFit: RoleChanceFit | undefined;
+  let nearest: {
+    scored: ContingentScore[]; opened: Map<string, ContingentRow>;
+  } | undefined;
   const kept = emptyKept();
   const lines = new Map(Object.keys(LINES).map((name) =>
     [name, new Map(CUTS.map((week) => [week, { said: [], was: [] } as Said]))]));
@@ -534,6 +696,8 @@ async function main(): Promise<void> {
   for (const season of scorable) {
     const fits = new Map(TERM_SETS.map((terms) =>
       [terms, fitSleepersAsOf(season, examples, { terms })]));
+    const chanceFit = fitRoleChanceAsOf(season, backups);
+    lastChanceFit = chanceFit;
 
     for (const week of CUTS) {
       const population = rows.filter((row) =>
@@ -554,10 +718,52 @@ async function main(): Promise<void> {
         }
       }
 
+      const mine = population
+        .map((row) => byPlayer.get(atCut(season, week, row.cut.playerId)))
+        .filter((one): one is ContingentRow => one !== undefined);
+      const at: AtCut = {
+        scored,
+        contingent: new Map(mine.map((one) =>
+          [one.cut.playerId, scoreContingent(chanceFit, one.cut)])),
+      };
+      const behind = mine.filter(isBackup);
+      const opened = new Map(behind.map((one) => [one.cut.playerId, one]));
+      const notYet = behind
+        .filter((one) => one.cut.snapShare < STARTER_SNAPS);
+      const notYetOpened = new Map(notYet.map((one) =>
+        [one.cut.playerId, one]));
+      const behindRows = behind.map((one) => one.row);
+      const notYetRows = notYet.map((one) => one.row);
+
+      roleKept.candidates += behind.length;
+      roleKept.opened += behind.filter((one) => one.becameStarter).length;
+      stillBehind.candidates += notYet.length;
+      stillBehind.opened += notYet.filter((one) => one.becameStarter).length;
+
+      for (const one of behind) {
+        marked.push({
+          chance: at.contingent.get(one.cut.playerId)!.roleChance,
+          becameStarter: one.becameStarter,
+        });
+      }
+
+      if (season === SHOWN_CUT.season && week === SHOWN_CUT.week) {
+        nearest = {
+          scored: behind.map((one) => at.contingent.get(one.cut.playerId)!),
+          opened,
+        };
+      }
+
       for (const name of NAMES) {
-        keep(
-          kept, name, season, week,
-          topPicks(population, METHODS[name]!, scored),
+        const order = METHODS[name]!;
+        keep(kept, name, season, week, topPicks(population, order, at));
+        talliedRole(
+          roleKept.pooled.get(name)!, topPicks(behindRows, order, at), opened,
+        );
+        talliedRole(
+          stillBehind.pooled.get(name)!,
+          topPicks(notYetRows, order, at),
+          notYetOpened,
         );
       }
 
@@ -565,7 +771,7 @@ async function main(): Promise<void> {
         const mark = lines.get(name)!.get(week)!;
 
         for (const row of population) {
-          mark.said.push(line(row, scored));
+          mark.said.push(line(row, at));
           mark.was.push(row.restOfSeasonPpg);
         }
       }
@@ -598,6 +804,20 @@ async function main(): Promise<void> {
   }
 
   reportPooled(kept);
+  reportRole(
+    roleKept,
+    "second outcome: the top twenty among the players ranked 2 or 3 at " +
+    "their position",
+  );
+  reportRole(
+    stillBehind,
+    "the same, over only the ones under a starter's share at the cut",
+  );
+
+  if (lastChanceFit) {
+    reportChance(lastChanceFit, marked);
+  }
+
   reportSeasonSpread(kept);
 
   for (const outcome of OUTCOMES) {
@@ -623,6 +843,20 @@ async function main(): Promise<void> {
 
   for (const [terms, picks] of shown) {
     reportReasons(SHOWN_CUT.season, SHOWN_CUT.week, picks, terms);
+  }
+
+  if (nearest) {
+    const when = `in ${SHOWN_CUT.season} after week ${SHOWN_CUT.week}`;
+    const deepest = (read: (one: ContingentScore) => number) =>
+      [...nearest!.scored].sort((a, b) => read(b) - read(a)).slice(0, PICKS);
+    reportNearest(
+      `who the contingent score liked ${when}`,
+      deepest((one) => one.score), nearest.opened,
+    );
+    reportNearest(
+      `who was nearest a job ${when}, by the chance alone`,
+      deepest((one) => one.roleChance), nearest.opened,
+    );
   }
 
   if (last && shown.size === 0) {

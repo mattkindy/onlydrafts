@@ -47,3 +47,27 @@ export function claimWords(said: Sleeper): string {
 
   return `${sign}${said.score.toFixed(1)} a game over his price`;
 }
+
+/**
+ * Under this the job is not close enough to say anything about, and a
+ * card cluttered with a one in twenty chance for every backup in the
+ * league is a card nobody reads.
+ */
+const WORTH_SAYING = 0.2;
+
+/**
+ * The other claim, as "would average 14.2 with the job, about a 35%
+ * chance it opens". Nothing comes back when the board has no contingent
+ * parts for him or when the job is too far off to be worth the room.
+ */
+export function roleWords(said: Sleeper): string {
+  const would = said.wouldAverage;
+  const chance = said.roleChance;
+
+  if (would == null || chance == null || chance < WORTH_SAYING) {
+    return "";
+  }
+
+  return `would average ${would.toFixed(1)} with the job, about a ` +
+    `${Math.round(chance * 100)}% chance it opens`;
+}

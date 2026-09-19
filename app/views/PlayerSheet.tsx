@@ -5,7 +5,7 @@ import { useEffect } from "preact/hooks";
 import type { Pays, Player } from "../lib/scoring.ts";
 import { payFor } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
-import { claimWords, reasonWords } from "../lib/sleeperWords.ts";
+import { claimWords, reasonWords, roleWords } from "../lib/sleeperWords.ts";
 import { lineOver, movedBy } from "../lib/statLine.ts";
 
 interface Props {
@@ -107,6 +107,7 @@ export function PlayerSheet(props: Props) {
   const sim = p.sim;
   const said = p.sleeper;
   const why = said ? reasonWords(said) : "";
+  const ifTheJobOpens = said ? roleWords(said) : "";
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -151,6 +152,10 @@ export function PlayerSheet(props: Props) {
             {said.week}
             {why && `, on ${why}`}
           </div>
+        )}
+
+        {ifTheJobOpens && (
+          <div class="fact">if the job opens: {ifTheJobOpens}</div>
         )}
 
         {p.games !== undefined && (
