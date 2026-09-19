@@ -14,6 +14,7 @@
  */
 
 import { fitRidge, predictRidge } from "../backtest/ridge.js";
+import { mean, scalingFor, standardizedRow } from "./termScaling.js";
 
 /**
  * How many opportunities it takes before a player's own rate outweighs
@@ -277,33 +278,13 @@ export interface RoleChanceFit {
   weights: number[];
 }
 
-const mean = (values: number[]) =>
-  values.length === 0
-    ? 0
-    : values.reduce((sum, value) => sum + value, 0) / values.length;
-
-function deviation(values: number[], middle: number): number {
-  if (values.length < 2) {
-    return 1;
-  }
-
-  const spread = mean(values.map((value) => (value - middle) ** 2));
-
-  return spread > 1e-12 ? Math.sqrt(spread) : 1;
-}
-
 /** the raw value of every term, in `roleChanceTermNames` order */
 export const chanceTermValues = (cut: ContingentCut): number[] =>
   CHANCE_TERMS.map((term) => term.of(cut));
 
-function standardized(
+const standardized = (
   fit: Pick<RoleChanceFit, "means" | "deviations">, cut: ContingentCut,
-): number[] {
-  const raw = chanceTermValues(cut);
-
-  return [1, ...raw.map((value, i) =>
-    (value - (fit.means[i] ?? 0)) / (fit.deviations[i] ?? 1))];
-}
+): number[] => standardizedRow(fit, chanceTermValues(cut));
 
 /**
  * The same pull the sleeper fit uses, as a share of the rows behind it,
@@ -334,13 +315,7 @@ export function fitRoleChance(
     );
   }
 
-  const raw = examples.map((one) => chanceTermValues(one.cut));
-  const means = CHANCE_TERMS.map((_, i) => mean(raw.map((row) => row[i] ?? 0)));
-  const scaling = {
-    means,
-    deviations: CHANCE_TERMS.map((_, i) =>
-      deviation(raw.map((row) => row[i] ?? 0), means[i] ?? 0)),
-  };
+  const scaling = scalingFor(examples.map((one) => chanceTermValues(one.cut)));
   const X = examples.map((one) => standardized(scaling, one.cut));
   const y = examples.map((one) => (happened(one) ? 1 : 0));
 

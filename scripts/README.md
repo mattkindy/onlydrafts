@@ -1230,15 +1230,15 @@ method                       ppg  p@10   p@20  h@20    ppg  p@10   p@20  h@20   
 the price itself            8.55  0.238  0.250  105  10.07  0.229  0.236   99     420
 points a game so far       11.17  0.410  0.343  144  13.43  0.410  0.329  138     420
 raw work share              8.24  0.319  0.288  121   9.68  0.267  0.231   97     420
-the in-season level        11.06  0.376  0.312  131  13.56  0.357  0.295  124     420
-the role level             10.60  0.290  0.269  113  13.09  0.276  0.233   98     420
+the in-season level        11.69  0.400  0.343  144  14.02  0.371  0.314  132     420
+the role level             11.14  0.310  0.269  113  13.61  0.295  0.243  102     420
 the model                  10.02  0.438  0.398  167  11.65  0.405  0.364  153     420
 the model over the curve    8.26  0.338  0.260  109   9.77  0.310  0.236   99     420
 the model's own line       11.58  0.414  0.350  147  13.73  0.438  0.345  145     420
-the model plus in-season   10.02  0.438  0.393  165  11.69  0.395  0.355  149     420
-plus in-season, own line   11.48  0.414  0.338  142  13.67  0.443  0.336  141     420
+the model plus in-season   10.52  0.452  0.417  175  12.17  0.414  0.374  157     420
+plus in-season, own line   11.83  0.405  0.348  146  14.03  0.419  0.340  143     420
 usage, no points            9.00  0.386  0.343  144  10.46  0.343  0.310  130     420
-usage plus role             9.45  0.405  0.360  151  11.07  0.357  0.310  130     420
+usage plus role            10.11  0.381  0.369  155  11.88  0.319  0.331  139     420
 usage, split trend          9.04  0.376  0.345  145  10.47  0.338  0.310  130     420
 usage, own line            10.96  0.338  0.321  135  12.74  0.376  0.312  131     420
 oracle: the rest known     15.45  0.852  0.698  293  16.23  0.762  0.626  263     420
@@ -1289,10 +1289,11 @@ missing December, and the score loses 14 of its 167. So the score was
 being paid a little for picking players who stayed healthy, and it keeps
 the win without that.
 
-The plain projection wins the points outright. "The model's own line" is
-the same fit with nothing taken off, and it averages 11.58 a pick against
-points a game so far's 11.17, five seasons of seven. So taking the price
-off costs a point and a half a pick and buys five points of precision.
+The plain projection wins the points. "The model's own line" is the same
+fit with nothing taken off, and it averages 11.58 a pick against points a
+game so far's 11.17, five seasons of seven. Only the two in-season lines
+beat it, at 11.69 and 11.83. So taking the price off costs a point and a
+half a pick and buys five points of precision.
 The players the board is highest on among the cheap are the ones already
 scoring, and subtracting the price pushes them down in favour of players
 whose share and trend say more than their box score does.
@@ -1328,32 +1329,32 @@ position centre is what ships even though it scores worse on the points.
 
 ## Whether the in-season update helps
 
-It does not. The update is the rest of season level from
+It does. The update is the rest of season level from
 `src/features/inSeasonLevel.ts`: a preseason anchor moved by what a
 player's usage says his role pays and by his points a game so far. On
 this bench the anchor is the price curve's median at his price, and both
 the role level and the update weights are fitted on seasons before the
 one being scored. The candidates, the cuts and the definition of a hit
-are the ones above, untouched, and every number for the old methods comes
-out where it was.
+are the ones above, untouched.
 
 Three ways of adding it, all in the table above. The update on its own
-reads 11.06 a pick and 0.312 at twenty, so it beats the price and loses
-to points a game so far on both. The role level on its own, which is what
-the usage pays with the player's own scoring rate left out, reads 10.60
-and 0.269. Adding the two to the model as terms leaves it where it was:
-10.02 a pick either way, 165 hits against 167, 0.393 against 0.398. Each
-cut reads the same way: the pair is 54 hits against 56 after week 4,
-level at 55 after week 6, and level at 56 after week 8.
+reads 11.69 a pick and 0.343 at twenty, so it beats the price on both and
+draws level with points a game so far. The role level on its own, which
+is what the usage pays with the player's own scoring rate left out, reads
+11.14 and 0.269. Adding the two to the model as terms is the one that
+pays: 10.52 a pick against 10.02, 175 hits against 167, 0.417 against
+0.398. Every cut goes the same way, 60 hits against 56 after week 4, 57
+against 55 after week 6 and 58 against 56 after week 8.
 
-The weights say why. Points a game so far falls from 2.22 to 1.83 and the
-work share from 0.60 to 0.50 when the two new terms arrive at 0.34 and
-0.22. The update is made of usage and points a game so far, the fit
-already reads both, so the terms take weight off what they are made of
-and the order barely moves.
+The weights say where it comes from. Points a game so far falls from 2.22
+to 1.25 and the work share from 0.60 to 0.37 when the two new terms
+arrive at 1.15 and 0.28. The update is made of usage and points a game so
+far, so the terms take their weight off what they are made of, and the
+1.15 is the part of a player's level that neither of those two says on
+its own.
 
-On the question the update was built for it does beat points a game so
-far over these candidates, and loses to the fit's own line, which is the
+On the question the update was built for it beats points a game so far
+over these candidates and it beats the fit's own line, which is the
 measure that matters here since that line is what the ranking comes off:
 
 ```
@@ -1361,41 +1362,47 @@ rest of season over the cheap candidates, MAE then correlation
                                week 4      week 6      week 8
 the price median            5.51 0.331   5.73 0.302   5.94 0.269
 points a game so far        2.83 0.632   2.70 0.643   2.65 0.647
-the in-season level         2.72 0.653   2.71 0.653   2.70 0.652
-the role level              2.76 0.633   2.76 0.626   2.74 0.625
+the in-season level         2.53 0.674   2.47 0.676   2.42 0.682
+the role level              2.59 0.657   2.51 0.655   2.44 0.662
 the model's own line        2.25 0.669   2.24 0.673   2.29 0.678
-plus in-season, own line    2.24 0.671   2.24 0.674   2.28 0.679
+plus in-season, own line    2.19 0.684   2.17 0.686   2.19 0.691
 ```
 
 ## Who the update finds and who it likes by mistake
 
 The update on its own and the role level on its own rank on points a game
-with nothing taken off, so they fill up on quarterbacks: 313 and 346 of
+with nothing taken off, so they fill up on quarterbacks: 301 and 332 of
 their 420 picks, against the model's 68. That does open the blind spot.
-Between them they add 53 and 59 hits the model's top twenty never had,
+Between them they add 59 and 56 hits the model's top twenty never had,
 and the first dozen are all passers: Justin Herbert in 2020, Trevor
 Lawrence and Matthew Stafford in 2025, Ryan Tannehill in 2020, Bo Nix in
 2024, Justin Fields in 2022.
 
-It costs more than it pays. The same two orders add 198 and 240 misses,
+It costs more than it pays. The same two orders add 182 and 228 misses,
 and those are passers too: Andy Dalton at 23.5 points a game in relief
 and nothing after it, Marcus Mariota, Jameis Winston, Joe Flacco, Dwayne
 Haskins, Deshaun Watson, Dorian Thompson-Robinson on a role level of 17.8
 off 1.2 points a game. Pass attempts pay a quarterback level whatever he
 does with them, and most of these lost the job or the season inside a
-week or two. They drop 89 and 113 hits to make room, among them Justin
+week or two. They drop 82 and 110 hits to make room, among them Justin
 Jefferson in 2020 at every cut, Brian Thomas Jr. in 2024, Brock Bowers,
 Bucky Irving and Hunter Renfrow.
 
 Added to the model as terms, where the score is centred inside a position
-again, the two change almost nobody: 20 swaps out of 420. It adds
-Courtland Sutton after week 4 of 2024 and Zach Ertz after week 8, both
-hits, and drops Jefferson in 2020, Brock Purdy in 2023, Cole Kmet and Pat
-Freiermuth. The other 20 it adds all miss, and most are the same
-caretaker passers. So the earlier read is unchanged: the model still
-finds its hits through work share at back and tight end, 88 of its 167,
-still takes only 68 quarterbacks, and its worst calls are still one good
-game and a job that was never his.
+again, the two swap 48 of the 420 picks and the swap is worth eight hits.
+What comes in is a cheap quarterback who was already scoring and went on
+scoring: Trevor Lawrence in 2025, Ryan Tannehill in 2020, Jameis Winston
+in 2019, Jordan Love in 2023, Kirk Cousins in 2022 at two cuts, with
+Courtland Sutton in 2024 the one receiver among them. What goes out is a
+tight end or a receiver whose share had arrived before his points did,
+Jefferson in 2020, Hunter Renfrow, Garrett Wilson, Cole Kmet and Pat
+Freiermuth. The passers it adds and misses on are Gardner Minshew at all
+three cuts of 2020, Joe Burrow, Carson Wentz and Jared Goff, so the same
+caretakers are still in the population and the terms take more of the
+passers who kept the job than of the ones who lost it. The model's own
+shape is unchanged underneath: it still finds its hits through work share
+at back and tight end, 88 of its 167, and it still takes only 68
+quarterbacks where the pair takes 92.
 
 ## Taking the points back out of the terms
 
@@ -1408,9 +1415,11 @@ is the first one with the trend split into the target trend and the carry
 trend it was summed from.
 
 None of them ship. Against the shipped 0.398 at twenty they read 0.343,
-0.360 and 0.345, and on the rate against 0.364 all three read 0.310. The
-per-game outcome was where they had the best case and it does not arrive.
-They lose the points a pick too, 9.00 and 9.45 against 10.02.
+0.369 and 0.345, and on the rate against 0.364 they read 0.310, 0.331 and
+0.310. The per-game outcome was where they had the best case and it does
+not arrive. Two of them lose the points a pick as well, at 9.00 and 9.04
+against 10.02, and usage plus role comes out a tenth of a point ahead at
+10.11 while still finding twelve fewer players a league starts.
 
 Splitting the trend changes nothing: 0.345 against 0.343, with the target
 trend at 0.19 and the carry trend at 0.30 where the sum was 0.38.
@@ -1433,8 +1442,8 @@ this is true more often than it is false. Dropping the term to avoid the
 Andy Daltons costs more Dak Prescotts than it saves.
 
 The role level is the closest thing to a usage-only term that works, at
-0.360, and it gets there by being made of usage: a 2.00 weight on it in
-the usage fit against the 0.22 it takes beside the points. It is still
+0.369, and it gets there by being made of usage: a 2.26 weight on it in
+the usage fit against the 0.28 it takes beside the points. It is still
 under the shipped 0.398.
 
 The script prints the top ten after week 6 of 2025 under all three sets,
@@ -2069,6 +2078,260 @@ nothing left that varies.
 Take the incumbent's side out. Six terms describe the man in front and
 under both outcomes they weigh nought to two decimal places. Dropping
 them would say what the fit is actually doing.
+
+## Scoring a backup in points instead of in a chance times a price
+
+Everything above turns the two halves into one number by multiplying a
+chance by a rate. This round changes all three parts of that. The chance
+the man in front misses a week comes off the availability model the site
+already ships instead of a ridge fitted from scratch on a rare binary. A
+second road to the job is added, which is the man in front keeping his
+health and losing the job anyway. And the score stops being a rate over a
+price and becomes the points a backup adds over the rest of the season
+for the roster spot he takes up.
+
+`src/model/expectedSleepers.ts` is the model and
+`src/backtest/expectedBench.ts` builds the rows. `sleeperEval.ts` benches
+it beside everything else, on the tables above and on one more.
+
+### Where the chance of missing a week comes from
+
+`src/features/gamesPlayed.ts` fits a ridge on a player's last three
+seasons of games, his age, the touches a game he was handed, his weight,
+the weeks he was listed out, the weeks he was listed at all, whether he
+finished last season still on the report, how much of his home schedule
+is on turf and the weeks his club had him on reserve. What comes back is
+his expected games, which is the number a card already prints as "about
+9.1 projected games".
+
+`src/features/fitAbsence.ts` is the other half. It reads played weeks
+into a per-position hazard of a spell starting and a pool of spell
+lengths, and `hazardFor` moves the league's hazard until a player's
+expected misses land on what the availability model said of him. Under
+that process the share of weeks he is down is the hazard times the mean
+spell over one plus the same product, and that share is the weekly chance
+used here. Both fits read only seasons before the one being scored, and
+neither is refitted for this.
+
+Over the 3559 backups the score covers, this is what it says about the
+man in front of each of them:
+
+```
+  position  backups   misses a week   the job opens   points added
+  QB            475           0.220           0.914           45.1
+  RB           1075           0.213           0.913           35.1
+  WR            995           0.194           0.907            7.5
+  TE           1014           0.220           0.904            8.0
+  all          3559           0.210           0.909           21.0
+```
+
+The weekly number is small and the season number is not, and both are
+right. A starter misses about a fifth of his weeks, so over the ten to
+fourteen weeks left at a cut something opens up in front of almost
+everybody, which is why the middle column is nine in ten for every
+position. That is the first thing this round found: a chance of the job
+opening at some point does no separating at all, and the ordering the
+score produces is very nearly the value half on its own.
+
+### How often a fit starter loses his job anyway
+
+The sweep takes weeks 4, 6 and 8 of 2015 to 2025, ranks every club's
+position group on the work it has handed out through the cut, and pairs
+the man on top with the players ranked second and third. 6560 pairs, 4439
+of them with four more games on the club's schedule to read. A backup
+counts as having taken the job when he got more opportunity than the man
+in front over those four weeks and at least three a game of it, while the
+roster file had the man in front active and the injury report had nothing
+on him in three of the four weeks including the last. That happened 449
+times, so about one pair in ten.
+
+Reading it off the roster file rather than off who played is what makes
+the quarterbacks work. A benched passer still dresses, so a rule that
+asks whether he played would throw away the cases the question is about.
+
+```
+  position    pairs   the backup took the job
+  QB            518                        57
+  RB           1368                       142
+  WR           1380                       200
+  TE           1173                        50
+```
+
+The fit reads six terms: the man in front's points a game so far less
+what the curve says a player at his price averages, whether the backup
+went inside the top hundred and is in his first two seasons, how far the
+backup's share of the snaps moved over the three weeks to the cut, and
+his position. The seasons before 2018 have no price curve, so they count
+toward the rate above and stay out of the fit.
+
+```
+  term                          weight   the term's own average
+  the starter against his price -0.022                   1.554
+  the backup's draft capital     0.043                   0.128
+  his snaps over three weeks     0.026                  -0.002
+  is RB                         -0.006                   0.312
+  is WR                          0.014                   0.306
+  is TE                         -0.028                   0.256
+```
+
+```
+  band          players    said     was
+  0.00 to 0.02      237   0.009   0.017
+  0.02 to 0.04      238   0.033   0.008
+  0.04 to 0.06      237   0.051   0.042
+  0.06 to 0.08      238   0.068   0.025
+  0.08 to 0.09      238   0.085   0.046
+  0.09 to 0.11      237   0.101   0.034
+  0.11 to 0.13      238   0.119   0.071
+  0.13 to 0.16      237   0.141   0.080
+  0.16 to 0.20      238   0.178   0.113
+  0.21 to 0.42      238   0.265   0.168
+```
+
+It predicts something, which is more than the six terms about the
+incumbent in the old chance managed. Draft capital is the biggest term:
+a backup a club spent a top hundred pick on in the last two drafts is the
+one who takes a job off a fit starter. The snap trend is next, so a
+backup whose share was already climbing keeps climbing. The starter's own
+gap comes out at -0.022 with the sign it should have, a starter beating
+his price being the one who keeps his place, and it is half the size of
+the draft pick behind him.
+
+The deciles order the population out of sample, from 1.7% at the bottom
+to 16.8% at the top, and the fit is too sure of itself in the middle,
+promising 10% where 3% happened. That is least squares on a binary that
+comes up one time in ten again. The ordering can be read; the number
+beside a player cannot.
+
+### Rest of season total points per roster spot
+
+The tables above score a pick on points a game over his club's remaining
+games and on whether he cleared his position's starter tier. Neither is
+the question this score was built for, which is what a roster spot
+returns from the cut to the end of the season. So each method's twenty
+are added up on what they actually scored, zero weeks included.
+
+```
+method                       total   a spot   week 4   week 6   week 8   jobs opened   ppg when open
+the price itself             39363     93.7    15514    13042    10807          111           9.62
+points a game so far         51096    121.7    19497    17232    14367           64          11.58
+the in-season level          53722    127.9    21079    17674    14970           39          11.98
+the model                    45796    109.0    17605    15425    12766           69          11.78
+the model plus in-season     48107    114.5    18596    15962    13549           55          11.87
+contingent                   46104    109.8    17652    15360    13092           92          10.88
+would average                45993    109.5    18062    15456    12475           73          12.04
+the chance it opens          48766    116.1    19072    16245    13450           47           9.33
+value then chance            19073     45.4     7594     6136     5343          103           7.91
+expected points added        13969     33.3     6030     4627     3312          166           8.98
+oracle: the rest known       70959    168.9    27013    23703    20244          115          15.83
+oracle: the totals known     71109    169.3    27016    23761    20332          117          15.66
+```
+
+A job opened for a pick when the man in front of him missed three or more
+of the weeks left or the pick himself went on to take half the snaps.
+"ppg when open" is what the picks scored over the weeks their job was
+open, counting a week they did not play as nothing.
+
+The new score is the worst thing in the table. 13969 points against the
+shipped model's 45796, the in-season level's 53722 and an oracle's 71109,
+and one of its spots returns 33.3 points where doing nothing but reading
+the price returns 93.7. On the starter tier it finds 10 players of 420
+against the shipped model's 167. Neither gate came close.
+
+What it does find is openings. 166 of its 420 picks saw the job in front
+of them open, which is more than any other method in the bench and more
+than either oracle, since an oracle that knows the rest of the season is
+answering a different question. The openings are worth nothing: its picks
+average 8.98 a game over the weeks their job was open, where the shipped
+model's picks average 11.78 and the price alone's 9.62.
+
+### Where the list goes
+
+218 quarterbacks and 202 running backs of 420 picks, and not one receiver
+or tight end. After week 6 of 2025 it is fifteen backup quarterbacks and
+five deep running backs:
+
+```
+  Tyler Shough         QB  99% the job opens, worth 104.1; it opened, 158 points in 10 games
+  Jalen Milroe         QB  96% the job opens, worth  84.1; it did not, 0 in 0
+  Anthony Richardson   QB  99% the job opens, worth  78.8; it opened, 0 in 0
+  Mason Rudolph        QB 100% the job opens, worth  77.5; it opened, 15 in 3
+  Kirk Cousins         QB 100% the job opens, worth  71.8; it opened, 102 in 9
+  Zach Wilson          QB  97% the job opens, worth  71.2; it opened, 0 in 3
+  Joe Milton III       QB  99% the job opens, worth  64.2; it did not, 11 in 3
+  Isaac Guerendo       RB  99% the job opens, worth  64.0; it did not, 0 in 3
+  Dameon Pierce        RB 100% the job opens, worth  62.9; it did not, 1 in 3
+  Drew Lock            QB  95% the job opens, worth  54.2; it did not, 0 in 2
+  Devin Neal           RB  96% the job opens, worth  53.6; it opened, 59 in 8
+  Trey Lance           QB  89% the job opens, worth  53.4; it did not, 11 in 3
+  Mitchell Trubisky    QB  92% the job opens, worth  52.8; it did not, 30 in 3
+  Jaxson Dart          QB 100% the job opens, worth  50.8; it opened, 183 in 9
+  Jacoby Brissett      QB  97% the job opens, worth  50.3; it opened, 207 in 11
+  Joshua Dobbs         QB  94% the job opens, worth  47.1; it did not, 2 in 3
+  Andy Dalton          QB  93% the job opens, worth  45.3; it opened, 3 in 2
+  Davis Mills          QB  81% the job opens, worth  45.2; it opened, 67 in 5
+  Tahj Brooks          RB  90% the job opens, worth  44.3; it did not, 5 in 8
+  Brian Robinson       RB  99% the job opens, worth  44.1; it did not, 46 in 11
+```
+
+Ten of the twenty had the job open and the twenty scored about 900 points
+between them, which is 45 a spot and the best cut the score has. The
+three that paid are Brissett, Dart and Shough, and every one of them was
+a quarterback the room already knew about.
+
+The reason the list looks like this is the value half, and it is the same
+reason the "value then chance" ordering picked twenty running backs
+further up. What a backup would average with the job is his shrunk points
+per opportunity times the opportunities the inheritance line gives his
+position, and that line hands every deep quarterback 33.5 attempts and
+every deep back 18.4 touches whatever his own work says. A third string
+quarterback's present role pays him nothing. So the gap between the two
+is a large number that barely moves inside a position, the weekly chance
+is nine in ten for everybody, and the ordering ends up sorting the league
+by position.
+
+### Reading it
+
+It does not ship. The score loses on points per roster spot, 13969
+against 45796, and on the starter tier, 10 hits against 167, so neither
+gate the owner set came in. `buildSite.ts` still does not write
+`wouldAverage` or `roleChance` or anything new, the card text in
+`app/lib/sleeperWords.ts` stays inert, and the Waivers view gets no
+second table.
+
+Two of the three changes were worth making on their own terms. Taking the
+weekly chance off the availability model means the sleeper side and the
+season sim now say the same thing about who is likely to miss games, and
+it costs no fit of its own. The benching fit is the first thing about the
+man in front that has predicted anything here: six terms about the
+incumbent weighed nought in the role chance, and this one orders its
+population from 1.7% to 16.8% off his price gap and the pick behind him.
+
+The third change is the one that fails. Adding up the weeks is the right
+arithmetic and it is being applied to a value half that cannot tell one
+deep back from another.
+
+### What to try next on this
+
+Give the inheritance line something that varies inside a position. The
+running back line is a constant 18.4 and the quarterback line is very
+nearly 33.5, so the value half hands a whole position the same number and
+the ranking follows. Until that changes, any ordering that leads on the
+value picks the same twenty players.
+
+Take the job's size off the score. A backup who inherits a job for two
+weeks and a backup who inherits it for ten are both paid the full weekly
+gap here. Reading the expected open weeks as a spell rather than as a
+steady rate would separate a starter with a history of long absences from
+one who misses the odd Sunday.
+
+Put the benching chance into the shipped fit as a term rather than
+scoring on it. It predicts, it is cheap, and the shipped model already
+knows how to weigh a term against points a game so far.
+
+Rank inside a position. Nine in ten is the open chance at every position,
+so the only thing separating positions in this score is the size of the
+job, which is a fact about quarterbacks and not about any player.
 
 ## What to try next
 

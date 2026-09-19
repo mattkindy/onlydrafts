@@ -100,7 +100,7 @@ export function boardByName(
   return byName;
 }
 
-function pricedAs(
+export function pricedAs(
   byName: Map<string, AdpEntry[]>, name: string, position: string,
 ): AdpEntry | undefined {
   const entries = byName.get(normalizeName(name)) ?? [];

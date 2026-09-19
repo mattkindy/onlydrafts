@@ -20,6 +20,13 @@ interface Absence {
   /** a spell's length in weeks, drawn */
   spellOf: (position: string, uniform: () => number) => number;
   /**
+   * How long a spell runs on average. A caller who wants the chance a
+   * player is down in a given week rather than a season played out needs
+   * it, since a hazard on its own says how often spells start and not how
+   * many weeks they cover.
+   */
+  meanSpellOf: (position: string) => number;
+  /**
    * The same process scaled to one player: the league's hazard moved so
    * his expected games match what the availability model says of him.
    */
@@ -30,7 +37,14 @@ const POSITIONS = ["QB", "RB", "WR", "TE"];
 /** a player counts toward the fit once he averages this many touches */
 const STEADY = 5;
 
-export async function fitAbsence(seasons: number[]): Promise<Absence> {
+/**
+ * A caller fitting one of these per season reads the same four or five
+ * stat files over and over, so it can hand in a reader that remembers
+ * them.
+ */
+export async function fitAbsence(
+  seasons: number[], load = loadPlayerStats,
+): Promise<Absence> {
   const spells = new Map<string, number[]>();
   const starts = new Map<string, number>();
   const playingWeeks = new Map<string, number>();
@@ -42,7 +56,7 @@ export async function fitAbsence(seasons: number[]): Promise<Absence> {
     const teamWeeks = new Map<string, Set<number>>();
     const teamOf = new Map<string, string>();
 
-    for (const s of await loadPlayerStats(season)) {
+    for (const s of await load(season)) {
       if (s.week > 18 || !POSITIONS.includes(s.position)) {
         continue;
       }
@@ -112,14 +126,19 @@ export async function fitAbsence(seasons: number[]): Promise<Absence> {
 
     return pool[Math.min(pool.length - 1, Math.floor(uniform() * pool.length))]!;
   };
+  const meanSpellOf = (pos: string) => {
+    const pool = spells.get(pos) ?? [1];
+
+    return pool.reduce((a, b) => a + b, 0) / Math.max(1, pool.length);
+  };
 
   return {
     hazardOf,
     spellOf,
+    meanSpellOf,
     hazardFor: (pos, expectedGames, playable) => {
       const league = hazardOf(pos);
-      const pool = spells.get(pos) ?? [1];
-      const meanSpell = pool.reduce((a, b) => a + b, 0) / Math.max(1, pool.length);
+      const meanSpell = meanSpellOf(pos);
       const hisMissed = Math.max(0.2, playable - expectedGames);
       /**
        * Expected misses are roughly hazard times spell length times

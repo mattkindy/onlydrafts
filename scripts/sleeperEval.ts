@@ -8,7 +8,8 @@
  * in-season update, the role level, and the model under each of its term
  * sets, against an oracle that knew the rest. Every method is scored
  * twice, over his club's remaining games with the tier on total points
- * and over the games he played with the tier on the rate.
+ * and over the games he played with the tier on the rate, and once on the
+ * points its twenty returned for the roster spots they took up.
  *
  * Run: npx tsx scripts/sleeperEval.ts [--seasons 2016-2025]
  */
@@ -19,17 +20,32 @@ import {
 import {
   buildContingent, isBackup, STARTER_SNAPS, type ContingentRow,
 } from "../src/backtest/contingentBench.js";
+import {
+  benchExamples, benchingKey, buildBenching, missWorldFor,
+  type BenchingCase, type MissWorld,
+} from "../src/backtest/expectedBench.js";
 import { seasonsAsked } from "../src/data/seasons.js";
 import {
   BENCH_SNAP_CEILING, calibration, chanceThenValue, fitRoleChanceAsOf,
-  roleChanceWeights, scoreContingent, valueThenChance,
+  roleChanceWeights, scoreContingent, valueThenChance, wouldAverage,
   type ContingentScore, type Marked, type RoleChanceFit,
 } from "../src/model/contingentSleepers.js";
+import {
+  benchChance, benchWeights, expectedAdded, fitBenchingAsOf,
+  type BenchFit, type ExpectedScore,
+} from "../src/model/expectedSleepers.js";
 import {
   fitSleepersAsOf, rankSleepers, sleeperTermNames,
   type SleeperExample, type SleeperFit, type SleeperScore,
   type SleeperTermSet,
 } from "../src/model/sleepers.js";
+
+/**
+ * The seasons the benching rate is measured over. It reads a stat file, a
+ * snap file and a roster file and nothing about a price, so it can go
+ * back further than the cuts a price curve allows.
+ */
+const BENCHING_SEASONS = Array.from({ length: 11 }, (_, i) => 2015 + i);
 
 /** how deep each method picks, and where precision is read */
 const PICKS = 20;
@@ -58,6 +74,8 @@ interface AtCut {
   fromTheIncumbent: Map<string, ContingentScore>;
   /** and from the fit asked who went on to score like a starter */
   onThePoints: Map<string, ContingentScore>;
+  /** what the job is worth to him in points over the rest of the season */
+  expected: Map<string, ExpectedScore>;
 }
 
 /**
@@ -147,8 +165,11 @@ const METHODS: Record<string, Order> = {
     shippedScore(row, at) + (contingent(row, at)?.score ?? 0),
   "better of the two": (row, at) =>
     Math.max(shippedScore(row, at), contingent(row, at)?.score ?? -Infinity),
+  "expected points added": (row, at) =>
+    at.expected.get(row.cut.playerId)?.expectedAdded ?? -Infinity,
   "oracle: the rest known": (row) => row.restOfSeasonPpg,
   "oracle: the rate known": (row) => row.restOfSeasonPerGame,
+  "oracle: the totals known": (row) => row.restOfSeasonTotal,
 };
 
 const NAMES = Object.keys(METHODS);
@@ -306,6 +327,100 @@ function keep(
   }
 }
 
+/* ---------- the fourth outcome: points per roster spot ---------- */
+
+/**
+ * How many of the weeks left the man in front has to miss before the job
+ * counts as having opened, which is the same three the position base rate
+ * is counted at.
+ */
+const MISSED_TO_OPEN = 3;
+
+/** what one method's twenty were worth to the roster spot they took up */
+interface Spot {
+  picks: number;
+  /** what the picks actually scored over the rest of the season */
+  total: number;
+  /** how many of them saw the job in front of them open */
+  opened: number;
+  /** the weeks it was open, and what they scored over those weeks */
+  openWeeks: number;
+  openPoints: number;
+}
+
+const emptySpot = (): Spot => ({
+  picks: 0, total: 0, opened: 0, openWeeks: 0, openPoints: 0,
+});
+
+const jobOpened = (his: BenchingCase | undefined): boolean =>
+  his !== undefined
+    && (his.starterMissedAfter >= MISSED_TO_OPEN || his.tookStartersShare);
+
+function talliedSpot(
+  into: Spot, picks: Row[], caseOf: (row: Row) => BenchingCase | undefined,
+): void {
+  for (const pick of picks) {
+    const his = caseOf(pick);
+    into.picks++;
+    into.total += pick.restOfSeasonTotal;
+    into.openWeeks += his?.openWeeks ?? 0;
+    into.openPoints += his?.pointsWhenOpen ?? 0;
+
+    if (jobOpened(his)) {
+      into.opened++;
+    }
+  }
+}
+
+interface SpotKept {
+  pooled: Map<string, Spot>;
+  byCut: Map<string, Map<number, Spot>>;
+}
+
+const emptySpotKept = (): SpotKept => ({
+  pooled: new Map(NAMES.map((name) => [name, emptySpot()])),
+  byCut: new Map(NAMES.map((name) => [name, new Map<number, Spot>()])),
+});
+
+function keepSpot(
+  kept: SpotKept, name: string, week: number, picks: Row[],
+  caseOf: (row: Row) => BenchingCase | undefined,
+): void {
+  talliedSpot(kept.pooled.get(name)!, picks, caseOf);
+  const byCut = kept.byCut.get(name)!;
+  const tally = byCut.get(week) ?? emptySpot();
+  talliedSpot(tally, picks, caseOf);
+  byCut.set(week, tally);
+}
+
+function reportSpot(kept: SpotKept): void {
+  console.log(
+    "\nrest of season total points per roster spot, over each method's " +
+    `${PICKS} a cut`,
+  );
+  console.log(
+    `${"method".padEnd(25)}    total   a spot` +
+    `${CUTS.map((week) => `   week ${week}`).join("")}` +
+    "   jobs opened   ppg when open",
+  );
+
+  for (const name of NAMES) {
+    const tally = kept.pooled.get(name)!;
+    const cuts = CUTS.map((week) => {
+      const mine = kept.byCut.get(name)!.get(week) ?? emptySpot();
+
+      return `  ${mine.total.toFixed(0).padStart(7)}`;
+    });
+    console.log(
+      `${name.padEnd(25)}  ${tally.total.toFixed(0).padStart(7)}` +
+      `  ${per(tally.total, tally.picks).toFixed(1).padStart(7)}` +
+      `${cuts.join("")}` +
+      `  ${String(tally.opened).padStart(11)}` +
+      `  ${per(tally.openPoints, tally.openWeeks).toFixed(2).padStart(13)}`,
+    );
+  }
+}
+
 /* ---------- the second outcome: did the job come to him ---------- */
 
 /** how many of a method's picks the outcome came true for, and what they paid */
@@ -437,6 +552,105 @@ function reportChance(
       `  ${bin.low.toFixed(2)} to ${bin.high.toFixed(2)}` +
       `  ${String(bin.players).padStart(7)}` +
       `   ${bin.predicted.toFixed(3)}   ${bin.realized.toFixed(3)}`,
+    );
+  }
+}
+
+/** one backup's two chances, for reading what the model says about a week */
+interface Chances {
+  position: string;
+  missPerWeek: number;
+  openChance: number;
+  expectedAdded: number;
+}
+
+/**
+ * What the absence model and the benching fit between them say about a
+ * backup, pooled by position. A weekly chance of missing is a small
+ * number and a chance of missing at some point over eleven weeks is a
+ * large one, and the two are worth seeing side by side.
+ */
+function reportChances(chances: Chances[]): void {
+  console.log(
+    "\nwhat the man in front's absence is worth to the backups behind him",
+  );
+  console.log(
+    `  ${"position".padEnd(10)}backups   misses a week   the job opens   ` +
+    "points added",
+  );
+
+  for (const position of [...POSITIONS, "all"]) {
+    const mine = position === "all"
+      ? chances
+      : chances.filter((one) => one.position === position);
+
+    if (mine.length === 0) {
+      continue;
+    }
+
+    console.log(
+      `  ${position.padEnd(10)}${String(mine.length).padStart(7)}` +
+      `   ${mean(mine.map((one) => one.missPerWeek)).toFixed(3).padStart(13)}` +
+      `   ${mean(mine.map((one) => one.openChance)).toFixed(3).padStart(13)}` +
+      `   ${mean(mine.map((one) => one.expectedAdded)).toFixed(1).padStart(12)}`,
+    );
+  }
+}
+
+/** what the benching fit weighs, and whether its chance means anything */
+function reportBenching(fit: BenchFit, marked: Marked[]): void {
+  console.log(
+    `\nwhat the ${fit.trainedOn[0]} to ` +
+    `${fit.trainedOn[fit.trainedOn.length - 1]} benching fit weighs, in ` +
+    `chance per deviation, over ${fit.examples} incumbent and backup pairs ` +
+    `of which ${fit.benched} ended with the backup holding the job`,
+  );
+  console.log(`  ${"term".padEnd(30)}weight   the term's own average`);
+
+  for (const { term, weight, average } of benchWeights(fit)) {
+    console.log(
+      `  ${term.padEnd(30)}${weight.toFixed(3).padStart(6)}` +
+      `   ${average.toFixed(3).padStart(21)}`,
+    );
+  }
+
+  console.log(
+    "\nthe benching chance against what happened, in deciles of the chance",
+  );
+  console.log("  band          players    said     was");
+
+  for (const bin of calibration(marked)) {
+    console.log(
+      `  ${bin.low.toFixed(2)} to ${bin.high.toFixed(2)}` +
+      `  ${String(bin.players).padStart(7)}` +
+      `   ${bin.predicted.toFixed(3)}   ${bin.realized.toFixed(3)}`,
+    );
+  }
+}
+
+/** the expected points picks at one cut, for reading by eye */
+function reportExpected(
+  title: string, picks: Row[], at: AtCut,
+  caseOf: (row: Row) => BenchingCase | undefined,
+): void {
+  console.log(`\n${title}`);
+
+  for (const pick of picks) {
+    const his = at.expected.get(pick.cut.playerId);
+    const mine = caseOf(pick);
+
+    if (!his) {
+      continue;
+    }
+
+    console.log(
+      `  ${pick.cut.playerName.slice(0, 20).padEnd(20)} ${pick.cut.position} ` +
+      `${(his.openChance * 100).toFixed(0).padStart(3)}% the job opens, ` +
+      `worth ${his.expectedAdded.toFixed(1).padStart(5)} over the rest ` +
+      `(${his.expectedPerGame.toFixed(2)} a week); the job ` +
+      `${jobOpened(mine) ? "opened" : "did not open"}, he scored ` +
+      `${pick.restOfSeasonTotal.toFixed(0)} in ${pick.gamesAfter} games, ` +
+      `${pick.restOfSeasonPerGame.toFixed(1)} a game`,
     );
   }
 }
@@ -764,6 +978,20 @@ async function main(): Promise<void> {
   }));
   const contingentRows = (await buildContingent(rows, CUTS)).rows;
   const backups = contingentRows.filter(isBackup);
+  const benchCases = await buildBenching(BENCHING_SEASONS, CUTS);
+  const benchBy = new Map(benchCases.map((one) =>
+    [benchingKey(one.season, one.week, one.playerId), one]));
+  const benchTeaching = benchExamples(benchCases);
+  const misses = await missWorldFor(priced);
+  const benchMarked: Marked[] = [];
+  const chances: Chances[] = [];
+  let lastBenchFit: BenchFit | undefined;
+  let shownExpected: {
+    picks: Row[];
+    at: AtCut;
+    caseOf: (row: Row) => BenchingCase | undefined;
+  } | undefined;
+  const spots = emptySpotKept();
   const atCut = (season: number, week: number, playerId: string) =>
     `${season}|${week}|${playerId}`;
   const byPlayer = new Map(contingentRows.map((one) =>
@@ -811,9 +1039,11 @@ async function main(): Promise<void> {
     const pointsFit = fitRoleChanceAsOf(
       season, backups, { outcome: "a starter's points" },
     );
+    const benchFit = fitBenchingAsOf(season, benchTeaching);
     lastChanceFit = chanceFit;
     lastIncumbentFit = incumbentFit;
     lastPointsFit = pointsFit;
+    lastBenchFit = benchFit;
 
     for (const week of CUTS) {
       const population = rows.filter((row) =>
@@ -845,6 +1075,40 @@ async function main(): Promise<void> {
           [one.cut.playerId, scoreContingent(incumbentFit, one.cut)])),
         onThePoints: new Map(mine.map((one) =>
           [one.cut.playerId, scoreContingent(pointsFit, one.cut)])),
+        expected: new Map(mine.filter(isBackup).flatMap((one) => {
+          const his = benchBy.get(
+            benchingKey(season, week, one.cut.playerId),
+          );
+
+          if (!his) {
+            return [];
+          }
+
+          // a player with no games of his own is read at what his price
+          // pays, though a cut only keeps the players who have one
+          const now = one.row.cut.gamesPlayed > 0
+            ? one.row.cut.inSeasonPpg
+            : one.cut.priceMedian;
+
+          const missPerWeek = misses.missPerWeek(
+            season, his.starterId, one.cut.position,
+          );
+          const score = expectedAdded({
+            missPerWeek,
+            benchedByFour: benchChance(benchFit, his.cut),
+            weeksLeft: one.row.weeksLeft,
+            wouldAverage: wouldAverage(one.cut),
+            currentPpg: now,
+          });
+          chances.push({
+            position: one.cut.position,
+            missPerWeek,
+            openChance: score.openChance,
+            expectedAdded: score.expectedAdded,
+          });
+
+          return [[one.cut.playerId, score]];
+        })),
       };
       const behind = mine.filter(isBackup);
       // every scorable player rather than the backups alone, since the
@@ -878,6 +1142,14 @@ async function main(): Promise<void> {
           happened: one.scoredLikeStarter,
         });
 
+        const pair = benchBy.get(benchingKey(season, week, one.cut.playerId));
+
+        if (pair?.benched !== undefined) {
+          benchMarked.push({
+            chance: benchChance(benchFit, pair.cut), happened: pair.benched,
+          });
+        }
+
         if (one.cut.snapShare < BENCH_SNAP_CEILING) {
           markedOffTheIncumbent.push({
             chance: at.fromTheIncumbent.get(one.cut.playerId)!.roleChance,
@@ -887,6 +1159,12 @@ async function main(): Promise<void> {
       }
 
       if (season === SHOWN_CUT.season && week === SHOWN_CUT.week) {
+        shownExpected = {
+          picks: topPicks("expected points added", population, at),
+          at,
+          caseOf: (row: Row) =>
+            benchBy.get(benchingKey(season, week, row.cut.playerId)),
+        };
         nearest = {
           scored: behind.map((one) => at.contingent.get(one.cut.playerId)!),
           onThePoints: mine
@@ -895,8 +1173,13 @@ async function main(): Promise<void> {
         };
       }
 
+      const caseOf = (row: Row) =>
+        benchBy.get(benchingKey(season, week, row.cut.playerId));
+
       for (const name of NAMES) {
-        keep(kept, name, season, week, topPicks(name, population, at));
+        const picks = topPicks(name, population, at);
+        keep(kept, name, season, week, picks);
+        keepSpot(spots, name, week, picks, caseOf);
         talliedRole(
           roleKept.pooled.get(name)!, topPicks(name, behindRows, at), opened,
         );
@@ -944,6 +1227,16 @@ async function main(): Promise<void> {
   }
 
   reportPooled(kept);
+  reportSpot(spots);
+  console.log(
+    `\nthe benching sweep read ${benchCases.length} incumbent and backup ` +
+    `pairs over ${BENCHING_SEASONS[0]} to ` +
+    `${BENCHING_SEASONS[BENCHING_SEASONS.length - 1]}, ` +
+    `${benchCases.filter((one) => one.benched !== undefined).length} of them ` +
+    "with four weeks left to read, and the backup had the job four weeks on " +
+    `with the man in front fit in ${benchCases.filter((one) => one.benched)
+      .length} of those.`,
+  );
   reportRole(
     roleKept,
     "second outcome: the top twenty among the players ranked 2 or 3 at " +
@@ -971,6 +1264,20 @@ async function main(): Promise<void> {
       "fit asked who went on to score like a starter",
       lastPointsFit,
       markedOnThePoints,
+    );
+  }
+
+  reportChances(chances);
+
+  if (lastBenchFit) {
+    reportBenching(lastBenchFit, benchMarked);
+  }
+
+  if (shownExpected) {
+    reportExpected(
+      `who the expected points score liked in ${SHOWN_CUT.season} after ` +
+      `week ${SHOWN_CUT.week}`,
+      shownExpected.picks, shownExpected.at, shownExpected.caseOf,
     );
   }
 

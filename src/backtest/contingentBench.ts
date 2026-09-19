@@ -133,7 +133,7 @@ function totalled(
 /* ---------- who is in front of whom ---------- */
 
 /** one club's players at one position, the busiest first */
-interface Pecking {
+export interface Pecking {
   playerId: string;
   perGame: number;
   opportunities: number;
@@ -144,7 +144,7 @@ interface Pecking {
  * ranked. A club that has played four games and given its lead back
  * fourteen carries a game is offering a job worth fourteen carries.
  */
-function peckingOrders(
+export function peckingOrders(
   read: OpportunitySeason, week: number,
 ): Map<string, Pecking[]> {
   const byClub = new Map<string, Map<string, Pecking>>();
@@ -198,7 +198,7 @@ function clubAt(
 }
 
 /** a teammate below this is not taking work off anybody */
-const MEANINGFUL_PER_GAME = 3;
+export const MEANINGFUL_PER_GAME = 3;
 
 /* ---------- the snaps ---------- */
 
@@ -208,7 +208,7 @@ const MEANINGFUL_PER_GAME = 3;
  * normalized name inside a club. A name that matches two players on one
  * club is dropped rather than guessed at.
  */
-function snapsById(
+export function snapsById(
   read: OpportunitySeason, counts: SnapCountWeek[],
 ): Map<string, Map<number, number>> {
   const byKey = new Map<string, string | null>();
