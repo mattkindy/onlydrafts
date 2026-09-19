@@ -38,8 +38,8 @@ says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `jointProjectionEval.ts`, `playLayerEval.ts`, `estimateCorrelation.ts`,
 `exemptCheck.ts`, `leverageUsageProbe.ts`, `marketPriceProbe.ts`,
 `sleeperEval.ts`, `seasonShrinkEval.ts`, `inSeasonLevelEval.ts`,
-`kickerSeasonEval.ts`, `kickerWeekEval.ts`, `walkVolumeEval.ts` and
-`simAgreement.ts`.
+`kickerSeasonEval.ts`, `kickerWeekEval.ts`, `walkVolumeEval.ts`,
+`injuryStatusEval.ts` and `simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
@@ -1767,3 +1767,82 @@ skill positions and the defences and never for kickers, so a kicker's
 slate row ships no rival number beside ours. Sleeper beat our defence
 line through week four and it would be worth knowing whether it beats a
 kicker line that reads 0.08.
+
+# What a word on the injury report is worth
+
+`injuryStatusEval.ts` counts the nflverse injury reports for 2018 to
+2025 against what the player then did, at QB, RB, WR, TE and K. 6,499
+listings, taking the last report of each player's week. He counts as
+having played if he has a stat row or an offensive snap.
+
+```
+status         listings  played
+Out                2637   0.001
+Doubtful            417   0.012
+Questionable       3445   0.639
+```
+
+Doubtful is out. Twelve of the 417 doubtful players in eight seasons
+took a snap, which is close enough to zero that the app now prices it
+there. Questionable is the word that decides a lineup, and about a third
+of the players carrying it do not play.
+
+Who it hits depends on the position. A questionable quarterback plays
+43% of the time, where a receiver plays 68%:
+
+```
+pos           Out      Doubtful  Questionable
+QB     0.00 (265)     0.00 (44)    0.43 (264)
+RB     0.00 (603)    0.02 (119)    0.60 (878)
+WR    0.00 (1125)    0.02 (163)    0.68 (1571)
+TE     0.00 (580)     0.00 (79)    0.67 (633)
+K       0.00 (64)     0.00 (12)     0.68 (99)
+```
+
+Practice splits questionable nearly in half:
+
+```
+practice   listings  played
+DNP             533   0.432
+Limited        2222   0.657
+Full            638   0.745
+```
+
+A questionable player who does play scores 86% of what the same player
+averaged over his weeks that season with nothing said about him, 7.1
+points against 8.3, over 1,997 weeks. That is a further markdown the app
+does not yet take.
+
+Four rules for the chance he plays, fitted on 2018 to 2022 and scored by
+Brier score on 2023 to 2025, against an oracle that knew the scoring
+seasons' own rates:
+
+```
+rule                                    brier
+A  the app today (Q 1.00, D 1.00)       0.2598
+B  priors (Q 0.60, D 0.00)              0.1234
+C  measured by status (Q 0.65, D 0.01)  0.1241
+D  measured by status and practice      0.1224
+   ceiling: the same seasons' own rates 0.1233
+```
+
+Treating everybody not ruled out as certain to play is twice as wrong as
+anything else here. Past that there is almost nothing in it: Matt's
+priors, the measured rates and the oracle all land within a thousandth
+of each other, and practice participation buys a further 0.001. The app
+ships the measured rates by status, since the live providers send the
+status word and never say who practised.
+
+## What to try next
+
+Fold the 0.86 in. A questionable player is worth 0.64 of a week times
+0.86 of his usual rate, which is 0.55, not 0.64. The reason to wait is
+that neither projection is independent of the injury: Sleeper's number
+already reacts to the word, so multiplying both by the same rate may be
+counting it twice. Measuring the two projections against what the player
+scored, split by status, would settle it.
+
+Practice participation from a live source. It is worth 0.001 on the
+Brier score, which is nothing, but the split is wide: 43% for a player
+who did not practise against 75% for one who practised in full. Sleeper
+and ESPN both send only the status word.

@@ -38,17 +38,26 @@ interface Props {
 /** what the injury report and his side's injuries say about one player */
 function Chips({ row, his }: { row: SlateRow; his: Listed | undefined }) {
   const badge = injuryBadge(his);
+  const chance = row.playChance;
+  // the word alone does not say why his number moved, so the chance rides
+  // along with it
+  const marked = chance !== undefined && chance > 0 && chance < 1;
+  const odds = marked ? `, ${Math.round(chance! * 100)}%` : "";
+  const why = marked
+    ? `. About ${Math.round(chance! * 100)}% of the players listed this way ` +
+      "have played, and his projection is marked down to match"
+    : "";
 
   return (
     <>
       {badge && (
-        <span class={"badge " + badge.badgeHow} title={badge.badgeTitle}>
-          {badge.badge}
+        <span class={"badge " + badge.badgeHow} title={badge.badgeTitle + why}>
+          {badge.badge + odds}
         </span>
       )}
       {row.questionable && !badge && (
-        <span class="badge warn" title="listed questionable this week">
-          questionable
+        <span class="badge warn" title={"listed questionable this week" + why}>
+          {"questionable" + odds}
         </span>
       )}
       {row.gamesMissedRecent > 0 && (

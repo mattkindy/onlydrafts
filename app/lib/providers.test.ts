@@ -16,7 +16,8 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  espnPays, listedPlayers, type EspnScoringItem, type League,
+  espnPays, listedPlayers, playerFileGoodFor,
+  type EspnScoringItem, type League,
 } from "./providers.ts";
 
 const items = JSON.parse(readFileSync(
@@ -356,5 +357,23 @@ describe("listedPlayers", () => {
 
     expect(listed.has("justinjefferson")).toBe(false);
     expect(listed.get("tylerboyd")?.status).toBe("Out");
+  });
+});
+
+describe("how long a cached player file is good for", () => {
+  const hours = (at: string) => playerFileGoodFor(new Date(at)) / (60 * 60 * 1000);
+
+  it("keeps it for the day away from the games", () => {
+    expect(hours("2026-09-15T10:00:00")).toBe(24);
+    expect(hours("2026-09-16T10:00:00")).toBe(24);
+    expect(hours("2026-09-18T10:00:00")).toBe(24);
+    expect(hours("2026-09-19T10:00:00")).toBe(24);
+  });
+
+  /** a player ruled out ninety minutes before kickoff has to get through */
+  it("pulls it again every three hours on a game day", () => {
+    expect(hours("2026-09-17T10:00:00")).toBe(3);
+    expect(hours("2026-09-20T10:00:00")).toBe(3);
+    expect(hours("2026-09-21T10:00:00")).toBe(3);
   });
 });
