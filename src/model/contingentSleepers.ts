@@ -241,17 +241,35 @@ const CHANCE_TERMS: Term[] = [
 export const roleChanceTermNames: readonly string[] =
   CHANCE_TERMS.map((term) => term.name);
 
-/** one backup, and whether the job came to him */
+/** one backup, and what the rest of the season did with him */
 export interface RoleExample {
   cut: ContingentCut;
   /** he averaged a starter's snap share over the weeks he played after */
   becameStarter: boolean;
+  /**
+   * He averaged a starter's points over the weeks he played after, taken
+   * at his position's own tier. Half the snaps is a bar a second receiver
+   * clears by turning up, so a fit taught on it finds role changes a
+   * league has no use for.
+   */
+  scoredLikeStarter: boolean;
 }
 
+/** which of the two things a fit is asked to predict */
+export type RoleOutcome = "half the snaps" | "a starter's points";
+
+const OUTCOME_OF: Record<RoleOutcome, (one: RoleExample) => boolean> = {
+  "half the snaps": (one) => one.becameStarter,
+  "a starter's points": (one) => one.scoredLikeStarter,
+};
+
+export const ROLE_OUTCOMES = Object.keys(OUTCOME_OF) as RoleOutcome[];
+
 export interface RoleChanceFit {
+  outcome: RoleOutcome;
   trainedOn: number[];
   examples: number;
-  /** how many of them the job opened for */
+  /** how many of them the outcome came true for */
   opened: number;
   means: number[];
   deviations: number[];
@@ -303,8 +321,12 @@ const LOWEST_CHANCE = 0.02;
 const HIGHEST_CHANCE = 0.95;
 
 export function fitRoleChance(
-  examples: RoleExample[], lambdaShare = LAMBDA_SHARE,
+  examples: RoleExample[], options: RoleChanceOptions = {},
 ): RoleChanceFit {
+  const outcome = options.outcome ?? "half the snaps";
+  const lambdaShare = options.lambdaShare ?? LAMBDA_SHARE;
+  const happened = OUTCOME_OF[outcome];
+
   if (examples.length <= CHANCE_TERMS.length) {
     throw new Error(
       `a role chance fit wants more than ${CHANCE_TERMS.length} rows and ` +
@@ -320,14 +342,15 @@ export function fitRoleChance(
       deviation(raw.map((row) => row[i] ?? 0), means[i] ?? 0)),
   };
   const X = examples.map((one) => standardized(scaling, one.cut));
-  const y = examples.map((one) => (one.becameStarter ? 1 : 0));
+  const y = examples.map((one) => (happened(one) ? 1 : 0));
 
   return {
     ...scaling,
+    outcome,
     trainedOn: [...new Set(examples.map((one) => one.cut.season))]
       .sort((a, b) => a - b),
     examples: examples.length,
-    opened: examples.filter((one) => one.becameStarter).length,
+    opened: examples.filter(happened).length,
     weights: fitRidge(X, y, Math.max(1e-6, lambdaShare * examples.length)),
   };
 }
@@ -344,6 +367,8 @@ export interface RoleChanceOptions {
   lambdaShare?: number;
   /** the snap share a row is dropped at, one by default, meaning none */
   snapCeiling?: number;
+  /** what the fit predicts, half the snaps by default */
+  outcome?: RoleOutcome;
 }
 
 /**
@@ -359,7 +384,7 @@ export function fitRoleChanceAsOf(
   return fitRoleChance(
     examples.filter((one) =>
       one.cut.season < season && one.cut.snapShare < ceiling),
-    options.lambdaShare ?? LAMBDA_SHARE,
+    options,
   );
 }
 
@@ -412,6 +437,35 @@ export function scoreContingent(
   };
 }
 
+/** what taking the job would be worth over what his price already pays */
+export const jobValue = (score: ContingentScore): number =>
+  score.wouldAverage - score.pricePpg;
+
+/**
+ * A number in nought and one that rises with what it is given, so adding
+ * it to a whole number can only settle players the whole number ties.
+ */
+const asTiebreak = (value: number): number =>
+  0.5 + Math.atan(value) / Math.PI;
+
+/**
+ * Rank on the chance, and let the value settle the players the chance
+ * cannot tell apart. Chances are cut into bands of `band` and every
+ * player in a band is ordered on what the job would be worth to him. Two
+ * players either side of a band edge stay in chance order however close
+ * they are, which is what a rule has to give up to answer the same way
+ * whatever order the players arrive in.
+ */
+export const chanceThenValue = (
+  band: number, score: ContingentScore,
+): number => Math.floor(score.roleChance / band) + asTiebreak(jobValue(score));
+
+/** the same the other way round: the value leads and the chance settles it */
+export const valueThenChance = (
+  band: number, score: ContingentScore,
+): number =>
+  Math.floor(jobValue(score) / band) + asTiebreak(score.roleChance);
+
 /** every player scored, the biggest contingent claim first */
 export function rankContingent(
   fit: RoleChanceFit, cuts: ContingentCut[],
@@ -423,13 +477,19 @@ export function rankContingent(
 
 /* ---------- whether the chance means what it says ---------- */
 
+/** one player, what he was given and whether it came true */
+export interface Marked {
+  chance: number;
+  happened: boolean;
+}
+
 /** one decile of the chance, with what it promised and what happened */
 export interface CalibrationBin {
   /** the lowest and highest chance that landed in this decile */
   low: number;
   high: number;
   players: number;
-  /** what the fit said on average, and how often the job actually opened */
+  /** what the fit said on average, and how often it actually happened */
   predicted: number;
   realized: number;
 }
@@ -440,7 +500,7 @@ export interface CalibrationBin {
  * three empty.
  */
 export function calibration(
-  marked: { chance: number; becameStarter: boolean }[], bins = 10,
+  marked: Marked[], bins = 10,
 ): CalibrationBin[] {
   const sorted = [...marked].sort((a, b) => a.chance - b.chance);
   const out: CalibrationBin[] = [];
@@ -459,7 +519,7 @@ export function calibration(
       high: mine[mine.length - 1]!.chance,
       players: mine.length,
       predicted: mean(mine.map((one) => one.chance)),
-      realized: mean(mine.map((one) => (one.becameStarter ? 1 : 0))),
+      realized: mean(mine.map((one) => (one.happened ? 1 : 0))),
     });
   }
 

@@ -556,6 +556,9 @@ export function contingentRows(
       row,
       becameStarter: afterCut.weeks >= MIN_WEEKS_ON_FIELD
         && afterCut.share >= STARTER_SNAPS,
+      // the bench already marks this one, over the games he played and
+      // against every player at his position rather than the cheap ones
+      scoredLikeStarter: row.hitPerGame,
       snapShareAfter: afterCut.share,
       weeksOnField: afterCut.weeks,
     });

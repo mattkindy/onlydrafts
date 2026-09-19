@@ -1851,25 +1851,224 @@ work and hardly at all on the size of the job he is stepping into, and a
 backup keeps about an eighth of the gap between his own scoring rate and
 his position's when he gets the job.
 
+### Asking the chance who went on to score like a starter
+
+The two things the section above said to try next have been tried
+together. The chance is fitted again on the same fifteen terms, and what it
+predicts changes from "he averaged half his club's snaps over the weeks
+he played after the cut" to "he averaged his position's starter tier over
+the weeks he played after the cut", which is the `hitPerGame` the points
+table already marks a player on. The old outcome stays in the bench as
+its own column, so every table below reads across. And the value half stops
+multiplying the chance and starts breaking its ties: the chance is cut
+into bands, and inside a band the players are ordered on what the job
+would be worth over what their price already pays. Bands of 0.05 and 0.10
+were both run and neither was chosen by how it scored. The reverse, the
+value leading and the chance breaking its ties inside a point a game, is
+in the tables for contrast.
+
+The new outcome happens much less often than the old one. Of the 4342
+backups the last fit reads, 364 went on to score like a starter where
+1558 went on to play half the snaps, and over the 3768 backups the bench
+scores it is 147 against 1187.
+
+What the 2018 to 2024 fit weighs on the new outcome, in chance per
+standard deviation:
+
+```
+  term                      weight   the term's own average
+  depth rank                -0.024                   2.446
+  players ahead of him      -0.013                   1.260
+  snap share so far          0.073                   0.410
+  in a committee            -0.001                   0.204
+  the starter's age          0.002                  26.639
+  games the starter missed  -0.003                   4.773
+  weeks he has been listed  -0.015                   0.757
+  he is listed now           0.000                   0.161
+  he is off the roster      -0.008                   0.127
+  his seasons in the league  0.012                   4.161
+  the position base rate     0.002                   0.241
+  weeks left                -0.003                  10.734
+  is RB                      0.050                   0.304
+  is WR                      0.019                   0.308
+  is TE                      0.000                   0.286
+```
+
+Snap share so far is still the biggest term but it falls from 0.234 to
+0.073, and the second biggest is now the running back flag at 0.050.
+Everything about the man in front is nought to two decimal places, the
+same as it was before.
+
+The deciles say the fit is too sure of itself everywhere above the
+bottom:
+
+```
+  band          players    said     was
+  0.02 to 0.02      376   0.020   0.019
+  0.02 to 0.02      377   0.020   0.008
+  0.02 to 0.02      377   0.020   0.005
+  0.02 to 0.04      377   0.034   0.019
+  0.04 to 0.07      377   0.056   0.021
+  0.07 to 0.09      376   0.081   0.040
+  0.09 to 0.12      377   0.106   0.053
+  0.12 to 0.15      377   0.133   0.048
+  0.15 to 0.18      377   0.164   0.082
+  0.18 to 0.29      377   0.218   0.095
+```
+
+The top decile promises 0.218 and delivers 0.095, and the middle bands
+run two to three times high. The old fit was within a few points at every
+decile. A ridge on a nought or one gives back a spread wider than the
+thing it is fitted to whenever that thing is rare, and this one happens
+8% of the time, so everything above the floor comes out too big. The
+ordering it produces can still be read; the number printed beside a
+player cannot.
+
+On the points outcome, with the shipped rivals beside the new columns:
+
+```
+                         club games, on the total  games played, on the rate
+method                       ppg  p@10   p@20  h@20    ppg  p@10   p@20  h@20
+the price itself            8.55  0.238  0.250  105  10.07  0.229  0.236   99
+points a game so far       11.17  0.410  0.343  144  13.43  0.410  0.329  138
+the model                  10.02  0.438  0.398  167  11.65  0.405  0.364  153
+the model plus in-season   10.52  0.452  0.417  175  12.17  0.414  0.374  157
+the chance it opens        10.57  0.219  0.243  102  12.98  0.171  0.217   91
+the chance, five a position 8.90  0.195  0.238  100  10.60  0.224  0.243  102
+the new chance alone       10.88  0.281  0.274  115  13.20  0.262  0.264  111
+chance then value, 0.05    10.79  0.262  0.281  118  13.05  0.271  0.279  117
+chance then value, 0.10    10.44  0.348  0.260  109  12.56  0.329  0.260  109
+value then chance           4.18  0.067  0.071   30   5.37  0.057  0.064   27
+contingent                 10.08  0.352  0.331  139  11.92  0.329  0.310  130
+oracle: the rest known     15.45  0.852  0.698  293  16.23  0.762  0.626  263
+```
+
+Every other row in that table is where it was, so nothing about the new
+fit moved the old methods.
+
+The new chance beats the old one, 115 hits against 102, and the bands add
+three more at 0.05 and take six away at 0.10. All of them are well under
+the old product's 139 and nowhere near the model's 167. Leading on the
+value is the worst thing in the whole bench at 30 hits, which is what the
+2025 list further down explains.
+
+Both role tables now show both outcomes. Over every player ranked second
+or third at his position:
+
+```
+                           half the snaps           a starter's points
+method                   landed   rate  ppg when  landed   rate  ppg when
+the price itself            188  0.448     10.14      46  0.110     15.09
+points a game so far        292  0.695     10.55      61  0.145     15.50
+the in-season level         315  0.750     10.23      65  0.155     15.24
+the model                   291  0.693      9.89      63  0.150     15.08
+usage plus role             299  0.712      9.93      68  0.162     14.87
+the chance it opens         350  0.833      9.18      38  0.090     15.84
+the chance, five a position 275  0.655      9.48      42  0.100     14.12
+the new chance alone        310  0.738      9.41      41  0.098     15.78
+chance then value, 0.05     266  0.633      9.64      44  0.105     15.45
+chance then value, 0.10     227  0.540      9.58      44  0.105     15.27
+value then chance            35  0.083     10.40      18  0.043     13.88
+contingent                  269  0.640     10.50      58  0.138     15.99
+oracle: the rest known      345  0.821     12.93     139  0.331     15.12
+```
+
+And over the ones still under a starter's share at the cut, which is the
+question an owner is actually asking:
+
+```
+                           half the snaps           a starter's points
+method                   landed   rate  ppg when  landed   rate  ppg when
+the price itself             58  0.138     10.39      20  0.048     14.17
+points a game so far        100  0.238      9.64      33  0.079     14.27
+the in-season level          95  0.226      9.93      39  0.093     13.97
+the model                    96  0.229      8.84      34  0.081     13.72
+usage plus role             102  0.243      9.09      38  0.090     13.61
+the chance it opens         143  0.340      7.88      17  0.040     14.53
+the chance, five a position 133  0.317      9.11      25  0.060     14.95
+the new chance alone         74  0.176      9.22      28  0.067     13.62
+chance then value, 0.05      59  0.140     10.11      27  0.064     13.68
+chance then value, 0.10      60  0.143      9.80      26  0.062     13.63
+value then chance            32  0.076     10.54      19  0.045     13.79
+contingent                   68  0.162     10.87      31  0.074     13.78
+oracle: the rest known      178  0.424     11.23      65  0.155     14.18
+```
+
+The narrower outcome is harder for everybody. 66 of the 2622 quiet
+backups scored like a starter where 377 played half the snaps, and the
+oracle that knew the rest of the season finds 65 of the 66 against 178
+of the 377.
+
+The new chance does beat the old one on the question it was refitted for,
+28 against 17, and that is the only gate it comes near. It loses to the
+in-season level's 39, to usage plus role's 38, to the model's 34 and to
+the old product's 31, so a fit built to find this player finds him less
+often than four orders that were never asked about him. Its picks average
+13.62 a game when they land, under the model's 13.72 and under every
+other row in the table. Neither the hit count nor the points clears what
+it had to clear, so nothing ships, `buildSite.ts` still does not write
+`wouldAverage` or `roleChance`, and the card text stays inert.
+
+### Where the new chance sends the list
+
+The 2025 week 6 top twenty says what happened. Ranked on the new chance
+alone it is thirteen quarterbacks, four backs, two tight ends and one
+receiver, led by Aaron Rodgers, Matthew Stafford, Javonte Williams and
+Geno Smith. Sixteen of the twenty already had the job at the cut, and
+seven went on to score like a starter.
+
+That is the running back flag and the fallen snap share doing their work.
+A cheap quarterback who is playing clears his position's tier far more
+often than a cheap receiver who is playing clears his, because there are
+twelve quarterback seats and about thirty six receiver ones against a
+much deeper pool of cheap receivers. So a fit asked who scores like a
+starter learns to answer "the quarterback", and the same list under the
+old chance was seven backs, nine receivers and three quarterbacks.
+
+Breaking ties on the value inside 0.05 pushes Javonte Williams, Rhamondre
+Stevenson and Travis Etienne to the top and adds Cam Skattebo, Rico
+Dowdle, Nick Chubb and Kyle Pitts, which is a better list to read and
+three more hits over the seven seasons. Widening to 0.10 pulls in Justice
+Hill at 17.2 with the job and 3.0 without it, Trey Benson at 15.8 and
+nothing, and Cam Akers, and the extra room costs nine hits.
+
+Leading on the value is where it breaks. Its twenty are twenty running
+backs, ten of them on the floor chance of 2%, and they are there because
+the value is `wouldAverage` less what a player at his price averages:
+every deep back inherits the same 18.4 touches a game off the running
+back line and every deep back is priced at the bottom of the curve, so
+the subtraction hands the whole position an identical eight or nine
+points and the chance, squeezed into a tie-break, cannot undo it. Eight
+of the twenty scored under 3.0 a game over the rest of the season. That
+is a property of the value half rather than of the ordering rule, and it
+is why the old product multiplied rather than banded.
+
 ### What to try next on this
 
-Ask the chance a narrower question. Half the snaps over the rest of the
-season is a low bar that a second receiver clears by turning up, which is
-why the chance beats the oracle at it and loses at everything a league
-cares about. Marking a backup on whether he went on to score like a
-starter, rather than to play like one, would put the two halves of the
-score back on the same question.
+Give the chance a fit that suits a rare outcome. The ridge lands 0.218 on
+a decile that comes in at 0.095, which is what least squares does to a
+binary that happens 8% of the time. A logistic fit over the same terms
+would keep the ordering and make the number printable, and the number is
+what a card would show.
+
+Ask it inside a position. The new fit's second biggest term is the
+running back flag, and the list it produces is mostly quarterbacks, so
+most of what it learned is which position clears its own tier most often.
+That is a fact about tier sizes rather than about any player. Ranking the
+chance five to a position already loses to ranking it across the league
+on the old outcome, 133 against 143, but fitting it per position is a
+different change and has not been tried.
+
+Fix the value half before ranking on it. Every deep running back gets the
+same 18.4 touches from the inheritance line and the same bottom of the
+price curve, so the value cannot tell one from another, and the ranking
+that leads on it picks twenty backs. The line was fitted with both of a
+back's slopes dropped for coming out negative, which is why he has
+nothing left that varies.
 
 Take the incumbent's side out. Six terms describe the man in front and
-together they are worth about as much as one position flag. Dropping them
-would cost the fit four picks in 420 and would say what the fit is
-actually doing.
-
-Price the job rather than the player. The product's picks average 10.87 a
-game when the job comes to them, which is the best number in the job
-table, and it still finds fewer jobs than the model does. A method that
-took the chance's ranking and used the value half only to break ties
-inside it would keep both.
+under both outcomes they weigh nought to two decimal places. Dropping
+them would say what the fit is actually doing.
 
 ## What to try next
 

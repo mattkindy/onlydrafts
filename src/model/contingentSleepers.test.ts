@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  BENCH_SNAP_CEILING, calibration, fitRoleChance, fitRoleChanceAsOf,
-  inCommittee, inheritedOpportunities, priorMultiplier, roleChance,
-  roleChanceTermNames, roleChanceWeights, scoreContingent, shrunkEfficiency,
-  rankContingent, wouldAverage,
-  type ContingentCut, type RoleExample,
+  BENCH_SNAP_CEILING, calibration, chanceThenValue, fitRoleChance,
+  fitRoleChanceAsOf, inCommittee, inheritedOpportunities, jobValue,
+  priorMultiplier, roleChance, roleChanceTermNames, roleChanceWeights,
+  scoreContingent, shrunkEfficiency, rankContingent, valueThenChance,
+  wouldAverage,
+  type ContingentCut, type ContingentScore, type RoleExample,
 } from "./contingentSleepers.js";
 
 const aCut = (over: Partial<ContingentCut> = {}): ContingentCut => ({
@@ -146,7 +147,11 @@ describe("inCommittee", () => {
   });
 });
 
-/** backups whose job opened whenever they were already playing a lot */
+/**
+ * Backups whose job opened whenever they were already playing a lot, and
+ * who scored like a starter only when they were playing a lot more. The
+ * two outcomes differ so a fit on one can be told from a fit on the other.
+ */
 const madeUpBackups = (): RoleExample[] => {
   const examples: RoleExample[] = [];
 
@@ -160,6 +165,7 @@ const madeUpBackups = (): RoleExample[] => {
         depthRank: snapShare > 0.4 ? 2 : 3,
       }),
       becameStarter: snapShare > 0.4,
+      scoredLikeStarter: snapShare > 0.7,
     });
   }
 
@@ -203,6 +209,78 @@ describe("fitRoleChance", () => {
     expect(listed?.average).toBe(0);
     expect(weighed.find((one) => one.term === "snap share so far")?.average)
       .toBeGreaterThan(0);
+  });
+
+  it("counts the outcome it was asked for", () => {
+    const snaps = fitRoleChance(madeUpBackups());
+    const points = fitRoleChance(
+      madeUpBackups(), { outcome: "a starter's points" },
+    );
+
+    expect(snaps.outcome).toBe("half the snaps");
+    expect(points.outcome).toBe("a starter's points");
+    expect(points.opened).toBeLessThan(snaps.opened);
+  });
+
+  it("gives the narrower outcome the lower chance at the same snap share", () => {
+    const snaps = fitRoleChance(madeUpBackups());
+    const points = fitRoleChance(
+      madeUpBackups(), { outcome: "a starter's points" },
+    );
+    const cut = aCut({ snapShare: 0.5 });
+
+    expect(roleChance(points, cut)).toBeLessThan(roleChance(snaps, cut));
+  });
+});
+
+/** a scored player made by hand, since only three of its fields are read */
+const aScore = (
+  roleChance: number, wouldAverage: number, pricePpg = 5,
+): ContingentScore => ({
+  season: 2024,
+  week: 6,
+  playerId: "00-0000001",
+  playerName: "A Backup",
+  position: "RB",
+  price: 180,
+  drafted: false,
+  roleChance,
+  wouldAverage,
+  pricePpg,
+  score: roleChance * (wouldAverage - pricePpg),
+});
+
+describe("chanceThenValue", () => {
+  it("keeps two players in chance order across a band edge", () => {
+    expect(chanceThenValue(0.05, aScore(0.11, 6)))
+      .toBeGreaterThan(chanceThenValue(0.05, aScore(0.09, 35)));
+  });
+
+  it("orders on the value inside one band", () => {
+    expect(chanceThenValue(0.05, aScore(0.11, 20)))
+      .toBeGreaterThan(chanceThenValue(0.05, aScore(0.14, 6)));
+  });
+
+  it("widens what one band holds as the band widens", () => {
+    expect(chanceThenValue(0.05, aScore(0.11, 20)))
+      .toBeLessThan(chanceThenValue(0.05, aScore(0.19, 6)));
+    expect(chanceThenValue(0.1, aScore(0.11, 20)))
+      .toBeGreaterThan(chanceThenValue(0.1, aScore(0.19, 6)));
+  });
+});
+
+describe("valueThenChance", () => {
+  it("leads on the value and settles ties on the chance", () => {
+    expect(valueThenChance(1, aScore(0.02, 12)))
+      .toBeGreaterThan(valueThenChance(1, aScore(0.9, 6)));
+    expect(valueThenChance(1, aScore(0.9, 12.4)))
+      .toBeGreaterThan(valueThenChance(1, aScore(0.02, 12)));
+  });
+});
+
+describe("jobValue", () => {
+  it("is what the job pays over what his price already pays", () => {
+    expect(jobValue(aScore(0.5, 12, 5))).toBeCloseTo(7, 6);
   });
 });
 
@@ -261,7 +339,7 @@ describe("calibration", () => {
   it("cuts the rows into deciles of the chance", () => {
     const marked = Array.from({ length: 100 }, (_, i) => ({
       chance: i / 100,
-      becameStarter: i >= 50,
+      happened: i >= 50,
     }));
 
     const bins = calibration(marked);

@@ -21,8 +21,9 @@ import {
 } from "../src/backtest/contingentBench.js";
 import { seasonsAsked } from "../src/data/seasons.js";
 import {
-  BENCH_SNAP_CEILING, calibration, fitRoleChanceAsOf, roleChanceWeights,
-  scoreContingent, type ContingentScore, type RoleChanceFit,
+  BENCH_SNAP_CEILING, calibration, chanceThenValue, fitRoleChanceAsOf,
+  roleChanceWeights, scoreContingent, valueThenChance,
+  type ContingentScore, type Marked, type RoleChanceFit,
 } from "../src/model/contingentSleepers.js";
 import {
   fitSleepersAsOf, rankSleepers, sleeperTermNames,
@@ -55,7 +56,19 @@ interface AtCut {
   contingent: Map<string, ContingentScore>;
   /** the same from the fit that was only shown backups under 30% of snaps */
   fromTheIncumbent: Map<string, ContingentScore>;
+  /** and from the fit asked who went on to score like a starter */
+  onThePoints: Map<string, ContingentScore>;
 }
+
+/**
+ * The chance bands the value is allowed to reorder players inside. Two
+ * were asked for and two were run, so neither is a number anything was
+ * tuned to.
+ */
+const BANDS = [0.05, 0.1];
+
+/** and the band on the value, for the ranking that leads on the value */
+const VALUE_BAND = 1;
 
 /** what one method ranks by, biggest first */
 type Order = (row: Row, at: AtCut) => number;
@@ -67,8 +80,27 @@ const by = (
 const contingent = (row: Row, at: AtCut): ContingentScore | undefined =>
   at.contingent.get(row.cut.playerId);
 
+/** the same two parts, with the chance fitted on who scored like a starter */
+const onPoints = (row: Row, at: AtCut): ContingentScore | undefined =>
+  at.onThePoints.get(row.cut.playerId);
+
 const shippedScore = (row: Row, at: AtCut): number =>
   by("shipped", row, at)?.score ?? -Infinity;
+
+const ranked = (
+  read: (score: ContingentScore) => number,
+): Order => (row, at) => {
+  const his = onPoints(row, at);
+
+  return his === undefined ? -Infinity : read(his);
+};
+
+/** one ranking per band, so the two can be read beside each other */
+const BANDED: Record<string, Order> = Object.fromEntries(BANDS.map((band) =>
+  [
+    `chance then value, ${band.toFixed(2)}`,
+    ranked((score) => chanceThenValue(band, score)),
+  ]));
 
 const METHODS: Record<string, Order> = {
   "the price itself": (row) => -row.cut.price,
@@ -107,6 +139,9 @@ const METHODS: Record<string, Order> = {
     contingent(row, at)?.roleChance ?? -Infinity,
   "the chance off the incumbent": (row, at) =>
     at.fromTheIncumbent.get(row.cut.playerId)?.roleChance ?? -Infinity,
+  "the new chance alone": ranked((score) => score.roleChance),
+  ...BANDED,
+  "value then chance": ranked((score) => valueThenChance(VALUE_BAND, score)),
   "contingent": (row, at) => contingent(row, at)?.score ?? -Infinity,
   "model plus contingent": (row, at) =>
     shippedScore(row, at) + (contingent(row, at)?.score ?? 0),
@@ -273,19 +308,38 @@ function keep(
 
 /* ---------- the second outcome: did the job come to him ---------- */
 
-/** what one method's picks did about taking a job, over one population */
-interface RoleTally {
-  picks: number;
-  /** how many went on to average a starter's share of the snaps */
-  started: number;
-  /** what those ones averaged over the games they played */
-  pointsWhenStarted: number;
-  /** and what all the picks averaged */
+/** how many of a method's picks the outcome came true for, and what they paid */
+interface Landed {
+  players: number;
   points: number;
 }
 
+/** what one method's picks did about taking a job, over one population */
+interface RoleTally {
+  picks: number;
+  /** one entry per way of asking whether the job came to him */
+  landed: Record<string, Landed>;
+  /** what all the picks averaged over the games they played */
+  points: number;
+}
+
+/**
+ * The two readings of a role change. Half the snaps is what the chance
+ * was always fitted on; a starter's points is the narrower question,
+ * marked the way the points table marks a hit.
+ */
+const ROLE_READINGS: Record<string, (one: ContingentRow) => boolean> = {
+  "half the snaps": (one) => one.becameStarter,
+  "a starter's points": (one) => one.scoredLikeStarter,
+};
+
+const READINGS = Object.keys(ROLE_READINGS);
+
 const emptyRole = (): RoleTally => ({
-  picks: 0, started: 0, pointsWhenStarted: 0, points: 0,
+  picks: 0,
+  landed: Object.fromEntries(READINGS.map((one) =>
+    [one, { players: 0, points: 0 }])),
+  points: 0,
 });
 
 function talliedRole(
@@ -296,9 +350,12 @@ function talliedRole(
     into.picks++;
     into.points += pick.restOfSeasonPerGame;
 
-    if (his?.becameStarter) {
-      into.started++;
-      into.pointsWhenStarted += pick.restOfSeasonPerGame;
+    for (const reading of READINGS) {
+      if (his && ROLE_READINGS[reading]!(his)) {
+        const mine = into.landed[reading]!;
+        mine.players++;
+        mine.points += pick.restOfSeasonPerGame;
+      }
     }
   }
 }
@@ -307,35 +364,42 @@ function talliedRole(
 interface RoleKept {
   pooled: Map<string, RoleTally>;
   candidates: number;
-  opened: number;
+  /** how many of the candidates each reading came true for */
+  opened: Record<string, number>;
 }
 
 const emptyRoleKept = (): RoleKept => ({
   pooled: new Map(NAMES.map((name) => [name, emptyRole()])),
   candidates: 0,
-  opened: 0,
+  opened: Object.fromEntries(READINGS.map((one) => [one, 0])),
 });
 
 function reportRole(kept: RoleKept, title: string): void {
   console.log(
-    `\n${title}: ${kept.candidates} candidates, ${kept.opened} of them went ` +
-    `on to average ${(STARTER_SNAPS * 100).toFixed(0)}% of the snaps`,
+    `\n${title}: ${kept.candidates} candidates, of whom ${READINGS
+      .map((one) => `${kept.opened[one]} went on to ${one}`).join(" and ")}`,
   );
   console.log(
-    `${"method".padEnd(25)}  starters  of picks   rate   ppg when they did` +
-    "   ppg overall",
+    `${"".padEnd(27)}${READINGS.map((one) => one.padEnd(28)).join("")}`,
+  );
+  console.log(
+    `${"method".padEnd(27)}${READINGS
+      .map(() => "  landed   rate   ppg when").join("")}      ppg   picks`,
   );
 
   for (const name of NAMES) {
     const tally = kept.pooled.get(name)!;
-    const rate = tally.picks === 0 ? 0 : tally.started / tally.picks;
-    const when = tally.started === 0
-      ? 0 : tally.pointsWhenStarted / tally.started;
+    const cells = READINGS.map((reading) => {
+      const mine = tally.landed[reading]!;
+      const rate = tally.picks === 0 ? 0 : mine.players / tally.picks;
+
+      return `  ${String(mine.players).padStart(6)}  ${rate.toFixed(3)}` +
+        `  ${per(mine.points, mine.players).toFixed(2).padStart(9)}`;
+    });
     console.log(
-      `${name.padEnd(25)}  ${String(tally.started).padStart(8)}` +
-      `  ${String(tally.picks).padStart(8)}  ${rate.toFixed(3)}` +
-      `  ${when.toFixed(2).padStart(17)}` +
-      `  ${per(tally.points, tally.picks).toFixed(2).padStart(12)}`,
+      `${name.padEnd(27)}${cells.join("")}` +
+      `  ${per(tally.points, tally.picks).toFixed(2).padStart(6)}` +
+      `  ${String(tally.picks).padStart(5)}`,
     );
   }
 }
@@ -348,13 +412,13 @@ function reportRole(kept: RoleKept, title: string): void {
 function reportChance(
   title: string,
   fit: RoleChanceFit,
-  marked: { chance: number; becameStarter: boolean }[],
+  marked: Marked[],
 ): void {
   console.log(
     `\nwhat the ${fit.trainedOn[0]} to ` +
     `${fit.trainedOn[fit.trainedOn.length - 1]} ${title} weighs, in ` +
     `chance per deviation, over ${fit.examples} rows of which ${fit.opened} ` +
-    "took a job",
+    `went on to ${fit.outcome}`,
   );
   console.log(`  ${"term".padEnd(26)}weight   the term's own average`);
 
@@ -386,13 +450,16 @@ function reportNearest(
 
   for (const pick of picks) {
     const his = opened.get(pick.playerId);
+    const went = [
+      his?.becameStarter ? "took the job" : "did not",
+      his?.scoredLikeStarter ? "scored like a starter" : "did not",
+    ].join(", ");
     console.log(
       `  ${pick.playerName.slice(0, 20).padEnd(20)} ${pick.position} ` +
       `${(pick.roleChance * 100).toFixed(0).padStart(3)}% chance, would ` +
       `average ${pick.wouldAverage.toFixed(1)} against the ` +
       `${pick.pricePpg.toFixed(1)} his price says, score ` +
-      `${pick.score.toFixed(2)}; ` +
-      `${his?.becameStarter ? "took the job" : "did not"}, ` +
+      `${pick.score.toFixed(2)}; ${went}, ` +
       `${his?.row.restOfSeasonPerGame.toFixed(1) ?? "0.0"} a game after`,
     );
   }
@@ -703,12 +770,16 @@ async function main(): Promise<void> {
     [atCut(one.cut.season, one.cut.week, one.cut.playerId), one]));
   const roleKept = emptyRoleKept();
   const stillBehind = emptyRoleKept();
-  const marked: { chance: number; becameStarter: boolean }[] = [];
-  const markedOffTheIncumbent: { chance: number; becameStarter: boolean }[] = [];
+  const marked: Marked[] = [];
+  const markedOffTheIncumbent: Marked[] = [];
+  const markedOnThePoints: Marked[] = [];
   let lastChanceFit: RoleChanceFit | undefined;
   let lastIncumbentFit: RoleChanceFit | undefined;
+  let lastPointsFit: RoleChanceFit | undefined;
   let nearest: {
-    scored: ContingentScore[]; opened: Map<string, ContingentRow>;
+    scored: ContingentScore[];
+    onThePoints: ContingentScore[];
+    opened: Map<string, ContingentRow>;
   } | undefined;
   const kept = emptyKept();
   const lines = new Map(Object.keys(LINES).map((name) =>
@@ -737,8 +808,12 @@ async function main(): Promise<void> {
     const incumbentFit = fitRoleChanceAsOf(
       season, backups, { snapCeiling: BENCH_SNAP_CEILING },
     );
+    const pointsFit = fitRoleChanceAsOf(
+      season, backups, { outcome: "a starter's points" },
+    );
     lastChanceFit = chanceFit;
     lastIncumbentFit = incumbentFit;
+    lastPointsFit = pointsFit;
 
     for (const week of CUTS) {
       const population = rows.filter((row) =>
@@ -768,9 +843,13 @@ async function main(): Promise<void> {
           [one.cut.playerId, scoreContingent(chanceFit, one.cut)])),
         fromTheIncumbent: new Map(mine.map((one) =>
           [one.cut.playerId, scoreContingent(incumbentFit, one.cut)])),
+        onThePoints: new Map(mine.map((one) =>
+          [one.cut.playerId, scoreContingent(pointsFit, one.cut)])),
       };
       const behind = mine.filter(isBackup);
-      const opened = new Map(behind.map((one) => [one.cut.playerId, one]));
+      // every scorable player rather than the backups alone, since the
+      // points table picks its twenty out of all of them
+      const opened = new Map(mine.map((one) => [one.cut.playerId, one]));
       const notYet = behind
         .filter((one) => one.cut.snapShare < STARTER_SNAPS);
       const notYetOpened = new Map(notYet.map((one) =>
@@ -779,20 +858,30 @@ async function main(): Promise<void> {
       const notYetRows = notYet.map((one) => one.row);
 
       roleKept.candidates += behind.length;
-      roleKept.opened += behind.filter((one) => one.becameStarter).length;
       stillBehind.candidates += notYet.length;
-      stillBehind.opened += notYet.filter((one) => one.becameStarter).length;
+
+      for (const reading of READINGS) {
+        const came = ROLE_READINGS[reading]!;
+        roleKept.opened[reading] =
+          (roleKept.opened[reading] ?? 0) + behind.filter(came).length;
+        stillBehind.opened[reading] =
+          (stillBehind.opened[reading] ?? 0) + notYet.filter(came).length;
+      }
 
       for (const one of behind) {
         marked.push({
           chance: at.contingent.get(one.cut.playerId)!.roleChance,
-          becameStarter: one.becameStarter,
+          happened: one.becameStarter,
+        });
+        markedOnThePoints.push({
+          chance: at.onThePoints.get(one.cut.playerId)!.roleChance,
+          happened: one.scoredLikeStarter,
         });
 
         if (one.cut.snapShare < BENCH_SNAP_CEILING) {
           markedOffTheIncumbent.push({
             chance: at.fromTheIncumbent.get(one.cut.playerId)!.roleChance,
-            becameStarter: one.becameStarter,
+            happened: one.becameStarter,
           });
         }
       }
@@ -800,6 +889,8 @@ async function main(): Promise<void> {
       if (season === SHOWN_CUT.season && week === SHOWN_CUT.week) {
         nearest = {
           scored: behind.map((one) => at.contingent.get(one.cut.playerId)!),
+          onThePoints: mine
+            .map((one) => at.onThePoints.get(one.cut.playerId)!),
           opened,
         };
       }
@@ -875,6 +966,14 @@ async function main(): Promise<void> {
     );
   }
 
+  if (lastPointsFit) {
+    reportChance(
+      "fit asked who went on to score like a starter",
+      lastPointsFit,
+      markedOnThePoints,
+    );
+  }
+
   reportSeasonSpread(kept);
 
   for (const outcome of OUTCOMES) {
@@ -913,6 +1012,28 @@ async function main(): Promise<void> {
     reportNearest(
       `who was nearest a job ${when}, by the chance alone`,
       deepest((one) => one.roleChance), nearest.opened,
+    );
+
+    const onPointsDeepest = (read: (one: ContingentScore) => number) =>
+      [...nearest!.onThePoints]
+        .sort((a, b) => read(b) - read(a)).slice(0, PICKS);
+    reportNearest(
+      `who the new chance liked ${when}`,
+      onPointsDeepest((one) => one.roleChance), nearest.opened,
+    );
+
+    for (const band of BANDS) {
+      reportNearest(
+        `the new chance ${when}, the value breaking ties inside ` +
+        `${band.toFixed(2)}`,
+        onPointsDeepest((one) => chanceThenValue(band, one)), nearest.opened,
+      );
+    }
+
+    reportNearest(
+      `the value ${when}, the new chance breaking ties`,
+      onPointsDeepest((one) => valueThenChance(VALUE_BAND, one)),
+      nearest.opened,
     );
   }
 
