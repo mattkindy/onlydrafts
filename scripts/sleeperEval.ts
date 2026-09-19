@@ -21,8 +21,8 @@ import {
 } from "../src/backtest/contingentBench.js";
 import { seasonsAsked } from "../src/data/seasons.js";
 import {
-  calibration, fitRoleChanceAsOf, roleChanceWeights, scoreContingent,
-  type ContingentScore, type RoleChanceFit,
+  BENCH_SNAP_CEILING, calibration, fitRoleChanceAsOf, roleChanceWeights,
+  scoreContingent, type ContingentScore, type RoleChanceFit,
 } from "../src/model/contingentSleepers.js";
 import {
   fitSleepersAsOf, rankSleepers, sleeperTermNames,
@@ -53,6 +53,8 @@ interface AtCut {
   scored: Scored;
   /** the contingent parts, absent for a player with no club or no rank */
   contingent: Map<string, ContingentScore>;
+  /** the same from the fit that was only shown backups under 30% of snaps */
+  fromTheIncumbent: Map<string, ContingentScore>;
 }
 
 /** what one method ranks by, biggest first */
@@ -101,6 +103,10 @@ const METHODS: Record<string, Order> = {
     contingent(row, at)?.wouldAverage ?? -Infinity,
   "the chance it opens": (row, at) =>
     contingent(row, at)?.roleChance ?? -Infinity,
+  "the chance, five a position": (row, at) =>
+    contingent(row, at)?.roleChance ?? -Infinity,
+  "the chance off the incumbent": (row, at) =>
+    at.fromTheIncumbent.get(row.cut.playerId)?.roleChance ?? -Infinity,
   "contingent": (row, at) => contingent(row, at)?.score ?? -Infinity,
   "model plus contingent": (row, at) =>
     shippedScore(row, at) + (contingent(row, at)?.score ?? 0),
@@ -112,6 +118,11 @@ const METHODS: Record<string, Order> = {
 
 const NAMES = Object.keys(METHODS);
 
+/** the methods that pick five at each position rather than twenty anywhere */
+const SPREAD_OF: Record<string, Spread> = {
+  "the chance, five a position": "by position",
+};
+
 /** the pairs whose swapped picks are named, the old one first */
 const COMPARED: [string, string][] = [
   ["the model", "the model plus in-season"],
@@ -121,14 +132,32 @@ const COMPARED: [string, string][] = [
   ["the model", "usage plus role"],
 ];
 
-function topPicks(rows: Row[], order: Order, at: AtCut): Row[] {
-  return [...rows]
-    .sort((a, b) => {
-      const gap = order(b, at) - order(a, at);
+function sorted(rows: Row[], order: Order, at: AtCut): Row[] {
+  return [...rows].sort((a, b) => {
+    const gap = order(b, at) - order(a, at);
 
-      return gap === 0 ? a.cut.playerId.localeCompare(b.cut.playerId) : gap;
-    })
-    .slice(0, PICKS);
+    return gap === 0 ? a.cut.playerId.localeCompare(b.cut.playerId) : gap;
+  });
+}
+
+/**
+ * Some methods pick across the league and some pick a few at each
+ * position, which is what a reader hunting a handcuff wants and what a
+ * list of nineteen receivers cannot give him.
+ */
+type Spread = "the league" | "by position";
+
+const SPREADS: Record<
+  Spread, (rows: Row[], order: Order, at: AtCut) => Row[]
+> = {
+  "the league": (rows, order, at) => sorted(rows, order, at).slice(0, PICKS),
+  "by position": (rows, order, at) => POSITIONS.flatMap((position) =>
+    sorted(rows.filter((row) => row.cut.position === position), order, at)
+      .slice(0, PICKS / POSITIONS.length)),
+};
+
+function topPicks(name: string, rows: Row[], at: AtCut): Row[] {
+  return SPREADS[SPREAD_OF[name] ?? "the league"](rows, METHODS[name]!, at);
 }
 
 /** what one method's picks were worth, under both readings of the rest */
@@ -317,17 +346,23 @@ function reportRole(kept: RoleKept, title: string): void {
  * the deciles are out of sample.
  */
 function reportChance(
+  title: string,
   fit: RoleChanceFit,
   marked: { chance: number; becameStarter: boolean }[],
 ): void {
   console.log(
     `\nwhat the ${fit.trainedOn[0]} to ` +
-    `${fit.trainedOn[fit.trainedOn.length - 1]} role chance fit weighs, in ` +
-    "chance per deviation",
+    `${fit.trainedOn[fit.trainedOn.length - 1]} ${title} weighs, in ` +
+    `chance per deviation, over ${fit.examples} rows of which ${fit.opened} ` +
+    "took a job",
   );
+  console.log(`  ${"term".padEnd(26)}weight   the term's own average`);
 
-  for (const { term, weight } of roleChanceWeights(fit)) {
-    console.log(`  ${term.padEnd(26)}${weight.toFixed(3)}`);
+  for (const { term, weight, average } of roleChanceWeights(fit)) {
+    console.log(
+      `  ${term.padEnd(26)}${weight.toFixed(3).padStart(6)}` +
+      `   ${average.toFixed(3).padStart(21)}`,
+    );
   }
 
   console.log("\nthe chance against what happened, in deciles of the chance");
@@ -669,7 +704,9 @@ async function main(): Promise<void> {
   const roleKept = emptyRoleKept();
   const stillBehind = emptyRoleKept();
   const marked: { chance: number; becameStarter: boolean }[] = [];
+  const markedOffTheIncumbent: { chance: number; becameStarter: boolean }[] = [];
   let lastChanceFit: RoleChanceFit | undefined;
+  let lastIncumbentFit: RoleChanceFit | undefined;
   let nearest: {
     scored: ContingentScore[]; opened: Map<string, ContingentRow>;
   } | undefined;
@@ -697,7 +734,11 @@ async function main(): Promise<void> {
     const fits = new Map(TERM_SETS.map((terms) =>
       [terms, fitSleepersAsOf(season, examples, { terms })]));
     const chanceFit = fitRoleChanceAsOf(season, backups);
+    const incumbentFit = fitRoleChanceAsOf(
+      season, backups, { snapCeiling: BENCH_SNAP_CEILING },
+    );
     lastChanceFit = chanceFit;
+    lastIncumbentFit = incumbentFit;
 
     for (const week of CUTS) {
       const population = rows.filter((row) =>
@@ -725,6 +766,8 @@ async function main(): Promise<void> {
         scored,
         contingent: new Map(mine.map((one) =>
           [one.cut.playerId, scoreContingent(chanceFit, one.cut)])),
+        fromTheIncumbent: new Map(mine.map((one) =>
+          [one.cut.playerId, scoreContingent(incumbentFit, one.cut)])),
       };
       const behind = mine.filter(isBackup);
       const opened = new Map(behind.map((one) => [one.cut.playerId, one]));
@@ -745,6 +788,13 @@ async function main(): Promise<void> {
           chance: at.contingent.get(one.cut.playerId)!.roleChance,
           becameStarter: one.becameStarter,
         });
+
+        if (one.cut.snapShare < BENCH_SNAP_CEILING) {
+          markedOffTheIncumbent.push({
+            chance: at.fromTheIncumbent.get(one.cut.playerId)!.roleChance,
+            becameStarter: one.becameStarter,
+          });
+        }
       }
 
       if (season === SHOWN_CUT.season && week === SHOWN_CUT.week) {
@@ -755,14 +805,13 @@ async function main(): Promise<void> {
       }
 
       for (const name of NAMES) {
-        const order = METHODS[name]!;
-        keep(kept, name, season, week, topPicks(population, order, at));
+        keep(kept, name, season, week, topPicks(name, population, at));
         talliedRole(
-          roleKept.pooled.get(name)!, topPicks(behindRows, order, at), opened,
+          roleKept.pooled.get(name)!, topPicks(name, behindRows, at), opened,
         );
         talliedRole(
           stillBehind.pooled.get(name)!,
-          topPicks(notYetRows, order, at),
+          topPicks(name, notYetRows, at),
           notYetOpened,
         );
       }
@@ -815,7 +864,15 @@ async function main(): Promise<void> {
   );
 
   if (lastChanceFit) {
-    reportChance(lastChanceFit, marked);
+    reportChance("role chance fit", lastChanceFit, marked);
+  }
+
+  if (lastIncumbentFit) {
+    reportChance(
+      `fit shown only backups under ${BENCH_SNAP_CEILING} of the snaps`,
+      lastIncumbentFit,
+      markedOffTheIncumbent,
+    );
   }
 
   reportSeasonSpread(kept);

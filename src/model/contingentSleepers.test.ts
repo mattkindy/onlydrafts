@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  calibration, fitRoleChance, fitRoleChanceAsOf, inCommittee, priorMultiplier,
-  roleChance, roleChanceTermNames, roleChanceWeights, scoreContingent,
-  shrunkEfficiency, rankContingent, wouldAverage,
+  BENCH_SNAP_CEILING, calibration, fitRoleChance, fitRoleChanceAsOf,
+  inCommittee, inheritedOpportunities, priorMultiplier, roleChance,
+  roleChanceTermNames, roleChanceWeights, scoreContingent, shrunkEfficiency,
+  rankContingent, wouldAverage,
   type ContingentCut, type RoleExample,
 } from "./contingentSleepers.js";
 
@@ -17,6 +18,7 @@ const aCut = (over: Partial<ContingentCut> = {}): ContingentCut => ({
   drafted: false,
   priceMedian: 6,
   opportunities: 0,
+  ownOpportunities: 0,
   opportunityPoints: 0,
   lastOpportunities: 0,
   lastOpportunityPoints: 0,
@@ -26,6 +28,9 @@ const aCut = (over: Partial<ContingentCut> = {}): ContingentCut => ({
   playersAhead: 1,
   snapShare: 0.2,
   starterGamesMissed: 2,
+  starterListedWeeks: 0,
+  starterListedNow: false,
+  starterOffRoster: false,
   positionOpenRate: 0.3,
   weeksLeft: 12,
   ...over,
@@ -49,8 +54,13 @@ describe("shrunkEfficiency", () => {
     const many = plainPrior({ opportunities: 300, opportunityPoints: 600 });
 
     expect(shrunkEfficiency(few)).toBeGreaterThan(0.7);
-    expect(shrunkEfficiency(few)).toBeLessThan(1.5);
-    expect(shrunkEfficiency(many)).toBeGreaterThan(1.75);
+    expect(shrunkEfficiency(many)).toBeGreaterThan(shrunkEfficiency(few));
+  });
+
+  it("leaves a backup near his position even after a season of work", () => {
+    const busy = plainPrior({ opportunities: 100, opportunityPoints: 300 });
+
+    expect(shrunkEfficiency(busy)).toBeLessThan(1.4);
   });
 
   it("counts last season for less than this one", () => {
@@ -88,18 +98,43 @@ describe("priorMultiplier", () => {
   });
 });
 
-describe("wouldAverage", () => {
-  it("is his rate times the job in front of him", () => {
-    const cut = plainPrior({ starterOpportunities: 20 });
+describe("inheritedOpportunities", () => {
+  it("gives a back the same whatever the man in front was getting", () => {
+    const behindAWorkhorse = aCut({ starterOpportunities: 30 });
+    const behindACommittee = aCut({ starterOpportunities: 12 });
 
-    expect(wouldAverage(cut)).toBeCloseTo(0.7 * 20, 6);
+    expect(inheritedOpportunities(behindAWorkhorse))
+      .toBeCloseTo(inheritedOpportunities(behindACommittee), 6);
+    expect(inheritedOpportunities(behindAWorkhorse)).toBeLessThan(25);
   });
 
-  it("grows with the size of the job", () => {
-    const small = plainPrior({ starterOpportunities: 6 });
-    const big = plainPrior({ starterOpportunities: 24 });
+  it("gives a receiver more when he is already getting targets", () => {
+    const quiet = aCut({ position: "WR", ownOpportunities: 1 });
+    const busy = aCut({ position: "WR", ownOpportunities: 6 });
 
-    expect(wouldAverage(big)).toBeGreaterThan(wouldAverage(small));
+    expect(inheritedOpportunities(busy))
+      .toBeGreaterThan(inheritedOpportunities(quiet));
+  });
+
+  it("never goes below nothing", () => {
+    const odd = aCut({ starterOpportunities: -50, ownOpportunities: -50 });
+
+    expect(inheritedOpportunities(odd)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("wouldAverage", () => {
+  it("is his rate times what a next man up at his position inherits", () => {
+    const cut = plainPrior({ starterOpportunities: 20 });
+
+    expect(wouldAverage(cut))
+      .toBeCloseTo(0.7 * inheritedOpportunities(cut), 6);
+  });
+
+  it("no longer hands a backup a workhorse's whole load", () => {
+    const behindAWorkhorse = plainPrior({ starterOpportunities: 30 });
+
+    expect(wouldAverage(behindAWorkhorse)).toBeLessThan(0.7 * 30);
   });
 });
 
@@ -159,6 +194,16 @@ describe("fitRoleChance", () => {
 
     expect(weighed.map((one) => one.term)).toEqual([...roleChanceTermNames]);
   });
+
+  it("says what each term averaged, so an empty one can be told apart", () => {
+    const weighed = roleChanceWeights(fitRoleChance(madeUpBackups()));
+    const listed = weighed
+      .find((one) => one.term === "weeks he has been listed");
+
+    expect(listed?.average).toBe(0);
+    expect(weighed.find((one) => one.term === "snap share so far")?.average)
+      .toBeGreaterThan(0);
+  });
 });
 
 describe("fitRoleChanceAsOf", () => {
@@ -166,6 +211,16 @@ describe("fitRoleChanceAsOf", () => {
     const fit = fitRoleChanceAsOf(2022, madeUpBackups());
 
     expect(fit.trainedOn).toEqual([2020, 2021]);
+  });
+
+  it("drops the backups already playing when given a snap ceiling", () => {
+    const all = fitRoleChanceAsOf(2024, madeUpBackups());
+    const quiet = fitRoleChanceAsOf(
+      2024, madeUpBackups(), { snapCeiling: BENCH_SNAP_CEILING },
+    );
+
+    expect(quiet.examples).toBeLessThan(all.examples);
+    expect(quiet.opened).toBe(0);
   });
 });
 
@@ -194,8 +249,8 @@ describe("rankContingent", () => {
   it("puts the biggest claim first", () => {
     const fit = fitRoleChance(madeUpBackups());
     const ranked = rankContingent(fit, [
-      aCut({ playerId: "small", starterOpportunities: 4 }),
-      aCut({ playerId: "big", starterOpportunities: 30 }),
+      aCut({ playerId: "small", position: "WR", ownOpportunities: 1 }),
+      aCut({ playerId: "big", position: "WR", ownOpportunities: 9 }),
     ]);
 
     expect(ranked[0]!.playerId).toBe("big");

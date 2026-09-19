@@ -4,8 +4,8 @@
  * The shipped sleeper score finds a player who has already outscored his
  * price, which is a waiver pickup. This asks a different question, in two
  * parts a caller can read separately. `wouldAverage` is his points per
- * opportunity, shrunk toward the position by how few he has, times the
- * opportunities a game the top man at his position on his club gets.
+ * opportunity, shrunk hard toward the position by how few he has, times
+ * the opportunities a next man up at his position actually inherits.
  * `roleChance` is a ridge fit on earlier seasons giving the chance he
  * goes on to average a starter's share of the snaps. The score multiplies
  * the two and takes off what a player at his price averages.
@@ -17,16 +17,19 @@ import { fitRidge, predictRidge } from "../backtest/ridge.js";
 
 /**
  * How many opportunities it takes before a player's own rate outweighs
- * the position's. A receiver sees three to six targets a game, so sixty
- * is most of a season of part-time work: a player with that much behind
- * him is read half off himself. A quarterback throws thirty times a game
- * and needs the higher figure to mean the same thing.
+ * the position's. Over the 752 backups of 2015 to 2018 who went on to
+ * play a starter's share, the rate they had scored at before the job
+ * opened predicted the rate they scored at with it at a slope of 0.12,
+ * on a mean of 35 opportunities behind them. A slope that flat asks for
+ * a weight near 250, which is where these sit. The quarterback figure is
+ * higher for the same reason it always was: he gets thirty chances a
+ * game rather than six, so it takes more of them to mean as much.
  */
 const SHRINK_OPPORTUNITIES: Record<string, number> = {
-  QB: 150, RB: 60, WR: 60, TE: 60,
+  QB: 600, RB: 250, WR: 250, TE: 250,
 };
 
-const DEFAULT_SHRINK = 60;
+const DEFAULT_SHRINK = 250;
 
 /**
  * What last season's opportunities count for against this season's. Below
@@ -68,6 +71,8 @@ export interface ContingentCut {
   /** his own opportunities this season to the cut, and what they produced */
   opportunities: number;
   opportunityPoints: number;
+  /** the same opportunities as a rate, over the games his club has played */
+  ownOpportunities: number;
   /** and the same over all of last season */
   lastOpportunities: number;
   lastOpportunityPoints: number;
@@ -87,6 +92,14 @@ export interface ContingentCut {
   /** how old the man in front is, and how many games that man has missed */
   starterAge?: number;
   starterGamesMissed: number;
+  /** weeks the man in front has been on the injury report this season */
+  starterListedWeeks: number;
+  /** and whether he is on it in the cut week itself */
+  starterListedNow: boolean;
+  /** whether his club's roster file has him as anything but active */
+  starterOffRoster: boolean;
+  /** his seasons in the league, absent when the roster file does not say */
+  starterExperience?: number;
   /**
    * How often a starter at this position misses three or more of the
    * remaining weeks, counted over earlier seasons. It anchors a fit that
@@ -138,9 +151,47 @@ export function shrunkEfficiency(cut: ContingentCut): number {
   return (points + weight * prior) / (chances + weight);
 }
 
-/** what he would average a game with the workload the man in front has */
+/** what a next man up gets a game, off the job and off his own work */
+interface InheritedLine {
+  base: number;
+  fromTheJob: number;
+  fromHisOwnWork: number;
+}
+
+/**
+ * Fitted on the 1004 backups of 2015 to 2018 who went on to play a
+ * starter's share for three weeks or more, one line per position. The
+ * job in front barely moves it: inside a position, what the man ahead
+ * was getting explains about three percent of what the next man got. A
+ * back behind a 28 touch workhorse and a back behind a 14 touch
+ * committee both end up near eighteen. A receiver's own work does move
+ * it, which is why the third number is not zero for him or for a tight
+ * end. The running back line came out with both slopes slightly
+ * negative, so his is the mean and nothing else.
+ */
+const INHERITED: Record<string, InheritedLine> = {
+  QB: { base: 33.5, fromTheJob: 0.09, fromHisOwnWork: 0.08 },
+  RB: { base: 18.4, fromTheJob: 0, fromHisOwnWork: 0 },
+  WR: { base: 3.7, fromTheJob: 0.02, fromHisOwnWork: 0.41 },
+  TE: { base: 2.3, fromTheJob: 0.02, fromHisOwnWork: 0.72 },
+};
+
+const DEFAULT_INHERITED: InheritedLine = {
+  base: 3.7, fromTheJob: 0.02, fromHisOwnWork: 0.41,
+};
+
+/** the opportunities a game he would get if the job in front of him opened */
+export function inheritedOpportunities(cut: ContingentCut): number {
+  const line = INHERITED[cut.position] ?? DEFAULT_INHERITED;
+
+  return Math.max(0, line.base
+    + line.fromTheJob * cut.starterOpportunities
+    + line.fromHisOwnWork * cut.ownOpportunities);
+}
+
+/** what he would average a game with the job in front of him open */
 export function wouldAverage(cut: ContingentCut): number {
-  return shrunkEfficiency(cut) * cut.starterOpportunities;
+  return shrunkEfficiency(cut) * inheritedOpportunities(cut);
 }
 
 /* ---------- the chance the job opens ---------- */
@@ -153,13 +204,18 @@ interface Term {
 const at = (position: string) => (cut: ContingentCut) =>
   cut.position === position ? 1 : 0;
 
+/** the seasons in the league a starter is read at when the file is silent */
+const TYPICAL_EXPERIENCE = 5;
+
 /**
  * A backup two deep is closer to the job than one three deep, and a
  * backup already on the field for a fifth of the snaps is closer still.
- * The man in front is the other half: an old starter who has missed six
- * games in two years leaves more often than a young one who has missed
- * none. The position base rate anchors all of it, since a running back
- * ahead of you goes down far more often than a quarterback does.
+ * The man in front is the other half, and he gets six terms of it: how
+ * often he has turned up on the injury report this season, whether he is
+ * on it right now, whether the roster file has taken him off active, his
+ * age, his seasons in the league, and what he has missed over the last
+ * two years. The position base rate anchors all of it, since a running
+ * back ahead of you goes down far more often than a quarterback does.
  */
 const CHANCE_TERMS: Term[] = [
   { name: "depth rank", of: (cut) => cut.depthRank },
@@ -168,6 +224,13 @@ const CHANCE_TERMS: Term[] = [
   { name: "in a committee", of: (cut) => (inCommittee(cut) ? 1 : 0) },
   { name: "the starter's age", of: (cut) => cut.starterAge ?? NEUTRAL_AGE },
   { name: "games the starter missed", of: (cut) => cut.starterGamesMissed },
+  { name: "weeks he has been listed", of: (cut) => cut.starterListedWeeks },
+  { name: "he is listed now", of: (cut) => (cut.starterListedNow ? 1 : 0) },
+  { name: "he is off the roster", of: (cut) => (cut.starterOffRoster ? 1 : 0) },
+  {
+    name: "his seasons in the league",
+    of: (cut) => cut.starterExperience ?? TYPICAL_EXPERIENCE,
+  },
   { name: "the position base rate", of: (cut) => cut.positionOpenRate },
   { name: "weeks left", of: (cut) => cut.weeksLeft },
   { name: "is RB", of: at("RB") },
@@ -270,15 +333,33 @@ export function fitRoleChance(
 }
 
 /**
+ * The share of the snaps past which a backup is playing enough that his
+ * own share swamps anything a fit could learn about the man in front of
+ * him. A fit given this ceiling has to answer off the incumbent, which
+ * is the only way to find out whether the incumbent says anything.
+ */
+export const BENCH_SNAP_CEILING = 0.30;
+
+export interface RoleChanceOptions {
+  lambdaShare?: number;
+  /** the snap share a row is dropped at, one by default, meaning none */
+  snapCeiling?: number;
+}
+
+/**
  * The fit a reader could have had at the end of a week of `season`. The
  * rows from that season and later are dropped here rather than by the
  * caller, so a bench cannot peek by forgetting to cut them.
  */
 export function fitRoleChanceAsOf(
-  season: number, examples: RoleExample[], lambdaShare = LAMBDA_SHARE,
+  season: number, examples: RoleExample[], options: RoleChanceOptions = {},
 ): RoleChanceFit {
+  const ceiling = options.snapCeiling ?? 1;
+
   return fitRoleChance(
-    examples.filter((one) => one.cut.season < season), lambdaShare,
+    examples.filter((one) =>
+      one.cut.season < season && one.cut.snapShare < ceiling),
+    options.lambdaShare ?? LAMBDA_SHARE,
   );
 }
 
@@ -385,10 +466,17 @@ export function calibration(
   return out;
 }
 
-/** what each term weighs, so a caller printing a table need not know the fit */
+/**
+ * What each term weighs, with what it averaged over the rows behind it.
+ * A weight of nothing on a term that averages nothing is a term the file
+ * did not fill in, which is a different problem from one that is filled
+ * in and says nothing.
+ */
 export const roleChanceWeights = (
   fit: RoleChanceFit,
-): { term: string; weight: number }[] =>
+): { term: string; weight: number; average: number }[] =>
   roleChanceTermNames.map((term, i) => ({
-    term, weight: fit.weights[i + 1] ?? 0,
+    term,
+    weight: fit.weights[i + 1] ?? 0,
+    average: fit.means[i] ?? 0,
   }));

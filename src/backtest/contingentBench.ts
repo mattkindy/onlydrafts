@@ -12,6 +12,7 @@
  * either way, and the question here is who is getting the ball.
  */
 
+import { loadCompromisedWeeks } from "../data/injuries.js";
 import { normalizeName } from "../data/names.js";
 import {
   loadPlayerStats, loadSnapCounts, loadWeeklyRosters,
@@ -273,17 +274,36 @@ function snapShareOver(
 export interface RosterFacts {
   age: Map<string, number>;
   draftOverall: Map<string, number>;
+  /** seasons in the league, as the roster file counts them */
+  experience: Map<string, number>;
+  /** the weeks the file marked him active, so the rest are weeks he was not */
+  activeWeeks: Map<string, Set<number>>;
 }
 
 const SEASON_START = "-09-01";
 
+/** the roster file's word for a player who can be picked to play */
+const ACTIVE = "ACT";
+
 export async function rosterFactsFor(season: number): Promise<RosterFacts> {
   const age = new Map<string, number>();
   const draftOverall = new Map<string, number>();
+  const experience = new Map<string, number>();
+  const activeWeeks = new Map<string, Set<number>>();
 
   for (const row of await loadWeeklyRosters(season).catch(() => [])) {
     if (row.draftOverall !== undefined) {
       draftOverall.set(row.playerId, row.draftOverall);
+    }
+
+    if (row.yearsExperience !== undefined) {
+      experience.set(row.playerId, row.yearsExperience);
+    }
+
+    if (row.status === ACTIVE) {
+      const weeks = activeWeeks.get(row.playerId) ?? new Set<number>();
+      weeks.add(row.week);
+      activeWeeks.set(row.playerId, weeks);
     }
 
     if (row.birthDate) {
@@ -296,7 +316,34 @@ export async function rosterFactsFor(season: number): Promise<RosterFacts> {
     }
   }
 
-  return { age, draftOverall };
+  return { age, draftOverall, experience, activeWeeks };
+}
+
+/**
+ * The weeks each player was on his club's injury report, by the same
+ * reading `loadCompromisedWeeks` uses: limited or worse in practice, or
+ * questionable or worse on the game report. A starter who has been on it
+ * three weeks running is a job that may be about to open, which games
+ * missed over the last two seasons cannot say.
+ */
+export async function listedWeeksFor(
+  season: number,
+): Promise<Map<string, Set<number>>> {
+  const listed = new Map<string, Set<number>>();
+
+  for (const key of await loadCompromisedWeeks(season)) {
+    const [playerId, week] = key.split("|");
+
+    if (!playerId || !week) {
+      continue;
+    }
+
+    const weeks = listed.get(playerId) ?? new Set<number>();
+    weeks.add(Number(week));
+    listed.set(playerId, weeks);
+  }
+
+  return listed;
 }
 
 /**
@@ -407,6 +454,8 @@ export interface ContingentSeason {
   missedFrom: OpportunitySeason[];
   snaps: Map<string, Map<number, number>>;
   roster: RosterFacts;
+  /** the weeks each player was on the injury report this season */
+  listed: Map<string, Set<number>>;
   openRate: Map<string, number>;
 }
 
@@ -443,7 +492,7 @@ function positionRates(
 export function contingentRows(
   season: ContingentSeason, rows: Row[], week: number,
 ): ContingentRow[] {
-  const { read, before, snaps, roster } = season;
+  const { read, before, snaps, roster, listed } = season;
   const orders = peckingOrders(read, week);
   const rates = positionRates(read, before, week);
   const out: ContingentRow[] = [];
@@ -458,6 +507,9 @@ export function contingentRows(
       continue;
     }
 
+    const starterListed = listed.get(top.playerId) ?? new Set<number>();
+    const games = [...(read.clubWeeks.get(row.club) ?? [])]
+      .filter((one) => one <= week).length;
     const mine = totalled(read, playerId, 1, week);
     const last = season.before
       ? totalled(season.before, playerId, 1, LAST_WEEK)
@@ -475,6 +527,7 @@ export function contingentRows(
       drafted: row.cut.drafted,
       priceMedian: row.cut.priceMedian,
       opportunities: mine.opportunities,
+      ownOpportunities: games === 0 ? 0 : mine.opportunities / games,
       opportunityPoints: mine.points,
       lastOpportunities: last.opportunities,
       lastOpportunityPoints: last.points,
@@ -489,6 +542,11 @@ export function contingentRows(
       snapShare: beforeCut.share,
       starterAge: roster.age.get(top.playerId),
       starterGamesMissed: gamesMissedBefore(top.playerId, season.missedFrom),
+      starterListedWeeks: [...starterListed].filter((one) => one <= week).length,
+      starterListedNow: starterListed.has(week),
+      starterOffRoster: !(roster.activeWeeks.get(top.playerId)?.has(week)
+        ?? false),
+      starterExperience: roster.experience.get(top.playerId),
       positionOpenRate: season.openRate.get(position) ?? 0,
       weeksLeft: row.weeksLeft,
     };
@@ -504,6 +562,148 @@ export function contingentRows(
   }
 
   return out;
+}
+
+/* ---------- what the next man up actually got ---------- */
+
+/**
+ * How many weeks a backup has to play a starter's share before the
+ * work he is getting counts as the job. Two weeks can be one blowout and
+ * one bye-week fill-in.
+ */
+export const MIN_WEEKS_WITH_JOB = 3;
+
+/** a backup who got the job, against what the man in front had been getting */
+export interface Inherited {
+  season: number;
+  /** the cut he was still a backup at */
+  week: number;
+  position: string;
+  playerId: string;
+  playerName: string;
+  /** his share of the snaps before the cut */
+  snapShareBefore: number;
+  /** the weeks after the cut he played a starter's share */
+  weeksWithJob: number;
+  /** what the man in front had a game through the cut */
+  starterOpportunities: number;
+  starterPoints: number;
+  /** what he himself got a game over the weeks he had the job */
+  opportunities: number;
+  points: number;
+  /** his own opportunities through the cut, all of them, not a rate */
+  opportunitiesBefore: number;
+  /** and the same as a rate, over the games his club has played */
+  ownOpportunities: number;
+  /** his points an opportunity before the cut, absent when he had too few */
+  rateBefore?: number;
+  /** and over the weeks he had the job */
+  rateWithJob: number;
+  /** what an opportunity paid at his position through the cut */
+  positionRate: number;
+}
+
+/** how many opportunities a backup needs before his own rate is worth reading */
+const ENOUGH_TO_READ_A_RATE = 15;
+
+/**
+ * Every backup at every cut of one season who went on to take the job,
+ * with his work beside the work the man in front of him had been getting.
+ * The division is the share of a job a next man up actually inherits.
+ */
+export function inheritanceIn(
+  season: ContingentSeason, cuts: number[],
+): Inherited[] {
+  const { read, snaps } = season;
+  const out: Inherited[] = [];
+
+  for (const week of cuts) {
+    const rates = positionRates(read, season.before, week);
+
+    for (const [key, order] of peckingOrders(read, week)) {
+      const position = key.split("|")[1] ?? "";
+      const club = key.split("|")[0] ?? "";
+      const top = order[0];
+
+      if (!top || top.perGame < MEANINGFUL_PER_GAME) {
+        continue;
+      }
+
+      const games = [...(read.clubWeeks.get(club) ?? [])]
+        .filter((one) => one <= week).length;
+
+      if (games === 0) {
+        continue;
+      }
+
+      const starter = totalled(read, top.playerId, 1, week);
+
+      for (const place of BEHIND) {
+        const his = order[place - 1];
+
+        if (!his) {
+          continue;
+        }
+
+        const withJob = weeksWithTheJob(read, snaps, his.playerId, week);
+
+        if (withJob.games < MIN_WEEKS_WITH_JOB) {
+          continue;
+        }
+
+        const before = totalled(read, his.playerId, 1, week);
+
+        out.push({
+          season: read.season,
+          week,
+          position,
+          playerId: his.playerId,
+          playerName: read.names.get(his.playerId) ?? his.playerId,
+          snapShareBefore: snapShareOver(snaps, his.playerId, 1, week).share,
+          weeksWithJob: withJob.games,
+          starterOpportunities: starter.opportunities / games,
+          starterPoints: starter.points / games,
+          opportunities: withJob.opportunities / withJob.games,
+          points: withJob.points / withJob.games,
+          opportunitiesBefore: before.opportunities,
+          ownOpportunities: before.opportunities / games,
+          rateBefore: before.opportunities >= ENOUGH_TO_READ_A_RATE
+            ? before.points / before.opportunities
+            : undefined,
+          rateWithJob: withJob.opportunities === 0
+            ? 0
+            : withJob.points / withJob.opportunities,
+          positionRate: rates.get(position) ?? 0,
+        });
+      }
+    }
+  }
+
+  return out;
+}
+
+/** his work over the weeks after the cut he was on for a starter's share */
+function weeksWithTheJob(
+  read: OpportunitySeason,
+  snaps: Map<string, Map<number, number>>,
+  playerId: string,
+  cut: number,
+): Did & { games: number } {
+  const summed = { ...nothing(), games: 0 };
+  const his = read.weeks.get(playerId);
+
+  for (const [week, pct] of snaps.get(playerId) ?? []) {
+    const did = his?.get(week);
+
+    if (week <= cut || pct < STARTER_SNAPS || !did) {
+      continue;
+    }
+
+    add(summed, did);
+    summed.games++;
+  }
+
+  return summed;
 }
 
 /* ---------- every season ---------- */
@@ -556,6 +756,7 @@ export async function buildContingent(
       missedFrom,
       snaps: snapsById(read, await loadSnapCounts(season).catch(() => [])),
       roster: await rosterFactsFor(season),
+      listed: await listedWeeksFor(season),
       openRate: pooledOpenRate(rateTallies),
     };
 
@@ -594,6 +795,7 @@ export async function contingentSeasonFor(
       .filter((one) => one.weeks.size > 0),
     snaps: snapsById(read, await loadSnapCounts(season).catch(() => [])),
     roster: await rosterFactsFor(season),
+    listed: await listedWeeksFor(season),
     openRate,
   };
 }
