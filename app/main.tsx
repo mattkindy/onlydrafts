@@ -1086,6 +1086,9 @@ function App() {
           minus={board?.plusMinus.get(showing.key)?.minus ?? []}
           teams={active?.size ?? 12}
           pays={active?.pays ?? {}}
+          thisWeek={slate
+            ? { week: slate.week, row: slateRows.get(showing.key) }
+            : undefined}
           onClose={() => setShowing(null)}
         />
       )}

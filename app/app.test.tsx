@@ -19,6 +19,7 @@ import { rescore } from "./lib/board.ts";
 import type { Player } from "./lib/scoring.ts";
 import type { League, Matchup } from "./lib/providers.ts";
 import { Roster } from "./views/Roster.tsx";
+import { readSlate } from "./lib/slate.ts";
 import { DraftView } from "./views/Draft.tsx";
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
 import { Waivers } from "./views/Waivers.tsx";
@@ -555,6 +556,38 @@ describe("a week row keeps its shape", () => {
 
     expect(week3!.querySelector(".bar s")).toBeNull();
     expect(week3!.querySelector(".wkline")).toBeNull();
+  });
+
+  it("says the slate's line for the week the slate covers", () => {
+    const p: Player = {
+      name: "Test Wideout", key: "test-wideout", position: "WR", team: "AAA",
+      ppg: 10,
+      game: { ev: 10, mid: 10, low: 5, q1: 8, q3: 12, high: 15 },
+      weeks: [
+        { w: 2, opp: "@ BBB", of: 1 },
+        { w: 3, opp: "v CCC", of: 1 },
+      ],
+    };
+    const row = readSlate({
+      season: 2026, week: 2, perCatch: 0.5,
+      players: [{
+        name: "Test Wideout", position: "WR", team: "AAA", opponent: "@ BBB",
+        ours: 12, sleeper: 14, average: 13, floor: 4, ceiling: 24, catches: 5,
+      }],
+    }).rows[0]!;
+
+    render(
+      <PlayerSheet
+        p={p} plus={[]} minus={[]} teams={12} onClose={() => {}}
+        thisWeek={{ week: 2, row }}
+      />,
+      where,
+    );
+
+    const [week2, week3] = Array.from(where.querySelectorAll(".wk"));
+
+    expect(week2!.querySelector(".wkpts")!.textContent).toBe("13.04 to 24");
+    expect(week3!.querySelector(".wkpts")!.textContent).toBe("10.05 to 15");
   });
 });
 

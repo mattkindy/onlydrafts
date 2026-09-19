@@ -6,7 +6,14 @@ import type { Pays, Player } from "../lib/scoring.ts";
 import { payFor } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
 import { claimWords, reasonWords, roleWords } from "../lib/sleeperWords.ts";
+import type { SlateRow } from "../lib/slate.ts";
 import { lineOver, movedBy } from "../lib/statLine.ts";
+
+/** the week the slate covers, and his row on it if he has one */
+export interface ThisWeek {
+  week: number;
+  row: SlateRow | undefined;
+}
 
 interface Props {
   p: Player;
@@ -14,7 +21,17 @@ interface Props {
   minus: string[];
   teams: number;
   pays?: Pays;
+  thisWeek?: ThisWeek;
   onClose: () => void;
+}
+
+/** where a week's bar starts and ends, its box, and its middle */
+interface WeekBands {
+  pts: number;
+  low: number;
+  q1: number;
+  q3: number;
+  high: number;
 }
 
 /**
@@ -22,8 +39,13 @@ interface Props {
  * bar. The season's per-game quantiles give the shape of a single week;
  * each week stretches that shape by its own matchup, so a soft one
  * shows a lower box and a shorter tail, not only a shorter bar.
+ *
+ * The week the slate covers takes the slate's own line instead, so the
+ * card says the same number the matchup page starts him on.
  */
-function WeekByWeek({ p, pays }: { p: Player; pays: Pays }) {
+function WeekByWeek(
+  { p, pays, thisWeek }: { p: Player; pays: Pays; thisWeek?: ThisWeek },
+) {
   const games = p.weeks ?? [];
 
   if (!games.length) {
@@ -37,15 +59,37 @@ function WeekByWeek({ p, pays }: { p: Player; pays: Pays }) {
     : { low: 1, q1: 1, q3: 1, high: 1 };
   // a week is a multiple of his own average, so the league's own
   // scoring is already in the number the card shows
-  const points = games.map((w) => w.of * (p.ppg ?? 0));
+  const bands = games.map((w): WeekBands => {
+    const row = w.w === thisWeek?.week ? thisWeek.row : undefined;
+
+    if (row) {
+      return {
+        pts: row.blend,
+        low: row.floor,
+        q1: row.q1 ?? row.blend * spread.q1,
+        q3: row.q3 ?? row.blend * spread.q3,
+        high: row.ceiling,
+      };
+    }
+
+    const pts = w.of * (p.ppg ?? 0);
+
+    return {
+      pts,
+      low: pts * spread.low,
+      q1: pts * spread.q1,
+      q3: pts * spread.q3,
+      high: pts * spread.high,
+    };
+  });
   // what he actually scored, under this league's rules, in a week
   // already played; a week not yet played has nothing to score
   const played = games.map((w) => w.played ? payFor(w.played, pays) : null);
   const max = Math.max(
-    ...points.map((n) => n * spread.high),
+    ...bands.map((b) => b.high),
     ...played.filter((n): n is number => n !== null),
   ) || 1;
-  const pct = (v: number) => (v / max) * 100;
+  const pct = (v: number) => (Math.max(0, v) / max) * 100;
 
   return (
     <>
@@ -55,7 +99,7 @@ function WeekByWeek({ p, pays }: { p: Player; pays: Pays }) {
         week already played.
       </div>
       {games.map((w, i) => {
-        const pts = points[i]!;
+        const { pts, low, q1, q3, high } = bands[i]!;
         const got = played[i] ?? null;
         const beat = got !== null ? got >= pts : null;
 
@@ -65,12 +109,12 @@ function WeekByWeek({ p, pays }: { p: Player; pays: Pays }) {
             <span>{w.opp}</span>
             <span class="bar">
               <u style={{
-                left: pct(pts * spread.low) + "%",
-                right: (100 - pct(pts * spread.high)) + "%",
+                left: pct(low) + "%",
+                right: (100 - pct(high)) + "%",
               }} />
               <i style={{
-                left: pct(pts * spread.q1) + "%",
-                right: (100 - pct(pts * spread.q3)) + "%",
+                left: pct(q1) + "%",
+                right: (100 - pct(q3)) + "%",
               }} />
               <b style={{ left: pct(pts) + "%" }} />
               {got !== null && (
@@ -79,7 +123,7 @@ function WeekByWeek({ p, pays }: { p: Player; pays: Pays }) {
             </span>
             <span class="wkpts">
               {pts.toFixed(1)}
-              <em>{(pts * spread.low).toFixed(0)} to {(pts * spread.high).toFixed(0)}</em>
+              <em>{low.toFixed(0)} to {high.toFixed(0)}</em>
             </span>
             {got !== null && (
               <span class="wkline">
@@ -190,7 +234,7 @@ export function PlayerSheet(props: Props) {
           </>
         )}
 
-        <WeekByWeek p={p} pays={props.pays ?? {}} />
+        <WeekByWeek p={p} pays={props.pays ?? {}} thisWeek={props.thisWeek} />
       </div>
     </div>
   );

@@ -66,6 +66,21 @@ describe("slateUnder", () => {
     expect(standard.rows[0]!.blend).toBe(14);
   });
 
+  it("stops a floor at nothing rather than under it", () => {
+    const low = readSlate({
+      season: 2026, week: 1, perCatch: 1,
+      players: [{
+        name: "T.J. Hockenson", position: "TE", team: "MIN", opponent: "@ CHI",
+        ours: 6.8, sleeper: 9.1, average: 7.9, floor: 1.6, ceiling: 15.4,
+        catches: 3.74,
+      }],
+    });
+    const standard = slateUnder(low, 0).rows[0]!;
+
+    expect(standard.floor).toBe(0);
+    expect(standard.blend).toBeCloseTo(4.2, 1);
+  });
+
   it("leaves a player with no catches, and a missing figure, alone", () => {
     const burrow = slateUnder(built, 1).rows[1]!;
 

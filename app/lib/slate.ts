@@ -206,11 +206,18 @@ export function slateUnder(slate: Slate, perCatch: number): Slate {
     return slate;
   }
 
-  // a Sleeper zero means he is not expected to play, so it stays zero
-  const moved = (row: SlateRow, points: number | null | undefined) =>
-    points === null || points === undefined || points === 0
-      ? points
-      : Number((points + shift * row.catches).toFixed(1));
+  // a Sleeper zero means he is not expected to play, so it stays zero,
+  // and taking a catch's pay off a low floor must not push it under
+  // nothing, since a week with no catches never scores below it
+  const moved = (row: SlateRow, points: number | null | undefined) => {
+    if (points === null || points === undefined || points === 0) {
+      return points;
+    }
+
+    const shifted = points + shift * row.catches;
+
+    return Number((points >= 0 ? Math.max(0, shifted) : shifted).toFixed(1));
+  };
 
   return {
     ...slate,
