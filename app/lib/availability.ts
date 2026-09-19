@@ -40,9 +40,9 @@ export const OUT_FOR_A_WHILE = new Set([
  *
  * NA is here, unlike in the season set. A player on somebody's roster
  * carrying it is not active, and projecting him a full week was the bug
- * an owner noticed. Questionable and Doubtful are not here, because most
- * of the players carrying either one play, and nothing else in the app marks
- * a doubtful player down.
+ * an owner noticed. Questionable and Doubtful stay out of this set
+ * because a questionable player mostly does play. They are not left at
+ * full value either: the week's rows are scaled by `playChance` instead.
  */
 export const OUT_THIS_WEEK = new Set([
   "IR", "PUP", "Sus", "DNR", "COV", "Out", "NA",
@@ -51,6 +51,65 @@ export const OUT_THIS_WEEK = new Set([
 /** whether the injury report says he does not play this week */
 export const outThisWeek = (status: string | null | undefined) =>
   Boolean(status && OUT_THIS_WEEK.has(status));
+
+/**
+ * How often a player carrying each word really took a snap, counted over
+ * the 2018 to 2025 regular seasons at QB, RB, WR, TE and K. A word this
+ * table has nothing for means nobody has said anything about him, so he
+ * plays.
+ *
+ * Doubtful is close enough to out to price it that way: 12 of the 417
+ * doubtful players in eight seasons played. Questionable is the one that
+ * moves a lineup.
+ */
+const PLAY_CHANCE: Record<string, number> = {
+  Out: 0, Doubtful: 0.02, Questionable: 0.64,
+};
+
+/**
+ * The same, split by what he did at practice on the last report. Thursday
+ * and Friday practice splits questionable nearly in half, so where an
+ * owner has that word it is worth more than the status alone.
+ */
+const PRACTICE_PLAY_CHANCE: Record<string, number> = {
+  "Questionable|DNP": 0.43,
+  "Questionable|Limited": 0.66,
+  "Questionable|Full": 0.75,
+};
+
+/**
+ * The chance he plays at all this week.
+ *
+ * Scored by Brier score on 2023 to 2025 against rates fitted on 2018 to
+ * 2022: these rates land at 0.124 where treating everybody not marked out
+ * as certain to play scores 0.260. An oracle that knew the scoring
+ * seasons' own rates gets 0.123, so there is almost nothing left in it.
+ */
+export function playChance(
+  status: string | null | undefined,
+  practice?: string | null,
+): number {
+  if (!status) {
+    return 1;
+  }
+
+  if (OUT_THIS_WEEK.has(status)) {
+    return 0;
+  }
+
+  const told = practice
+    ? PRACTICE_PLAY_CHANCE[`${status}|${practice}`]
+    : undefined;
+
+  return told ?? PLAY_CHANCE[status] ?? 1;
+}
+
+/**
+ * Whether the app marks him down at all, so a caller can skip the work
+ * of rewriting a row it would hand back unchanged.
+ */
+export const pricedDown = (status: string | null | undefined) =>
+  playChance(status) < 1;
 
 /**
  * The positions a lineup can start. The injury report is read by name,

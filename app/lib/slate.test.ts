@@ -138,14 +138,6 @@ describe("a player the injury report says is not playing", () => {
     expect(rows.get(chase)!.blend).toBeGreaterThan(0);
   });
 
-  it("leaves a questionable player alone", () => {
-    const rows = rowsOf(built);
-
-    expect(withOutPlayersZeroed(rows, listedBy({
-      "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Questionable" },
-    }))).toBe(rows);
-  });
-
   it("hands back the same map when nobody is out", () => {
     const rows = rowsOf(built);
 
@@ -204,5 +196,94 @@ describe("a player the injury report says is not playing", () => {
 
     expect(drawn.scored).toBe(6.4);
     expect(drawn.week.every((week) => week === 0)).toBe(true);
+  });
+});
+
+/**
+ * About two thirds of questionable players have played, so the rest of
+ * his projection is a third of his week that never happens.
+ */
+describe("a player the injury report is unsure about", () => {
+  const chase = normalizeName("Ja'Marr Chase");
+
+  const asked = (status: string) => withOutPlayersZeroed(
+    rowsOf(built), listedBy({ "Ja'Marr Chase": { name: "Ja'Marr Chase", status } }),
+  ).get(chase)!;
+
+  it("takes a third off a questionable player's three projections", () => {
+    const row = asked("Questionable");
+
+    expect(row.ours).toBe(10.9);
+    expect(row.sleeper).toBe(10.9);
+    expect(row.blend).toBe(10.9);
+    expect(row.playChance).toBeCloseTo(0.64);
+  });
+
+  it("puts the bottom of his week at zero, since he may not play", () => {
+    const row = asked("Questionable");
+
+    expect(row.floor).toBe(0);
+    expect(row.q1).toBe(0);
+  });
+
+  it("leaves the top of his week where a played week had it", () => {
+    const row = asked("Questionable");
+
+    expect(row.q3).toBe(22);
+    expect(row.ceiling).toBe(28);
+  });
+
+  it("prices a doubtful player at nearly nothing", () => {
+    const row = asked("Doubtful");
+
+    expect(row.blend).toBeLessThan(1);
+    expect(row.ceiling).toBe(28);
+  });
+
+  it("leaves everybody else where he was", () => {
+    const rows = withOutPlayersZeroed(rowsOf(built), listedBy({
+      "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Questionable" },
+    }));
+
+    expect(rows.get(normalizeName("Joe Burrow"))!.blend).toBe(18);
+  });
+
+  /** the build's flag is a week old by Sunday, so a live word wins */
+  it("takes the league's word over the one the build wrote down", () => {
+    const listed = readSlate({
+      season: 2026,
+      week: 1,
+      perCatch: 0.5,
+      players: [{
+        name: "Ja'Marr Chase", position: "WR", team: "CIN", opponent: "v TB",
+        ours: 17, sleeper: 17, average: 17, floor: 9, ceiling: 28,
+        q1: 12, q3: 22, catches: 6, questionable: true,
+      }],
+    });
+
+    const back = withOutPlayersZeroed(rowsOf(listed), listedBy({
+      "Ja'Marr Chase": { name: "Ja'Marr Chase", status: "Out" },
+    })).get(chase)!;
+
+    expect(back.blend).toBe(0);
+    expect(back.ceiling).toBe(0);
+  });
+
+  it("marks down a player only the build had listed", () => {
+    const listed = readSlate({
+      season: 2026,
+      week: 1,
+      perCatch: 0.5,
+      players: [{
+        name: "Ja'Marr Chase", position: "WR", team: "CIN", opponent: "v TB",
+        ours: 17, sleeper: 17, average: 17, floor: 9, ceiling: 28,
+        q1: 12, q3: 22, catches: 6, questionable: true,
+      }],
+    });
+
+    const back = withOutPlayersZeroed(rowsOf(listed), new Map()).get(chase)!;
+
+    expect(back.blend).toBe(10.9);
+    expect(back.playChance).toBeCloseTo(0.64);
   });
 });

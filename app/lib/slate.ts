@@ -10,7 +10,9 @@
  * decide a matchup.
  */
 
-import { listingFits, outThisWeek, type Listed } from "./availability.ts";
+import {
+  listingFits, outThisWeek, playChance, type Listed,
+} from "./availability.ts";
 import { normalizeName } from "./store.ts";
 
 export interface WeekRef {
@@ -43,6 +45,11 @@ export interface SlateRow {
   questionable: boolean;
   gamesMissedRecent: number;
   absenceShare: number;
+  /**
+   * His chance of playing, where the injury report has marked him down.
+   * A row nobody has said anything about leaves this off.
+   */
+  playChance?: number;
 }
 
 export interface Slate {
@@ -216,8 +223,35 @@ const NOTHING = {
 };
 
 /**
- * The week's rows with the players the injury report has ruled out set to
- * zero.
+ * Where a chance of playing stops taking the bottom off his week.
+ *
+ * The bands are percentiles, so a player with a 60% chance to play has a
+ * 40% chance of nothing and both his 10th and his 25th are zero. Above
+ * 75% the 25th is back inside his played week, and above 90% so is the
+ * 10th. The top two bands are what he does when he plays and never move.
+ */
+const FLOOR_SURVIVES_AT = 0.9;
+const Q1_SURVIVES_AT = 0.75;
+
+/** his row marked down for the chance he does not take the field at all */
+function scaledBy(row: SlateRow, chance: number): SlateRow {
+  const at = (points: number) => Number((points * chance).toFixed(1));
+
+  return {
+    ...row,
+    ours: at(row.ours),
+    sleeper: row.sleeper === null ? null : at(row.sleeper),
+    blend: at(row.blend),
+    floor: chance >= FLOOR_SURVIVES_AT ? row.floor : 0,
+    q1: chance >= Q1_SURVIVES_AT ? row.q1 : 0,
+    playChance: chance,
+  };
+}
+
+/**
+ * The week's rows priced for what the injury report says. A player ruled
+ * out reads zero on every figure, and a doubtful or questionable one is
+ * marked down by the share of players like him who went on to play.
  *
  * A row of zeros draws a flat zero week instead of his usual ladder.
  * What he put up before he limped off is counted separately from the
@@ -233,7 +267,9 @@ export function withOutPlayersZeroed(
   const sat: [string, SlateRow][] = [];
 
   for (const [key, his] of listed) {
-    if (!outThisWeek(his.status)) {
+    const chance = playChance(his.status);
+
+    if (chance === 1) {
       continue;
     }
 
@@ -241,13 +277,15 @@ export function withOutPlayersZeroed(
 
     if (row) {
       if (listingFits(his, row.position)) {
-        sat.push([key, { ...row, ...NOTHING }]);
+        sat.push([
+          key, chance === 0 ? { ...row, ...NOTHING } : scaledBy(row, chance),
+        ]);
       }
 
       continue;
     }
 
-    if (!his.position) {
+    if (!outThisWeek(his.status) || !his.position) {
       continue;
     }
 
@@ -263,11 +301,23 @@ export function withOutPlayersZeroed(
       questionable: false,
       gamesMissedRecent: 0,
       absenceShare: 0,
+      playChance: 0,
     }]);
   }
 
-  // the same map comes back when nobody is out, since callers key work off
-  // the map itself and a fresh copy each render would throw that away
+  // The build wrote down who the injury report listed the day it ran, which
+  // is a week old by Sunday, so it speaks only for a player the connected
+  // league has said nothing about.
+  for (const [key, row] of rows) {
+    if (!row.questionable || listed.has(key)) {
+      continue;
+    }
+
+    sat.push([key, scaledBy(row, playChance("Questionable"))]);
+  }
+
+  // the same map comes back when nobody is marked down, since callers key
+  // work off the map itself and a fresh copy each render would throw that away
   if (!sat.length) {
     return rows;
   }

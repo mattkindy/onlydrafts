@@ -5,7 +5,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { gamesLeft, outThisWeek, WEEKS_OUT } from "./availability.ts";
+import {
+  gamesLeft, outThisWeek, playChance, pricedDown, WEEKS_OUT,
+} from "./availability.ts";
 
 describe("what a player on a list is expected to play", () => {
   it("takes six games off him", () => {
@@ -68,5 +70,52 @@ describe("who does not play this week", () => {
     expect(outThisWeek(null)).toBe(false);
     expect(outThisWeek(undefined)).toBe(false);
     expect(outThisWeek("")).toBe(false);
+  });
+});
+
+/**
+ * The rates come from the injury reports for 2018 to 2025, counted by the
+ * injury status eval. Two thirds of questionable players play and about
+ * one doubtful player in eighty does.
+ */
+describe("the chance a listed player plays", () => {
+  it("gives a player nobody has said anything about the full week", () => {
+    expect(playChance(null)).toBe(1);
+    expect(playChance(undefined)).toBe(1);
+    expect(playChance("")).toBe(1);
+    expect(playChance("Probable")).toBe(1);
+  });
+
+  it("gives a player who has been ruled out nothing", () => {
+    for (const word of ["Out", "IR", "PUP", "Sus", "DNR", "COV", "NA"]) {
+      expect(playChance(word)).toBe(0);
+    }
+  });
+
+  it("marks a questionable player down to about two thirds", () => {
+    expect(playChance("Questionable")).toBeCloseTo(0.64);
+  });
+
+  it("prices a doubtful player about where an out one sits", () => {
+    expect(playChance("Doubtful")).toBeLessThan(0.05);
+  });
+
+  it("splits questionable by what he did at practice", () => {
+    expect(playChance("Questionable", "DNP")).toBeCloseTo(0.43);
+    expect(playChance("Questionable", "Limited")).toBeCloseTo(0.66);
+    expect(playChance("Questionable", "Full")).toBeCloseTo(0.75);
+  });
+
+  it("falls back to the status where no practice has been reported", () => {
+    expect(playChance("Questionable", "Walkthrough"))
+      .toBe(playChance("Questionable"));
+    expect(playChance("Doubtful", "Full")).toBe(playChance("Doubtful"));
+  });
+
+  it("says which words move a projection at all", () => {
+    expect(pricedDown("Questionable")).toBe(true);
+    expect(pricedDown("Doubtful")).toBe(true);
+    expect(pricedDown("Out")).toBe(true);
+    expect(pricedDown(null)).toBe(false);
   });
 });

@@ -89,7 +89,9 @@ describe("who to start", () => {
   it("puts the highest blend first and works down", () => {
     draw();
 
-    const shown = slate.rows
+    // the table ranks on what the injury report leaves him, not on the
+    // number the build wrote down
+    const shown = [...rowsOf(new Map()).values()]
       .filter((r) => names().includes(r.name))
       .sort((a, b) => b.blend - a.blend);
 
@@ -152,6 +154,21 @@ describe("who to start", () => {
     expect(rowFor("Ja'Marr Chase").textContent).toContain("questionable");
     expect(rowFor("Chase Brown").textContent).toContain("starter out");
     expect(rowFor("Trey McBride").textContent).toContain("missed 1");
+  });
+
+  /**
+   * The word on its own does not explain a projection a third lower than
+   * the one beside it on the other page, so the chance rides with it.
+   */
+  it("says how likely a questionable player is to play", () => {
+    draw(null, new Map([[normalizeName("Ja'Marr Chase"), {
+      name: "Ja'Marr Chase", status: "Questionable", part: "hip",
+    }]]));
+
+    const badge = rowFor("Ja'Marr Chase").querySelector(".badge")!;
+
+    expect(badge.textContent).toBe("questionable, 64%");
+    expect(badge.getAttribute("title")).toContain("64% of the players");
   });
 
   it("ranks a player the injury report has ruled out at zero, and says why", () => {

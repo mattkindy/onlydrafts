@@ -272,6 +272,24 @@ export interface SleeperPlayer {
 
 export type SleeperPlayers = Record<string, SleeperPlayer>;
 
+const HOUR = 60 * 60 * 1000;
+
+/** the days a game is played, as a browser numbers them */
+const GAME_DAYS = new Set([0, 1, 4]);
+
+/**
+ * How long a player file is good for.
+ *
+ * A day most of the time, because the list gains players every week of
+ * the year: rookies at the draft, signings all summer. Sleeper asks for
+ * one pull a day and this stays inside that. Thursday, Sunday and Monday
+ * are the exception, since that is when a player is ruled out a couple of
+ * hours before kickoff and an owner setting a lineup needs to hear it.
+ */
+export function playerFileGoodFor(now: Date = new Date()): number {
+  return GAME_DAYS.has(now.getDay()) ? 3 * HOUR : 24 * HOUR;
+}
+
 /** Sleeper's whole player file, trimmed and kept for the day */
 let sleeperFile: SleeperPlayers | null = null;
 
@@ -280,17 +298,13 @@ export async function sleeperPlayers() {
     return sleeperFile;
   }
 
-  /**
-   * A day, because the list gains players every week of the year: rookies
-   * at the draft, signings all summer. The old cache never expired and
-   * a browser from last season silently dropped every newer player from
-   * the draft it was watching.
-   */
+  // the old cache never expired, and a browser from last season silently
+  // dropped every newer player from the draft it was watching
   const cached = stored<{
     at: number; players: SleeperPlayers;
   } | null>("players.v6", null);
 
-  if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) {
+  if (cached && Date.now() - cached.at < playerFileGoodFor()) {
     sleeperFile = cached.players;
 
     return cached.players;
@@ -405,7 +419,7 @@ export async function espnPlayers(season: number): Promise<EspnPlayers> {
   const key = "espnPlayers.v2." + season;
   const cached = stored<{ at: number; players: EspnPlayers } | null>(key, null);
 
-  if (cached && Date.now() - cached.at < 24 * 60 * 60 * 1000) {
+  if (cached && Date.now() - cached.at < playerFileGoodFor()) {
     espnFile = cached.players;
 
     return cached.players;
