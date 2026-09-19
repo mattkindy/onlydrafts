@@ -344,6 +344,13 @@ const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
 const SLEEPERS_SHOWN = 8;
 
 /**
+ * The least an add has to move this week's win probability to be listed.
+ * Below a point the figure rounds to "+0" or "+1" on noise from the
+ * simulation, and a move that small is not worth a waiver claim.
+ */
+const WEEK_WORTH_SHOWING = 0.01;
+
+/**
  * The free agents the draft board underpriced, biggest claim first.
  *
  * The rest of this page prices a move by what it does to how often you
@@ -459,7 +466,7 @@ export function Waivers(props: Props) {
   /**
    * The adds worth showing, in the order the span asks for. This week
    * leads with what a move does to your win probability and drops
-   * everybody it does nothing for, since a list led by five tight ends
+   * everybody under a point, since a list led by five tight ends
    * worth zero is a list nobody reads.
    */
   const adds = useMemo(() => {
@@ -475,7 +482,7 @@ export function Waivers(props: Props) {
       .map((one) => ({
         ...one, by: week?.adds.get(one.row.p.key)?.added ?? 0,
       }))
-      .filter((one) => one.by !== 0)
+      .filter((one) => one.by >= WEEK_WORTH_SHOWING)
       .sort((a, b) => b.by - a.by);
   }, [worth, rest, wanted, span, week]);
 
