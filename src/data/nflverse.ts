@@ -31,6 +31,8 @@ export interface GameRow extends Game {
   surface?: string;
   /** the hour it kicks off, since an evening in December is colder */
   hour?: number;
+  /** the calendar day, as YYYY-MM-DD, which a weather history is indexed by */
+  gameday?: string;
   /** days since each side last played, 7 on a normal week */
   homeRest?: number;
   awayRest?: number;
@@ -127,6 +129,7 @@ export async function loadGames(): Promise<GameRow[]> {
           (HOME[row["home_team"] ?? ""]?.indoors ?? false)),
       surface: (row["surface"] ?? "").replace(/"/g, "") || undefined,
       hour: toNumber((row["gametime"] ?? "").split(":")[0]),
+      gameday: row["gameday"] || undefined,
       homeRest: toNumber(row["home_rest"]),
       awayRest: toNumber(row["away_rest"]),
       divisional: row["div_game"] === "1" || row["div_game"] === "TRUE",
