@@ -1,0 +1,78 @@
+What the weather does to a kick
+
+26465 outdoor kicks and fourth downs from 2015 on, with a recorded temperature and wind.
+A fourth down counts as in range from the 43 or closer, and appetite is the share of those where the kicker was sent out.
+Each cell is the rate, its standard error and the count. Temperature and wind are nflverse's, rain and snow the Open-Meteo archive's.
+
+Wind make rates are selected: a staff only sends a long one into a gale when they fancy it, so those attempts are the easy ones and the
+rate reads high. Read wind through appetite unless the long band says otherwise on its own.
+
+By temperature, F
+
+row         under 32                  32 to 40                  40 to 60                  over 60                   
+under 40    0.934 +-0.018 n=  196     0.942 +-0.012 n=  361     0.942 +-0.006 n= 1367     0.950 +-0.005 n= 1908     
+40 to 49    0.744 +-0.046 n=   90     0.730 +-0.031 n=  204     0.767 +-0.015 n=  768     0.772 +-0.013 n= 1100     
+50 plus     0.636 +-0.073 n=   44     0.590 +-0.049 n=  100     0.639 +-0.024 n=  416     0.631 +-0.019 n=  666     
+extra point 0.924 +-0.013 n=  410     0.925 +-0.009 n=  894     0.931 +-0.005 n= 3061     0.949 +-0.003 n= 4362     
+appetite    0.535 +-0.021 n=  566     0.568 +-0.015 n= 1068     0.624 +-0.008 n= 3757     0.653 +-0.007 n= 5127     
+
+By wind, mph
+
+row         under 12                  12 to 20                  over 20                   
+under 40    0.947 +-0.004 n= 2963     0.942 +-0.008 n=  763     0.934 +-0.024 n=  106     
+40 to 49    0.770 +-0.010 n= 1681     0.741 +-0.021 n=  440     0.805 +-0.062 n=   41     
+50 plus     0.634 +-0.016 n=  956     0.624 +-0.031 n=  250     0.550 +-0.111 n=   20     
+extra point 0.942 +-0.003 n= 6880     0.931 +-0.006 n= 1641     0.908 +-0.020 n=  206     
+appetite    0.633 +-0.005 n= 8049     0.615 +-0.010 n= 2195     0.562 +-0.030 n=  274     
+
+By what fell
+
+row         dry                       wet                       snow                      
+under 40    0.947 +-0.004 n= 3434     0.926 +-0.015 n=  312     0.953 +-0.023 n=   86     
+40 to 49    0.769 +-0.010 n= 1905     0.738 +-0.030 n=  210     0.723 +-0.065 n=   47     
+50 plus     0.636 +-0.014 n= 1116     0.615 +-0.050 n=   96     0.286 +-0.121 n=   14     
+extra point 0.939 +-0.003 n= 7872     0.945 +-0.009 n=  650     0.937 +-0.017 n=  205     
+appetite    0.630 +-0.005 n= 9372     0.638 +-0.016 n=  887     0.517 +-0.031 n=  259     
+
+What fell crossed with the cold
+
+row         dry under 32              dry 32 to 40              dry over 40               wet under 32              wet 32 to 40              wet over 40               snow under 32             snow 32 to 40             snow over 40              
+under 40    0.932 +-0.020 n=  161     0.935 +-0.014 n=  291     0.949 +-0.004 n= 2982             .                 1.000 +-0.000 n=   19     0.922 +-0.016 n=  293     0.943 +-0.039 n=   35     0.961 +-0.027 n=   51             .                 
+40 to 49    0.739 +-0.053 n=   69     0.730 +-0.035 n=  159     0.774 +-0.010 n= 1677             .                 0.789 +-0.094 n=   19     0.733 +-0.032 n=  191     0.762 +-0.093 n=   21     0.692 +-0.091 n=   26             .                 
+50 plus     0.711 +-0.074 n=   38     0.618 +-0.052 n=   89     0.635 +-0.015 n=  989             .                 0.333 +-0.272 n=    3     0.624 +-0.050 n=   93     0.167 +-0.152 n=    6     0.375 +-0.171 n=    8             .                 
+extra point 0.922 +-0.015 n=  307     0.924 +-0.010 n=  760     0.941 +-0.003 n= 6805             .                 0.906 +-0.052 n=   32     0.947 +-0.009 n=  618     0.932 +-0.025 n=  103     0.941 +-0.023 n=  102             .                 
+appetite    0.542 +-0.023 n=  456     0.572 +-0.017 n=  857     0.641 +-0.005 n= 8059             .                 0.629 +-0.061 n=   62     0.639 +-0.017 n=  825     0.509 +-0.048 n=  110     0.523 +-0.041 n=  149             .                 
+
+The sent out rate each condition would be fitted at, all seasons
+
+snow      0.517 +-0.031 n=  259   shipped 0.517
+freezing  0.542 +-0.023 n=  456   shipped 0.542
+cold      0.576 +-0.016 n=  919   shipped 0.576
+wet       0.639 +-0.017 n=  825   shipped 0.639
+windy     0.629 +-0.012 n= 1751   shipped 0.629
+mild      0.644 +-0.006 n= 6308   shipped 0.644
+
+Is a wet ball in the cold worse than wet and cold on their own?
+
+dry and mild, the baseline:   0.641 sent out
+falling and mild, against it: 0.997
+dry and cold, against it:     0.876
+both, the two multiplied:     0.873
+both, what happened:          0.841 (n=321, +-0.043)
+
+The interaction is -0.032 against the two multiplied, which is 0.7 standard errors. It leans the way the guess did and it is inside the noise, so
+there is nothing here to fit a term to.
+
+Kicker points a game, actual against the slate's line, 2021 to 2025
+out of sample, outdoor fixtures only.
+
+rough fixtures      : n=  562  now 3.6508  with the new tables 3.6487 (0.06%)  ceiling 3.6488 (0.05%)
+all outdoor         : n= 1855  now 3.5888  with the new tables 3.5882 (0.02%)  ceiling 3.5882 (0.02%)
+The new tables move 636 of 1855 lines at all.
+
+The weekly line rescales its parts to a total read off his recent
+weeks and the game total, so the venue only moves the mix of kicks
+rather than the total. Blizzard against a mild afternoon, same
+kicker: the line moves 0.004 points.
+
+Bench took 3.8s.

@@ -418,23 +418,37 @@ function binTable(
 function weatherRow(s: { wind: number; temp: number; soaked: boolean }): number[] {
   const blowing = Math.max(0, s.wind - 10) / 10;
   const cold = Math.max(0, ROUGH_COLD - s.temp) / 10;
+  const wet = s.soaked ? 1 : 0;
 
-  return [1, blowing, cold, blowing * cold, s.soaked ? 1 : 0];
+  return [1, blowing, cold, blowing * cold, wet, wet * cold];
 }
 
 /** a small ridge, since the corner column nearly repeats its parts */
 const LAMBDA = 5;
 
-function fitGroup(samples: Sample[]): number[] {
+/**
+ * The groups whose wet by cold term kept its sign across every
+ * training window. It flips on a tight end and on a back who catches,
+ * so those two are fitted without the column rather than with a
+ * coefficient nobody can trust.
+ */
+const WET_COLD_GROUPS = new Set(["QB", "WR"]);
+
+function fitGroup(samples: Sample[], group?: string): number[] {
+  const wide = group === undefined || WET_COLD_GROUPS.has(group);
+  const width = wide ? 6 : 5;
+
   if (samples.length < 50) {
-    return [1, 0, 0, 0, 0];
+    return new Array<number>(6).fill(0).map((_, i) => (i === 0 ? 1 : 0));
   }
 
-  return fitRidge(
-    samples.map(weatherRow),
+  const weights = fitRidge(
+    samples.map((s) => weatherRow(s).slice(0, width)),
     samples.map((s) => s.actual / s.line),
     LAMBDA,
   );
+
+  return wide ? weights : [...weights, 0];
 }
 
 /** the fit is a nudge to a line, not a licence to halve it */
@@ -607,7 +621,7 @@ async function main(): Promise<void> {
   out.push("per ten degrees below forty, the corner term, and a soaking.");
   out.push("");
   out.push(
-    "group        train        intercept     wind     cold   corner      wet   n",
+    "group        train        intercept     wind     cold   corner      wet  wetcold   n",
   );
 
   const all = empty();
@@ -620,8 +634,8 @@ async function main(): Promise<void> {
       const mine = samples.filter((s) => s.group === group);
       const before = mine.filter((s) => s.season < season);
       const during = mine.filter((s) => s.season === season);
-      const weights = fitGroup(before);
-      const ceiling = fitGroup(during);
+      const weights = fitGroup(before, group);
+      const ceiling = fitGroup(during, group);
 
       out.push(
         `${group.padEnd(13)}${`to ${season - 1}`.padEnd(13)}` +
@@ -673,14 +687,14 @@ async function main(): Promise<void> {
   out.push("Refitted on every season, which is what a shipped table would use");
   out.push("");
   out.push(
-    "group        intercept     wind     cold   corner      wet   n",
+    "group        intercept     wind     cold   corner      wet  wetcold   n",
   );
 
   const everySeason = new Map<string, number[]>();
 
   for (const group of GROUPS) {
     const mine = samples.filter((s) => s.group === group);
-    const weights = fitGroup(mine);
+    const weights = fitGroup(mine, group);
     everySeason.set(group, weights);
     out.push(
       group.padEnd(13) +
@@ -692,7 +706,7 @@ async function main(): Promise<void> {
   out.push("");
   out.push("The same divided by its intercept, which is the shape a lift wants");
   out.push("");
-  out.push("group             wind     cold   corner      wet");
+  out.push("group             wind     cold   corner      wet  wetcold");
 
   for (const group of GROUPS) {
     const weights = everySeason.get(group)!;

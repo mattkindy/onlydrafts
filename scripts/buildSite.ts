@@ -89,7 +89,9 @@ import { readingsFrom, kickoffsIn } from "../src/data/gameWeather.js";
 import {
   settingLift, sharedOut, type Setting, type Weather,
 } from "../src/features/weekSetting.js";
-import { loadWeatherWeekly } from "../src/data/weatherWeekly.js";
+import {
+  loadWeatherWeekly, type Forecast,
+} from "../src/data/weatherWeekly.js";
 import {
   fetchLeagueScoring,
   fetchStarterSlots,
@@ -497,6 +499,37 @@ async function defenceSlateRows(
   });
 }
 
+/**
+ * The weather a fixture is likely to be played in: the forecast where
+ * anyone has one, and otherwise what that ground usually gets in that
+ * week. Built once and kept, since the climate fit reads every game
+ * ever played.
+ */
+let weatherAhead: Promise<{
+  forecast: Map<string, Forecast>;
+  usually: { temperature: (g: GameRow) => number; wind: (g: GameRow) => number };
+}> | undefined;
+
+function weatherFor(season: number) {
+  weatherAhead ??= (async () => {
+    const rows = (await loadWeatherWeekly()).filter((f) => f.season === season);
+    const gameRows = parseCsv(await readFile(
+      join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
+    const climate = fitClimate(readingsFrom(gameRows));
+
+    return {
+      forecast: new Map(rows.map((f) => [`${f.homeTeam}|${f.week}`, f])),
+      usually: {
+        temperature: (g: GameRow) =>
+          climate.meanTemperature(g.homeTeamId, g.week, g.hour ?? 13),
+        wind: (g: GameRow) => climate.meanWind(g.homeTeamId),
+      },
+    };
+  })();
+
+  return weatherAhead;
+}
+
 /** two kickers from the slate, so a run can be read at a glance */
 function sayKickerRows(rows: SlateRowShape[]): void {
   for (const row of rows.filter((r) => r.position === "K").slice(0, 2)) {
@@ -524,6 +557,7 @@ async function kickerSlateRows(
   season: number, week: number, games: GameRow[],
 ): Promise<SlateRowShape[]> {
   const jobs = await loadKickerJobs(season, week);
+  const { forecast, usually } = await weatherFor(season);
   const soFar = (await loadKickerWeeks(season)).filter((w) => w.week < week);
   const ownWeeks = new Map<string, typeof soFar>();
 
@@ -540,9 +574,16 @@ async function kickerSlateRows(
       continue;
     }
 
-    const venue: Venue = g.indoors
-      ? { indoors: true }
-      : { indoors: false, temperature: g.temp ?? 60, wind: g.wind ?? 6 };
+    // nflverse fills temp and wind in after a game, so a fixture that
+    // has not kicked off has neither and every outdoor kicker used to
+    // be priced at a mild still 60 and 6
+    const said = forecast.get(`${g.homeTeamId}|${g.week}`);
+    const venue: Venue = g.indoors ? { indoors: true } : {
+      indoors: false,
+      temperature: g.temp ?? said?.temperature ?? usually.temperature(g),
+      wind: g.wind ?? said?.wind ?? usually.wind(g),
+      precipitation: said?.precipitation,
+    };
     const half = (g.totalLine ?? 0) / 2;
     const tilt = (g.spreadLine ?? 0) / 2;
     const known = g.totalLine !== undefined && g.spreadLine !== undefined;
@@ -984,13 +1025,7 @@ async function main(): Promise<void> {
   const gameRows = parseCsv(await readFile(
     join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
   const whereEach = new Map<string, Setting>();
-  const skyAtGround = new Map<string, Weather>();
-
-  for (const f of await loadWeatherWeekly()) {
-    if (f.season === season) {
-      skyAtGround.set(`${f.homeTeam}|${f.week}`, f);
-    }
-  }
+  const skyAtGround: Map<string, Weather> = (await weatherFor(season)).forecast;
 
   for (const k of kickoffsIn(gameRows, season)) {
     const indoors = k.indoors;

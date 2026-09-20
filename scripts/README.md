@@ -2977,3 +2977,53 @@ Wind direction and the stadium's orientation. Open-Meteo sends
 different game from a following wind. Then measure whether a forecast a
 week out predicts the day as well as the record of it does, since every
 number here was scored against weather that had already happened.
+
+# What the weather does to a kick
+
+`kickerWeatherEval.ts` pulls every kick and every fourth down from the
+43 or closer out of the play by play since 2015, caches them, and reads
+them against the ground's weather. Temperature and wind are nflverse's,
+rain and snow the Open-Meteo archive's.
+
+Appetite is where the weather shows, not the make rate. Of the fourth
+downs in range a staff sends the kicker out 64.4 times in a hundred on
+a mild afternoon, 62.9 in a wind, 57.6 between 32 and 40, 54.2 below
+freezing and 51.7 in snow. Snow was priced as a mild afternoon before
+this, which the count of the kicks says is wrong. Rain on its own does
+almost nothing: 63.9 against 64.4, so `wet` gets no term of its own.
+
+The make rates keep freezing equal to cold. The split is inside noise
+at every band, and the fifty plus row reads *higher* below freezing
+(0.711 on 38 kicks) than in the mild (0.635), which is the same
+selection that makes wind look helpful. A staff only tries a long one
+on a brutal day when they already like it.
+
+A wet ball in the cold is not worse than the wet and the cold apart.
+Against a dry mild afternoon, falling and mild sends him out at 0.997,
+dry and cold at 0.876, the two multiplied at 0.873, and the cell that
+is both at 0.841 on 321 fourth downs, plus or minus 0.043. That is 0.7
+standard errors of interaction. It leans the way the guess did and
+there is nothing there to fit.
+
+The decision number says almost nothing, and the reason is structural.
+`projectKickerWeek` scales its parts to a total read off his recent
+weeks and the game total, so `paid` equals that total whatever the
+venue and the appetite cancels exactly. A blizzard against a mild
+afternoon for the same kicker moves the line 0.004 points, and that is
+only the rows where the scale hit its band. Out of sample on 2021 to
+2025 the new tables move the error 0.06% on rough fixtures and 0.02%
+across every outdoor one, nowhere near the 1% bar.
+
+The tables changed anyway. Saying a staff is as happy to kick in snow
+as on a mild afternoon is wrong on the count of the kicks themselves,
+and appetite reaches the season walk, the floor and ceiling draws, and
+the parts a league with its own ladder pays by. None of those three
+rescale it away.
+
+## What to try next
+
+Let the venue reach the weekly total rather than only the mix. The
+rescale to `wanted` is what discards it, and `wanted` is fitted from
+recent pay and the game total with no weather column at all. Fitting a
+weather column into `wanted` is the change that would make any of this
+reach the slate's headline number.

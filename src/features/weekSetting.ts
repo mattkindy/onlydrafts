@@ -84,23 +84,32 @@ const WORST_COLD = 0;
 
 /** what a group loses per ten mph of wind over ten */
 const WIND: Partial<Record<Group, number>> = {
-  QB: -0.0967, "RB catching": -0.0525, WR: -0.0659, TE: -0.1429,
+  QB: -0.0948, "RB catching": -0.0525, WR: -0.0653, TE: -0.1429,
 };
 
 /** and per ten degrees under forty */
 const COLD: Partial<Record<Group, number>> = {
-  QB: -0.0499, "RB catching": -0.0235, WR: -0.0136, TE: -0.0352,
+  QB: -0.0684, "RB catching": -0.0235, WR: -0.0220, TE: -0.0352,
 };
 
-/** what a day that is both costs on top of the two */
+/** what a windy cold day costs on top of the two */
 const BOTH: Partial<Record<Group, number>> = {
-  QB: -0.0366, "RB catching": 0.0254, WR: -0.0202, TE: 0.0444,
+  QB: -0.0523, "RB catching": 0.0254, WR: -0.0245, TE: 0.0444,
 };
 
-/** and what a soaking costs, which is the largest of the four */
+/** and what a soaking costs, which is the largest of them */
 const WET: Partial<Record<Group, number>> = {
-  QB: -0.1252, "RB catching": -0.1513, WR: -0.1111, TE: -0.1182,
+  QB: -0.1639, "RB catching": -0.1513, WR: -0.1273, TE: -0.1182,
 };
+
+/**
+ * A soaking in the cold, which costs less than the rain and the cold
+ * do apart, so this term gives some back. Only a quarterback and a
+ * receiver have one: it flipped sign across the training windows for
+ * a tight end and for a back who catches, so they are fitted without
+ * it rather than given a number nobody can trust.
+ */
+const WET_COLD: Partial<Record<Group, number>> = { QB: 0.1478, WR: 0.0588 };
 
 /** the weather moves a line, it does not get to halve one */
 const MOST = 0.25;
@@ -110,10 +119,12 @@ function weatherFactor(group: Group, sky: Weather): number {
   const temperature = Math.max(WORST_COLD, sky.temperature);
   const blowing = Math.max(0, wind - CALM_WIND) / 10;
   const cold = Math.max(0, MILD - temperature) / 10;
+  const wet = sky.soaked ? 1 : 0;
   const lost = blowing * (WIND[group] ?? 0) +
     cold * (COLD[group] ?? 0) +
     blowing * cold * (BOTH[group] ?? 0) +
-    (sky.soaked ? WET[group] ?? 0 : 0);
+    wet * (WET[group] ?? 0) +
+    wet * cold * (WET_COLD[group] ?? 0);
 
   // every bin of every group scored under its line in weather, so a
   // day the tables like is a day they have extrapolated past

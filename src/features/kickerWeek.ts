@@ -93,6 +93,12 @@ export interface KickerWeekRead {
   impliedFor: number;
   /** the ground he kicks at, which decides how often he is sent out */
   venue: Venue;
+  /**
+   * How often he is sent out, already worked out. The weather bench
+   * sets this so it can score a rival set of kicking tables through
+   * the same line; everything that ships leaves it alone.
+   */
+  appetite?: number;
 }
 
 interface KickerWeekLine {
@@ -110,7 +116,7 @@ const mean = (its: number[]) =>
  */
 function countingShape(read: KickerWeekRead): Parts {
   const own = Math.min(1, read.ownGames / (read.ownGames + SHRINK_GAMES));
-  const sentOut = kickingVenue.appetite(read.venue);
+  const sentOut = read.appetite ?? kickingVenue.appetite(read.venue);
   const out: Parts = {};
 
   for (const part of KICKER_PARTS) {
