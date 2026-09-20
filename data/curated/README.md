@@ -23,3 +23,12 @@ the raw downloads, so `scripts/fetchSleeperProjections.ts` reproduces it
 only as long as Sleeper keeps serving those weeks. Sleeper projects
 about 350 men a week at the four positions, which is fewer than play, so
 anything scored against it has to say what share of the slate it covered.
+
+Every week of the season is fetched, including the ones nobody has
+played, because the player card shows a line for each week ahead.
+Sleeper revises a week as it nears, and each run overwrites the row with
+what Sleeper says now, so a stored row for a week already played is
+Sleeper's last word before kickoff and nothing here remembers what it
+said a month out. Anything measuring how good Sleeper is weeks in
+advance has to be collected as the season runs; it cannot be read back
+out of this file.

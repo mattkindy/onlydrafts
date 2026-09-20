@@ -13,7 +13,8 @@ mentions a script that is no longer here, it says so.
 - `week.ts` is the weekly refresh. `npm run week` runs it, and it calls
   the next four in order.
 - `fetchData.ts` downloads the nflverse files into `data/raw/`.
-- `fetchSleeperProjections.ts` pulls Sleeper's weekly projections.
+- `fetchSleeperProjections.ts` pulls Sleeper's weekly projections, every
+  week of the season and not only the one coming up.
 - `pullAdp.ts` and `pullSleeperAdp.ts` pull draft position snapshots.
 - `aggregate*.ts` count the raw play-by-play into the tables in
   `data/curated/`. Each writes the file named in its header comment and

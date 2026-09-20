@@ -8,14 +8,15 @@
  *
  * The endpoint needs no auth, so the only politeness is going one week at a
  * time with a pause between calls. A week nobody has projected yet comes
- * back empty, which is how the current season stops itself.
+ * back empty, which is how a season still to start stops itself. Every week
+ * is fetched, not only the one coming up, because the player card shows a
+ * line for each week ahead.
  *
  * Run: npx tsx scripts/fetchSleeperProjections.ts [--seasons 2024,2025,2026]
  */
 
 import { writeFile } from "node:fs/promises";
 import { fetchSleeperGsisIds } from "../src/data/sleeper.js";
-import { comingWeek, currentSeason, loadGames } from "../src/data/nflverse.js";
 import {
   defenceProjectionsToCsv,
   joinDefenceProjections,
@@ -94,16 +95,7 @@ async function main(): Promise<void> {
   for (const season of seasons) {
     let seasonRows = 0;
 
-    /**
-     * Sleeper revises every week still to come, so fetching all eighteen
-     * rewrites thousands of rows a run for numbers nobody reads until
-     * that week arrives. Past seasons are settled and come whole.
-     */
-    const last = season === currentSeason()
-      ? Math.min(LAST_WEEK, comingWeek(await loadGames(), season))
-      : LAST_WEEK;
-
-    for (let week = 1; week <= last; week++) {
+    for (let week = 1; week <= LAST_WEEK; week++) {
       const raw = await fetchWeek(season, week);
       await pause(PAUSE_MS);
 
