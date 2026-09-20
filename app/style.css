@@ -254,6 +254,11 @@
   .badge.bad { background: var(--no); color: #fff; }
   .badge.even { background: var(--chip); color: var(--muted);
     border: 1px solid var(--edge); }
+  /* the forecast, which is news about the fixture rather than the player,
+     so it reads quieter than the injury badges beside it */
+  .badge.weather { background: var(--chip); color: var(--ink);
+    border: 1px solid var(--edge); letter-spacing: .02em;
+    font-size: .68rem; padding: .1rem .35rem; }
   .facts { display: flex; flex-wrap: wrap; gap: .1rem var(--s3);
     align-items: baseline; font-variant-numeric: tabular-nums; }
   .facts .f { color: var(--ink); font-size: var(--t2); font-weight: 600; }

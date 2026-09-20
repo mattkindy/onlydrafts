@@ -57,6 +57,27 @@ export interface SlateRow {
    * A row nobody has said anything about leaves this off.
    */
   playChance?: number;
+  /**
+   * The forecast for his fixture, on the rows where it would move him:
+   * wind 15 or more, under 40, or something falling. A mild afternoon
+   * leaves this off, which is most of them.
+   */
+  weather?: WeatherNote;
+  /**
+   * What the weather already did to `ours`, as a multiplier. The build
+   * applied it, so the app reads it rather than working it out again.
+   */
+  weatherLift?: number;
+}
+
+/** what the sky is doing at his kickoff, where it is worth a word */
+export interface WeatherNote {
+  /** miles an hour */
+  wind: number;
+  /** fahrenheit */
+  temp: number;
+  wet: boolean;
+  snow: boolean;
 }
 
 export interface Slate {
@@ -143,6 +164,8 @@ interface FileRow {
   gamesMissedRecent?: number;
   gamesMissed?: number;
   absenceShare?: number;
+  weather?: WeatherNote;
+  weatherLift?: number;
 }
 
 interface FileSlate {
@@ -179,6 +202,8 @@ function readRow(row: FileRow): SlateRow {
     status: row.status || undefined,
     gamesMissedRecent: row.gamesMissedRecent ?? row.gamesMissed ?? 0,
     absenceShare: row.absenceShare ?? 0,
+    weather: row.weather,
+    weatherLift: row.weatherLift,
   };
 }
 

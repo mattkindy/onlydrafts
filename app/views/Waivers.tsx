@@ -21,6 +21,7 @@ import { claimWords, reasonWords } from "../lib/sleeperWords.ts";
 import type { League, Matchup } from "../lib/providers.ts";
 import { myGameIn, type Lines } from "../lib/matchups.ts";
 import type { Slate, SlateRow } from "../lib/slate.ts";
+import { WeatherMark } from "./WeatherMark.tsx";
 import type { Listed } from "../lib/availability.ts";
 import {
   RARELY_STARTS, WORTH_ADDING, type Add, type Drop, type Net,
@@ -239,7 +240,7 @@ function addCost(paid: { drop: string } | null): string {
 }
 
 function AddRow(
-  { row, at, figures, absent, paid, span, onMore }: {
+  { row, at, figures, absent, paid, span, sky, onMore }: {
     row: Add;
     /** where he is in this week's lineup, when the week is loaded */
     at: { slot: string | null } | null;
@@ -248,6 +249,8 @@ function AddRow(
     /** who a spot for him costs and what the pair is worth, when priced */
     paid: { drop: string; net: number } | null;
     span: Span;
+    /** his row on this week's slate, which is where the forecast is */
+    sky?: SlateRow;
     onMore: () => void;
   },
 ) {
@@ -258,7 +261,10 @@ function AddRow(
       <td data-label="move" class="move">
         Add {row.p.name} ({row.p.position}){addCost(paid)}
       </td>
-      <td data-label="player"><span class="who link">{row.p.name}</span></td>
+      <td data-label="player">
+        <span class="who link">{row.p.name}</span>
+        {sky && <WeatherMark row={sky} />}
+      </td>
       <td data-label="pos">{row.p.position}</td>
       {/* a season of him says nothing about one week, and the week's own
           figures are already the three cells after it */}
@@ -657,6 +663,7 @@ export function Waivers(props: Props) {
               key={row.p.key}
               row={row}
               span={span}
+              sky={span === "week" ? props.rows.get(row.p.key) : undefined}
               {...addSeen(row, paid)}
               onMore={() => props.onMore(row.p)}
             />

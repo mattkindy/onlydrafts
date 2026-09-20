@@ -23,6 +23,7 @@ import {
 import type { Matchup, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import { hurtWord, type Slate, type SlateRow, type WeekRef } from "../lib/slate.ts";
+import { WeatherMark } from "./WeatherMark.tsx";
 import { Advice, gainPct, nameOf, pct } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
 import { PlayerName } from "./PlayerName.tsx";
@@ -125,6 +126,18 @@ function InjuryBadge(
   );
 }
 
+/** everything worth flagging beside a name: what he is listed as, and the sky */
+function Marks(
+  { his, row }: { his: Listed | undefined; row: SlateRow | undefined },
+) {
+  return (
+    <>
+      <InjuryBadge his={his} row={row} />
+      {row && <WeatherMark row={row} />}
+    </>
+  );
+}
+
 /**
  * Where the swap's win probability comes from, shown only on the slots
  * a reader cannot settle from the two projections.
@@ -190,7 +203,7 @@ function Slot(
           team={his.line?.team}
           onOpen={onMore ? () => onMore(choice.starter.key) : undefined}
         />
-        <InjuryBadge
+        <Marks
           his={listed.get(choice.starter.key)}
           row={rows.get(choice.starter.key)}
         />
@@ -221,7 +234,7 @@ function Slot(
                     onOpen={onMore ? () => onMore(option.key) : undefined}
                   />
                   <Numbers line={other.line} left={other.left} />
-                  <InjuryBadge
+                  <Marks
                     his={listed.get(option.key)}
                     row={rows.get(option.key)}
                   />

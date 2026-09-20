@@ -162,6 +162,7 @@ async function main(): Promise<void> {
       homeTeam: game.homeTeamId,
       ...taken,
       soaked: taken.precipitation >= SOAKED_MM,
+      snow: taken.precipitation >= SOAKED_MM && taken.temperature < 32,
       source: said ? "forecast" : "climate",
     });
   }

@@ -31,8 +31,49 @@ export interface Forecast extends Weather {
   precipitation: number;
   /** the highest chance of any of those three hours, as a percentage */
   precipChance: number;
+  /** falling, and cold enough that it is falling as snow */
+  snow: boolean;
   /** whether this came from a forecast or from the ground's own history */
   source: "forecast" | "climate";
+}
+
+/** rain this cold is snow, which is what a kicking table treats it as */
+const SNOWS_UNDER = 32;
+
+/** the wind and the cold a day has to reach before anyone should be told */
+const WORTH_SAYING_WIND = 15;
+const WORTH_SAYING_COLD = 40;
+
+/** what a card shows next to a name, where the day is worth a word */
+export interface WeatherNote {
+  wind: number;
+  temp: number;
+  wet: boolean;
+  snow: boolean;
+}
+
+/**
+ * A day mild enough to change nothing gets no note, so most rows carry
+ * no weather at all and the slate stays small.
+ */
+export function weatherNote(
+  f: Forecast | undefined,
+): WeatherNote | undefined {
+  if (!f) {
+    return undefined;
+  }
+
+  const worth = f.wind >= WORTH_SAYING_WIND ||
+    f.temperature < WORTH_SAYING_COLD || f.soaked;
+
+  return worth
+    ? {
+      wind: Math.round(f.wind),
+      temp: Math.round(f.temperature),
+      wet: f.soaked && !f.snow,
+      snow: f.snow,
+    }
+    : undefined;
 }
 
 export const HEADER =
@@ -71,6 +112,8 @@ export function parseWeatherWeekly(text: string): Forecast[] {
       precipitation: Number.isFinite(precipitation) ? precipitation : 0,
       precipChance: num(row["precip_chance"]) || 0,
       soaked: Number.isFinite(precipitation) && precipitation >= SOAKED_MM,
+      snow: Number.isFinite(precipitation) && precipitation >= SOAKED_MM &&
+        temperature < SNOWS_UNDER,
       source: row["source"] === "climate" ? "climate" : "forecast",
     });
   }

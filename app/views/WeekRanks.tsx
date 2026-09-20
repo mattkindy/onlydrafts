@@ -19,6 +19,7 @@ import {
 import type { Listed } from "../lib/availability.ts";
 import { normalizeName } from "../lib/store.ts";
 import { injuryBadge } from "./Draft.tsx";
+import { WeatherMark } from "./WeatherMark.tsx";
 import { Reading } from "./Reading.tsx";
 
 const POSITIONS = ["ALL", "QB", "RB", "WR", "TE"];
@@ -50,6 +51,7 @@ function Chips({ row, his }: { row: SlateRow; his: Listed | undefined }) {
 
   return (
     <>
+      <WeatherMark row={row} />
       {badge && (
         <span class={"badge " + badge.badgeHow} title={badge.badgeTitle + why}>
           {badge.badge + odds}

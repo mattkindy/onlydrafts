@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { HEADER, parseWeatherWeekly, rowOf } from "./weatherWeekly.js";
+import {
+  HEADER, parseWeatherWeekly, rowOf, weatherNote,
+} from "./weatherWeekly.js";
 
 const file = (...rows: string[]) => [HEADER, ...rows].join("\n") + "\n";
 
@@ -13,8 +15,17 @@ describe("the week's forecasts", () => {
       season: 2026, week: 3, homeTeam: "BUF",
       wind: 18.4, temperature: 31.2,
       precipitation: 2.6, precipChance: 80,
-      soaked: true, source: "forecast",
+      soaked: true, snow: true, source: "forecast",
     });
+  });
+
+  it("calls rain below freezing snow, which is what it falls as", () => {
+    const [cold] = parseWeatherWeekly(file("2026,3,GB,8,25.0,2.00,90,forecast"));
+    const [mild] = parseWeatherWeekly(file("2026,3,GB,8,50.0,2.00,90,forecast"));
+
+    expect(cold?.snow).toBe(true);
+    expect(mild?.snow).toBe(false);
+    expect(mild?.soaked).toBe(true);
   });
 
   it("calls a drizzle dry, since a millimetre is where the fit was cut", () => {
@@ -45,12 +56,43 @@ describe("the week's forecasts", () => {
     expect(parseWeatherWeekly(file())).toEqual([]);
   });
 
+  describe("whether a day is worth telling anyone about", () => {
+    const only = (row: string) => weatherNote(parseWeatherWeekly(file(row))[0]);
+
+    it("says nothing about a mild still dry afternoon", () => {
+      expect(only("2026,3,TB,7,72.0,0.00,5,forecast")).toBeUndefined();
+    });
+
+    it("speaks up once the wind reaches fifteen", () => {
+      expect(only("2026,3,BUF,14.4,70.0,0.00,0,forecast")).toBeUndefined();
+      expect(only("2026,3,BUF,15.2,70.0,0.00,0,forecast"))
+        .toEqual({ wind: 15, temp: 70, wet: false, snow: false });
+    });
+
+    it("speaks up under forty degrees", () => {
+      expect(only("2026,3,GB,5,39.4,0.00,0,forecast"))
+        .toEqual({ wind: 5, temp: 39, wet: false, snow: false });
+      expect(only("2026,3,GB,5,41.0,0.00,0,forecast")).toBeUndefined();
+    });
+
+    it("tells wet from snow by how cold it is", () => {
+      expect(only("2026,3,NE,6,48.0,2.00,80,forecast"))
+        .toEqual({ wind: 6, temp: 48, wet: true, snow: false });
+      expect(only("2026,3,GB,6,24.0,2.00,80,forecast"))
+        .toEqual({ wind: 6, temp: 24, wet: false, snow: true });
+    });
+
+    it("has nothing to say about a fixture with no row", () => {
+      expect(weatherNote(undefined)).toBeUndefined();
+    });
+  });
+
   it("writes a row the reader takes straight back", () => {
     const written = {
       season: 2026, week: 9, homeTeam: "NE",
       wind: 21.55, temperature: 33.49,
       precipitation: 1.234, precipChance: 45,
-      soaked: true, source: "forecast" as const,
+      soaked: true, snow: false, source: "forecast" as const,
     };
     const [back] = parseWeatherWeekly(file(rowOf(written)));
 

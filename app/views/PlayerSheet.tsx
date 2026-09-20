@@ -7,6 +7,7 @@ import { payFor } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
 import { claimWords, reasonWords, roleWords } from "../lib/sleeperWords.ts";
 import { movedForCatches, type SlateRow } from "../lib/slate.ts";
+import { WeatherMark, weatherWords } from "./WeatherMark.tsx";
 import { lineOver, movedBy } from "../lib/statLine.ts";
 
 /** the week the slate covers, and his row on it if he has one */
@@ -114,6 +115,7 @@ function WeekByWeek(
     ...played.filter((n): n is number => n !== null),
   ) || 1;
   const pct = (v: number) => (Math.max(0, v) / max) * 100;
+  const weather = thisWeek?.row ? weatherWords(thisWeek.row) : undefined;
 
   return (
     <>
@@ -130,7 +132,12 @@ function WeekByWeek(
         return (
           <div class="wk" key={w.w}>
             <span>w{w.w}</span>
-            <span>{w.opp}</span>
+            <span>
+              {w.opp}
+              {w.w === thisWeek?.week && thisWeek.row && (
+                <WeatherMark row={thisWeek.row} />
+              )}
+            </span>
             <span class="bar">
               <u style={{
                 left: pct(low) + "%",
@@ -165,6 +172,9 @@ function WeekByWeek(
         </div>
         <span />
       </div>
+      {weather && (
+        <div class="hint">Week {thisWeek!.week}: {weather}.</div>
+      )}
     </>
   );
 }

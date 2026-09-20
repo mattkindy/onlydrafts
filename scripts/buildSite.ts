@@ -90,7 +90,7 @@ import {
   settingLift, sharedOut, type Setting, type Weather,
 } from "../src/features/weekSetting.js";
 import {
-  loadWeatherWeekly, type Forecast,
+  loadWeatherWeekly, weatherNote, type Forecast, type WeatherNote,
 } from "../src/data/weatherWeekly.js";
 import {
   fetchLeagueScoring,
@@ -237,6 +237,7 @@ function slateRow(
   ours: number,
   projection: SleeperProjection | undefined,
   quiet: boolean,
+  sky?: { note: WeatherNote | undefined; lift: number },
 ) {
   const said = projection
     ? sleeperPointsUnder(projection, scoring().receptions)
@@ -279,6 +280,11 @@ function slateRow(
     status: e.status,
     gamesMissed: e.gamesMissedRecent,
     absenceShare: Number(e.absenceShare.toFixed(2)),
+    // left off a mild day entirely, which is most rows
+    ...(sky?.note ? { weather: sky.note } : {}),
+    ...(sky && sky.lift !== 1
+      ? { weatherLift: Number(sky.lift.toFixed(3)) }
+      : {}),
   };
 }
 
@@ -567,6 +573,7 @@ async function kickerSlateRows(
 
   const fixtures = new Map<string, {
     against: string; home: boolean; implied: number; venue: Venue;
+    note: WeatherNote | undefined;
   }>();
 
   for (const g of games) {
@@ -588,17 +595,21 @@ async function kickerSlateRows(
     const tilt = (g.spreadLine ?? 0) / 2;
     const known = g.totalLine !== undefined && g.spreadLine !== undefined;
 
+    const note = g.indoors ? undefined : weatherNote(said);
+
     fixtures.set(g.homeTeamId, {
       against: g.awayTeamId,
       home: true,
       implied: known ? half - tilt : IMPLIED_WITHOUT_A_LINE,
       venue,
+      note,
     });
     fixtures.set(g.awayTeamId, {
       against: g.homeTeamId,
       home: false,
       implied: known ? half + tilt : IMPLIED_WITHOUT_A_LINE,
       venue,
+      note,
     });
   }
 
@@ -652,6 +663,7 @@ async function kickerSlateRows(
       status: "",
       gamesMissed: 0,
       absenceShare: 0,
+      ...(fixture.note ? { weather: fixture.note } : {}),
     }];
   };
 
@@ -1025,7 +1037,9 @@ async function main(): Promise<void> {
   const gameRows = parseCsv(await readFile(
     join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
   const whereEach = new Map<string, Setting>();
-  const skyAtGround: Map<string, Weather> = (await weatherFor(season)).forecast;
+  const skyAtGround = (await weatherFor(season)).forecast;
+  /** both sides play at the home ground, so a club week resolves to one row */
+  const skyForClub = new Map<string, Forecast>();
 
   for (const k of kickoffsIn(gameRows, season)) {
     const indoors = k.indoors;
@@ -1038,8 +1052,15 @@ async function main(): Promise<void> {
       whereEach.set(`${team}|${k.week}`, {
         indoors, night: k.hour >= 18, restDays: rest, weather,
       });
+
+      if (weather && !indoors) {
+        skyForClub.set(`${team}|${k.week}`, weather);
+      }
     }
   }
+
+  const forecastFor = (team: string, week: number) =>
+    skyForClub.get(`${team}|${week}`);
 
   const settingOf = (team: string, week: number): Setting =>
     whereEach.get(`${team}|${week}`) ??
@@ -1131,13 +1152,14 @@ async function main(): Promise<void> {
         // the roof and the kickoff time are already in the line through
         // the season chart, so only the forecast is left to apply
         const sky = settingOf(e.teamId, week).weather;
-        const line = sky
-          ? said * settingLift(
+        const lift = sky
+          ? settingLift(
             e.position,
             { indoors: false, night: false, restDays: 7, weather: sky },
             catchShareOf(e),
           )
-          : said;
+          : 1;
+        const line = said * lift;
 
         // his card says what the slate says, and the slate has him at zero
         ours.set(e.playerId, e.ruledOut ? 0 : line);
@@ -1148,6 +1170,7 @@ async function main(): Promise<void> {
           line,
           projections.get(projectionKey(season, week, e.playerId)),
           quiet.has(projectionKey(season, week, e.playerId)),
+          { note: weatherNote(forecastFor(e.teamId, week)), lift },
         );
       });
 
