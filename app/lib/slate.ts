@@ -196,8 +196,13 @@ export function readSlate(said: FileSlate): Slate {
 /**
  * The slate in a league's scoring. The rows were scored once, at the
  * build, and the three usual formats differ only in what a catch pays,
- * so every point figure moves by the difference times his catches. A
+ * so his average moves by the difference times his catches. A
  * league paying what the build paid gets the rows back untouched.
+ *
+ * His floor and ceiling move in proportion to the average. A floor week
+ * has fewer catches in it than an average one and a ceiling week more,
+ * so moving every band by the same points would open the band up in a
+ * league paying less for a catch and squeeze it in one paying more.
  */
 export function slateUnder(slate: Slate, perCatch: number): Slate {
   const shift = perCatch - slate.perCatch;
@@ -206,17 +211,15 @@ export function slateUnder(slate: Slate, perCatch: number): Slate {
     return slate;
   }
 
-  // a Sleeper zero means he is not expected to play, so it stays zero,
-  // and taking a catch's pay off a low floor must not push it under
-  // nothing, since a week with no catches never scores below it
+  // a Sleeper zero means he is not expected to play, so it stays zero
   const moved = (row: SlateRow, points: number | null | undefined) => {
     if (points === null || points === undefined || points === 0) {
       return points;
     }
 
-    const shifted = points + shift * row.catches;
+    const share = row.blend > 0 ? points / row.blend : 1;
 
-    return Number((points >= 0 ? Math.max(0, shifted) : shifted).toFixed(1));
+    return Number((points + shift * row.catches * share).toFixed(1));
   };
 
   return {

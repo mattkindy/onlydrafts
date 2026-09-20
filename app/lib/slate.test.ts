@@ -46,18 +46,23 @@ describe("isSplit", () => {
 });
 
 describe("slateUnder", () => {
-  it("moves every point figure by the catch difference times his catches", () => {
+  it("moves his average by the catch difference times his catches", () => {
     const ppr = slateUnder(built, 1);
     const chase = ppr.rows[0]!;
 
     expect(chase.ours).toBe(20);
     expect(chase.sleeper).toBe(20);
     expect(chase.blend).toBe(20);
-    expect(chase.floor).toBe(12);
-    expect(chase.q1).toBe(15);
-    expect(chase.q3).toBe(25);
-    expect(chase.ceiling).toBe(31);
     expect(ppr.perCatch).toBe(1);
+  });
+
+  it("moves his floor and ceiling in proportion to the average", () => {
+    const chase = slateUnder(built, 1).rows[0]!;
+
+    expect(chase.floor).toBeCloseTo(9 * 20 / 17, 1);
+    expect(chase.q1).toBeCloseTo(12 * 20 / 17, 1);
+    expect(chase.q3).toBeCloseTo(22 * 20 / 17, 1);
+    expect(chase.ceiling).toBeCloseTo(28 * 20 / 17, 1);
   });
 
   it("takes points off for a league paying less than the build did", () => {
@@ -66,7 +71,7 @@ describe("slateUnder", () => {
     expect(standard.rows[0]!.blend).toBe(14);
   });
 
-  it("stops a floor at nothing rather than under it", () => {
+  it("keeps a low floor above nothing in a league paying no catch", () => {
     const low = readSlate({
       season: 2026, week: 1, perCatch: 1,
       players: [{
@@ -77,7 +82,8 @@ describe("slateUnder", () => {
     });
     const standard = slateUnder(low, 0).rows[0]!;
 
-    expect(standard.floor).toBe(0);
+    expect(standard.floor).toBeCloseTo(1.6 - 3.74 * 1.6 / 7.9, 1);
+    expect(standard.ceiling).toBeCloseTo(15.4 - 3.74 * 15.4 / 7.9, 1);
     expect(standard.blend).toBeCloseTo(4.2, 1);
   });
 
