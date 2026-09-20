@@ -1,6 +1,6 @@
 // The weekly refresh, in order: pull this season's nflverse files, pull
 // Sleeper's projections, count this season's touches, count the same
-// work again by leverage, build the site.
+// work again by leverage, pull the forecast, build the site.
 // Run: npm run week [-- --season 2026]
 
 import { spawn } from "node:child_process";
@@ -72,6 +72,13 @@ async function main(): Promise<void> {
       what: "the leverage counts",
       script: "aggregateLeverage.ts",
       args: ["--seasons", String(season)],
+    },
+    {
+      // the slate reads this for the weeks it covers, and a fixture with
+      // no row in it comes through with no weather rather than failing
+      what: "the weather forecast",
+      script: "fetchWeather.ts",
+      args: ["--season", String(season)],
     },
     { what: "the site", script: "buildSite.ts", args: ["--season", String(season), ...rest] },
   ];

@@ -49,3 +49,76 @@ describe("what the schedule says about a week", () => {
     expect(sharedOut([1, 1, 1])).toEqual([1, 1, 1]);
   });
 });
+
+/** a back who takes 40% of his touches through the air is a catching one */
+const CATCHES = 0.4;
+const RUNS = 0.1;
+
+describe("what the forecast says about a week", () => {
+  const mild = { wind: 5, temperature: 65, soaked: false };
+  const blowing = { wind: 25, temperature: 65, soaked: false };
+  const freezing = { wind: 5, temperature: 15, soaked: false };
+  const wet = { ...mild, soaked: true };
+  const under = (weather: Setting["weather"]) => ({ ...ordinary, weather });
+
+  it("leaves a mild still dry afternoon alone", () => {
+    for (const position of ["QB", "RB", "WR", "TE"]) {
+      expect(settingLift(position, under(mild), CATCHES)).toBeCloseTo(1, 10);
+    }
+  });
+
+  it("takes points off everyone it was fitted for when the wind gets up", () => {
+    expect(settingLift("QB", under(blowing))).toBeLessThan(0.99);
+    expect(settingLift("WR", under(blowing))).toBeLessThan(0.99);
+    expect(settingLift("TE", under(blowing))).toBeLessThan(0.99);
+    expect(settingLift("RB", under(blowing), CATCHES)).toBeLessThan(0.99);
+  });
+
+  it("costs a tight end more wind than a receiver, which is what was fitted", () => {
+    expect(settingLift("TE", under(blowing)))
+      .toBeLessThan(settingLift("WR", under(blowing)));
+  });
+
+  it("leaves a back who mostly runs out of the weather tables", () => {
+    expect(settingLift("RB", under(blowing), RUNS)).toBe(1);
+    expect(settingLift("RB", under(wet), RUNS)).toBe(1);
+    expect(settingLift("RB", under(freezing), RUNS)).toBe(1);
+  });
+
+  it("does not know what a kicker does with the weather", () => {
+    expect(settingLift("K", under(blowing))).toBe(1);
+  });
+
+  it("takes something off for the cold and more again for a soaking", () => {
+    expect(settingLift("WR", under(freezing))).toBeLessThan(1);
+    expect(settingLift("WR", under(wet)))
+      .toBeLessThan(settingLift("WR", under(freezing)));
+  });
+
+  it("leaves a roof out of the weather whatever the forecast says", () => {
+    const inside = { ...ordinary, indoors: true, weather: blowing };
+
+    expect(settingLift("WR", inside)).toBeCloseTo(1.0510, 4);
+  });
+
+  /**
+   * The corner term runs positive for a tight end, so a day past
+   * anything the tables were fitted on used to come out as a lift.
+   */
+  it("never turns weather into a lift, however bad the day gets", () => {
+    const awful = { wind: 90, temperature: -40, soaked: true };
+
+    for (const position of ["QB", "WR", "TE"]) {
+      expect(settingLift(position, under(awful))).toBeLessThan(1);
+      expect(settingLift(position, under(awful))).toBeGreaterThanOrEqual(0.75);
+    }
+
+    expect(settingLift("RB", under(awful), CATCHES)).toBeLessThan(1);
+  });
+
+  it("says nothing at all when nobody has a forecast", () => {
+    expect(settingLift("WR", ordinary)).toBe(1);
+    expect(settingLift("QB", { ...ordinary, indoors: true }))
+      .toBeCloseTo(1.0474, 4);
+  });
+});

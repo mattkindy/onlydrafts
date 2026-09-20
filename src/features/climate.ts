@@ -80,6 +80,7 @@ export interface Climate {
   drawWind: (team: string, rng: () => number) => number;
   /** and the middle of such days, for anyone who wants one number */
   meanTemperature: (team: string, week: number, hour: number) => number;
+  meanWind: (team: string) => number;
 }
 
 /**
@@ -171,8 +172,20 @@ export function fitClimate(readings: Reading[]): Climate {
       (offsetOf.get(team)?.offset ?? 0);
   };
 
+  /** a ground with few afternoons of its own leans on every ground's */
+  const windOf = (team: string) => {
+    const its = windAt.get(team) ?? [];
+    const trust = its.length / (its.length + SETTLES_AT);
+
+    return {
+      middle: trust * mean(its) + (1 - trust) * windEverywhere,
+      spread: trust * spreadOf(its, mean(its)) + (1 - trust) * windSpread,
+    };
+  };
+
   return {
     meanTemperature: middleAt,
+    meanWind: (team) => windOf(team).middle,
     drawTemperature: (team, week, hour, rng) => {
       const spread = offsetOf.get(team)?.spread ?? wholeSpread;
 
@@ -181,12 +194,9 @@ export function fitClimate(readings: Reading[]): Climate {
         middleAt(team, week, hour) + spread * bellDraw(rng)));
     },
     drawWind: (team, rng) => {
-      const its = windAt.get(team) ?? [];
-      const trust = its.length / (its.length + SETTLES_AT);
-      const middle = trust * mean(its) + (1 - trust) * windEverywhere;
-      const spread = trust * spreadOf(its, mean(its)) + (1 - trust) * windSpread;
+      const its = windOf(team);
 
-      return Math.max(0, middle + spread * bellDraw(rng));
+      return Math.max(0, its.middle + its.spread * bellDraw(rng));
     },
   };
 }

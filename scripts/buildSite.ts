@@ -86,7 +86,10 @@ import {
 import type { Venue } from "../src/features/kickingVenue.js";
 import { fitClimate } from "../src/features/climate.js";
 import { readingsFrom, kickoffsIn } from "../src/data/gameWeather.js";
-import { settingLift, sharedOut, type Setting } from "../src/features/weekSetting.js";
+import {
+  settingLift, sharedOut, type Setting, type Weather,
+} from "../src/features/weekSetting.js";
+import { loadWeatherWeekly } from "../src/data/weatherWeekly.js";
 import {
   fetchLeagueScoring,
   fetchStarterSlots,
@@ -981,15 +984,24 @@ async function main(): Promise<void> {
   const gameRows = parseCsv(await readFile(
     join(import.meta.dirname, "..", "data", "raw", "games.csv"), "utf8"));
   const whereEach = new Map<string, Setting>();
+  const skyAtGround = new Map<string, Weather>();
+
+  for (const f of await loadWeatherWeekly()) {
+    if (f.season === season) {
+      skyAtGround.set(`${f.homeTeam}|${f.week}`, f);
+    }
+  }
 
   for (const k of kickoffsIn(gameRows, season)) {
     const indoors = k.indoors;
+    // both sides play at the home ground, so one forecast covers them
+    const weather = skyAtGround.get(`${k.homeTeam}|${k.week}`);
 
     for (const [team, rest] of [
       [k.homeTeam, k.homeRest], [k.awayTeam, k.awayRest],
     ] as [string, number][]) {
       whereEach.set(`${team}|${k.week}`, {
-        indoors, night: k.hour >= 18, restDays: rest,
+        indoors, night: k.hour >= 18, restDays: rest, weather,
       });
     }
   }
@@ -997,6 +1009,25 @@ async function main(): Promise<void> {
   const settingOf = (team: string, week: number): Setting =>
     whereEach.get(`${team}|${week}`) ??
       { indoors: false, night: false, restDays: 7 };
+
+  /**
+   * The forecast only reaches the weeks in front of us, and sharedOut
+   * divides by the mean, so a single wet week in a season chart would
+   * quietly raise all sixteen others. The season chart takes the roof
+   * and the kickoff time; the slate below takes the weather.
+   */
+  const seasonSettingOf = (team: string, week: number): Setting => {
+    const { weather: _ignored, ...rest } = settingOf(team, week);
+
+    return rest;
+  };
+
+  /** his targets over his touches, which decides how the wind treats a back */
+  const catchShareOf = (e: WeeklyExample): number => {
+    const touches = e.targetsRecent + e.carriesRecent;
+
+    return touches > 0 ? e.targetsRecent / touches : 0;
+  };
 
   const saidInput = await preseasonWeeklyInput(world, exampleById);
   const saidWeekly = preseasonWeekly(saidInput);
@@ -1024,7 +1055,7 @@ async function main(): Promise<void> {
      * -0.004, and it dragged the roof from 0.050 down to 0.038.
      */
     const lifts = sharedOut(his.map((w) =>
-      settingLift(p.position, settingOf(p.teamId, w.week))));
+      settingLift(p.position, seasonSettingOf(p.teamId, w.week))));
     const lifted = his.map((w, i) => ({ ...w, points: w.points * lifts[i]! }));
 
     anchoredWeeks.set(p.playerId, anchorToSeason(lifted, p.projectedPpg));
@@ -1055,13 +1086,23 @@ async function main(): Promise<void> {
     const ours = new Map<string, number>();
     const players = (await weeklyProspectiveForWeek(season, week, games))
       .map((e) => {
-        const line = earlyWeekLine(
+        const said = earlyWeekLine(
           week,
           e.position,
           slateLineFor(week, e),
           histories.get(e.playerId),
           priors,
         );
+        // the roof and the kickoff time are already in the line through
+        // the season chart, so only the forecast is left to apply
+        const sky = settingOf(e.teamId, week).weather;
+        const line = sky
+          ? said * settingLift(
+            e.position,
+            { indoors: false, night: false, restDays: 7, weather: sky },
+            catchShareOf(e),
+          )
+          : said;
 
         // his card says what the slate says, and the slate has him at zero
         ours.set(e.playerId, e.ruledOut ? 0 : line);

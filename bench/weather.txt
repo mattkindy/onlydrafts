@@ -2,6 +2,7 @@ Weather against a line that never saw it
 
 16520 outdoor player games with a recorded wind and temperature, out of 24753 with a line at all (66.7%).
 Wind and temperature are nflverse's. Rain and snow are the Open-Meteo archive's, summed over the three hours from kickoff.
+A back counts as catching when targets are 28.1% or more of his touches over the window, and a receiver counts as deep at 11.63 air yards a target or more. Both cuts are the top third of 2015 to 2020.
 
 Does the archive agree with what nflverse wrote down?
 
@@ -87,20 +88,20 @@ TE           to 2024         0.9767  -0.1159  -0.0243   0.0209  -0.1428  2324
 
 Mean absolute error of the weekly line, 2021 to 2025, out of sample
 
-rough games only          : n=  2649  without 5.8864  with 5.7613 (2.13%)  shape only 5.7429 (2.44%)  ceiling 5.6208 (4.51%)
-all outdoor games         : n=  7225  without 5.9991  with 5.9611 (0.63%)  shape only 5.9444 (0.91%)  ceiling 5.8446 (2.58%)
+rough games only          : n=  2649  without 5.8864  with 5.7613 (2.13%)  shape only 5.7225 (2.78%)  ceiling 5.6208 (4.51%)
+all outdoor games         : n=  7225  without 5.9991  with 5.9611 (0.63%)  shape only 5.9360 (1.05%)  ceiling 5.8446 (2.58%)
 A rough game is wind 15 plus, under 40 F, or 1mm of rain or any snow. That is 2649 of 24753 player games with a line, 10.7%.
 
-rough, QB                 : n=   412  without 6.7562  with 6.7012 (0.81%)  shape only 6.5905 (2.45%)  ceiling 6.3860 (5.48%)
-rough, RB catching        : n=   182  without 4.8272  with 4.6272 (4.14%)  shape only 4.6252 (4.18%)  ceiling 4.4262 (8.31%)
-rough, RB running         : n=   536  without 6.4155  with 6.5320 (-1.82%)  shape only 6.4451 (-0.46%)  ceiling 6.3668 (0.76%)
-rough, WR                 : n=  1084  without 5.7916  with 5.6329 (2.74%)  shape only 5.6330 (2.74%)  ceiling 5.5304 (4.51%)
+rough, QB                 : n=   412  without 6.7562  with 6.7012 (0.81%)  shape only 6.5833 (2.56%)  ceiling 6.3860 (5.48%)
+rough, RB catching        : n=   182  without 4.8272  with 4.6272 (4.14%)  shape only 4.5824 (5.07%)  ceiling 4.4262 (8.31%)
+rough, RB running         : n=   536  without 6.4155  with 6.5320 (-1.82%)  shape only 6.3716 (0.68%)  ceiling 6.3668 (0.76%)
+rough, WR                 : n=  1084  without 5.7916  with 5.6329 (2.74%)  shape only 5.6296 (2.80%)  ceiling 5.5304 (4.51%)
 rough, TE                 : n=   435  without 5.0902  with 4.7157 (7.36%)  shape only 4.8161 (5.38%)  ceiling 4.7022 (7.62%)
 
-all outdoor, QB           : n=  1117  without 6.5739  with 6.5817 (-0.12%)  shape only 6.5095 (0.98%)  ceiling 6.4643 (1.67%)
-all outdoor, RB catching  : n=   532  without 5.6339  with 5.5665 (1.20%)  shape only 5.5586 (1.34%)  ceiling 5.1866 (7.94%)
-all outdoor, RB running   : n=  1407  without 6.4358  with 6.5397 (-1.61%)  shape only 6.4519 (-0.25%)  ceiling 6.3350 (1.57%)
-all outdoor, WR           : n=  3002  without 5.9154  with 5.8547 (1.03%)  shape only 5.8541 (1.04%)  ceiling 5.7798 (2.29%)
+all outdoor, QB           : n=  1117  without 6.5739  with 6.5817 (-0.12%)  shape only 6.5069 (1.02%)  ceiling 6.4643 (1.67%)
+all outdoor, RB catching  : n=   532  without 5.6339  with 5.5665 (1.20%)  shape only 5.5439 (1.60%)  ceiling 5.1866 (7.94%)
+all outdoor, RB running   : n=  1407  without 6.4358  with 6.5397 (-1.61%)  shape only 6.4191 (0.26%)  ceiling 6.3350 (1.57%)
+all outdoor, WR           : n=  3002  without 5.9154  with 5.8547 (1.03%)  shape only 5.8529 (1.06%)  ceiling 5.7798 (2.29%)
 all outdoor, TE           : n=  1167  without 5.3041  with 5.1230 (3.41%)  shape only 5.1999 (1.97%)  ceiling 5.1265 (3.35%)
 
 Refitted on every season, which is what a shipped table would use
@@ -121,4 +122,4 @@ RB running      0.0613   0.0008   0.0482  -0.0185
 WR             -0.0659  -0.0136  -0.0202  -0.1111
 TE             -0.1429  -0.0352   0.0444  -0.1182
 
-Bench took 8.0s.
+Bench took 5.2s.

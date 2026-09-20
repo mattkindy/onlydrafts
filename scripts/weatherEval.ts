@@ -300,6 +300,9 @@ function topThirdCut(values: number[]): number {
 
 const GROUPS = ["QB", "RB catching", "RB running", "WR", "TE"] as const;
 
+/** the cuts the groups were drawn at, so a shipped table can use the same ones */
+export const cuts = { rb: 0, depth: 0 };
+
 function label(raws: Raw[]): Sample[] {
   const early = raws.filter((r) => CUT_SEASONS.includes(r.season));
   const rbCut = topThirdCut(
@@ -310,6 +313,9 @@ function label(raws: Raw[]): Sample[] {
       .filter((r) => r.position === "WR" || r.position === "TE")
       .map((r) => r.depth),
   );
+
+  cuts.rb = rbCut;
+  cuts.depth = depthCut;
 
   const groupOf: Record<string, (r: Raw) => string> = {
     QB: () => "QB",
@@ -442,21 +448,33 @@ function liftFrom(weights: number[], s: Sample): number {
   );
 }
 
+/** the roughest day the tables are asked about, past which they extrapolate */
+const WORST_WIND = 35;
+const WORST_COLD = 0;
+
 /**
  * The same fit divided by what it says about a mild still dry day, so a
- * game with no weather in it comes through at one. The intercept is a
- * standing correction to the trailing mean rather than anything the
- * weather did, and a weather term has no business carrying it.
+ * game with no weather in it comes through at one, and held to the
+ * range it was fitted over. The intercept is a standing correction to
+ * the trailing mean rather than anything the weather did, and a weather
+ * term has no business carrying it. This is what weekSetting ships.
  */
 function shapeFrom(weights: number[], s: Sample): number {
   const benign = weights[0] ?? 1;
 
-  return benign > 0
-    ? clipped(
-      weatherRow(s).reduce((sum, x, i) => sum + x * (weights[i] ?? 0), 0) /
-        benign,
-    )
-    : 1;
+  if (benign <= 0) {
+    return 1;
+  }
+
+  const held = {
+    wind: Math.min(WORST_WIND, s.wind),
+    temp: Math.max(WORST_COLD, s.temp),
+    soaked: s.soaked,
+  };
+  const said = weatherRow(held)
+    .reduce((sum, x, i) => sum + x * (weights[i] ?? 0), 0) / benign;
+
+  return Math.min(1, Math.max(1 - CLIP, said));
 }
 
 // ------------------------------------------------------------------ the run
@@ -536,6 +554,12 @@ async function main(): Promise<void> {
   out.push(
     "Wind and temperature are nflverse's. Rain and snow are the " +
       "Open-Meteo archive's, summed over the three hours from kickoff.",
+  );
+  out.push(
+    `A back counts as catching when targets are ${(cuts.rb * 100).toFixed(1)}% ` +
+      `or more of his touches over the window, and a receiver counts as deep ` +
+      `at ${cuts.depth.toFixed(2)} air yards a target or more. Both cuts are ` +
+      `the top third of 2015 to 2020.`,
   );
   out.push("");
   out.push(...agreementLines(agreement));

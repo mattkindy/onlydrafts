@@ -11,10 +11,17 @@ mentions a script that is no longer here, it says so.
 **Entry points**, the ones a person runs on purpose:
 
 - `week.ts` is the weekly refresh. `npm run week` runs it, and it calls
-  the next four in order.
+  the next five in order.
 - `fetchData.ts` downloads the nflverse files into `data/raw/`.
 - `fetchSleeperProjections.ts` pulls Sleeper's weekly projections, every
   week of the season and not only the one coming up.
+- `fetchWeather.ts` pulls an Open-Meteo forecast for every outdoor
+  fixture left in the season into `data/curated/weatherWeekly.csv`. A
+  fixture more than sixteen days out gets the ground's own average
+  instead, which is dry and mild and moves nobody's line.
+- `fetchWeatherArchive.ts` pulls the hour by hour history for every
+  ground into `data/raw/weatherArchive/`, which only `weatherEval.ts`
+  reads. It is cached, so the second run costs nothing.
 - `pullAdp.ts` and `pullSleeperAdp.ts` pull draft position snapshots.
 - `aggregate*.ts` count the raw play-by-play into the tables in
   `data/curated/`. Each writes the file named in its header comment and
@@ -41,7 +48,7 @@ says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `sleeperEval.ts`, `inheritanceProbe.ts`, `seasonShrinkEval.ts`,
 `inSeasonLevelEval.ts`,
 `kickerSeasonEval.ts`, `kickerWeekEval.ts`, `walkVolumeEval.ts`,
-`injuryStatusEval.ts` and `simAgreement.ts`.
+`injuryStatusEval.ts`, `weatherEval.ts` and `simAgreement.ts`.
 
 The findings follow, in the order they were written.
 
@@ -2918,3 +2925,55 @@ Practice participation from a live source. It is worth 0.001 on the
 Brier score, which is nothing, but the split is wide: 43% for a player
 who did not practise against 75% for one who practised in full. Sleeper
 and ESPN both send only the status word.
+
+# What the weather does to a skill player's week
+
+`weatherEval.ts` scores every outdoor player game from 2015 on against
+a line that never saw the forecast: his own trailing four game mean
+inside the season, carried across by the setting lift the slate already
+applies. Wind and temperature come from nflverse. `games.csv` has no
+rain column, so rain and snow come from Open-Meteo's hour by hour
+archive, summed over the three hours from kickoff and cached by
+`fetchWeatherArchive.ts`. Both services describe the same 1899 games,
+and they agree: 0.977 correlation on temperature and 0.675 on wind,
+with the archive reading a tenth of a mile an hour and a third of a
+degree lower on average.
+
+Every group loses points to weather and the size follows what you would
+guess. A tight end over 20 mph of wind scored 0.681 of his line across
+79 games, a receiver 0.911, a quarterback 0.894. Rain costs more than
+either: a soaked tight end came in at 0.805, a receiver at 0.859, and a
+back who catches at 0.815. Deep receivers lose more to wind than short
+ones and short receivers lose more to rain, which is the right way
+round for both.
+
+Fitted per group on the seasons before the one being scored and checked
+on 2021 to 2025, the term lowers out of sample error 2.78% on the games
+it is meant for (wind 15 plus, under 40 F, or a millimetre of rain) and
+1.05% across every outdoor game. Those rough games are 10.7% of all
+player games with a line. An oracle fitted on the season it scores gets
+4.51% and 2.58%, so the term collects over half of what is there.
+
+Two details decided how it ships. The fitted intercept is not one, so
+using the fit raw would discount a mild still afternoon as well; the
+tables are divided by their own intercept instead, which leaves a
+benign day at exactly one and scores better everywhere (2.13% against
+2.78% on the rough games). And the wind by cold corner term runs
+positive for a tight end, so a day past anything the fit saw would come
+out as a lift. Wind is held at 35 mph, temperature at 0 F, and the
+factor never goes above one.
+
+A back who mostly runs gets no weather term. His wind coefficient came
+out positive in all five training windows, which is a believable thing
+about football, and applying it made his line worse by 1.8% on the
+rough games. Under the shipped clamps he lands at +0.68%, below the 1%
+bar and coming entirely from the cap holding his own fit back, so there
+is nothing there worth shipping.
+
+## What to try next
+
+Wind direction and the stadium's orientation. Open-Meteo sends
+`wind_direction_10m` for free, and a crosswind at an open end is a
+different game from a following wind. Then measure whether a forecast a
+week out predicts the day as well as the record of it does, since every
+number here was scored against weather that had already happened.
