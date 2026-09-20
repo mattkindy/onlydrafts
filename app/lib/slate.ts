@@ -194,15 +194,27 @@ export function readSlate(said: FileSlate): Slate {
 }
 
 /**
+ * A points figure moved to what a catch pays here, by the difference
+ * times the catches behind it.
+ *
+ * A band moves in proportion to the average it is drawn around. A floor week
+ * has fewer catches in it than an average one and a ceiling week more,
+ * so moving every band by the same points would open the band up in a
+ * league paying less for a catch and squeeze it in one paying more.
+ */
+export function movedForCatches(
+  points: number, average: number, catches: number, shift: number,
+): number {
+  const share = average > 0 ? points / average : 1;
+
+  return Number((points + shift * catches * share).toFixed(1));
+}
+
+/**
  * The slate in a league's scoring. The rows were scored once, at the
  * build, and the three usual formats differ only in what a catch pays,
  * so his average moves by the difference times his catches. A
  * league paying what the build paid gets the rows back untouched.
- *
- * His floor and ceiling move in proportion to the average. A floor week
- * has fewer catches in it than an average one and a ceiling week more,
- * so moving every band by the same points would open the band up in a
- * league paying less for a catch and squeeze it in one paying more.
  */
 export function slateUnder(slate: Slate, perCatch: number): Slate {
   const shift = perCatch - slate.perCatch;
@@ -217,9 +229,7 @@ export function slateUnder(slate: Slate, perCatch: number): Slate {
       return points;
     }
 
-    const share = row.blend > 0 ? points / row.blend : 1;
-
-    return Number((points + shift * row.catches * share).toFixed(1));
+    return movedForCatches(points, row.blend, row.catches, shift);
   };
 
   return {

@@ -589,6 +589,53 @@ describe("a week row keeps its shape", () => {
     expect(week2!.querySelector(".wkpts")!.textContent).toBe("13.04 to 24");
     expect(week3!.querySelector(".wkpts")!.textContent).toBe("10.05 to 15");
   });
+
+  it("says the blended line for a week the board has one for", () => {
+    const p: Player = {
+      name: "Test End", key: "test-end", position: "TE", team: "AAA",
+      ppg: 10,
+      game: { ev: 10, mid: 10, low: 5, q1: 8, q3: 12, high: 15 },
+      weeks: [
+        // Sleeper has no row for this one, so it stays the schedule factor
+        { w: 3, opp: "v CCC", of: 1 },
+        { w: 4, opp: "@ DDD", of: 1, blend: 8.4, catches: 4 },
+      ],
+    };
+
+    render(
+      <PlayerSheet
+        p={p} plus={[]} minus={[]} teams={12} onClose={() => {}}
+      />,
+      where,
+    );
+
+    const [week3, week4] = Array.from(where.querySelectorAll(".wk"));
+
+    expect(week3!.querySelector(".wkpts")!.textContent).toBe("10.05 to 15");
+    expect(week4!.querySelector(".wkpts")!.textContent).toBe("8.44 to 13");
+  });
+
+  it("moves a blended week to what the league pays a catch", () => {
+    const p: Player = {
+      name: "Test End", key: "test-end", position: "TE", team: "AAA",
+      ppg: 10,
+      game: { ev: 10, mid: 10, low: 5, q1: 8, q3: 12, high: 15 },
+      weeks: [{ w: 4, opp: "@ DDD", of: 1, blend: 8.4, catches: 4 }],
+    };
+
+    // four catches at a half point more each, and the whiskers stretch
+    // around the moved line rather than shifting by the same four points
+    render(
+      <PlayerSheet
+        p={p} plus={[]} minus={[]} teams={12} onClose={() => {}}
+        pays={{ rec: 1, rec_yd: 0.1, rec_td: 6 }}
+        boardPerCatch={0.5}
+      />,
+      where,
+    );
+
+    expect(where.querySelector(".wkpts")!.textContent).toBe("10.45 to 16");
+  });
 });
 
 /**

@@ -1549,6 +1549,35 @@ async function main(): Promise<void> {
     console.log(`sleeper scores: ${claims.scores.size} players`);
   }
 
+  /**
+   * The line a week ahead would get if a slate were written for it: our
+   * week times Sleeper's, the same blend the slate uses. Sleeper publishes
+   * every week of the season and revises it as the week nears, so a card
+   * reading a week in November has something more than our schedule
+   * factor behind it. A week Sleeper has no row for gets nothing.
+   *
+   * A week a slate already covers is skipped, because its `of` was built
+   * from the slate line and blending that again would count Sleeper twice.
+   */
+  const weekAhead = comingWeek(games, season);
+  const blendAhead = (p: { playerId: string; position: string }, week: number,
+                      ours: number) => {
+    const said = projections.get(projectionKey(season, week, p.playerId));
+
+    if (week < weekAhead || slateLine.get(week)?.has(p.playerId) || !said) {
+      return {};
+    }
+
+    const sleeper = sleeperPointsUnder(said, scoring().receptions);
+
+    return {
+      blend: Number(blendPoints(
+        ours, debiasedSleeper(p.position, sleeper), SHIPPED_BLEND_WEIGHT,
+      ).toFixed(1)),
+      catches: Number((said.catches ?? 0).toFixed(2)),
+    };
+  };
+
   const board = world.players
     .map((p) => {
       const f = factors(p.playerId, p.projectedPpg);
@@ -1617,14 +1646,19 @@ async function main(): Promise<void> {
         // points under one league's scoring. A player projected at
         // nothing has no average, so a flat one beats zero everywhere.
         weeks: (weeklyByPlayer.get(p.playerId) ?? [])
-          .map((w) => ({
-            w: w.week,
-            opp: (w.home ? "v " : "@ ") + w.opponent,
-            of: p.projectedPpg >= 1
+          .map((w) => {
+            const of = p.projectedPpg >= 1
               ? Number((w.points / p.projectedPpg).toFixed(3))
-              : 1,
-            played: playedByPlayer.get(p.playerId)?.get(w.week) ?? null,
-          })),
+              : 1;
+
+            return {
+              w: w.week,
+              opp: (w.home ? "v " : "@ ") + w.opponent,
+              of,
+              played: playedByPlayer.get(p.playerId)?.get(w.week) ?? null,
+              ...blendAhead(p, w.week, of * p.projectedPpg),
+            };
+          }),
       };
     })
     .sort((a, b) => b.vor - a.vor);

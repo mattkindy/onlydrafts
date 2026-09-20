@@ -1086,6 +1086,7 @@ function App() {
           minus={board?.plusMinus.get(showing.key)?.minus ?? []}
           teams={active?.size ?? 12}
           pays={active?.pays ?? {}}
+          boardPerCatch={board?.perCatch}
           thisWeek={slate
             ? { week: slate.week, row: slateRows.get(showing.key) }
             : undefined}

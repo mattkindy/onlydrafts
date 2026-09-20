@@ -40,14 +40,22 @@ interface FileRow {
   minus?: string[];
   game?: Record<string, number> | null;
   sim?: (Record<string, number> & { games: number }) | null;
-  weeks?: { w: number; opp: string; of: number; played?: Record<string, number> | null }[];
+  weeks?: Player["weeks"];
 }
+
+/** what the build paid a catch when it scored the board */
+const BOARD_PER_CATCH = 1;
 
 export interface Board {
   players: Player[];
   plusMinus: Map<string, { plus: string[]; minus: string[] }>;
   /** who each side plays each week, missing on an older file */
   schedule?: Record<string, (string | null)[]> | null;
+  /**
+   * What a catch paid when the board's weekly blends were scored, so a
+   * league paying differently can move them.
+   */
+  perCatch: number;
 }
 
 /** the file changes far more often than a browser expects */
@@ -62,6 +70,7 @@ export async function loadBoard(season: number): Promise<Board> {
     .then((r) => r.json()) as {
       players: FileRow[];
       schedule?: Record<string, (string | null)[]> | null;
+      scoredBy?: { receptions?: number } | null;
     };
   const plusMinus = new Map<string, { plus: string[]; minus: string[] }>();
 
@@ -91,5 +100,10 @@ export async function loadBoard(season: number): Promise<Board> {
     };
   });
 
-  return { players, plusMinus, schedule: said.schedule ?? null };
+  return {
+    players,
+    plusMinus,
+    schedule: said.schedule ?? null,
+    perCatch: said.scoredBy?.receptions ?? BOARD_PER_CATCH,
+  };
 }

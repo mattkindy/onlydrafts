@@ -63,9 +63,20 @@ export interface Player {
   /**
    * how his weeks vary against his own average, one per week, and what
    * he actually did in a week already played, under the same categories
-   * `projected` uses
+   * `projected` uses.
+   *
+   * A week still to come also has `blend`, the line a slate for that week
+   * would give him, and the `catches` behind it so another catch price can
+   * move it. Both are in the board's own scoring.
    */
-  weeks?: { w: number; opp: string; of: number; played?: Parts | null }[];
+  weeks?: {
+    w: number;
+    opp: string;
+    of: number;
+    played?: Parts | null;
+    blend?: number;
+    catches?: number;
+  }[];
   /** the spread of a game of his, as the file scored it */
   game?: Record<string, number> | null;
   /** and of a season, with the games he is expected to play */

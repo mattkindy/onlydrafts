@@ -6,7 +6,7 @@ import type { Pays, Player } from "../lib/scoring.ts";
 import { payFor } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
 import { claimWords, reasonWords, roleWords } from "../lib/sleeperWords.ts";
-import type { SlateRow } from "../lib/slate.ts";
+import { movedForCatches, type SlateRow } from "../lib/slate.ts";
 import { lineOver, movedBy } from "../lib/statLine.ts";
 
 /** the week the slate covers, and his row on it if he has one */
@@ -21,6 +21,8 @@ interface Props {
   minus: string[];
   teams: number;
   pays?: Pays;
+  /** what a catch paid when the board's weekly blends were scored */
+  boardPerCatch?: number;
   thisWeek?: ThisWeek;
   onClose: () => void;
 }
@@ -34,6 +36,8 @@ interface WeekBands {
   high: number;
 }
 
+type Week = NonNullable<Player["weeks"]>[number];
+
 /**
  * One row per week, drawn as a box and whisker rather than a filled
  * bar. The season's per-game quantiles give the shape of a single week;
@@ -41,10 +45,17 @@ interface WeekBands {
  * shows a lower box and a shorter tail, not only a shorter bar.
  *
  * The week the slate covers takes the slate's own line instead, so the
- * card says the same number the matchup page starts him on.
+ * card says the same number the matchup page starts him on. A later week
+ * takes the board's blend of our line with Sleeper's, so week 3 and week
+ * 9 are answering the same question as the week in front of you.
  */
 function WeekByWeek(
-  { p, pays, thisWeek }: { p: Player; pays: Pays; thisWeek?: ThisWeek },
+  { p, pays, boardPerCatch, thisWeek }: {
+    p: Player;
+    pays: Pays;
+    boardPerCatch?: number;
+    thisWeek?: ThisWeek;
+  },
 ) {
   const games = p.weeks ?? [];
 
@@ -57,8 +68,21 @@ function WeekByWeek(
   const spread = g && ev > 0
     ? { low: g["low"]! / ev, q1: g["q1"]! / ev, q3: g["q3"]! / ev, high: g["high"]! / ev }
     : { low: 1, q1: 1, q3: 1, high: 1 };
-  // a week is a multiple of his own average, so the league's own
-  // scoring is already in the number the card shows
+  // The blend was scored once, at the build. A league paying a catch
+  // differently moves it, the same way the slate moves, and a page with
+  // no league connected leaves it where the board put it.
+  const shift = pays["rec"] === undefined || boardPerCatch === undefined
+    ? 0
+    : pays["rec"] - boardPerCatch;
+  const blendOf = (w: Week) => {
+    if (w.blend === undefined) {
+      return undefined;
+    }
+
+    return movedForCatches(w.blend, w.blend, w.catches ?? 0, shift);
+  };
+  // a week with no blend is a multiple of his own average, so the
+  // league's own scoring is already in the number the card shows
   const bands = games.map((w): WeekBands => {
     const row = w.w === thisWeek?.week ? thisWeek.row : undefined;
 
@@ -72,7 +96,7 @@ function WeekByWeek(
       };
     }
 
-    const pts = w.of * (p.ppg ?? 0);
+    const pts = blendOf(w) ?? w.of * (p.ppg ?? 0);
 
     return {
       pts,
@@ -234,7 +258,12 @@ export function PlayerSheet(props: Props) {
           </>
         )}
 
-        <WeekByWeek p={p} pays={props.pays ?? {}} thisWeek={props.thisWeek} />
+        <WeekByWeek
+          p={p}
+          pays={props.pays ?? {}}
+          boardPerCatch={props.boardPerCatch}
+          thisWeek={props.thisWeek}
+        />
       </div>
     </div>
   );
