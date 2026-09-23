@@ -1,0 +1,16 @@
+{
+  "//": "The scripts that reach into app, whose imports spell a .ts extension. NodeNext will not read those, so these three are checked under bundler resolution, the way tsx runs them.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": [
+    "scripts/buildSimTables.ts",
+    "scripts/partialGameProbe.ts",
+    "scripts/simAgreement.ts"
+  ],
+  "exclude": []
+}

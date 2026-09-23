@@ -6,7 +6,7 @@
   "description": "Graph-based fantasy football draft analysis and backtesting",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.app.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p worker/tsconfig.json",
     "fetch": "tsx scripts/fetchData.ts",
     "build": "tsx scripts/buildSite.ts",
     "week": "tsx scripts/week.ts",
