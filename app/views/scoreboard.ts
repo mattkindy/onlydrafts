@@ -1,15 +1,16 @@
 /**
- * Where every game in a week has got to, read once a view asks for it.
+ * Where every game in a week has got to, kept up to date until every game
+ * is over.
  *
- * A page that prices a lineup needs to know which games have kicked off
- * before it can say anything, so the read is a hook rather than something
- * each view does for itself. Nothing is asked for until both the season and
- * the week are known, and a read that fails leaves the states empty with a
- * line a page can show.
+ * Nothing is asked for until both the season and the week are known, and a
+ * read that fails leaves the states empty with a line a page can show. The
+ * scoreboard is read every minute while a game is on, and before the first
+ * kickoff it waits for that kickoff, so a page opened on Sunday morning
+ * notices the games starting. It reads again whenever the tab comes back
+ * into view.
  *
- * Two tabs price the same week: your own matchup and the rest of the
- * league. Only one of them is ever on screen, so each reads the
- * scoreboard through the same hook rather than sharing one read.
+ * Several tabs price the same week and only one is ever on screen, so each
+ * reads the scoreboard through the same hook rather than sharing one read.
  */
 
 import { useEffect, useState } from "preact/hooks";
@@ -23,11 +24,64 @@ import type { Pays } from "../lib/scoring.ts";
 /** how often the scoreboard is read again while a game is on */
 const EVERY = 60_000;
 
-export function useScoreboard(
+/** the longest wait before the first kickoff, in case the schedule moves */
+const LONGEST_WAIT = 30 * 60_000;
+
+/**
+ * How long to wait before reading the scoreboard again, or null once
+ * every game is over. A game past its kickoff that ESPN still has as not
+ * started is read every minute until it starts.
+ */
+export function nextReadIn(
+  states: Map<string, GameState> | null, nextKickoff: number | null, now: number,
+): number | null {
+  if (!states) {
+    return EVERY;
+  }
+
+  const where = [...states.values()].map((s) => s.where);
+
+  if (where.includes("in")) {
+    return EVERY;
+  }
+
+  if (!where.includes("pre")) {
+    return null;
+  }
+
+  if (nextKickoff === null) {
+    return EVERY;
+  }
+
+  return Math.min(LONGEST_WAIT, Math.max(EVERY, nextKickoff - now));
+}
+
+interface Reading {
+  /** the season and week this read was for */
+  of: string;
+  states: Map<string, GameState>;
+  situations: Map<string, LiveSituation>;
+  nextKickoff: number | null;
+  read: Date;
+}
+
+interface PolledWeek {
+  states: Map<string, GameState> | null;
+  situations: Map<string, LiveSituation> | null;
+  read: Date | null;
+  trouble: string;
+}
+
+function usePolledScoreboard(
   season: number | undefined, week: number | undefined,
-): { states: Map<string, GameState> | null; trouble: string } {
-  const [states, setStates] = useState<Map<string, GameState> | null>(null);
+): PolledWeek {
+  const [reading, setReading] = useState<Reading | null>(null);
   const [trouble, setTrouble] = useState("");
+  /** bumped to ask for another read */
+  const [asks, setAsks] = useState(0);
+  /** bumped when a read comes back, either way, which arms the next one */
+  const [answers, setAnswers] = useState(0);
+  const of = `${season}/${week}`;
 
   useEffect(() => {
     if (season === undefined || week === undefined) {
@@ -37,15 +91,71 @@ export function useScoreboard(
     let stale = false;
 
     gameStates(season, week)
-      .then((got) => { if (!stale) { setStates(got.states); setTrouble(""); } })
+      .then((got) => {
+        if (!stale) {
+          setReading({ of, ...got, read: new Date() });
+          setTrouble("");
+        }
+      })
       .catch((e: Error) => {
         if (!stale) {
           setTrouble("could not read the scoreboard: " + e.message);
         }
+      })
+      .finally(() => {
+        if (!stale) {
+          setAnswers((n) => n + 1);
+        }
       });
 
     return () => { stale = true; };
-  }, [season, week]);
+  }, [asks, season, week]);
+
+  // a read for last week must not stand in for this one while it loads
+  const current = reading?.of === of ? reading : null;
+
+  useEffect(() => {
+    if (answers === 0) {
+      return;
+    }
+
+    const wait = nextReadIn(
+      current?.states ?? null, current?.nextKickoff ?? null, Date.now());
+
+    if (wait === null) {
+      return;
+    }
+
+    const timer = setTimeout(() => setAsks((n) => n + 1), wait);
+
+    return () => clearTimeout(timer);
+  }, [answers]);
+
+  // a tab left in the background has its timers slowed or stopped
+  useEffect(() => {
+    const back = () => {
+      if (document.visibilityState === "visible") {
+        setAsks((n) => n + 1);
+      }
+    };
+
+    document.addEventListener("visibilitychange", back);
+
+    return () => document.removeEventListener("visibilitychange", back);
+  }, []);
+
+  return {
+    states: current?.states ?? null,
+    situations: current?.situations ?? null,
+    read: current?.read ?? null,
+    trouble,
+  };
+}
+
+export function useScoreboard(
+  season: number | undefined, week: number | undefined,
+): { states: Map<string, GameState> | null; trouble: string } {
+  const { states, trouble } = usePolledScoreboard(season, week);
 
   return { states, trouble };
 }
@@ -61,8 +171,7 @@ export interface LiveWeek {
 }
 
 /**
- * The same read, kept up to date while games are on, with the rest of
- * each live game played out.
+ * The same read with the rest of each live game played out.
  *
  * From half time on, playing the rest of a game out beats pulling a
  * player's week line toward what he has done, so those games go to the
@@ -71,58 +180,13 @@ export interface LiveWeek {
 export function useLiveWeek(
   season: number | undefined, week: number | undefined, pays: Pays,
 ): LiveWeek {
-  const [states, setStates] = useState<Map<string, GameState> | null>(null);
-  const [situations, setSituations] =
-    useState<Map<string, LiveSituation> | null>(null);
+  const { states, situations, read, trouble } = usePolledScoreboard(season, week);
   const [remainder, setRemainder] =
     useState<Map<string, number[]> | null>(null);
-  const [read, setRead] = useState<Date | null>(null);
-  const [trouble, setTrouble] = useState("");
-  /**
-   * Bumped on every read, which is what asks for the next one. Reading
-   * inside a timer that depends on the states themselves would rebuild
-   * the timer every minute and drift.
-   */
-  const [reads, setReads] = useState(0);
-
-  useEffect(() => {
-    if (season === undefined || week === undefined) {
-      return;
-    }
-
-    let stale = false;
-
-    gameStates(season, week)
-      .then((got) => {
-        if (!stale) {
-          setStates(got.states);
-          setSituations(got.situations);
-          setRead(new Date());
-          setTrouble("");
-        }
-      })
-      .catch((e: Error) => {
-        if (!stale) {
-          setTrouble("could not read the scoreboard: " + e.message);
-        }
-      });
-
-    return () => { stale = true; };
-  }, [reads, season, week]);
 
   const live = states
     ? [...states.values()].some((s) => s.where === "in")
     : false;
-
-  useEffect(() => {
-    if (!live) {
-      return;
-    }
-
-    const timer = setTimeout(() => setReads((n) => n + 1), EVERY);
-
-    return () => clearTimeout(timer);
-  }, [live, reads]);
 
   useEffect(() => {
     if (!situations || !gamesToPlay(situations).length || season === undefined) {

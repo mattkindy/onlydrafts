@@ -194,6 +194,8 @@ interface ScoreboardCompetition {
 
 interface ScoreboardEvent {
   id?: string;
+  /** kickoff, as an ISO time */
+  date?: string;
   status?: ScoreboardStatus;
   competitions?: ScoreboardCompetition[];
 }
@@ -482,6 +484,8 @@ export async function gameStates(
 ): Promise<{
   states: Map<string, GameState>;
   situations: Map<string, LiveSituation>;
+  /** the earliest kickoff among games still to start, in epoch ms */
+  nextKickoff: number | null;
 }> {
   const answered = await fetch(
     `${SCOREBOARD}?seasontype=2&week=${week}&dates=${season}`);
@@ -496,7 +500,19 @@ export async function gameStates(
   return {
     states: statesFrom(said, readings),
     situations: situationsFrom(said, readings),
+    nextKickoff: nextKickoffFrom(said),
   };
+}
+
+/** when the first game not yet started kicks off, or null if none is left */
+export function nextKickoffFrom(said: { events?: ScoreboardEvent[] }): number | null {
+  const times = (said.events ?? [])
+    .filter((event) =>
+      stateOf(event.competitions?.[0]?.status ?? event.status).where === "pre")
+    .map((event) => Date.parse(event.date ?? ""))
+    .filter((at) => Number.isFinite(at));
+
+  return times.length ? Math.min(...times) : null;
 }
 
 /**

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import {
   alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, hasLineup,
-  hurtFrom, initialForm, liveDraws, myGameIn, outscoreShare,
+  hurtFrom, initialForm, liveDraws, myGameIn, nextKickoffFrom, outscoreShare,
   oddsFor, standingFor, sideTotals, situationsFrom, spreadOf, starterState,
   statesFrom, stockLine,
 } from "./matchups.ts";
@@ -507,6 +507,26 @@ describe("clockLeftOf", () => {
   it("puts an overtime clock somewhere other than zero", () => {
     expect(clockLeftOf({ period: 5, clock: 240 }))
       .toEqual({ secondsLeft: 0, overtimeLeft: 240 });
+  });
+});
+
+describe("nextKickoffFrom", () => {
+  it("gives the earliest kickoff among games not yet started", () => {
+    const got = nextKickoffFrom({
+      events: [
+        { date: "2026-09-27T17:00Z", status: { type: { state: "in" } } },
+        { date: "2026-09-27T20:25Z", status: { type: { state: "pre" } } },
+        { date: "2026-09-28T00:20Z", status: { type: { state: "pre" } } },
+      ],
+    });
+
+    expect(got).toBe(Date.parse("2026-09-27T20:25Z"));
+  });
+
+  it("gives null once every game has started", () => {
+    expect(nextKickoffFrom({
+      events: [{ date: "2026-09-27T17:00Z", status: { type: { state: "post" } } }],
+    })).toBeNull();
   });
 });
 
