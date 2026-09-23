@@ -20,5 +20,10 @@ docs/data/league-*
 # back in a couple of seconds from the rows it counted. Thirty three of
 # these had been committed by the time anyone looked, at 699 megabytes.
 data/kept/counts*.json
+
+# wrangler's local cache has the Cloudflare account name and where the
+# last deploy ran from, and the repo is public
+worker/.wrangler/
+
 .claude/worktrees/
 .harness/
