@@ -34,7 +34,7 @@ import {
   normalCdf, normalQuantile, quantileOf, weeksFromSpread, type Spread,
 } from "./spread.ts";
 import { normalizeName } from "./store.ts";
-import { winChance } from "./winShare.ts";
+import { weekResult, winChance } from "./winShare.ts";
 
 export const SCOREBOARD =
   "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
@@ -1020,15 +1020,8 @@ export function outscoreShare(instead: number[], his: number[]): number {
     return 0;
   }
 
-  const won = instead.reduce((sum, mine, i) => {
-    const theirs = his[i] ?? 0;
-
-    if (mine > theirs) {
-      return sum + 1;
-    }
-
-    return mine === theirs ? sum + 0.5 : sum;
-  }, 0);
+  const won = instead.reduce(
+    (sum, mine, i) => sum + weekResult(mine, his[i] ?? 0), 0);
 
   return won / instead.length;
 }

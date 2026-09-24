@@ -13,6 +13,7 @@ import {
   winChance, winShareFor,
 } from "./winShare.ts";
 import type { Player } from "./scoring.ts";
+import { outscoreShare } from "./matchups.ts";
 
 const SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF"];
 
@@ -232,6 +233,12 @@ describe("winChance", () => {
   it("counts the weeks one side outscores the other", () => {
     expect(winChance([10, 10, 10], [9, 11, 9])).toBeCloseTo(2 / 3, 5);
     expect(winChance([1, 1], [2, 2])).toBe(0);
+  });
+
+  it("counts a tie as half a win, the way a lineup swap is scored", () => {
+    expect(winChance([20, 20], [20, 20])).toBe(0.5);
+    expect(winChance([20, 30], [20, 10])).toBe(0.75);
+    expect(winChance([20, 20], [20, 20])).toBe(outscoreShare([20, 20], [20, 20]));
   });
 });
 

@@ -767,15 +767,22 @@ export function projectedRoster(
   return roster;
 }
 
-/** how often the first beats the second, week for week */
+/** one week's result for the first side: a win, a tie as half, or a loss */
+export function weekResult(mine: number, theirs: number): number {
+  if (mine > theirs) {
+    return 1;
+  }
+
+  return mine === theirs ? 0.5 : 0;
+}
+
+/** how often the first beats the second, week for week, a tie counting half */
 export function winChance(mine: number[], theirs: number[]): number {
   const weeks = Math.min(mine.length, theirs.length);
   let won = 0;
 
   for (let i = 0; i < weeks; i++) {
-    if (mine[i]! > theirs[i]!) {
-      won++;
-    }
+    won += weekResult(mine[i]!, theirs[i]!);
   }
 
   return won / Math.max(1, weeks);
