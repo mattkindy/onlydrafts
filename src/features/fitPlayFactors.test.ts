@@ -648,9 +648,10 @@ const spotsInOrder = (state: PlayState) =>
         ),
       })));
 
+type Cell = CountedPlays["cells"] extends Map<string, infer C> ? C : never;
+
 describe("a side's pool read through its own cells", () => {
   /** the walk as it was written against the whole side table */
-  type Cell = CountedPlays["cells"] extends Map<string, infer C> ? C : never;
   const sideAsWalked = (
     counted: CountedPlays, from: Map<string, Cell>, who: string,
     spots: ReturnType<typeof spotsInOrder>, least: number, call?: Call,
@@ -733,4 +734,82 @@ describe("a side's pool read through its own cells", () => {
     // most of the pools found plays, so the order was put to the test
     expect(filled).toBeGreaterThan(500);
   });
+});
+
+describe("the share pool cut from one walk for any number of plays", () => {
+  /** the cells as they were gathered afresh for each number of plays */
+  const cellsAsWalked = (
+    counted: CountedPlays, spots: ReturnType<typeof spotsInOrder>,
+    least: number, call?: Call,
+  ) => {
+    let found: Cell[] = [];
+    let plays = 0;
+
+    for (const looseness of [0, 1, 2]) {
+      if (plays >= least) {
+        break;
+      }
+
+      const pooled: Cell[] = [];
+      plays = 0;
+
+      for (const spot of spots) {
+        if (spot.looseness !== looseness) {
+          continue;
+        }
+
+        for (const cellKey of spot.keys) {
+          const cell = counted.cells.get(call ? `${call}|${cellKey}` : cellKey);
+
+          if (!cell) {
+            continue;
+          }
+
+          pooled.push(cell);
+          plays += cell.plays;
+        }
+
+        if (plays >= least) {
+          break;
+        }
+      }
+
+      found = pooled;
+    }
+
+    return found;
+  };
+
+  const sameCells = (a: Cell[], b: Cell[]) =>
+    a.length === b.length && a.every((cell, i) => cell === b[i]);
+
+  it("gathers the same cells whatever order the numbers are asked in",
+    async () => {
+      vi.resetModules();
+      const loaded = await import("./fitPlayFactors.js");
+      const counted = loaded.countPlays(scatteredRows());
+      const asked = [60, 7, 100000, 0, 1000, 250, 61, 59.5, 3000];
+      let widened = 0;
+
+      for (const state of scatteredStates()) {
+        const spots = spotsInOrder(state);
+
+        for (const call of ["run", "pass", undefined] as const) {
+          const walk = loaded.widenedCells(state, (cellKey) =>
+            counted.cells.get(call ? `${call}|${cellKey}` : cellKey));
+
+          for (const least of asked) {
+            const found = walk.upTo(least);
+            const expected = cellsAsWalked(counted, spots, least, call);
+            expect(sameCells(found, expected)).toBe(true);
+            // and the same array back for the same cut, so sums kept
+            // against it are found again
+            expect(walk.upTo(least)).toBe(found);
+            widened += found.length > 1 ? 1 : 0;
+          }
+        }
+      }
+
+      expect(widened).toBeGreaterThan(100);
+    });
 });

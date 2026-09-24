@@ -9,8 +9,8 @@
  */
 
 import {
-  emptyCell, keysAt, nearnessWeight, stateKey, wideningPacked,
-  type Call, type PlayFactors, type PlayState, type StateCell,
+  emptyCell, keysAt, marginBand, nearnessWeight, stateKey, timeBand,
+  wideningPacked, type Call, type PlayFactors, type PlayState, type StateCell,
 } from "../model/playFactors.js";
 import type { RunParts } from "./runParts.js";
 import type { PlayLevel } from "./playLevel.js";
@@ -1397,6 +1397,148 @@ export const poolForSide = (
   return found;
 };
 
+/** how far one looseness of a widening has been walked */
+interface WalkedSoFar {
+  cells: Counted[];
+  /** how many cells had been gathered after each spot */
+  ends: number[];
+  /** and the plays in them, added up in the order they were gathered */
+  plays: number[];
+  /** where the next spot is in the packed widening */
+  next: number;
+  done: boolean;
+  cuts: Map<number, Counted[]>;
+}
+
+/**
+ * The cells around one state in widening order, walked only as far as
+ * somebody has asked, so a pool asked for again with a different number
+ * of plays is cut from the same walk rather than walked again.
+ */
+export interface WidenedCells {
+  /** the cells a walk stopping at `least` plays would have gathered */
+  upTo: (least: number) => Counted[];
+}
+
+/** the first spot whose running plays reach `least`, or -1 */
+const firstReaching = (plays: number[], least: number) => {
+  if (plays.length === 0 || plays[plays.length - 1]! < least) {
+    return -1;
+  }
+
+  let low = 0;
+  let high = plays.length - 1;
+
+  while (low < high) {
+    const middle = (low + high) >> 1;
+
+    if (plays[middle]! >= least) {
+      high = middle;
+    } else {
+      low = middle + 1;
+    }
+  }
+
+  return low;
+};
+
+export const widenedCells = (
+  state: PlayState, cellAt: (cellKey: string) => Counted | undefined,
+): WidenedCells => {
+  // copied out, since the walk resumes long after a caller may have
+  // moved its state on
+  const { down, toGo, yardline, secondsLeft, margin } = state;
+  const packedSpots = wideningPacked(toGo, yardline);
+  const walks = [0, 1, 2].map((): WalkedSoFar => ({
+    cells: [], ends: [], plays: [], next: 0, done: false, cuts: new Map(),
+  }));
+
+  const walkOneSpot = (looseness: number, walk: WalkedSoFar) => {
+    while (walk.next < packedSpots.length &&
+        Math.floor(packedSpots[walk.next]! / 100000) !== looseness) {
+      walk.next++;
+    }
+
+    if (walk.next >= packedSpots.length) {
+      walk.done = true;
+      return;
+    }
+
+    const packed = packedSpots[walk.next++]!;
+    let running = walk.plays.length > 0 ? walk.plays[walk.plays.length - 1]! : 0;
+
+    for (const cellKey of keysAt(
+      down, Math.floor(packed / 100) % 1000, packed % 100,
+      secondsLeft, margin, looseness,
+    )) {
+      const cell = cellAt(cellKey);
+
+      if (!cell) {
+        continue;
+      }
+
+      walk.cells.push(cell);
+      running += cell.plays;
+    }
+
+    walk.ends.push(walk.cells.length);
+    walk.plays.push(running);
+  };
+
+  const cutAt = (walk: WalkedSoFar, end: number) => {
+    const already = walk.cuts.get(end);
+
+    if (already) {
+      return already;
+    }
+
+    const cut = walk.cells.slice(0, end);
+    walk.cuts.set(end, cut);
+
+    return cut;
+  };
+
+  /** the cells and plays one looseness gathers before stopping at `least` */
+  const gatheredAt = (looseness: number, least: number) => {
+    const walk = walks[looseness]!;
+    let spot = firstReaching(walk.plays, least);
+
+    while (spot === -1 && !walk.done) {
+      walkOneSpot(looseness, walk);
+      spot = firstReaching(walk.plays, least);
+    }
+
+    if (spot === -1) {
+      spot = walk.plays.length - 1;
+    }
+
+    if (spot === -1) {
+      return { cells: cutAt(walk, 0), plays: 0 };
+    }
+
+    return { cells: cutAt(walk, walk.ends[spot]!), plays: walk.plays[spot]! };
+  };
+
+  return {
+    upTo: (least) => {
+      let found = cutAt(walks[0]!, 0);
+      let plays = 0;
+
+      for (const looseness of [0, 1, 2]) {
+        if (plays >= least) {
+          break;
+        }
+
+        const gathered = gatheredAt(looseness, least);
+        found = gathered.cells;
+        plays = gathered.plays;
+      }
+
+      return found;
+    },
+  };
+};
+
 export function fitPlayFactors(
   rows: PlayRow[],
   settings: FactorSettings = FACTOR_DEFAULTS,
@@ -2194,6 +2336,27 @@ export function fitPlayFactors(
     return sample;
   };
 
+  /**
+   * The walk is kept per state and not per number of plays, since that
+   * number grows with the cast and the same state was walked again for
+   * every size of cast. Its key has everything the widening reads.
+   */
+  const walksRemembered = new Map<string, WidenedCells>();
+  const widenedAt = (state: PlayState, call?: Call) => {
+    makeRoom(walksRemembered);
+    const key = `${call ?? "both"}|${Math.min(4, state.down)}|${state.toGo}` +
+      `|${state.yardline}|${timeBand(state.secondsLeft)}|${marginBand(state.margin)}`;
+    const already = walksRemembered.get(key);
+
+    if (already) {
+      return already;
+    }
+
+    const widened = widenedCells(state, call ? leagueOnCall[call] : leagueBoth);
+    walksRemembered.set(key, widened);
+
+    return widened;
+  };
   const cellsRemembered = new Map<string, Counted[]>();
   const atCells = (state: PlayState, least: number, call?: Call) => {
     makeRoom(cellsRemembered);
@@ -2206,44 +2369,7 @@ export function fitPlayFactors(
       return already;
     }
 
-    let found: Counted[] = [];
-    let plays = 0;
-
-    for (const looseness of [0, 1, 2]) {
-      if (plays >= least) {
-        break;
-      }
-
-      const pooled: Counted[] = [];
-      plays = 0;
-
-      for (const packed of wideningPacked(state.toGo, state.yardline)) {
-        if (Math.floor(packed / 100000) !== looseness) {
-          continue;
-        }
-
-        for (const cellKey of keysAt(
-          state.down, Math.floor(packed / 100) % 1000, packed % 100,
-          state.secondsLeft, state.margin, looseness,
-        )) {
-          const cell = cells.get(call ? `${call}|${cellKey}` : cellKey);
-
-          if (!cell) {
-            continue;
-          }
-
-          pooled.push(cell);
-          plays += cell.plays;
-        }
-
-        if (plays >= least) {
-          break;
-        }
-      }
-
-      found = pooled;
-    }
-
+    const found = widenedAt(state, call).upTo(least);
     cellsRemembered.set(key, found);
 
     return found;
