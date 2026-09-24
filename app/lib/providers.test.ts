@@ -20,6 +20,7 @@ import {
   type EspnScoringItem, type League,
 } from "./providers.ts";
 import { knownSlot, slotTakes } from "./scoring.ts";
+import { keep } from "./store.ts";
 
 const items = JSON.parse(readFileSync(
   join(import.meta.dirname, "..", "fixtures", "espnScoringItems.json"), "utf8",
@@ -374,6 +375,69 @@ describe("this week's matchups on ESPN", () => {
 
     expect(games[0]!.sides[0]!.starters.map((s) => s.slot))
       .toEqual(["QB", "SUPER_FLEX", "WRRB_FLEX", "REC_FLEX"]);
+  });
+});
+
+describe("an ESPN league that will not open", () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  /** ESPN's status for the direct read, and the relay's for the second */
+  const answering = (direct: number | "offline", relay?: number) => {
+    globalThis.fetch = ((url: string) => {
+      if (String(url).includes("fantasy.espn.com")) {
+        return direct === "offline"
+          ? Promise.reject(new TypeError("Failed to fetch"))
+          : Promise.resolve({ ok: false, status: direct, json: () => Promise.resolve({}) });
+      }
+
+      return Promise.resolve({
+        ok: false, status: relay, json: () => Promise.resolve({ error: "ESPN refused" }),
+      });
+    }) as unknown as typeof fetch;
+  };
+
+  const withCookies = () => {
+    keep("espnSwid", "{ABC}");
+    keep("espnS2", "x".repeat(90));
+  };
+
+  it("says there is no such league on a 404, without asking for cookies", async () => {
+    answering(404);
+
+    const { PROVIDERS, NeedsEspnCookies } = await import("./providers.ts");
+    const read = PROVIDERS["espn"]!.leaguesFor("77", 2031);
+
+    await expect(read).rejects.toThrow("ESPN has no league 77 for season 2031.");
+    await expect(read).rejects.not.toBeInstanceOf(NeedsEspnCookies);
+  });
+
+  it("says the same on a 400 for an id ESPN cannot read", async () => {
+    answering(400);
+
+    const { PROVIDERS } = await import("./providers.ts");
+
+    await expect(PROVIDERS["espn"]!.leaguesFor("abc", 2026))
+      .rejects.toThrow("ESPN has no league abc for season 2026.");
+  });
+
+  it("asks for cookies when ESPN refuses a private league", async () => {
+    answering(401);
+
+    const { PROVIDERS, NeedsEspnCookies } = await import("./providers.ts");
+
+    await expect(PROVIDERS["espn"]!.leaguesFor("77", 2026))
+      .rejects.toBeInstanceOf(NeedsEspnCookies);
+  });
+
+  it("goes through the relay when the browser cannot read ESPN, and passes on its 404", async () => {
+    answering("offline", 404);
+    withCookies();
+
+    const { PROVIDERS, NeedsEspnCookies } = await import("./providers.ts");
+    const read = PROVIDERS["espn"]!.leaguesFor("77", 2026);
+
+    await expect(read).rejects.toThrow("ESPN has no league 77 for season 2026.");
+    await expect(read).rejects.not.toBeInstanceOf(NeedsEspnCookies);
   });
 });
 

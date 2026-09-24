@@ -874,6 +874,11 @@ async function throughTheWorker(leagueId: string, season: number, query: string)
     throw new NeedsEspnCookies(
       `could not reach the relay at ${where}: ${e.message}`);
   });
+
+  if (ESPN_MISSING.has(answered.status) || answered.status >= 500) {
+    throw espnTrouble(answered.status, leagueId, season);
+  }
+
   const said = await answered.json().catch(() => {
     throw new NeedsEspnCookies(
       `the relay answered ${answered.status} with something other than json`);
@@ -925,9 +930,32 @@ async function espnAnswer(
     "?" + query.slice(1);
   const answered = await fetch(at, { credentials: "include", cache: "no-store" }).catch(() => null);
 
-  return answered?.ok
-    ? await answered.json()
-    : await throughTheWorker(leagueId, season, query);
+  if (answered?.ok) {
+    return await answered.json();
+  }
+
+  // a private league refuses, or fails the browser's cross site check,
+  // and only those are worth sending your cookies through the relay for
+  if (answered && !ESPN_REFUSED.has(answered.status)) {
+    throw espnTrouble(answered.status, leagueId, season);
+  }
+
+  return await throughTheWorker(leagueId, season, query);
+}
+
+/** what ESPN returns for a league it will not show without your cookies */
+const ESPN_REFUSED = new Set([401, 403]);
+
+/** and for an id it cannot read, or a league or season it does not have */
+const ESPN_MISSING = new Set([400, 404]);
+
+/** what to say when ESPN turns a league down for a reason cookies will not fix */
+function espnTrouble(status: number, leagueId: string, season: number): Error {
+  if (ESPN_MISSING.has(status)) {
+    return new Error(`ESPN has no league ${leagueId} for season ${season}.`);
+  }
+
+  return new Error(`ESPN sent back an error (${status}). Try again in a minute.`);
 }
 
 interface EspnEntry {
