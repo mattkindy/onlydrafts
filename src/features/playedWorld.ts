@@ -186,6 +186,23 @@ export function onTheRoster(status: string | undefined, live: boolean): boolean 
   return !live && status === "INA";
 }
 
+/**
+ * The roster week the cast is read from: the one asked for, or the latest
+ * before it when the file stops short, since a club's roster last week is
+ * a better guess than an empty one.
+ */
+export function rosterWeekFor(weeks: Iterable<number>, wanted: number): number {
+  let best = 0;
+
+  for (const week of weeks) {
+    if (week <= wanted && week > best) {
+      best = week;
+    }
+  }
+
+  return best || wanted;
+}
+
 interface PasserEvidence {
   /** throws each passer made for this side over the last fortnight */
   lately?: Map<string, number>;
@@ -341,8 +358,10 @@ export async function buildWorld(
     }
   }
 
-  const openingWeek = (await loadWeeklyRosters(SCORE_ON)).filter((row) =>
-    row.week === castWeek && !ruledOut.has(row.playerId) &&
+  const rosters = await loadWeeklyRosters(SCORE_ON);
+  const rosterWeek = rosterWeekFor(rosters.map((row) => row.week), castWeek);
+  const openingWeek = rosters.filter((row) =>
+    row.week === rosterWeek && !ruledOut.has(row.playerId) &&
     onTheRoster(row.status, live));
   const onTeam = new Map<string, { playerId: string; position: string }[]>();
 

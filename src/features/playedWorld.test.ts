@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { chooseThrower, onTheRoster } from "./playedWorld.js";
+import { chooseThrower, onTheRoster, rosterWeekFor } from "./playedWorld.js";
+
+describe("rosterWeekFor", () => {
+  it("reads the week asked for when the file has it", () => {
+    expect(rosterWeekFor([1, 2, 3], 2)).toBe(2);
+  });
+
+  it("reads the latest week before it when the file stops short", () => {
+    expect(rosterWeekFor([1, 1, 2, 2], 3)).toBe(2);
+  });
+});
 
 describe("onTheRoster", () => {
   it("keeps the active players in August and in season", () => {
