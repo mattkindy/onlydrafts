@@ -25,11 +25,14 @@ import {
   loadSleeperDefences,
   loadSleeperQuiet,
   loadSleeperWeekly,
-  projectionKey,
+  projectionsToCsv,
+  quietFromKey,
   quietToCsv,
+  replaceFetchedWeeks,
   SLEEPER_DEFENCE_PATH,
   SLEEPER_QUIET_PATH,
   SLEEPER_WEEKLY_PATH,
+  weekKey,
   type SleeperDefence,
   type SleeperProjection,
   type SleeperProjectionRow,
@@ -74,17 +77,6 @@ function parseSeasons(arg: string | undefined): number[] {
   return arg.split(",").map(Number);
 }
 
-function toCsv(rows: SleeperProjection[]): string {
-  const header = "season,week,gsisId,position,points,targets,carries,catches";
-  const lines = rows.map(
-    (r) =>
-      `${r.season},${r.week},${r.gsisId},${r.position},${r.points},` +
-      `${r.targets},${r.carries},${r.catches ?? ""}`,
-  );
-
-  return [header, ...lines].join("\n") + "\n";
-}
-
 async function main(): Promise<void> {
   const flag = process.argv.indexOf("--seasons");
   const seasons = parseSeasons(flag === -1 ? undefined : process.argv[flag + 1]);
@@ -94,6 +86,7 @@ async function main(): Promise<void> {
   const all: SleeperProjection[] = [];
   const quiet: SleeperQuiet[] = [];
   const defences: SleeperDefence[] = [];
+  const fetchedWeeks = new Set<string>();
 
   for (const season of seasons) {
     let seasonRows = 0;
@@ -107,6 +100,7 @@ async function main(): Promise<void> {
         break;
       }
 
+      fetchedWeeks.add(weekKey(season, week));
       const defenceRaw = raw.filter((r) => r.player?.position === "DEF");
       const joined = joinProjectionsToGsis(
         season, week, raw.filter((r) => r.player?.position !== "DEF"),
@@ -126,58 +120,30 @@ async function main(): Promise<void> {
     console.log(`${season}: ${seasonRows} rows`);
   }
 
-  /**
-   * A week that was fetched before and is not being fetched now stays.
-   * Sleeper stops answering for a season once it is well past, so asking
-   * for this season alone and writing only that would throw away every
-   * season the bench trains on.
-   */
-  const kept = new Map(await loadSleeperWeekly());
-
-  for (const row of all) {
-    kept.set(projectionKey(row.season, row.week, row.gsisId), row);
-  }
-
-  const merged = [...kept.values()].sort(
-    (a, b) =>
-      a.season - b.season ||
-      a.week - b.week ||
-      a.gsisId.localeCompare(b.gsisId),
+  // each of the three files has the weeks fetched now rewritten whole
+  // and every other week left as it was
+  const weekly = replaceFetchedWeeks(
+    (await loadSleeperWeekly()).values(), all, fetchedWeeks,
   );
-  await writeAtomically(SLEEPER_WEEKLY_PATH, toCsv(merged));
-  console.log(`fetched ${all.length} rows, wrote ${merged.length}`);
+  await writeAtomically(SLEEPER_WEEKLY_PATH, projectionsToCsv(weekly));
+  console.log(`fetched ${all.length} rows, wrote ${weekly.length}`);
 
-  /**
-   * A player who was quiet last run and has a number now must leave the
-   * file, so the weeks fetched this run are rewritten whole rather than
-   * merged key by key. Other weeks stay for the same reason as above.
-   */
-  const fetchedWeeks = new Set(
-    [...all, ...quiet].map((row) => `${row.season}|${row.week}`),
+  const allQuiet = replaceFetchedWeeks(
+    [...await loadSleeperQuiet()].map(quietFromKey), quiet, fetchedWeeks,
   );
-  const keptQuiet = [...await loadSleeperQuiet()]
-    .map((key) => key.split("|"))
-    .filter(([season, week]) => !fetchedWeeks.has(`${season}|${week}`))
-    .map(([season, week, gsisId]): SleeperQuiet => ({
-      season: Number(season), week: Number(week), gsisId: gsisId ?? "",
-    }));
-  const allQuiet = [...keptQuiet, ...quiet];
   await writeAtomically(SLEEPER_QUIET_PATH, quietToCsv(allQuiet));
   console.log(
     `fetched ${quiet.length} rows with no points, wrote ${allQuiet.length}`,
   );
 
-  const keptDefences = new Map(await loadSleeperDefences());
-
-  for (const row of defences) {
-    keptDefences.set(projectionKey(row.season, row.week, row.team), row);
-  }
-
+  const allDefences = replaceFetchedWeeks(
+    (await loadSleeperDefences()).values(), defences, fetchedWeeks,
+  );
   await writeAtomically(
-    SLEEPER_DEFENCE_PATH, defenceProjectionsToCsv([...keptDefences.values()]),
+    SLEEPER_DEFENCE_PATH, defenceProjectionsToCsv(allDefences),
   );
   console.log(
-    `fetched ${defences.length} defence weeks, wrote ${keptDefences.size}`,
+    `fetched ${defences.length} defence weeks, wrote ${allDefences.length}`,
   );
 }
 

@@ -155,7 +155,9 @@ export function quietToCsv(rows: SleeperQuiet[]): string {
       a.season - b.season || a.week - b.week || a.gsisId.localeCompare(b.gsisId))
     .map((r) => `${r.season},${r.week},${r.gsisId}`);
 
-  return ["season,week,gsisId", ...lines].join("\n") + "\n";
+  // the crosswalk gives some gsis ids to two Sleeper ids, and a player
+  // is quiet once however many of them Sleeper listed
+  return ["season,week,gsisId", ...new Set(lines)].join("\n") + "\n";
 }
 
 export function parseQuiet(text: string): Set<string> {
@@ -167,6 +169,13 @@ export function parseQuiet(text: string): Set<string> {
           Number(row["season"]), Number(row["week"]), row["gsisId"] ?? "",
         )),
   );
+}
+
+/** a quiet player-week back from the key it is looked up under */
+export function quietFromKey(key: string): SleeperQuiet {
+  const [season, week, gsisId] = key.split("|");
+
+  return { season: Number(season), week: Number(week), gsisId: gsisId ?? "" };
 }
 
 let cachedQuiet: Set<string> | undefined;
@@ -194,6 +203,56 @@ export function projectionKey(
   gsisId: string,
 ): string {
   return `${season}|${week}|${gsisId}`;
+}
+
+export function weekKey(season: number, week: number): string {
+  return `${season}|${week}`;
+}
+
+/**
+ * The rows on disk, with every week fetched this run replaced whole by
+ * what came back for it. Sleeper blanks a player it no longer expects to
+ * play, so merging row by row would keep his old number next to the new
+ * quiet flag. A week not fetched this run stays, because Sleeper stops
+ * answering for a season once it is well past.
+ */
+export function replaceFetchedWeeks<T extends { season: number; week: number }>(
+  onDisk: Iterable<T>,
+  fetched: T[],
+  fetchedWeeks: Set<string>,
+): T[] {
+  const kept = [...onDisk].filter(
+    (row) => !fetchedWeeks.has(weekKey(row.season, row.week)),
+  );
+
+  return [...kept, ...fetched];
+}
+
+/**
+ * The projections with every player-week Sleeper also listed as quiet
+ * taken out. The fetch keeps the two files apart, but if a row does end
+ * up in both, the quiet flag is the one to believe: a stale number
+ * starts a player Sleeper has stopped projecting.
+ */
+export function withoutQuiet(
+  projections: Map<string, SleeperProjection>,
+  quiet: Set<string>,
+): Map<string, SleeperProjection> {
+  return new Map(
+    [...projections].filter(([key]) => !quiet.has(key)),
+  );
+}
+
+export function projectionsToCsv(rows: SleeperProjection[]): string {
+  const header = "season,week,gsisId,position,points,targets,carries,catches";
+  const lines = [...rows]
+    .sort((a, b) =>
+      a.season - b.season || a.week - b.week || a.gsisId.localeCompare(b.gsisId))
+    .map((r) =>
+      `${r.season},${r.week},${r.gsisId},${r.position},${r.points},` +
+      `${r.targets},${r.carries},${r.catches ?? ""}`);
+
+  return [header, ...lines].join("\n") + "\n";
 }
 
 export interface SleeperDefence {
@@ -291,9 +350,14 @@ export async function loadSleeperWeekly(): Promise<
     return cached;
   }
 
-  const rows = parseCsv(await readFile(SLEEPER_WEEKLY_PATH, "utf8"));
-  cached = new Map(
-    rows.map((row) => {
+  cached = parseWeekly(await readFile(SLEEPER_WEEKLY_PATH, "utf8"));
+
+  return cached;
+}
+
+export function parseWeekly(text: string): Map<string, SleeperProjection> {
+  return new Map(
+    parseCsv(text).map((row) => {
       const projection: SleeperProjection = {
         season: Number(row["season"]),
         week: Number(row["week"]),
@@ -314,6 +378,4 @@ export async function loadSleeperWeekly(): Promise<
       ];
     }),
   );
-
-  return cached;
 }

@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   joinProjectionsToGsis,
   parseQuiet,
+  parseWeekly,
   projectionKey,
+  projectionsToCsv,
+  quietFromKey,
   quietToCsv,
+  replaceFetchedWeeks,
   sleeperPointsUnder,
+  weekKey,
+  withoutQuiet,
   type SleeperProjectionRow,
 } from "./sleeperProjections.js";
 
@@ -121,8 +127,89 @@ describe("the quiet file", () => {
     expect(keys.size).toBe(2);
   });
 
+  it("writes a player listed twice in a week once", () => {
+    expect(quietToCsv([...rows, rows[0]!])).toBe(quietToCsv(rows));
+  });
+
   it("is empty where the file has never been written", () => {
     expect(parseQuiet("").size).toBe(0);
+  });
+});
+
+describe("a fetch written over what is on disk", () => {
+  const caleb = "00-0039918";
+  const chase = "00-0036900";
+  const projected = (week: number, gsisId: string, points: number) => ({
+    season: 2026, week, gsisId, position: "QB",
+    points, targets: 0, carries: 3, catches: 0,
+  });
+  const onDisk = parseWeekly(projectionsToCsv([
+    projected(2, caleb, 18.4),
+    projected(3, caleb, 17.9),
+    projected(3, chase, 16.2),
+  ]));
+
+  // Sleeper has since blanked him for week 3, the way it does a player
+  // who turns doubtful, and still projects everybody else
+  const week3 = joinProjectionsToGsis(
+    2026, 3,
+    [row("11560", { adp_dd_ppr: 1000 }), row("7564", { pts_ppr: 16.8 })],
+    new Map([["11560", caleb], ["7564", chase]]),
+  );
+  const fetchedWeeks = new Set([weekKey(2026, 3)]);
+  const weekly = replaceFetchedWeeks(
+    onDisk.values(), week3.projected, fetchedWeeks,
+  );
+  const quiet = replaceFetchedWeeks([], week3.quiet, fetchedWeeks);
+
+  it("drops a projection Sleeper has withdrawn", () => {
+    const written = parseWeekly(projectionsToCsv(weekly));
+
+    expect(written.has(projectionKey(2026, 3, caleb))).toBe(false);
+    expect(quiet).toEqual([{ season: 2026, week: 3, gsisId: caleb }]);
+  });
+
+  it("takes the new number for a player still projected", () => {
+    const written = parseWeekly(projectionsToCsv(weekly));
+
+    expect(written.get(projectionKey(2026, 3, chase))?.points).toBe(16.8);
+    expect(written.size).toBe(2);
+  });
+
+  it("leaves a week that was not fetched as it was", () => {
+    const written = parseWeekly(projectionsToCsv(weekly));
+
+    expect(written.get(projectionKey(2026, 2, caleb))?.points).toBe(18.4);
+  });
+
+  it("keeps a player who was quiet and now has a number out of the quiet file", () => {
+    const again = replaceFetchedWeeks(
+      quiet,
+      joinProjectionsToGsis(
+        2026, 3, [row("11560", { pts_ppr: 15 })], new Map([["11560", caleb]]),
+      ).quiet,
+      fetchedWeeks,
+    );
+
+    expect(again).toEqual([]);
+  });
+
+  it("reads a player-week in both files as quiet", () => {
+    const both = withoutQuiet(
+      onDisk, parseQuiet(quietToCsv([{ season: 2026, week: 3, gsisId: caleb }])),
+    );
+
+    expect(both.has(projectionKey(2026, 3, caleb))).toBe(false);
+    expect(both.has(projectionKey(2026, 2, caleb))).toBe(true);
+    expect(both.has(projectionKey(2026, 3, chase))).toBe(true);
+  });
+});
+
+describe("quietFromKey", () => {
+  it("turns a key back into the row it was built from", () => {
+    expect(quietFromKey(projectionKey(2026, 3, "00-0039918"))).toEqual({
+      season: 2026, week: 3, gsisId: "00-0039918",
+    });
   });
 });
 

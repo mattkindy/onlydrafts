@@ -16,6 +16,7 @@ import {
   loadSleeperWeekly,
   projectionKey,
   sleeperPointsUnder,
+  withoutQuiet,
   type SleeperDefence,
   type SleeperProjection,
 } from "../src/data/sleeperProjections.js";
@@ -959,8 +960,8 @@ async function main(): Promise<void> {
     })),
     5,
   );
-  const projections = await loadSleeperWeekly();
   const quiet = await loadSleeperQuiet();
+  const projections = withoutQuiet(await loadSleeperWeekly(), quiet);
 
   await mkdir(join(DOCS, "data"), { recursive: true });
 
