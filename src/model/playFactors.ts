@@ -270,6 +270,41 @@ export function wideningPacked(toGo: number, yardline: number): Int32Array {
 }
 
 /**
+ * Where each spot comes in one pass of the widening, indexed by toGo
+ * times 100 plus the yardline, and -1 where the pass never reaches. The
+ * three passes visit the same spots in the same order.
+ */
+export interface SpotOrder {
+  ranks: Int16Array;
+  spots: number;
+}
+
+const ordersRemembered = new Map<number, SpotOrder>();
+
+export function spotOrder(toGo: number, yardline: number): SpotOrder {
+  const key = toGo * 100 + yardline;
+  const already = ordersRemembered.get(key);
+
+  if (already) {
+    return already;
+  }
+
+  const ranks = new Int16Array(41 * 100).fill(-1);
+  let spots = 0;
+
+  for (const packed of wideningPacked(toGo, yardline)) {
+    if (Math.floor(packed / 100000) === 0) {
+      ranks[packed % 100000] = spots++;
+    }
+  }
+
+  const made = { ranks, spots };
+  ordersRemembered.set(key, made);
+
+  return made;
+}
+
+/**
  * How much a play from this far up or down the field counts when a
  * pool is drawn from for a state here.
  *

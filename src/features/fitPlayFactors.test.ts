@@ -624,13 +624,18 @@ const scatteredRows = (): PlayRow[] => {
 const scatteredStates = (): PlayState[] => {
   const uniform = seededRng(29);
 
-  return Array.from({ length: 16 }, () => ({
-    down: 1 + Math.floor(uniform() * 4),
-    toGo: 1 + Math.floor(uniform() * 15),
-    yardline: 1 + Math.floor(uniform() * 99),
-    margin: Math.floor(uniform() * 41) - 20,
-    secondsLeft: Math.floor(uniform() * 3600),
-  }));
+  return [
+    ...Array.from({ length: 14 }, () => ({
+      down: 1 + Math.floor(uniform() * 4),
+      toGo: 1 + Math.floor(uniform() * 15),
+      yardline: 1 + Math.floor(uniform() * 99),
+      margin: Math.floor(uniform() * 41) - 20,
+      secondsLeft: Math.floor(uniform() * 3600),
+    })),
+    // and the edges, where the widening runs off the field or the table
+    { down: 4, toGo: 45, yardline: 99, margin: -30, secondsLeft: 10 },
+    { down: 1, toGo: 1, yardline: 1, margin: 30, secondsLeft: 3600 },
+  ];
 };
 
 const LEASTS = [0, 7, 60, 250, 1000, 100000];
