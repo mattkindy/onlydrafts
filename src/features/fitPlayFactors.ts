@@ -1290,12 +1290,20 @@ export function countPlays(
   };
 }
 
-/** a counted cell, with the spot it was counted at */
+/** a counted cell, with the key it was counted under */
 interface PlacedCell {
-  toGo: number;
-  yardline: number;
   cellKey: string;
   cell: Counted;
+}
+
+/**
+ * One row's cells, with the spot each was counted at, as toGo times 100
+ * plus the yardline, in an array of its own so a walk reads the spots
+ * in one sweep without going to each cell.
+ */
+interface CellRow {
+  at: Int32Array;
+  cells: PlacedCell[];
 }
 
 /**
@@ -1304,7 +1312,10 @@ interface PlacedCell {
  * is let go by a band either way, so a walk goes through the cells a row
  * has instead of looking up each of the hundreds of spots it passes.
  */
-export type CellRows = Map<number, PlacedCell[]>;
+export type CellRows = Map<number, CellRow>;
+
+/** a row still being filled */
+type DraftRows = Map<number, { at: number[]; cells: PlacedCell[] }>;
 
 /** and every side's, by team and then by call */
 export type SideCells = Map<string, Map<Call | "both", CellRows>>;
@@ -1355,13 +1366,11 @@ const startsWithDigit = (key: string) => {
 };
 
 /**
- * The row a state key belongs to, with the spot it was counted at, or
+ * The row a state key belongs to and the spot it was counted at, or
  * nothing for a key the widening never builds, which a walk over the
  * keys would never have found either.
  */
-const placedCellOf = (
-  cellKey: string, cell: Counted,
-): [number, PlacedCell] | undefined => {
+const rowAndSpotOf = (cellKey: string): [number, number] | undefined => {
   if (!startsWithDigit(cellKey)) {
     return undefined;
   }
@@ -1373,60 +1382,66 @@ const placedCellOf = (
     return undefined;
   }
 
-  const side = { toGo: toGo!, yardline: yardline!, cellKey, cell };
+  const at = toGo! * 100 + yardline!;
 
   if (parts.length === 4 && parts[3] === "any") {
-    return [rowOf(down!, 0, ANY_SCORE), side];
+    return [rowOf(down!, 0, ANY_SCORE), at];
   }
 
   const [time, band] = parts.slice(3).map(Number);
 
   if (parts.length === 5 && wholeIn(time!, 4) && wholeIn(band!, 8)) {
-    return [rowOf(down!, time!, band!), side];
+    return [rowOf(down!, time!, band!), at];
   }
 
   return undefined;
 };
 
-const addToRows = (rows: CellRows, cellKey: string, cell: Counted) => {
-  const placed = placedCellOf(cellKey, cell);
+const addToRows = (rows: DraftRows, cellKey: string, cell: Counted) => {
+  const placed = rowAndSpotOf(cellKey);
 
   if (!placed) {
     return;
   }
 
-  const [row, spot] = placed;
-  const inRow = rows.get(row) ?? [];
-  inRow.push(spot);
+  const [row, at] = placed;
+  const inRow = rows.get(row) ?? { at: [], cells: [] };
+  inRow.at.push(at);
+  inRow.cells.push({ cellKey, cell });
   rows.set(row, inRow);
 };
 
+const sealed = (draft: DraftRows): CellRows =>
+  new Map([...draft].map(([row, { at, cells }]) =>
+    [row, { at: Int32Array.from(at), cells }]));
+
 /** cells keyed by the state alone, grouped into rows */
 export const rowsOf = (cells: Map<string, Counted>): CellRows => {
-  const rows: CellRows = new Map();
+  const draft: DraftRows = new Map();
 
   for (const [cellKey, cell] of cells) {
-    addToRows(rows, cellKey, cell);
+    addToRows(draft, cellKey, cell);
   }
 
-  return rows;
+  return sealed(draft);
 };
 
 export const splitBySide = (from: Map<string, Counted>): SideCells => {
-  const sides: SideCells = new Map();
+  const drafts = new Map<string, Map<Call | "both", DraftRows>>();
 
   for (const [key, cell] of from) {
     const bar = key.indexOf("|");
     const who = key.slice(0, bar);
     const [call, cellKey] = callOfSideKey(key.slice(bar + 1));
-    const his = sides.get(who) ?? new Map<Call | "both", CellRows>();
-    const onCall = his.get(call) ?? new Map<number, PlacedCell[]>();
+    const his = drafts.get(who) ?? new Map<Call | "both", DraftRows>();
+    const onCall = his.get(call) ?? new Map();
     addToRows(onCall, cellKey, cell);
     his.set(call, onCall);
-    sides.set(who, his);
+    drafts.set(who, his);
   }
 
-  return sides;
+  return new Map([...drafts].map(([who, his]) =>
+    [who, new Map([...his].map(([call, draft]) => [call, sealed(draft)]))]));
 };
 
 export interface SidePool {
@@ -1488,15 +1503,23 @@ export const walkWidening = (
     marginBand(state.margin),
   )) {
     for (let set = 0; set < sets; set++) {
-      for (const placed of rowSets[set]?.get(row) ?? []) {
-        const rank = ranks[placed.toGo * 100 + placed.yardline]!;
+      const inRow = rowSets[set]?.get(row);
+
+      if (!inRow) {
+        continue;
+      }
+
+      const { at, cells } = inRow;
+
+      for (let i = 0; i < at.length; i++) {
+        const rank = ranks[at[i]!]!;
 
         if (rank < 0) {
           continue;
         }
 
         const slot = rank * perSpot + within * sets + set;
-        bySpot[slot] = placed;
+        bySpot[slot] = cells[i];
         filled.push(slot);
         lastSpot = Math.max(lastSpot, rank);
       }
