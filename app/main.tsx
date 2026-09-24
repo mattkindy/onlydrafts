@@ -35,8 +35,8 @@ import { Matchups } from "./views/Matchups.tsx";
 import { Standings } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import {
-  loadSlate, rosterKeys, slateUnder, weekRefs, withOutPlayersZeroed,
-  type Slate, type WeekRef,
+  hasGameIn, loadSlate, onTheBooks, rosterKeys, slateUnder, weekRefs,
+  withByesZeroed, withOutPlayersZeroed, type Slate, type WeekRef,
 } from "./lib/slate.ts";
 
 export type Order = "war" | "rank" | "adp";
@@ -418,11 +418,18 @@ function App() {
    * rather than in each of them.
    */
   const slateRows = useMemo(
-    () => withOutPlayersZeroed(
-      new Map((slate?.rows ?? []).map((r) => [normalizeName(r.name), r])),
-      listed,
+    () => withByesZeroed(
+      withOutPlayersZeroed(
+        new Map((slate?.rows ?? []).map((r) => [normalizeName(r.name), r])),
+        listed,
+      ),
+      onTheBooks(
+        board?.players ?? [],
+        active ? [active.myRoster, ...active.allRosters.map((r) => r.keys)] : [],
+      ),
+      (team) => hasGameIn(board?.schedule, team, slate?.week),
     ),
-    [slate, listed],
+    [slate, listed, board, active],
   );
 
   /**

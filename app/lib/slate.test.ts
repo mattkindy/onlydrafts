@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { Listed } from "./availability.ts";
 import { lineOf, liveDraws, spreadOf } from "./matchups.ts";
-import { isSplit, readSlate, slateUnder, withOutPlayersZeroed } from "./slate.ts";
+import {
+  hasGameIn, isSplit, onTheBooks, readSlate, slateUnder, withByesZeroed,
+  withOutPlayersZeroed,
+} from "./slate.ts";
 import { normalizeName } from "./store.ts";
 
 const built = readSlate({
@@ -350,5 +353,53 @@ describe("a player the injury report is unsure about", () => {
 
     expect(back.blend).toBe(10.9);
     expect(back.playChance).toBeCloseTo(0.64);
+  });
+});
+
+describe("a player whose team is on bye", () => {
+  const schedule = { CIN: ["TB", null, "KC"], KC: ["LAC", "PHI", "CIN"] };
+  const books = [
+    { key: "jamarrchase", name: "Ja'Marr Chase", position: "WR", team: "CIN" },
+    { key: "travis", name: "Travis Kelce", position: "TE", team: "KC" },
+  ];
+
+  it("gets a row of zeros in the bye week and nothing in the others", () => {
+    const byeWeek = withByesZeroed(
+      new Map(), books, (team) => hasGameIn(schedule, team, 2));
+
+    expect(byeWeek.get("jamarrchase")).toMatchObject({ blend: 0, ceiling: 0, bye: true });
+    expect(byeWeek.has("travis")).toBe(false);
+
+    const later = withByesZeroed(
+      new Map(), books, (team) => hasGameIn(schedule, team, 3));
+
+    expect(later.size).toBe(0);
+  });
+
+  it("leaves a player alone when the schedule does not know his team or the week", () => {
+    expect(hasGameIn(schedule, "XYZ", 2)).toBeNull();
+    expect(hasGameIn(schedule, "CIN", 19)).toBeNull();
+    expect(hasGameIn(null, "CIN", 2)).toBeNull();
+  });
+
+  it("takes the roster's team over the board's after a trade", () => {
+    const got = withByesZeroed(
+      new Map(),
+      onTheBooks(
+        [{ key: "jamarrchase", name: "Ja'Marr Chase", position: "WR", team: "CIN" }],
+        [[{ key: "jamarrchase", name: "Ja'Marr Chase", pos: "WR", team: "KC" }]],
+      ),
+      (team) => hasGameIn(schedule, team, 2),
+    );
+
+    expect(got.has("jamarrchase")).toBe(false);
+  });
+
+  it("keeps a row the week already has", () => {
+    const rows = rowsOf(built);
+    const chase = normalizeName("Ja'Marr Chase");
+    const got = withByesZeroed(rows, books, () => false);
+
+    expect(got.get(chase)).toBe(rows.get(chase));
   });
 });

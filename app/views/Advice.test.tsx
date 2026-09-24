@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { render } from "preact";
 
+import { standingFor } from "../lib/matchups.ts";
 import type { Side } from "../lib/providers.ts";
+import type { Player } from "../lib/scoring.ts";
+import { withByesZeroed } from "../lib/slate.ts";
 import { Advice, pct, pctPair } from "./Advice.tsx";
 
 const side = (owner: string, starters: Side["starters"]): Side => ({
@@ -67,5 +70,39 @@ describe("Advice", () => {
 
     expect(container.textContent).toContain("no lineup set");
     expect(container.textContent).not.toContain("wins");
+  });
+
+  it("says which starter is on bye, and projects him nothing", () => {
+    const container = document.createElement("div");
+    const lines = new Map([["jamarrchase", {
+      key: "jamarrchase", name: "Ja'Marr Chase", position: "WR", team: "CIN",
+      game: { ev: 22.5, q1: 15, mid: 21, q3: 29, low: 8, high: 40 },
+    } as Player]]);
+    const rows = withByesZeroed(
+      new Map(),
+      [{ key: "jamarrchase", name: "Ja'Marr Chase", position: "WR", team: "CIN" }],
+      (team) => team !== "CIN",
+    );
+    const mine = side("me", [{ key: "jamarrchase", points: 0, slot: "WR" }]);
+    const opp = side("them", [{ key: "qb", points: 0, slot: "QB" }]);
+    const states = new Map([["KC", { where: "pre" as const, left: 1 }]]);
+
+    const standing = standingFor({ sides: [mine, opp] }, rows, states, lines);
+
+    expect(standing.projected[0]).toBe(0);
+
+    render(
+      <Advice
+        side={mine}
+        against={opp}
+        slots={null}
+        rows={rows}
+        states={states}
+        lines={lines}
+      />,
+      container,
+    );
+
+    expect(container.textContent).toContain("Ja'Marr Chase is on bye this week.");
   });
 });

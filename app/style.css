@@ -703,6 +703,7 @@
   .advice ul { margin: var(--s1) 0 0; padding-left: var(--s4); }
   .advice li { margin: .1rem 0; }
   .advice .gain { color: var(--go); font-weight: 700; }
+  .advice .bye { margin: var(--s1) 0 0; }
 
   /* one slot in your own lineup, with the bench players who could take it */
   .slot-card { border: 1px solid var(--edge); border-radius: 10px;

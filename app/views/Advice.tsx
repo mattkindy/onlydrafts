@@ -76,6 +76,12 @@ export const namesIn = (sides: Side[]) => new Map(
     .map((player) => [player.key, player.name] as const),
 );
 
+/** the starters whose team has no game this week */
+export const onBye = (side: Side, rows: Map<string, SlateRow>) =>
+  side.starters
+    .filter((starter) => rows.get(starter.key)?.bye)
+    .map((starter) => starter.key);
+
 interface Props {
   side: Side;
   against: Side;
@@ -140,11 +146,28 @@ export function Advice(
     );
   }
 
+  const idle = onBye(side, rows);
+  const byes = idle.length > 0 && (
+    <p class="bye">
+      {idle.map((key, at) => (
+        <span key={key}>
+          {at > 0 && ", "}
+          <Who
+            name={nameOf(key, rows, lines, said.get(key))}
+            onOpen={onMore ? () => onMore(key) : undefined}
+          />
+        </span>
+      ))}{" "}
+      {idle.length === 1 ? "is" : "are"} on bye this week.
+    </p>
+  );
+
   if (!best.swaps.length) {
     return (
       <div class="advice">
         <b>Your lineup wins {pct(standing)}.</b> It is already the optimal
         lineup.
+        {byes}
       </div>
     );
   }
@@ -153,6 +176,7 @@ export function Advice(
     <div class="advice">
       <b>Your lineup wins {pct(standing)}.</b> Optimal lineup{" "}
       {pct(best.odds)}.
+      {byes}
       <ul>
         {best.swaps.map((swap) => (
           <li key={swap.starts + swap.benches}>

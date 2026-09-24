@@ -48,6 +48,8 @@ export interface SlateRow {
    * are zero and no lineup should start him
    */
   ruledOut: boolean;
+  /** his team has no game this week, so the row is all zeros */
+  bye?: boolean;
   /** the word his club used, where it said anything */
   status?: string;
   gamesMissedRecent: number;
@@ -383,6 +385,114 @@ export function withOutPlayersZeroed(
 
   // the same map comes back when nobody is marked down, since callers key
   // work off the map itself and a fresh copy each render would throw that away
+  if (!sat.length) {
+    return rows;
+  }
+
+  return new Map([...rows, ...sat]);
+}
+
+/** a player the week may have no row for, and the club he plays for */
+export interface OnTheBooks {
+  key: string;
+  name: string;
+  position?: string | undefined;
+  team?: string | undefined;
+}
+
+/**
+ * Whether a team plays in a week, off the board's schedule. Null where
+ * the schedule does not know the team or the week, so nobody is zeroed
+ * on a guess.
+ */
+export function hasGameIn(
+  schedule: Record<string, (string | null)[]> | null | undefined,
+  team: string,
+  week: number | undefined,
+): boolean | null {
+  const weeks = schedule?.[team.toUpperCase()];
+
+  if (!weeks || week === undefined || week < 1 || week > weeks.length) {
+    return null;
+  }
+
+  return weeks[week - 1] !== null;
+}
+
+/**
+ * Every player the board knows, then every rostered player in the league
+ * with the team his provider gives him, which is more current than the
+ * board's after a trade.
+ */
+export function onTheBooks(
+  board: { key: string; name: string; position: string; team?: string | null }[],
+  rosters: { key: string; name: string; pos?: string; team?: string }[][],
+): OnTheBooks[] {
+  return [
+    ...board.map((p) => ({
+      key: p.key, name: p.name, position: p.position, team: p.team ?? undefined,
+    })),
+    ...rosters.flat().map((p) => ({
+      key: p.key, name: p.name, position: p.pos, team: p.team,
+    })),
+  ];
+}
+
+/**
+ * The week's rows with a row of zeros for every player whose team has no
+ * game this week.
+ *
+ * The slate leaves a player on bye out, and a player with no row falls
+ * through to his season game, so a starter on bye would project a full
+ * week. `hasGame` returns null for a team the schedule does not know,
+ * which leaves that player alone. A later entry for the same key wins,
+ * so a roster's current team can overrule the board's.
+ */
+export function withByesZeroed(
+  rows: Map<string, SlateRow>,
+  players: Iterable<OnTheBooks>,
+  hasGame: (team: string) => boolean | null,
+): Map<string, SlateRow> {
+  const latest = new Map<string, OnTheBooks>();
+
+  for (const player of players) {
+    const had = latest.get(player.key);
+
+    latest.set(player.key, {
+      ...player,
+      position: player.position || had?.position,
+      team: player.team || had?.team,
+    });
+  }
+
+  const sat: [string, SlateRow][] = [];
+
+  for (const [key, his] of latest) {
+    if (rows.has(key) || !his.position || !his.team) {
+      continue;
+    }
+
+    if (hasGame(his.team) !== false) {
+      continue;
+    }
+
+    sat.push([key, {
+      playerId: key,
+      name: his.name,
+      position: his.position,
+      team: his.team,
+      opponent: "",
+      home: true,
+      ...NOTHING,
+      catches: 0,
+      questionable: false,
+      ruledOut: false,
+      bye: true,
+      gamesMissedRecent: 0,
+      absenceShare: 0,
+    }]);
+  }
+
   if (!sat.length) {
     return rows;
   }
