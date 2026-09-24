@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { describeWithRawData } from "../data/rawDataTest.js";
 import {
   fitMarketPrice,
   marketPriceAsOf,
   seasonPrices,
+  type MarketPrice,
   type PriceOutcome,
   type PriceFit,
   type SeasonPrices,
@@ -238,44 +240,55 @@ describe("disagreement", () => {
   });
 });
 
-// each of these reads a decade of drafts off disk and fits them, which
-// runs close to the five second default on a quiet machine and over it
-// on a busy one
-describe("marketPriceAsOf", { timeout: 30_000 }, () => {
-  it("reads nothing from the season it is asked about", async () => {
-    const fitted = await marketPriceAsOf(2019);
+/**
+ * Reading four seasons of stats and drafts off disk takes several
+ * seconds, so each suite reads once and its tests share what came back.
+ * The hooks get room past the ten second default for a busy machine.
+ */
+const READ_TIMEOUT = 30_000;
 
-    expect(fitted.trainedOn).toEqual([2015, 2016, 2017, 2018]);
-  });
-
+describe("marketPriceAsOf, too early to fit", () => {
   it("refuses a season with too little behind it", async () => {
     await expect(marketPriceAsOf(2016)).rejects.toThrow(/earlier/);
   });
+});
 
-  it("fills a handed-in cache and gives the same curve off it", async () => {
-    const counted = new Map<number, SeasonPrices | null>();
-    const cold = await marketPriceAsOf(2019, { counted });
+describeWithRawData("marketPriceAsOf", () => {
+  const counted = new Map<number, SeasonPrices | null>();
+  let cold: MarketPrice;
 
+  beforeAll(async () => {
+    cold = await marketPriceAsOf(2019, { counted });
+  }, READ_TIMEOUT);
+
+  it("reads nothing from the season it is asked about", () => {
+    expect(cold.trainedOn).toEqual([2015, 2016, 2017, 2018]);
     expect([...counted.keys()].sort()).toEqual([2015, 2016, 2017, 2018]);
+  });
 
-    const warm = await marketPriceAsOf(2019, { counted });
+  it("gives the same curve off a filled cache", async () => {
+    const warm = await marketPriceAsOf(2019, { counted: new Map(counted) });
 
     expect(warm.trainedOn).toEqual(cold.trainedOn);
     expect(warm.expectedPpg("RB", 40)).toBe(cold.expectedPpg("RB", 40));
   });
 
   it("leaves out a season the cache says has nothing", async () => {
-    const counted = new Map<number, SeasonPrices | null>([[2017, null]]);
-    const fitted = await marketPriceAsOf(2019, { counted });
+    const without = new Map(counted).set(2017, null);
+    const fitted = await marketPriceAsOf(2019, { counted: without });
 
     expect(fitted.trainedOn).toEqual([2015, 2016, 2018]);
   });
 });
 
-describe("seasonPrices", () => {
-  it("prices a season and finds almost everybody on it", async () => {
-    const priced = await seasonPrices(2023);
+describeWithRawData("seasonPrices", () => {
+  let priced: SeasonPrices;
 
+  beforeAll(async () => {
+    priced = await seasonPrices(2023);
+  }, READ_TIMEOUT);
+
+  it("prices a season and finds almost everybody on it", () => {
     expect(priced.rows.length).toBeGreaterThan(100);
     expect(priced.unmatched).toBeLessThan(5);
     expect(priced.rows.every((row) => row.adp > 0)).toBe(true);
@@ -283,8 +296,7 @@ describe("seasonPrices", () => {
     expect(priced.rows.every((row) => row.spread !== undefined)).toBe(true);
   });
 
-  it("counts a starter tier the size the league starts", async () => {
-    const priced = await seasonPrices(2023);
+  it("counts a starter tier the size the league starts", () => {
     const hits = (position: string) =>
       priced.rows.filter((row) => row.position === position && row.hit).length;
 
