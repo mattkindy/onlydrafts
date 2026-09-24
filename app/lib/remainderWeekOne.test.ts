@@ -8,12 +8,15 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { situationsFrom } from "./matchups.ts";
 import { gamesToPlay, remainderDraws } from "./remainderDraws.ts";
 import type { SimTables } from "./simTables.ts";
 
-const PATH = "docs/data/sim-2026.json";
+// A copy of the 2026 tables, so the site dropping its own file cannot
+// quietly turn this test off.
+const PATH = join(import.meta.dirname, "..", "fixtures", "sim-2026.json");
 const PPR = {
   pass_yd: 0.04, pass_td: 4, pass_int: -2, rush_yd: 0.1, rush_td: 6,
   rec: 1, rec_yd: 0.1, rec_td: 6, fum_lost: -2, rush_2pt: 2,
@@ -37,7 +40,7 @@ const SCOREBOARD = {
   }],
 };
 
-describe.skipIf(!existsSync(PATH))("a week one game, end to end", () => {
+describe("a week one game, end to end", () => {
   const tables = JSON.parse(readFileSync(PATH, "utf8")) as SimTables;
   const situations = situationsFrom(SCOREBOARD);
 
