@@ -106,10 +106,14 @@ jobs:
       - name: is the refresh worth committing
         env:
           SEASON: ${{ inputs.season }}
+          WEEK: ${{ inputs.week }}
         run: |
           args=()
           if [ -n "$SEASON" ]; then
             args+=(--season "$SEASON")
+          fi
+          if [ -n "$WEEK" ]; then
+            args+=(--week "$WEEK")
           fi
           npx tsx scripts/checkRefresh.ts "${args[@]}"
 

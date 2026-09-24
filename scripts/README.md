@@ -24,7 +24,11 @@ mentions a script that is no longer here, it says so.
 - `fetchWeatherArchive.ts` pulls the hour by hour history for every
   ground into `data/raw/weatherArchive/`, which only `weatherEval.ts`
   reads. It is cached, so the second run costs nothing.
-- `pullAdp.ts` and `pullSleeperAdp.ts` pull draft position snapshots.
+- `pullAdp.ts` and `pullSleeperAdp.ts` pull draft position snapshots
+  into `data/curated/adp/`, which is committed so the weekly Action
+  builds from the same boards a local build does. Run them in the week
+  before a season starts. They keep a board that is already there unless
+  given `--force`.
 - `aggregate*.ts` count the raw play-by-play into the tables in
   `data/curated/`. Each writes the file named in its header comment and
   reproduces it exactly on a rerun.
