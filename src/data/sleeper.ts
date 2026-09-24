@@ -87,15 +87,19 @@ export async function fetchSleeperGsisIds(): Promise<Map<string, string>> {
   const ids = new Map<string, string>();
   const raw = await loadSleeperPlayerFile();
 
+  // Sleeper writes some ids with a leading space, which no gsis key
+  // anywhere else has, so an untrimmed one never matches
   for (const [id, p] of Object.entries(raw)) {
-    if (p.gsis_id) {
-      ids.set(id, p.gsis_id);
+    const gsisId = p.gsis_id?.trim();
+
+    if (gsisId) {
+      ids.set(id, gsisId);
     }
   }
 
   for (const row of await loadPlayerIdCrosswalk()) {
-    const sleeperId = row["sleeper_id"];
-    const gsisId = row["gsis_id"];
+    const sleeperId = row["sleeper_id"]?.trim();
+    const gsisId = row["gsis_id"]?.trim();
 
     if (sleeperId && gsisId) {
       ids.set(sleeperId, gsisId);
