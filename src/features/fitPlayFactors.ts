@@ -139,15 +139,18 @@ const addTo = (into: Map<string, Rate>, key: string, yards: number): void => {
   into.set(key, own);
 };
 
+/** what one player did at one state */
+interface PlayerCounts {
+  touches: number; yards: number; scores: number;
+  /** and how often he breaks a long one, which is his own and lasts */
+  long: number;
+  /** with what those made, so his level can leave them out */
+  longYards: number;
+}
+
 /** everything counted at one state, plus who touched it there */
 interface Counted extends StateCell {
-  byPlayer: Map<string, {
-    touches: number; yards: number; scores: number;
-    /** and how often he breaks a long one, which is his own and lasts */
-    long: number;
-    /** with what those made, so his level can leave them out */
-    longYards: number;
-  }>;
+  byPlayer: Map<string, PlayerCounts>;
   /**
    * Where each gain came from, since a gain is cut off by the goal
    * line. A play from the forty one cannot make more than forty one
@@ -196,26 +199,179 @@ const emptyCounted = (): Counted =>
 interface Drawable { yards: number[]; from: number[] }
 
 /**
- * The same, split by what it was worth and carrying each play's
- * weight, worked out once while the pool is being split.
+ * The cells one pool gathered, in the order the widening reached them,
+ * with what is added up over them. A draw reads the gains where they sit
+ * in the cells, in that same order, rather than from a copy of them made
+ * for every state a game passes through.
  */
-interface Weighted { yards: number[]; weights: number[]; total: number }
+interface Gathered {
+  cells: Counted[];
+  plays: number;
+  runs: number;
+  scores: number;
+  named: Rate;
+  /** how many gains the cells have between them */
+  gains: number;
+}
 
-const emptyWeighted = (): Weighted => ({ yards: [], weights: [], total: 0 });
+/** every gain in a pool's cells added up, one after another in its order */
+export const yardsOver = (cells: Counted[]) => {
+  let sum = 0;
 
-/** one gain out of a split pool, the near ones coming up more often */
-const drawWeighted = (pool: Weighted, uniform: () => number): number => {
-  let left = uniform() * pool.total;
-
-  for (let i = 0; i < pool.yards.length; i++) {
-    left -= pool.weights[i]!;
-
-    if (left <= 0) {
-      return pool.yards[i]!;
+  for (const cell of cells) {
+    for (const gained of cell.yards) {
+      sum += gained;
     }
   }
 
-  return pool.yards[pool.yards.length - 1]!;
+  return sum;
+};
+
+/** one player's counts over a pool's cells, added up in the pool's order */
+export const hisOver = (cells: Counted[], player: string) => {
+  let his: PlayerCounts | undefined;
+
+  for (const cell of cells) {
+    const own = cell.byPlayer.get(player);
+
+    if (!own) {
+      continue;
+    }
+
+    his ??= { touches: 0, yards: 0, scores: 0, long: 0, longYards: 0 };
+    his.touches += own.touches;
+    his.yards += own.yards;
+    his.scores += own.scores;
+    his.long += own.long;
+    his.longYards += own.longYards;
+  }
+
+  return his;
+};
+
+/**
+ * Where a draw reads its gains from: lists read one after another,
+ * keeping only the gains made at least `atLeast` from the goal when that
+ * is set.
+ */
+interface DrawFrom { parts: Drawable[]; atLeast?: number }
+
+const keeps = (from: DrawFrom, part: Drawable, i: number) =>
+  from.atLeast === undefined || (part.from[i] ?? 0) >= from.atLeast;
+
+/** which end of a pool a gain is drawn from */
+type End = "nowhere" | "short" | "long";
+
+const endOf = (gained: number): End =>
+  gained <= 0 ? "nowhere" : gained >= 20 ? "long" : "short";
+
+/** how many gains a pool has at one end, and what they weigh together */
+interface EndTally { count: number; total: number }
+
+/** a pool split by end, each gain weighted by how near it was made */
+interface Tallied {
+  ends: Record<End, EndTally>;
+  /**
+   * Every gain's weight added up. Every share is taken over the same
+   * weights the draw uses; reading how often the pool gained nothing off
+   * the raw counts while drawing off the weighted ones would answer two
+   * different questions about one pool.
+   */
+  weight: number;
+  /**
+   * What this pool makes on an ordinary touch, counted while it is being
+   * split so it costs nothing. On a throw the pool is the one at this
+   * player's own depth, and that is what his level has to be measured
+   * against: a deep threat is already being dealt deep throws, so
+   * measuring him against every throw in the league credits him for the
+   * depth a second time.
+   */
+  plain: number;
+  plainWeight: number;
+  plainOf: number;
+}
+
+export const tallyEnds = (from: DrawFrom, yardline: number): Tallied => {
+  const tallied: Tallied = {
+    ends: {
+      nowhere: { count: 0, total: 0 },
+      short: { count: 0, total: 0 },
+      long: { count: 0, total: 0 },
+    },
+    weight: 0, plain: 0, plainWeight: 0, plainOf: 0,
+  };
+
+  for (const part of from.parts) {
+    for (let i = 0; i < part.yards.length; i++) {
+      if (!keeps(from, part, i)) {
+        continue;
+      }
+
+      const gained = part.yards[i]!;
+      const near = nearnessWeight(
+        Math.abs((part.from[i] ?? yardline) - yardline));
+      tallied.weight += near;
+
+      if (gained < 20) {
+        tallied.plain += gained * near;
+        tallied.plainWeight += near;
+        tallied.plainOf++;
+      }
+
+      const into = tallied.ends[endOf(gained)];
+      into.count++;
+      into.total += near;
+    }
+  }
+
+  return tallied;
+};
+
+/**
+ * One gain from one end of a pool, the near ones coming up more often.
+ * Each weight is worked out again the way the tally worked it out, so
+ * the draw walks the same weights in the same order.
+ */
+export const drawAt = (
+  from: DrawFrom, end: End, total: number, yardline: number,
+  uniform: () => number,
+): number => {
+  let left = uniform() * total;
+  let last: number | undefined;
+
+  for (const part of from.parts) {
+    for (let i = 0; i < part.yards.length; i++) {
+      const gained = part.yards[i]!;
+
+      if (!keeps(from, part, i) || endOf(gained) !== end) {
+        continue;
+      }
+
+      last = gained;
+      left -= nearnessWeight(Math.abs((part.from[i] ?? yardline) - yardline));
+
+      if (left <= 0) {
+        return gained;
+      }
+    }
+  }
+
+  return last!;
+};
+
+/** how many gains in these cells were made at least this far out */
+export const withRoom = (cells: Counted[], yardline: number) => {
+  let count = 0;
+
+  for (const cell of cells) {
+    for (let i = 0; i < cell.yards.length; i++) {
+      if ((cell.from[i] ?? 0) >= yardline) {
+        count++;
+      }
+    }
+  }
+
+  return count;
 };
 
 /**
@@ -226,14 +382,19 @@ const drawWeighted = (pool: Weighted, uniform: () => number): number => {
  * because that is what he does over a season. The situation says what
  * depths happen here and his leaning says which of them are his.
  */
-const bandHere = (
-  cell: Counted, leaning: number[], uniform: () => number,
+export const bandHere = (
+  cells: Counted[], leaning: number[], uniform: () => number,
 ): number => {
   const weights: number[] = [];
   let total = 0;
 
   for (let band = 0; band < leaning.length; band++) {
-    const here = (cell.byDepth.get(band) ?? []).length;
+    let here = 0;
+
+    for (const cell of cells) {
+      here += cell.byDepth.get(band)?.length ?? 0;
+    }
+
     const weight = here * (leaning[band] ?? 1);
     weights.push(weight);
     total += weight;
@@ -266,16 +427,25 @@ const bandHere = (
  * pool of all throws is worth six. A band next door is much closer to
  * the truth than no band at all.
  */
-const gainsAtDepth = (cell: Counted, band: number, room = 0): Drawable => {
+export const gainsAtDepth = (
+  cells: Counted[], band: number, room = 0,
+): Drawable => {
   const found: Drawable = { yards: [], from: [] };
   const take = (at: number) => {
-    const gains = cell.byDepth.get(at) ?? [];
-    const from = cell.byDepthFrom.get(at) ?? [];
+    for (const cell of cells) {
+      const gains = cell.byDepth.get(at);
 
-    for (let i = 0; i < gains.length; i++) {
-      if (room <= 0 || (from[i] ?? 0) >= room) {
-        found.yards.push(gains[i]!);
-        found.from.push(from[i] ?? 0);
+      if (!gains) {
+        continue;
+      }
+
+      const from = cell.byDepthFrom.get(at) ?? [];
+
+      for (let i = 0; i < gains.length; i++) {
+        if (room <= 0 || (from[i] ?? 0) >= room) {
+          found.yards.push(gains[i]!);
+          found.from.push(from[i] ?? 0);
+        }
       }
     }
   };
@@ -294,26 +464,9 @@ const gainsAtDepth = (cell: Counted, band: number, room = 0): Drawable => {
    * Better a throw that could not have run as far as this one might
    * than no throw of this depth at all.
    */
-  return room > 0 && found.yards.length < 20 ? gainsAtDepth(cell, band) : found;
-};
-
-/**
- * The gains from spots with at least this much field in front of them.
- *
- * Kept in the order they were counted, so the yards and where they
- * came from line up.
- */
-const drawableForYardline = (cell: Counted, yardline: number): Drawable => {
-  const found: Drawable = { yards: [], from: [] };
-
-  for (let i = 0; i < cell.yards.length; i++) {
-    if ((cell.from[i] ?? 0) >= yardline) {
-      found.yards.push(cell.yards[i]!);
-      found.from.push(cell.from[i]!);
-    }
-  }
-
-  return found;
+  return room > 0 && found.yards.length < 20
+    ? gainsAtDepth(cells, band)
+    : found;
 };
 
 const countIn = (rate: Rate, yards: number): void => {
@@ -2198,43 +2351,20 @@ export function fitPlayFactors(
   const gather = (
     state: PlayState, least: number, looseness: number, call?: Call,
   ) => {
-    const pooled = emptyCounted();
+    const pooled: Gathered = {
+      cells: [], plays: 0, runs: 0, scores: 0, named: emptyRate(), gains: 0,
+    };
 
     walkWidening([rowsAt(call)], state, looseness, ({ cell }) => {
+      pooled.cells.push(cell);
       pooled.plays += cell.plays;
       pooled.runs += cell.runs;
       pooled.scores += cell.scores;
-      // pushed rather than concatenated: rebuilding the array at every
-      // spot makes the gather quadratic, and a game that plays out
-      // asks for far more distinct states than one that does not
-      for (const gained of cell.yards) pooled.yards.push(gained);
-      for (const spot of cell.from) pooled.from.push(spot);
-      for (const [band, gains] of cell.byDepth) {
-        const already = pooled.byDepth.get(band) ?? [];
-        for (const gained of gains) already.push(gained);
-        pooled.byDepth.set(band, already);
-        // in step with the gains above, so the room filter still lines
-        // up after several cells have been gathered into one
-        const spots = pooled.byDepthFrom.get(band) ?? [];
-        for (const spot of cell.byDepthFrom.get(band) ?? []) spots.push(spot);
-        pooled.byDepthFrom.set(band, spots);
-      }
-
+      pooled.gains += cell.yards.length;
       pooled.named.touches += cell.named.touches;
       pooled.named.yards += cell.named.yards;
       pooled.named.long += cell.named.long;
       pooled.named.longYards += cell.named.longYards;
-
-      for (const [player, own] of cell.byPlayer) {
-        const already = pooled.byPlayer.get(player) ??
-          { touches: 0, yards: 0, scores: 0, long: 0, longYards: 0 };
-        already.touches += own.touches;
-        already.yards += own.yards;
-        already.scores += own.scores;
-        already.long += own.long;
-        already.longYards += own.longYards;
-        pooled.byPlayer.set(player, already);
-      }
     }, () => pooled.plays >= least);
 
     return pooled;
@@ -2328,7 +2458,7 @@ export function fitPlayFactors(
    * the same states repeat and the memory flat.
    */
   const REMEMBERS = Number(process.env["REMEMBERS"] ?? 30000);
-  const remembered = new Map<number | string, Counted>();
+  const remembered = new Map<number | string, Gathered>();
   /**
    * Half goes rather than all of it: clearing everything made every
    * following lookup a fresh gather, and a map iterates in insertion
@@ -2356,7 +2486,7 @@ export function fitPlayFactors(
    * caller that draws gains from it puts the situation back as a
    * ratio.
    */
-  const settledAt = new WeakMap<Counted, number>();
+  const settledAt = new WeakMap<Gathered, number>();
   const at = (state: PlayState, least: number, call?: Call) => {
     makeRoom(remembered);
     const key = memoKey(callCode(call), state, least);
@@ -2690,21 +2820,23 @@ export function fitPlayFactors(
     // the pool a draw here actually comes from, so the crossing share
     // is measured over the gains being settled and not over a wider
     // pool the draw never sees
-    const cell = at(state, goalPoolLeast(state), call);
+    const pool = at(state, goalPoolLeast(state), call);
     let crossed = 0;
     let gainful = 0;
 
-    for (const yards of cell.yards) {
-      if (yards >= state.yardline) {
-        crossed++;
-      }
+    for (const cell of pool.cells) {
+      for (const yards of cell.yards) {
+        if (yards >= state.yardline) {
+          crossed++;
+        }
 
-      if (yards > 0) {
-        gainful++;
+        if (yards > 0) {
+          gainful++;
+        }
       }
     }
 
-    const drawn = Math.max(1, cell.yards.length);
+    const drawn = Math.max(1, pool.gains);
     const crossShare = crossed / drawn;
     const found = POOL_WASTE
       ? scoreRateAt(state, call)
@@ -3791,10 +3923,9 @@ export function fitPlayFactors(
     },
     gains: (state, call, player, uniform, sides) => {
       const cell = at(state, goalPoolLeast(state), call);
-      const own = cell.byPlayer.get(player);
-      const pool: Drawable = { yards: cell.yards, from: cell.from };
+      const pool: DrawFrom = { parts: cell.cells };
 
-      if (!pool.yards.length) {
+      if (!cell.gains) {
         return 4;
       }
 
@@ -3833,7 +3964,7 @@ export function fitPlayFactors(
        */
       const atDepth = depth && call === "pass" && player
         ? gainsAtDepth(
-            cell, bandHere(cell, depth.leaningOf(player), uniform),
+            cell.cells, bandHere(cell.cells, depth.leaningOf(player), uniform),
             state.yardline <= DEPTH_ROOM_UPTO ? state.yardline : 0,
           )
         : undefined;
@@ -3858,51 +3989,16 @@ export function fitPlayFactors(
       const hadRoom = atDepth || state.yardline <= settings.roomBeyond ||
         state.yardline > settings.roomUpTo || process.env["NO_ROOM"]
         ? undefined
-        : drawableForYardline(cell, state.yardline);
-      const drawFrom = atDepth && atDepth.yards.length >= 20 ? atDepth
-        : hadRoom && hadRoom.yards.length >= settings.leastWithRoom ? hadRoom
+        : withRoom(cell.cells, state.yardline);
+      const drawFrom: DrawFrom = atDepth && atDepth.yards.length >= 20
+        ? { parts: [atDepth] }
+        : hadRoom !== undefined && hadRoom >= settings.leastWithRoom
+        ? { parts: cell.cells, atLeast: state.yardline }
         : pool;
-      const longOnes = emptyWeighted();
-      const shortOnes = emptyWeighted();
-      const wentNowhere = emptyWeighted();
-      /**
-       * What this pool makes on an ordinary touch, counted while it is
-       * being split so it costs nothing. On a throw the pool is the one
-       * at this player's own depth, and that is what his level has to be
-       * measured against: a deep threat is already being dealt deep
-       * throws, so measuring him against every throw in the league
-       * credits him for the depth a second time.
-       */
-      let poolPlain = 0;
-      let poolPlainOf = 0;
-      let poolPlainWeight = 0;
-      /**
-       * Every share below is taken over the same weights the draw
-       * uses. Reading how often the pool gained nothing off the raw
-       * counts while drawing off the weighted ones would answer two
-       * different questions about one pool.
-       */
-      let poolWeight = 0;
-
-      for (let i = 0; i < drawFrom.yards.length; i++) {
-        const gained = drawFrom.yards[i]!;
-        const near = nearnessWeight(
-          Math.abs((drawFrom.from[i] ?? state.yardline) - state.yardline));
-        poolWeight += near;
-
-        if (gained < 20) {
-          poolPlain += gained * near;
-          poolPlainWeight += near;
-          poolPlainOf++;
-        }
-
-        const into = gained <= 0 ? wentNowhere
-          : gained >= 20 ? longOnes
-          : shortOnes;
-        into.yards.push(gained);
-        into.weights.push(near);
-        into.total += near;
-      }
+      const tallied = tallyEnds(drawFrom, state.yardline);
+      const { ends } = tallied;
+      const { nowhere: wentNowhere, short: shortOnes, long: longOnes } = ends;
+      const poolWeight = tallied.weight;
 
       /**
        * Whether it went anywhere at all, decided before how far.
@@ -3919,8 +4015,10 @@ export function fitPlayFactors(
             wentNowhereHere * playLevel.stuffedBy(state, call, player, sides)))
         : Math.min(0.95, wentNowhereHere);
 
-      if (wentNowhere.yards.length && uniform() < stuffed) {
-        return drawWeighted(wentNowhere, uniform);
+      if (wentNowhere.count && uniform() < stuffed) {
+        return drawAt(
+          drawFrom, "nowhere", wentNowhere.total, state.yardline, uniform,
+        );
       }
 
       const gainful = longOnes.total + shortOnes.total;
@@ -3934,6 +4032,7 @@ export function fitPlayFactors(
        * would make every player look twice as good near the line.
        */
       const wide = byPlayerOf[call].get(player);
+      const own = hisOver(cell.cells, player);
       const atState = own && own.touches >= settings.leastForPlayer
         ? { his: own, league: cell.named }
         : undefined;
@@ -3945,11 +4044,11 @@ export function fitPlayFactors(
             leagueLong * (found.his.long / found.his.touches) /
               (found.league.long / found.league.touches)))
         : leagueLong;
-      const end = uniform() < hisLong && longOnes.yards.length ? longOnes
-        : shortOnes.yards.length ? shortOnes
-        : longOnes.yards.length ? longOnes
-        : wentNowhere;
-      const drawn = drawWeighted(end, uniform);
+      const end: End = uniform() < hisLong && longOnes.count ? "long"
+        : shortOnes.count ? "short"
+        : longOnes.count ? "long"
+        : "nowhere";
+      const drawn = drawAt(drawFrom, end, ends[end].total, state.yardline, uniform);
       /**
        * What his own per-touch history says, when a caller has handed
        * the rates in. It replaces the level below rather than stacking
@@ -3992,8 +4091,8 @@ export function fitPlayFactors(
        * Measured against the pool the draw came from when that pool is
        * his own depth, and against the league on this call otherwise.
        */
-      const atHisDepth = ORDINARY_LEVEL && atDepth && poolPlainOf >= 20
-        ? poolPlain / poolPlainWeight
+      const atHisDepth = ORDINARY_LEVEL && atDepth && tallied.plainOf >= 20
+        ? tallied.plain / tallied.plainWeight
         : 0;
       const league = !ORDINARY_LEVEL
         ? found.league.yards / Math.max(1, found.league.touches)
@@ -4068,7 +4167,7 @@ export function fitPlayFactors(
        */
       const leagueYards = cell.plays === 0
         ? 0
-        : cell.yards.reduce((a, b) => a + b, 0) / cell.plays;
+        : yardsOver(cell.cells) / cell.plays;
       const held = (found: { plays: number; yardsSum: number }) => {
         if (leagueYards <= 0 || found.plays < settings.leastForSide) {
           return 1;

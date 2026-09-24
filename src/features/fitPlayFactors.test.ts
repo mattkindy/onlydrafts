@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CountedPlays, GoalSample, PlayRow } from "./fitPlayFactors.js";
 import {
-  keysAt, marginBand, stateKey, timeBand, wideningPacked,
+  keysAt, marginBand, nearnessWeight, stateKey, timeBand, wideningPacked,
   type Call, type PlayState,
 } from "../model/playFactors.js";
 import { seededRng } from "../sim/rng.js";
@@ -972,6 +972,237 @@ describe("a player's touches over a pool, added up once", () => {
     hisTouches(pool, "Back");
     expect(asked).toBe(once);
     expect(once).toBeGreaterThan(before);
+  });
+});
+
+describe("a pool's gains read where they sit in its cells", () => {
+  /** the same league with a depth on each throw to a player */
+  const thrownRows = () => scatteredRows().map((row, i) =>
+    row.call === "pass" && row.player ? { ...row, airYards: (i % 45) - 5 } : row);
+
+  /** the pool as the gather used to build it, every cell copied into one */
+  const merged = (cells: Cell[]) => {
+    const one = {
+      yards: [] as number[], from: [] as number[],
+      byDepth: new Map<number, number[]>(),
+      byDepthFrom: new Map<number, number[]>(),
+      byPlayer: new Map<string, {
+        touches: number; yards: number; scores: number;
+        long: number; longYards: number;
+      }>(),
+    };
+
+    for (const cell of cells) {
+      one.yards.push(...cell.yards);
+      one.from.push(...cell.from);
+
+      for (const [band, gains] of cell.byDepth) {
+        one.byDepth.set(band, [...(one.byDepth.get(band) ?? []), ...gains]);
+        one.byDepthFrom.set(band, [
+          ...(one.byDepthFrom.get(band) ?? []),
+          ...(cell.byDepthFrom.get(band) ?? []),
+        ]);
+      }
+
+      for (const [player, own] of cell.byPlayer) {
+        const already = one.byPlayer.get(player) ??
+          { touches: 0, yards: 0, scores: 0, long: 0, longYards: 0 };
+        already.touches += own.touches;
+        already.yards += own.yards;
+        already.scores += own.scores;
+        already.long += own.long;
+        already.longYards += own.longYards;
+        one.byPlayer.set(player, already);
+      }
+    }
+
+    return one;
+  };
+
+  type Split = { yards: number[]; weights: number[]; total: number };
+
+  /** the copy split by end the way the draw used to split it */
+  const splitAsCopied = (yards: number[], from: number[], yardline: number) => {
+    const ends: Record<"nowhere" | "short" | "long", Split> = {
+      nowhere: { yards: [], weights: [], total: 0 },
+      short: { yards: [], weights: [], total: 0 },
+      long: { yards: [], weights: [], total: 0 },
+    };
+    let weight = 0;
+    let plain = 0;
+
+    for (let i = 0; i < yards.length; i++) {
+      const gained = yards[i]!;
+      const near = nearnessWeight(Math.abs((from[i] ?? yardline) - yardline));
+      weight += near;
+
+      if (gained < 20) {
+        plain += gained * near;
+      }
+
+      const into = gained <= 0 ? ends.nowhere
+        : gained >= 20 ? ends.long
+        : ends.short;
+      into.yards.push(gained);
+      into.weights.push(near);
+      into.total += near;
+    }
+
+    return { ends, weight, plain };
+  };
+
+  const drawAsCopied = (split: Split, uniform: () => number) => {
+    let left = uniform() * split.total;
+
+    for (let i = 0; i < split.yards.length; i++) {
+      left -= split.weights[i]!;
+
+      if (left <= 0) {
+        return split.yards[i]!;
+      }
+    }
+
+    return split.yards[split.yards.length - 1]!;
+  };
+
+  it("weighs and draws each end the way the copy did", async () => {
+    vi.resetModules();
+    const loaded = await import("./fitPlayFactors.js");
+    const counted = loaded.countPlays(scatteredRows());
+    let drawn = 0;
+
+    for (const call of ["run", "pass"] as const) {
+      const rows = loaded.rowsOf(loaded.cellsUnder(counted.cells, call));
+
+      for (const state of scatteredStates()) {
+        const pool = loaded.widenedCells(state, rows).upTo(300);
+        const whole = merged(pool);
+        const y = state.yardline;
+
+        for (const atLeast of [undefined, y]) {
+          const kept = whole.yards.flatMap((_, i) =>
+            atLeast === undefined || (whole.from[i] ?? 0) >= atLeast ? [i] : []);
+          const copied = splitAsCopied(
+            kept.map((i) => whole.yards[i]!), kept.map((i) => whole.from[i]!), y,
+          );
+          const from = { parts: pool, atLeast };
+          const tallied = loaded.tallyEnds(from, y);
+
+          expect(tallied.weight).toBe(copied.weight);
+          expect(tallied.plain).toBe(copied.plain);
+
+          for (const end of ["nowhere", "short", "long"] as const) {
+            expect(tallied.ends[end].count).toBe(copied.ends[end].yards.length);
+            expect(tallied.ends[end].total).toBe(copied.ends[end].total);
+
+            if (!copied.ends[end].yards.length) {
+              continue;
+            }
+
+            for (let seed = 1; seed <= 6; seed++) {
+              expect(loaded.drawAt(
+                from, end, tallied.ends[end].total, y, seededRng(seed),
+              )).toBe(drawAsCopied(copied.ends[end], seededRng(seed)));
+              drawn++;
+            }
+          }
+        }
+
+        expect(loaded.withRoom(pool, y))
+          .toBe(whole.from.filter((spot) => spot >= y).length);
+        expect(loaded.yardsOver(pool))
+          .toBe(whole.yards.reduce((a, b) => a + b, 0));
+
+        for (const player of ["Back", "Wideout", "Slot", "End", "Nobody"]) {
+          expect(loaded.hisOver(pool, player)).toEqual(whole.byPlayer.get(player));
+        }
+      }
+    }
+
+    expect(drawn).toBeGreaterThan(200);
+  });
+
+  it("finds the same gains at a depth as the copy did", async () => {
+    vi.resetModules();
+    const loaded = await import("./fitPlayFactors.js");
+    const counted = loaded.countPlays(thrownRows());
+    const passes = loaded.rowsOf(loaded.cellsUnder(counted.cells, "pass"));
+    const leaning = [0.5, 1, 1.5, 1, 2, 0.7];
+
+    /** the depth lookup as it read the copied pool */
+    const atDepthAsCopied = (
+      whole: ReturnType<typeof merged>, band: number, room = 0,
+    ): { yards: number[]; from: number[] } => {
+      const found = { yards: [] as number[], from: [] as number[] };
+      const take = (at: number) => {
+        const gains = whole.byDepth.get(at) ?? [];
+        const from = whole.byDepthFrom.get(at) ?? [];
+
+        for (let i = 0; i < gains.length; i++) {
+          if (room <= 0 || (from[i] ?? 0) >= room) {
+            found.yards.push(gains[i]!);
+            found.from.push(from[i] ?? 0);
+          }
+        }
+      };
+
+      take(band);
+
+      for (let step = 1; step < 6 && found.yards.length < 40; step++) {
+        take(band - step);
+        take(band + step);
+      }
+
+      return room > 0 && found.yards.length < 20
+        ? atDepthAsCopied(whole, band)
+        : found;
+    };
+
+    const bandAsCopied = (
+      whole: ReturnType<typeof merged>, uniform: () => number,
+    ) => {
+      const weights = leaning.map((lean, band) =>
+        (whole.byDepth.get(band) ?? []).length * lean);
+      const total = weights.reduce((a, b) => a + b, 0);
+
+      if (total <= 0) {
+        return 0;
+      }
+
+      let left = uniform() * total;
+
+      for (let band = 0; band < weights.length; band++) {
+        left -= weights[band]!;
+
+        if (left <= 0) {
+          return band;
+        }
+      }
+
+      return weights.length - 1;
+    };
+
+    let found = 0;
+
+    for (const state of scatteredStates()) {
+      const pool = loaded.widenedCells(state, passes).upTo(300);
+      const whole = merged(pool);
+
+      for (let band = 0; band < leaning.length; band++) {
+        for (const room of [0, state.yardline, 30]) {
+          const atDepth = loaded.gainsAtDepth(pool, band, room);
+          expect(atDepth).toEqual(atDepthAsCopied(whole, band, room));
+          found += atDepth.yards.length;
+        }
+      }
+
+      for (let seed = 1; seed <= 6; seed++) {
+        expect(loaded.bandHere(pool, leaning, seededRng(seed)))
+          .toBe(bandAsCopied(whole, seededRng(seed)));
+      }
+    }
+
+    expect(found).toBeGreaterThan(1000);
   });
 });
 
