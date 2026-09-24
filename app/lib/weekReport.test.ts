@@ -4,7 +4,7 @@ import type { GameState } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
 import type { SlateRow } from "./slate.ts";
 import {
-  AWARD_SAYS, bestPointsFor, quantileSays, reportFor, type Award,
+  AWARD_SAYS, bestPointsFor, pregameOf, quantileSays, reportFor, type Award,
   type ReportInput,
 } from "./weekReport.ts";
 
@@ -353,6 +353,20 @@ describe("bestPointsFor", () => {
     const of = side("Jem", flat(70));
 
     expect(bestPointsFor(of, ["QB"], rows, undefined)).toBeCloseTo(10);
+  });
+});
+
+describe("pregameOf", () => {
+  it("prices a game from before kickoff, whatever the sides have scored since", () => {
+    const up = side("up", [40, 0, 0, 0, 0, 0, 0]);
+    const down = side("down", [0, 0, 0, 0, 0, 0, 0]);
+    const [before] = pregameOf([{ sides: [up, down] }], rows, undefined, 2000);
+
+    // both sides start seven players projected 12, so it is a coin flip
+    expect(before!.odds[0]).toBeGreaterThan(0.35);
+    expect(before!.odds[0]).toBeLessThan(0.65);
+    expect(before!.projected[0]).toBeCloseTo(before!.projected[1], 0);
+    expect(up.starters[0]!.points).toBe(40);
   });
 });
 

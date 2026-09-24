@@ -213,9 +213,8 @@ const finishedGame = (
 /**
  * Every game as it looked before kickoff.
  *
- * Each team in the week is put back to pre, since a side that has scored
- * would otherwise read as a game already over and the chance would come
- * back as the result.
+ * Each team is put back to pre and each starter to no points. A side that
+ * kept its points would read as a full week stacked on what it already has.
  */
 export function pregameOf(
   games: Matchup[], rows: Map<string, SlateRow>, lines?: Lines,
@@ -236,11 +235,25 @@ export function pregameOf(
   }
 
   return games.map((game) => {
-    const { odds, projected } = standingFor(game, rows, before, lines, draws);
+    const { odds, projected } = standingFor(
+      beforeKickoff(game), rows, before, lines, draws);
 
     return { odds, projected };
   });
 }
+
+/** a side with nobody having scored yet */
+const scoreless = (side: Side): Side => ({
+  ...side,
+  points: 0,
+  starters: side.starters.map((starter) => ({ ...starter, points: 0 })),
+  bench: side.bench.map((player) => ({ ...player, points: 0 })),
+});
+
+const beforeKickoff = (game: Matchup): Matchup => ({
+  ...game,
+  sides: [scoreless(game.sides[0]), scoreless(game.sides[1])],
+});
 
 /** a player in the pool a best lineup is picked from */
 interface Scored {
