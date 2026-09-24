@@ -1617,7 +1617,7 @@ export interface SidePool {
  * The rows a pass at this looseness reads, each with its place among the
  * keys the widening builds for one spot, which is score band order.
  */
-const rowsAtLooseness = (
+const rowsFor = (
   looseness: number, down: number, time: number, band: number,
 ): [number, number][] => {
   if (looseness >= 2) {
@@ -1633,11 +1633,37 @@ const rowsAtLooseness = (
     .map((b) => [rowOf(down, time, b), b - band + 1]);
 };
 
+/** the same lists, built once for each of the few ways a walk can ask */
+const rowsKept = new Map<number, [number, number][]>();
+
+const rowsAtLooseness = (
+  looseness: number, down: number, time: number, band: number,
+): [number, number][] => {
+  if (!wholeIn(looseness, 2) || !wholeIn(down, 4) || !wholeIn(time, 4) ||
+      !wholeIn(band, 8)) {
+    return rowsFor(looseness, down, time, band);
+  }
+
+  const key = ((looseness * 5 + down) * 5 + time) * 9 + band;
+  const already = rowsKept.get(key);
+
+  if (already) {
+    return already;
+  }
+
+  const made = rowsFor(looseness, down, time, band);
+  rowsKept.set(key, made);
+
+  return made;
+};
+
 /**
  * Cells laid out by spot for a walk, kept between walks and emptied after
- * each one, with a fresh one for a walk started inside another.
+ * each one, with a fresh one for a walk started inside another. Each has
+ * beside it the slots the walk filled, so they can be emptied again.
  */
 const layouts: (PlacedCell | undefined)[][] = [];
+const fillings: number[][] = [];
 let layoutsInUse = 0;
 
 /**
@@ -1658,8 +1684,10 @@ export const walkWidening = (
   const sets = rowSets.length;
   const perSpot = 3 * sets;
   const bySpot = layouts[layoutsInUse] ?? [];
+  const filled = fillings[layoutsInUse] ?? [];
+  fillings[layoutsInUse] = filled;
   layouts[layoutsInUse++] = bySpot;
-  const filled: number[] = [];
+  let fills = 0;
   let lastSpot = 0;
 
   for (const [row, within] of rowsAtLooseness(
@@ -1684,7 +1712,7 @@ export const walkWidening = (
 
         const slot = rank * perSpot + within * sets + set;
         bySpot[slot] = cells[i];
-        filled.push(slot);
+        filled[fills++] = slot;
         lastSpot = Math.max(lastSpot, rank);
       }
     }
@@ -1714,8 +1742,8 @@ export const walkWidening = (
       }
     }
   } finally {
-    for (const slot of filled) {
-      bySpot[slot] = undefined;
+    for (let fill = 0; fill < fills; fill++) {
+      bySpot[filled[fill]!] = undefined;
     }
 
     layoutsInUse--;
@@ -1792,6 +1820,9 @@ export interface WidenedCells {
   upTo: (least: number) => Counted[];
 }
 
+/** a pool with nothing in it, shared, since nothing ever adds to a pool */
+const NO_CELLS: Counted[] = [];
+
 /** the first spot whose running plays reach `least`, or -1 */
 const firstReaching = (plays: number[], least: number) => {
   if (plays.length === 0 || plays[plays.length - 1]! < least) {
@@ -1842,7 +1873,8 @@ export const widenedCells = (
 
   /**
    * The same prefix of the same walk every time, so a cut is kept by its
-   * length and handed back as the same array.
+   * length and handed back as the same array. A cut of the whole walk is
+   * the walk's own list, which nothing adds to once the walk is done.
    */
   const cutAt = (looseness: number, cells: Counted[], end: number) => {
     const already = cuts[looseness]!.get(end);
@@ -1851,7 +1883,7 @@ export const widenedCells = (
       return already;
     }
 
-    const cut = cells.slice(0, end);
+    const cut = end === cells.length ? cells : cells.slice(0, end);
     cuts[looseness]!.set(end, cut);
 
     return cut;
@@ -1889,10 +1921,10 @@ export const widenedCells = (
 
   return {
     upTo: (least) => {
-      let found = cutAt(0, [], 0);
+      let found = cutAt(0, NO_CELLS, 0);
       let plays = 0;
 
-      for (const looseness of [0, 1, 2]) {
+      for (let looseness = 0; looseness < 3; looseness++) {
         if (plays >= least) {
           break;
         }
@@ -2047,6 +2079,46 @@ export const scriptTablesOf = (
 
   return tables;
 };
+
+/**
+ * The three ways a player's own plays are widened, tightest first, and how
+ * far out a play may have been made and still stand in for one here.
+ * Inside the twenty this used to be a flat ten yards at every pass, and
+ * hardly anybody has twenty of his own plays from inside the thirty, so
+ * the draw gave up on 70% of throws inside the ten and fell back to the
+ * pooled one, which gains 4.62 where a targeted throw gains 7.33. That is
+ * where the walk's short goal line came from.
+ */
+interface OwnPass {
+  fits: (plays: PlayStore, state: PlayState, i: number) => boolean;
+  room: number;
+}
+
+const OWN_PASSES: OwnPass[] = [
+  {
+    fits: (plays, state, i) => plays.down[i] === state.down &&
+      Math.abs(plays.toGo[i]! - state.toGo) <= 3 &&
+      Math.abs(plays.yardline[i]! - state.yardline) <= 20,
+    room: 10,
+  },
+  {
+    fits: (plays, state, i) =>
+      Math.abs(plays.yardline[i]! - state.yardline) <= 25,
+    room: 20,
+  },
+  { fits: () => true, room: 35 },
+];
+
+/** whether one of his plays can stand in for a play here, on this pass */
+const standsIn = (
+  plays: PlayStore, state: PlayState, pass: OwnPass, i: number,
+) =>
+  pass.fits(plays, state, i) &&
+  (state.yardline > NEAR_GOAL ||
+    (plays.yardline[i]! <= state.yardline + pass.room &&
+      plays.yardline[i]! >= state.yardline - CLOSER)) &&
+  (state.yardline <= NEAR_GOAL ||
+    plays.yardline[i]! >= state.yardline - FIELD_CLOSER);
 
 /** a call as a small number for a memo key, with no call at all as its own */
 const CALL_CODES: Record<Call | "both", number> = { run: 0, pass: 1, both: 2 };
@@ -3297,6 +3369,23 @@ export function fitPlayFactors(
     return gained;
   };
 
+  /** the sacks and the balls thrown away near each yardline, found once */
+  const wastedNear = new Map<number, PlayStore["wasted"]>();
+  const wastedAround = (store: PlayStore, yardline: number) => {
+    const already = wastedNear.get(yardline);
+
+    if (already) {
+      return already;
+    }
+
+    const near = store.wasted.filter(
+      (w) => Math.abs(w.yardline - yardline) <= 15,
+    );
+    wastedNear.set(yardline, near);
+
+    return near;
+  };
+
   /** widened play lists, one per player and call, built once */
   const pooled: Record<Call, Map<string, Map<string, number[]>>> = {
     run: new Map(), pass: new Map(),
@@ -3333,9 +3422,7 @@ export function fitPlayFactors(
          */
         if (call === "pass" && plays.wasted.length &&
             uniform() < plays.wastedShareAt(state.yardline)) {
-          const near = plays.wasted.filter(
-            (w) => Math.abs(w.yardline - state.yardline) <= 15,
-          );
+          const near = wastedAround(plays, state.yardline);
           const from = near.length >= 100 ? near : plays.wasted;
 
           return {
@@ -3395,47 +3482,18 @@ export function fitPlayFactors(
           return undefined;
         }
 
-        /**
-         * How far out a play may have been made and still stand in for
-         * one here. Inside the twenty this used to be a flat ten yards
-         * at every pass, and hardly anybody has twenty of his own plays
-         * from inside the thirty, so the draw gave up on 70% of throws
-         * inside the ten and fell back to the pooled one, which gains
-         * 4.62 where a targeted throw gains 7.33. That is where the
-         * walk's short goal line came from.
-         */
-        const passes: { fits: (i: number) => boolean; room: number }[] = [
-          {
-            fits: (i) => plays.down[i] === state.down &&
-              Math.abs(plays.toGo[i]! - state.toGo) <= 3 &&
-              Math.abs(plays.yardline[i]! - state.yardline) <= 20,
-            room: 10,
-          },
-          {
-            fits: (i) => Math.abs(plays.yardline[i]! - state.yardline) <= 25,
-            room: 20,
-          },
-          { fits: () => true, room: 35 },
-        ];
-
         // counted then scanned rather than filtered into an array,
         // which is the walk's hottest line and was allocating a pool
         // for every play of every game
-        for (const { fits, room } of passes) {
-          const wanted = (i: number) =>
-            fits(i) &&
-            (state.yardline > NEAR_GOAL ||
-              (plays.yardline[i]! <= state.yardline + room &&
-                plays.yardline[i]! >= state.yardline - CLOSER)) &&
-            (state.yardline <= NEAR_GOAL ||
-              plays.yardline[i]! >= state.yardline - FIELD_CLOSER);
+        for (const pass of OWN_PASSES) {
+          const { room } = pass;
           let count = 0;
           let weight = 0;
           let crossedWeight = 0;
           let dryWeight = 0;
 
           for (const i of his) {
-            if (wanted(i)) {
+            if (standsIn(plays, state, pass, i)) {
               count++;
               const w = FADES[plays.age[i]!] ?? FADES[5]!;
               weight += w;
@@ -3458,7 +3516,7 @@ export function fitPlayFactors(
           let at = his[0]!;
 
           for (const i of his) {
-            if (wanted(i)) {
+            if (standsIn(plays, state, pass, i)) {
               left -= FADES[plays.age[i]!] ?? FADES[5]!;
 
               if (left <= 0) {
