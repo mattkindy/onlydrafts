@@ -294,8 +294,12 @@ export function sleeperOnBoard(
 
 const HOUR = 60 * 60 * 1000;
 
-/** the days a designation lands or a game is played, as a browser numbers them */
-const GAME_DAYS = new Set([0, 1, 4, 5, 6]);
+/** the days a designation lands or a game is played, in US Eastern time */
+const GAME_DAYS = new Set(["Sun", "Mon", "Thu", "Fri", "Sat"]);
+
+/** the weekday on the east coast, where the league's clock runs */
+const easternDay = new Intl.DateTimeFormat(
+  "en-US", { timeZone: "America/New_York", weekday: "short" });
 
 /**
  * How long a player file is good for.
@@ -307,29 +311,53 @@ const GAME_DAYS = new Set([0, 1, 4, 5, 6]);
  * out on Saturday or an hour before kickoff, and an owner has to hear it.
  */
 export function playerFileGoodFor(now: Date = new Date()): number {
-  return GAME_DAYS.has(now.getDay()) ? 3 * HOUR : 24 * HOUR;
+  return GAME_DAYS.has(easternDay.format(now)) ? 3 * HOUR : 24 * HOUR;
 }
 
-/** Sleeper's whole player file, trimmed and kept for the day */
-let sleeperFile: SleeperPlayers | null = null;
+interface KeptFile<T> {
+  at: number;
+  players: T;
+}
 
-export async function sleeperPlayers() {
-  if (sleeperFile) {
-    return sleeperFile;
+/** the player files read this session, by the key each is stored under */
+const readFiles = new Map<string, KeptFile<unknown>>();
+
+const stillGood = (file: KeptFile<unknown>) =>
+  Date.now() - file.at < playerFileGoodFor();
+
+/**
+ * A player file, from this session, from this browser, or read afresh,
+ * whichever is the first still good. An open tab keeps the same file for
+ * as long as a stored one would last, so a tab left open all Sunday still
+ * hears who was ruled out.
+ */
+async function playerFile<T>(key: string, read: () => Promise<T>): Promise<T> {
+  const inMemory = readFiles.get(key) as KeptFile<T> | undefined;
+
+  if (inMemory && stillGood(inMemory)) {
+    return inMemory.players;
   }
 
-  // the old cache never expired, and a browser from last season silently
-  // dropped every newer player from the draft it was watching
-  const cached = stored<{
-    at: number; players: SleeperPlayers;
-  } | null>("players.v6", null);
+  const cached = stored<KeptFile<T> | null>(key, null);
 
-  if (cached && Date.now() - cached.at < playerFileGoodFor()) {
-    sleeperFile = cached.players;
+  if (cached && stillGood(cached)) {
+    readFiles.set(key, cached);
 
     return cached.players;
   }
 
+  const file = { at: Date.now(), players: await read() };
+
+  keep(key, file);
+  readFiles.set(key, file);
+
+  return file.players;
+}
+
+/** Sleeper's whole player file, trimmed */
+export const sleeperPlayers = () => playerFile("players.v6", readSleeperFile);
+
+async function readSleeperFile(): Promise<SleeperPlayers> {
   const raw = await ask("/players/nfl") as Record<string, {
     full_name?: string; position?: string; team?: string | null;
     injury_status?: string | null; injury_body_part?: string | null;
@@ -355,9 +383,6 @@ export async function sleeperPlayers() {
       };
     }
   }
-
-  keep("players.v6", { at: Date.now(), players: trimmed });
-  sleeperFile = trimmed;
 
   return trimmed;
 }
@@ -422,9 +447,6 @@ export interface EspnPlayer {
 
 export type EspnPlayers = Record<string, EspnPlayer>;
 
-/** ESPN's whole player list, trimmed and kept for the day */
-let espnFile: EspnPlayers | null = null;
-
 /**
  * Everyone ESPN has, by the numbers it gives them.
  *
@@ -433,20 +455,10 @@ let espnFile: EspnPlayers | null = null;
  * nobody, so the board would sit blank until somebody picked. This is
  * the list the public site reads and it needs no cookie.
  */
-export async function espnPlayers(season: number): Promise<EspnPlayers> {
-  if (espnFile) {
-    return espnFile;
-  }
+export const espnPlayers = (season: number): Promise<EspnPlayers> =>
+  playerFile("espnPlayers.v2." + season, () => readEspnFile(season));
 
-  const key = "espnPlayers.v2." + season;
-  const cached = stored<{ at: number; players: EspnPlayers } | null>(key, null);
-
-  if (cached && Date.now() - cached.at < playerFileGoodFor()) {
-    espnFile = cached.players;
-
-    return cached.players;
-  }
-
+async function readEspnFile(season: number): Promise<EspnPlayers> {
   const answered = await fetch(
     "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/" +
       season + "/players?scoringPeriodId=0&view=players_wl",
@@ -470,9 +482,6 @@ export async function espnPlayers(season: number): Promise<EspnPlayers> {
       trimmed[player.id] = { n: espnNameOf(player.id, player.fullName, pos), p: pos };
     }
   }
-
-  keep(key, { at: Date.now(), players: trimmed });
-  espnFile = trimmed;
 
   return trimmed;
 }

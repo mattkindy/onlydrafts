@@ -13,7 +13,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   espnPays, espnSlotsOf, listedPlayers, playerFileGoodFor, sleeperOnBoard,
@@ -492,8 +492,53 @@ describe("sleeperOnBoard", () => {
   });
 });
 
+describe("a player file in a tab left open", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("is read again once it is past its time, so a late ruling gets through", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // a Sunday morning on the east coast
+    vi.setSystemTime(new Date("2030-10-06T14:00:00Z"));
+    localStorage.clear();
+
+    let asked = 0;
+
+    globalThis.fetch = (() => {
+      asked++;
+
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        "1": {
+          full_name: "Tyler Boyd", position: "WR", team: "TEN",
+          injury_status: asked > 1 ? "Out" : null,
+        },
+      }) });
+    }) as unknown as typeof fetch;
+
+    const { sleeperPlayers } = await import("./providers.ts");
+
+    await sleeperPlayers();
+    await sleeperPlayers();
+
+    expect(asked).toBe(1);
+
+    vi.setSystemTime(new Date("2030-10-06T17:30:00Z"));
+
+    const later = await sleeperPlayers();
+
+    expect(asked).toBe(2);
+    expect(later["1"]?.hurt).toBe("Out");
+  });
+});
+
 describe("how long a cached player file is good for", () => {
   const hours = (at: string) => playerFileGoodFor(new Date(at)) / (60 * 60 * 1000);
+
+  it("goes by the day on the east coast, wherever the browser is", () => {
+    // Wednesday night in New York is already Thursday in London
+    expect(hours("2026-09-17T02:00:00Z")).toBe(24);
+    // and late Monday night there is Tuesday morning in Berlin
+    expect(hours("2026-09-22T03:30:00Z")).toBe(3);
+  });
 
   it("keeps it for the day early in the week", () => {
     expect(hours("2026-09-15T10:00:00")).toBe(24);

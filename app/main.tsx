@@ -17,7 +17,7 @@ import { rescore, roomFor } from "./lib/board.ts";
 import { keep, stored, normalizeName } from "./lib/store.ts";
 import {
   NeedsEspnCookies, listedPlayers, listedPlayersWith, PROVIDERS, sleeperPlayers,
-  type League, type Matchup,
+  type League, type Matchup, type SleeperPlayers,
 } from "./lib/providers.ts";
 import type { Listed } from "./lib/availability.ts";
 import { markedKeepers, saveMarkedKeepers } from "./lib/keepers.ts";
@@ -256,6 +256,8 @@ function App() {
   const [rereading, setRereading] = useState(false);
   /** who the injury report has listed, for the week's pages as well as the draft */
   const [allListed, setAllListed] = useState<Map<string, Listed>>(() => new Map());
+  /** the player file that list came from, so the same file is not listed twice */
+  const listedFrom = useRef<SleeperPlayers | null>(null);
   // the guard has to be the same object every render, since two reads
   // started from different effects would otherwise not see each other
   const reading = useRef(false);
@@ -288,17 +290,25 @@ function App() {
   }, []);
 
   /**
-   * The injury report's list, read once. Sleeper's file is the same file the
-   * draft view reads and is kept for a day either way, so asking for it
-   * here costs nothing. A read that fails leaves the list empty, and then
-   * every player projects the way he did before, which is the old bug rather
-   * than a new one.
+   * The injury report's list, asked for again each time the league's games
+   * are. Sleeper's file is kept for as long as it is good, so most asks cost
+   * nothing, and a newer file is what brings a Sunday ruling in. A read that
+   * fails keeps the list it had.
    */
   useEffect(() => {
+    let stale = false;
+
     sleeperPlayers()
-      .then((all) => setAllListed(listedPlayers(all)))
-      .catch(() => setAllListed(new Map()));
-  }, []);
+      .then((all) => {
+        if (!stale && all !== listedFrom.current) {
+          listedFrom.current = all;
+          setAllListed(listedPlayers(all));
+        }
+      })
+      .catch(() => undefined);
+
+    return () => { stale = true; };
+  }, [gameReads]);
 
   /** the week itself is only fetched once you ask for a tab that prices one */
   useEffect(() => {
