@@ -6,6 +6,26 @@ import { rescore } from "./lib/board.ts";
 
 const DATA = join(import.meta.dirname, "..", "docs", "data");
 
+/**
+ * The newest week the site lists. An older slate stays on disk after the
+ * build stops writing it, so a test pinned to one keeps passing on a file
+ * nobody ships any more.
+ */
+function latestSlate(): string {
+  const index = JSON.parse(readFileSync(join(DATA, "index.json"), "utf8")) as {
+    weeks: { season: number; week: number }[];
+  };
+  const latest = [...index.weeks]
+    .sort((a, b) => a.season - b.season || a.week - b.week)
+    .pop();
+
+  if (!latest) {
+    throw new Error("docs/data/index.json lists no weeks");
+  }
+
+  return `slate-${latest.season}-${latest.week}.json`;
+}
+
 it("the shipped files load and score end to end", async () => {
   vi.stubGlobal("fetch", async (url: string) => {
     const name = String(url).split("/").pop()!.split("?")[0]!;
@@ -140,9 +160,7 @@ it("prices dropping a first back the way the margin says it should", async () =>
 it("puts a defence in the slate the views can find", async () => {
   const { readSlate } = await import("./lib/slate.ts");
   const { lineOf } = await import("./lib/matchups.ts");
-  const file = JSON.parse(
-    readFileSync(join(DATA, "slate-2026-1.json"), "utf8"),
-  );
+  const file = JSON.parse(readFileSync(join(DATA, latestSlate()), "utf8"));
   const slate = readSlate(file);
   const defences = slate.rows.filter((r) => r.position === "DEF");
 
@@ -156,12 +174,14 @@ it("puts a defence in the slate the views can find", async () => {
     expect(d.opponent, d.name).not.toBe("");
   }
 
+  // any side that plays this week, since a named one can be on its bye
+  const team = defences[0]!.team;
   const rows = new Map(slate.rows.map((r) => [r.playerId, r]));
-  const buffalo = lineOf("buf", rows);
+  const found = lineOf(team.toLowerCase(), rows);
 
-  expect(buffalo?.position).toBe("DEF");
-  expect(buffalo?.team).toBe("BUF");
-  expect(buffalo?.blend).toBeGreaterThan(1);
+  expect(found?.position).toBe("DEF");
+  expect(found?.team).toBe(team);
+  expect(found?.blend).toBeGreaterThan(1);
 });
 
 /**

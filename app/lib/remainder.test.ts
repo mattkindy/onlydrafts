@@ -1,5 +1,9 @@
 /**
- * The browser engine, against the tables the site ships.
+ * The browser engine, against a copy of the 2025 tables the site
+ * shipped. The copy is kept with the test fixtures so that the site
+ * dropping or rebuilding its own file cannot turn these tests off. When
+ * the table layout changes, the shape check below fails and the copy
+ * needs refreshing from a fresh build.
  *
  * The full check asks the Node simulator the same questions off a
  * season of checkpoints, and it wants the raw play by play. So what
@@ -7,7 +11,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   defenceKeyOf, leagueOf, remainderFor, type RemainderState,
 } from "./remainder.ts";
@@ -15,7 +20,7 @@ import {
   bytesOf, DIST_BANDS, MARGIN_BANDS, TIME_BANDS, type SimTables,
 } from "./simTables.ts";
 
-const PATH = "docs/data/sim-2025.json";
+const PATH = join(import.meta.dirname, "..", "fixtures", "sim-2025.json");
 const PPR = {
   pass_yd: 0.04, pass_td: 4, pass_int: -2, rush_yd: 0.1, rush_td: 6,
   rec: 1, rec_yd: 0.1, rec_td: 6, fum_lost: -2, rush_2pt: 2,
@@ -47,7 +52,7 @@ const mean = (its: Float64Array) => {
   return its.length ? sum / its.length : 0;
 };
 
-describe.skipIf(!existsSync(PATH))("the rest of a game, played in the browser", () => {
+describe("the rest of a game, played in the browser", () => {
   const tables = JSON.parse(readFileSync(PATH, "utf8")) as SimTables;
   const league = leagueOf(tables);
   const teams = Object.keys(tables.teams);
@@ -66,7 +71,7 @@ describe.skipIf(!existsSync(PATH))("the rest of a game, played in the browser", 
    * would take the missing bytes for a zero and punt every fourth down
    * without saying so. The shape is checked instead.
    */
-  it("ships a fourth down table the engine's indexing fits", () => {
+  it("has a fourth down table the engine's indexing fits", () => {
     expect(league.fourth.length)
       .toBe(99 * DIST_BANDS * MARGIN_BANDS * TIME_BANDS * 2);
   });
