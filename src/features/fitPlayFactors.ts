@@ -126,6 +126,22 @@ interface Rate {
 const emptyRate = (): Rate =>
   ({ touches: 0, yards: 0, long: 0, longYards: 0 });
 
+/**
+ * Adds to the list kept under a key, or starts one. Pushed rather than
+ * copied, since copying the list on every row made counting quadratic in
+ * the busiest spots.
+ */
+const pushTo = <K>(lists: Map<K, number[]>, key: K, value: number) => {
+  const list = lists.get(key);
+
+  if (list) {
+    list.push(value);
+    return;
+  }
+
+  lists.set(key, [value]);
+};
+
 const addTo = (into: Map<string, Rate>, key: string, yards: number): void => {
   const own = into.get(key) ?? emptyRate();
   own.touches++;
@@ -934,12 +950,10 @@ export function storePlays(rows: PlayRow[]): PlayStore {
     yards[i] = r.yards;
     caught[i] = r.call === "run" || r.caught ? 1 : 0;
     age[i] = r.season ? latest - r.season : 0;
-    const key = `${r.player}|${r.call}`;
-    ofPlayer.set(key, [...(ofPlayer.get(key) ?? []), i]);
+    pushTo(ofPlayer, `${r.player}|${r.call}`, i);
 
     if (r.call === "pass" && r.passer) {
-      const pair = `${r.player}|${r.passer}`;
-      ofPair.set(pair, [...(ofPair.get(pair) ?? []), i]);
+      pushTo(ofPair, `${r.player}|${r.passer}`, i);
     }
   });
 
@@ -1327,10 +1341,8 @@ export function countPlays(
     if (row.call === "pass" && row.airYards !== undefined &&
         (POOL_WASTE || row.player)) {
       const band = bandOf(row.airYards);
-      cell.byDepth.set(band, [...(cell.byDepth.get(band) ?? []), row.yards]);
-      cell.byDepthFrom.set(
-        band, [...(cell.byDepthFrom.get(band) ?? []), row.yardline],
-      );
+      pushTo(cell.byDepth, band, row.yards);
+      pushTo(cell.byDepthFrom, band, row.yardline);
     }
 
     if (row.player) {
@@ -1365,10 +1377,8 @@ export function countPlays(
     if (row.call === "pass" && row.airYards !== undefined &&
         (POOL_WASTE || row.player)) {
       const band = bandOf(row.airYards);
-      anyTime.byDepth.set(band, [...(anyTime.byDepth.get(band) ?? []), row.yards]);
-      anyTime.byDepthFrom.set(
-        band, [...(anyTime.byDepthFrom.get(band) ?? []), row.yardline],
-      );
+      pushTo(anyTime.byDepth, band, row.yards);
+      pushTo(anyTime.byDepthFrom, band, row.yardline);
     }
 
     if (row.player) {

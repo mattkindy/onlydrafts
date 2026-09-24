@@ -5,6 +5,7 @@ import {
   type Call, type PlayState,
 } from "../model/playFactors.js";
 import { seededRng } from "../sim/rng.js";
+import { bandOf } from "./targetDepth.js";
 
 /**
  * The carry is read out of the environment when the module loads, so
@@ -1390,5 +1391,58 @@ describe("the keys the memos are kept under", () => {
       expect(sameMatches(pairs)).toBe(true);
       expect(new Set(pairs.map(({ key }) => key)).size)
         .toBe(new Set(pairs.map(({ old }) => old)).size);
+    });
+});
+
+describe("the lists a count keeps as it goes", () => {
+  it("keep every row's gain, depth and spot in the order the rows came",
+    async () => {
+      vi.resetModules();
+      const loaded = await import("./fitPlayFactors.js");
+      const rows = scatteredRows().map((row, i) =>
+        row.call === "pass" && row.player
+          ? { ...row, airYards: (i % 45) - 5, passer: `QB${i % 3}` }
+          : row);
+      const counted = loaded.countPlays(rows);
+      const plays = loaded.storePlays(rows);
+      let checked = 0;
+
+      for (const [key, cell] of counted.cells) {
+        const parts = key.split("|");
+
+        if (parts[0] !== "pass" || parts[4] !== "any") {
+          continue;
+        }
+
+        const [, down, toGo, yardline] = parts.map(Number);
+        const here = rows.filter((row) =>
+          row.call === "pass" && row.player && Math.min(4, row.down) === down &&
+          Math.min(40, row.toGo) === toGo &&
+          Math.min(99, row.yardline) === yardline);
+
+        for (const [band, gains] of cell.byDepth) {
+          const mine = here.filter((row) => bandOf(row.airYards!) === band);
+          expect(gains).toEqual(mine.map((row) => row.yards));
+          expect(cell.byDepthFrom.get(band))
+            .toEqual(mine.map((row) => row.yardline));
+          checked += gains.length;
+        }
+      }
+
+      const kept = rows.filter((row) => row.player);
+
+      for (const [key, list] of plays.ofPlayer) {
+        expect(list).toEqual(kept.flatMap((row, i) =>
+          `${row.player}|${row.call}` === key ? [i] : []));
+      }
+
+      for (const [key, list] of plays.ofPair) {
+        expect(list).toEqual(kept.flatMap((row, i) =>
+          row.call === "pass" && `${row.player}|${row.passer}` === key
+            ? [i]
+            : []));
+      }
+
+      expect(checked).toBeGreaterThan(1000);
     });
 });
