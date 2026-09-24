@@ -116,6 +116,7 @@ jobs:
         run: npm test
 
       - name: commit the refreshed site
+        id: commit
         env:
           SEASON: ${{ steps.built.outputs.season }}
           WEEK: ${{ steps.built.outputs.week }}
@@ -131,6 +132,56 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore(site): refresh $SEASON week $WEEK"
-          git pull --rebase --quiet origin "$GITHUB_REF_NAME"
-          git push
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      # Somebody may have pushed while the refresh ran. The tests above ran
+      # on the code this run checked out, so if the rebase brings in
+      # anything besides another refresh's output, the tests run again on
+      # what is about to be pushed.
+      - name: rebase onto whatever main has now
+        id: rebase
+        if: steps.commit.outputs.committed == 'true'
+        run: |
+          tested=$(git rev-parse HEAD~1)
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+
+          if ! git rebase --quiet FETCH_HEAD; then
+            git rebase --abort
+            echo "The refresh conflicted with a push to $GITHUB_REF_NAME made while it ran, so nothing was pushed. Rerun the workflow." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          changed=$(git diff --name-only "$tested" HEAD -- . ':!docs' ':!data/curated')
+
+          if [ -n "$changed" ]; then
+            echo "code_changed=true" >> "$GITHUB_OUTPUT"
+            echo "the rebase brought in changes to:"
+            echo "$changed"
+          fi
+
+          if ! git diff --quiet "$tested" HEAD -- package.json package-lock.json; then
+            echo "deps_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: install what the rebased package-lock.json asks for
+        if: steps.rebase.outputs.deps_changed == 'true'
+        run: npm ci
+
+      - name: do the tests still pass on the rebased code
+        if: steps.rebase.outputs.code_changed == 'true'
+        run: npm test
+
+      - name: push the refresh
+        if: steps.commit.outputs.committed == 'true'
+        env:
+          SEASON: ${{ steps.built.outputs.season }}
+          WEEK: ${{ steps.built.outputs.week }}
+        run: |
+          if ! git push origin "HEAD:$GITHUB_REF_NAME"; then
+            echo "The push to $GITHUB_REF_NAME failed, most likely because somebody pushed while the tests ran. Nothing was pushed. Rerun the workflow." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
           echo "committed the $SEASON week $WEEK refresh" >> "$GITHUB_STEP_SUMMARY"
