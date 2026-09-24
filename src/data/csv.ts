@@ -13,6 +13,7 @@ export function parseCsv(text: string): Record<string, string>[] {
     return [];
   }
 
+  const rowOf = rowMaker(header);
   const result: Record<string, string>[] = [];
 
   for (let r = 1; r < rows.length; r++) {
@@ -22,73 +23,120 @@ export function parseCsv(text: string): Record<string, string>[] {
       continue;
     }
 
-    const row: Record<string, string> = {};
-
-    for (let c = 0; c < header.length; c++) {
-      row[header[c]!] = cells[c] ?? "";
-    }
-
-    result.push(row);
+    result.push(rowOf(cells));
   }
 
   return result;
 }
 
+/** one row keyed by the header, by setting each column in turn */
+const rowByColumn = (header: string[]) => (cells: string[]) => {
+  const row: Record<string, string> = {};
+
+  for (let c = 0; c < header.length; c++) {
+    row[header[c]!] = cells[c] ?? "";
+  }
+
+  return row;
+};
+
+/**
+ * The same row built from one object literal with the header's column
+ * names written into it. Every row then has the same shape, which is
+ * quicker to build and to read than an object grown a column at a time.
+ * A column called `__proto__` would set the prototype in a literal, so a
+ * header with one is built a column at a time.
+ */
+const rowMaker = (
+  header: string[],
+): ((cells: string[]) => Record<string, string>) => {
+  if (header.includes("__proto__")) {
+    return rowByColumn(header);
+  }
+
+  const columns = header
+    .map((name, c) => `${JSON.stringify(name)}: cells[${c}] ?? ""`)
+    .join(",\n");
+
+  return new Function("cells", `return {\n${columns}\n};`) as
+    (cells: string[]) => Record<string, string>;
+};
+
+const QUOTE = 34;
+const COMMA = 44;
+const LINE_FEED = 10;
+const CARRIAGE_RETURN = 13;
+
+/**
+ * The cells of every line. Plain characters are taken a run at a time
+ * rather than one by one, and a quote starts or ends quoting wherever it
+ * falls, as it always has.
+ */
 function tokenize(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
   let inQuotes = false;
+  /** where the run of plain characters not yet added to the cell starts */
+  let from = 0;
   let i = 0;
 
   while (i < text.length) {
-    const ch = text[i]!;
+    const ch = text.charCodeAt(i);
 
     if (inQuotes) {
-      if (ch === '"' && text[i + 1] === '"') {
-        cell += '"';
-        i += 2;
-        continue;
-      }
-
-      if (ch === '"') {
-        inQuotes = false;
+      if (ch !== QUOTE) {
         i++;
         continue;
       }
 
-      cell += ch;
+      cell += text.slice(from, i);
+
+      if (text.charCodeAt(i + 1) === QUOTE) {
+        cell += '"';
+        i += 2;
+        from = i;
+        continue;
+      }
+
+      inQuotes = false;
       i++;
+      from = i;
       continue;
     }
 
-    if (ch === '"') {
+    if (ch === QUOTE) {
+      cell += text.slice(from, i);
       inQuotes = true;
       i++;
+      from = i;
       continue;
     }
 
-    if (ch === ",") {
-      row.push(cell);
+    if (ch === COMMA) {
+      row.push(cell + text.slice(from, i));
       cell = "";
       i++;
+      from = i;
       continue;
     }
 
-    if (ch === "\n" || ch === "\r") {
-      row.push(cell);
+    if (ch === LINE_FEED || ch === CARRIAGE_RETURN) {
+      row.push(cell + text.slice(from, i));
       cell = "";
       rows.push(row);
       row = [];
-      i += ch === "\r" && text[i + 1] === "\n" ? 2 : 1;
+      i += ch === CARRIAGE_RETURN && text.charCodeAt(i + 1) === LINE_FEED
+        ? 2
+        : 1;
+      from = i;
       continue;
     }
 
-    cell += ch;
     i++;
   }
 
-  row.push(cell);
+  row.push(cell + text.slice(from));
   rows.push(row);
   return rows;
 }
