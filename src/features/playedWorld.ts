@@ -171,6 +171,21 @@ async function componentPieces(
   return { split, perPlayer, standIn };
 }
 
+/**
+ * Whether a weekly roster row puts a player in the cast. The file lists
+ * everyone a club has the rights to, so without this a back on injured
+ * reserve, a retired receiver or a practice squad arm took a share of
+ * the work and could make the twelve all season. A game day inactive is
+ * still on the team in August, when nobody knows who will sit.
+ */
+export function onTheRoster(status: string | undefined, live: boolean): boolean {
+  if (status === undefined || status === "ACT") {
+    return true;
+  }
+
+  return !live && status === "INA";
+}
+
 interface PasserEvidence {
   /** throws each passer made for this side over the last fortnight */
   lately?: Map<string, number>;
@@ -326,8 +341,9 @@ export async function buildWorld(
     }
   }
 
-  const openingWeek = (await loadWeeklyRosters(SCORE_ON))
-    .filter((row) => row.week === castWeek && !ruledOut.has(row.playerId));
+  const openingWeek = (await loadWeeklyRosters(SCORE_ON)).filter((row) =>
+    row.week === castWeek && !ruledOut.has(row.playerId) &&
+    onTheRoster(row.status, live));
   const onTeam = new Map<string, { playerId: string; position: string }[]>();
 
   const calledOn = new Map<string, string>();

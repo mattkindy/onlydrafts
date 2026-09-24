@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { chooseThrower } from "./playedWorld.js";
+import { chooseThrower, onTheRoster } from "./playedWorld.js";
+
+describe("onTheRoster", () => {
+  it("keeps the active players in August and in season", () => {
+    expect(onTheRoster("ACT", false)).toBe(true);
+    expect(onTheRoster("ACT", true)).toBe(true);
+  });
+
+  it("keeps a game day inactive in August only", () => {
+    expect(onTheRoster("INA", false)).toBe(true);
+    expect(onTheRoster("INA", true)).toBe(false);
+  });
+
+  it("leaves out reserve, cut, retired and practice squad players", () => {
+    for (const status of ["RES", "CUT", "RET", "DEV", "EXE"]) {
+      expect(onTheRoster(status, false)).toBe(false);
+    }
+  });
+});
 
 const qb = (playerId: string) => ({ playerId, position: "QB" });
 
