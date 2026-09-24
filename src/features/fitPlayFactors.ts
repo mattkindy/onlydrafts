@@ -1982,38 +1982,187 @@ export const summedOverCells = (
 };
 
 /**
- * Each of these players' touches over a pooled list of cells, added up
- * cell by cell in the list's order. A cell with fewer players in it than
- * are being asked about is gone through instead of asked about each.
+ * A cell's players as numbers with their touches, in the order the cell's
+ * map has them, and what they come to together.
  */
-export const touchesAmong = (
-  list: Counted[], among: string[],
-): Map<string, number> => {
-  const totals = new Map(among.map((player) => [player, 0]));
+interface CellCast {
+  ids: Int32Array;
+  touches: Float64Array;
+  total: number;
+  /** by position number, with a gap where nobody plays it */
+  byPosition?: number[];
+}
 
-  for (const cell of list) {
-    if (cell.byPlayer.size < totals.size) {
-      for (const [player, own] of cell.byPlayer) {
-        const sum = totals.get(player);
+/**
+ * The players one world's counts name, numbered in the order they are
+ * first met, so the touches over a pool are added up in arrays rather than
+ * in maps keyed by player.
+ */
+export const playerIndex = (positions?: Map<string, string>) => {
+  const ids = new Map<string, number>();
+  const positionIds = new Map<string, number>();
+  /** each player's position number, or -1 without a position */
+  const positionOf: number[] = [];
 
-        if (sum !== undefined) {
-          totals.set(player, sum + own.touches);
+  const positionIdOf = (position: string) => {
+    const known = positionIds.get(position);
+
+    if (known !== undefined) {
+      return known;
+    }
+
+    positionIds.set(position, positionIds.size);
+
+    return positionIds.size - 1;
+  };
+
+  const idOf = (player: string) => {
+    const known = ids.get(player);
+
+    if (known !== undefined) {
+      return known;
+    }
+
+    const position = positions?.get(player);
+    positionOf.push(position ? positionIdOf(position) : -1);
+    ids.set(player, ids.size);
+
+    return ids.size - 1;
+  };
+
+  const casts = new WeakMap<Counted, CellCast>();
+  const castOf = (cell: Counted): CellCast => {
+    const already = casts.get(cell);
+
+    if (already) {
+      return already;
+    }
+
+    const made: CellCast = {
+      ids: new Int32Array(cell.byPlayer.size),
+      touches: new Float64Array(cell.byPlayer.size),
+      total: 0,
+      byPosition: undefined,
+    };
+    let at = 0;
+
+    for (const [player, own] of cell.byPlayer) {
+      made.ids[at] = idOf(player);
+      made.touches[at] = own.touches;
+      made.total += own.touches;
+      at++;
+    }
+
+    casts.set(cell, made);
+
+    return made;
+  };
+
+  /** each player's place in the cast being added up, or -1 */
+  let placeOf = new Int32Array(0);
+  let amongIds = new Int32Array(0);
+
+  /**
+   * Each of these players' touches over a pooled list of cells, added up
+   * cell by cell in the list's order, at the player's place in `among`.
+   */
+  const touchesAmong = (list: Counted[], among: string[]): Float64Array => {
+    const took = new Float64Array(among.length);
+
+    if (amongIds.length < among.length) {
+      amongIds = new Int32Array(among.length);
+    }
+
+    for (let i = 0; i < among.length; i++) {
+      amongIds[i] = idOf(among[i]!);
+    }
+
+    if (placeOf.length < ids.size) {
+      const grown = new Int32Array(ids.size * 2).fill(-1);
+      grown.set(placeOf);
+      placeOf = grown;
+    }
+
+    // a player named twice is added up once, at his first place
+    for (let i = among.length - 1; i >= 0; i--) {
+      placeOf[amongIds[i]!] = i;
+    }
+
+    for (const cell of list) {
+      const cast = castOf(cell);
+
+      for (let k = 0; k < cast.ids.length; k++) {
+        const at = placeOf[cast.ids[k]!] ?? -1;
+
+        if (at >= 0) {
+          took[at] = took[at]! + cast.touches[k]!;
+        }
+      }
+    }
+
+    for (let i = 0; i < among.length; i++) {
+      took[i] = took[placeOf[amongIds[i]!]!]!;
+    }
+
+    for (let i = 0; i < among.length; i++) {
+      placeOf[amongIds[i]!] = -1;
+    }
+
+    return took;
+  };
+
+  /** a cell's touches by position, added up once per cell */
+  const positionsIn = (cast: CellCast) => {
+    if (cast.byPosition) {
+      return cast.byPosition;
+    }
+
+    const sums: number[] = [];
+
+    for (let k = 0; k < cast.ids.length; k++) {
+      const position = positionOf[cast.ids[k]!]!;
+
+      if (position >= 0) {
+        sums[position] = (sums[position] ?? 0) + cast.touches[k]!;
+      }
+    }
+
+    cast.byPosition = sums;
+
+    return sums;
+  };
+
+  /** and over a pooled list, every position in one pass over its cells */
+  const listByPosition = new WeakMap<Counted[], number[]>();
+  const positionTouchesOver = (list: Counted[], position: string) => {
+    let sums = listByPosition.get(list);
+
+    if (!sums) {
+      sums = [];
+
+      for (const cell of list) {
+        const own = positionsIn(castOf(cell));
+
+        for (let place = 0; place < own.length; place++) {
+          const took = own[place];
+
+          if (took !== undefined) {
+            sums[place] = (sums[place] ?? 0) + took;
+          }
         }
       }
 
-      continue;
+      listByPosition.set(list, sums);
     }
 
-    for (const [player, sum] of totals) {
-      const own = cell.byPlayer.get(player);
+    // looked up after the cells are read, since reading them numbers
+    // any position not met before
+    const at = positionIds.get(position);
 
-      if (own) {
-        totals.set(player, sum + own.touches);
-      }
-    }
-  }
+    return at === undefined ? 0 : sums[at] ?? 0;
+  };
 
-  return totals;
+  return { castOf, touchesAmong, positionTouchesOver };
 };
 
 /**
@@ -2959,26 +3108,10 @@ export function fitPlayFactors(
     return found;
   };
 
-  /** each cell's touches added up once, since the map never changes */
-  const cellTouches = new WeakMap<Counted, number>();
-  const touchesOf = (cell: Counted) => {
-    const already = cellTouches.get(cell);
-
-    if (already !== undefined) {
-      return already;
-    }
-
-    let sum = 0;
-
-    for (const own of cell.byPlayer.values()) {
-      sum += own.touches;
-    }
-
-    cellTouches.set(cell, sum);
-
-    return sum;
-  };
-  const allTouchesOver = summedOverCells((cell) => touchesOf(cell));
+  const numbered = playerIndex(positions);
+  /** each cell's touches are added up once, when its players are numbered */
+  const allTouchesOver =
+    summedOverCells((cell) => numbered.castOf(cell).total);
 
   /**
    * What each position took of a call anywhere on the field, once.
@@ -3005,51 +3138,6 @@ export function fitPlayFactors(
 
   const positionOnCallOf = splitByCall(positionOnCall);
 
-  /** and the same at one cell, added up once per cell */
-  const cellByPosition = new WeakMap<Counted, Map<string, number>>();
-  const positionTouchesOf = (cell: Counted) => {
-    const already = cellByPosition.get(cell);
-
-    if (already) {
-      return already;
-    }
-
-    const sums = new Map<string, number>();
-
-    for (const [player, own] of cell.byPlayer) {
-      const position = positions?.get(player);
-
-      if (position) {
-        sums.set(position, (sums.get(position) ?? 0) + own.touches);
-      }
-    }
-
-    cellByPosition.set(cell, sums);
-
-    return sums;
-  };
-  /** and over a pooled list, every position in one pass over its cells */
-  const listByPosition = new WeakMap<Counted[], Map<string, number>>();
-  const positionTouchesOver = (list: Counted[], position: string) => {
-    const already = listByPosition.get(list);
-
-    if (already) {
-      return already.get(position) ?? 0;
-    }
-
-    const sums = new Map<string, number>();
-
-    for (const cell of list) {
-      for (const [at, took] of positionTouchesOf(cell)) {
-        sums.set(at, (sums.get(at) ?? 0) + took);
-      }
-    }
-
-    listByPosition.set(list, sums);
-
-    return sums.get(position) ?? 0;
-  };
-
   /**
    * How much more of the work this position takes here than it takes
    * anywhere, believed in proportion to how much of the spot is its
@@ -3066,7 +3154,7 @@ export function fitPlayFactors(
 
     const overallShare = (positionOnCallOf[call].get(position) ?? 0) /
       Math.max(1, callPlays.get(call) ?? 0);
-    const takenHere = positionTouchesOver(itsCells, position);
+    const takenHere = numbered.positionTouchesOver(itsCells, position);
 
     if (overallShare <= 0 || takenHere <= 0) {
       return 1;
@@ -3886,16 +3974,19 @@ export function fitPlayFactors(
         ? atCells(state, WIDE_LEAN * Math.max(1, among.length), call)
         : undefined;
       const wideHere = wideCells ? allTouchesOver(wideCells, "") : 0;
-      const tookHere = touchesAmong(itsCells, among);
-      const tookWide = wideCells ? touchesAmong(wideCells, among) : undefined;
+      const tookHere = numbered.touchesAmong(itsCells, among);
+      const tookWide = wideCells
+        ? numbered.touchesAmong(wideCells, among)
+        : undefined;
       const shares = new Map<string, number>();
       const script = scriptTables[call][
         scriptAt(state.margin, state.down, state.toGo)
       ]!;
       let total = 0;
 
-      for (const player of among) {
-        const touches = tookHere.get(player)!;
+      for (let place = 0; place < among.length; place++) {
+        const player = among[place]!;
+        const touches = tookHere[place]!;
 
         if (!projected && !split) {
           shares.set(player, touches);
@@ -3914,7 +4005,7 @@ export function fitPlayFactors(
         const believed = LEAN_K > 0 ? touches / (touches + LEAN_K) : 1;
         // and where he is left while his own count is too thin to say
         const towards = restingPlace(
-          player, call, itsCells, here, tookWide?.get(player), wideHere,
+          player, call, itsCells, here, tookWide?.[place], wideHere,
         );
         const leaning = hisOverall > 0 && hisHere > 0
           ? towards * ((hisHere / hisOverall) / towards) ** believed

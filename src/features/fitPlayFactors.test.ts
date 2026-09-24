@@ -910,30 +910,87 @@ describe("the touches of the players on the field over a pool", () => {
       const loaded = await import("./fitPlayFactors.js");
       const counted = loaded.countPlays(scatteredRows());
       const passes = loaded.rowsOf(loaded.cellsUnder(counted.cells, "pass"));
-      // one short cast and one longer than any cell, so both ways of
-      // going through a cell are taken
+      // a short cast, one longer than any cell, and players nobody counted
       const casts = [
         ["Back", "Nobody"],
         ["Back", "Wideout", "Slot", "End", "Nobody", "Else", "Other"],
+        // and a player named twice, who is the same player both times
+        ["Wideout", "Back", "Wideout"],
       ];
+      const numbered = loaded.playerIndex();
 
       for (const state of scatteredStates()) {
         const pool = loaded.widenedCells(state, passes).upTo(250);
 
         for (const among of casts) {
-          const took = loaded.touchesAmong(pool, among);
+          const took = numbered.touchesAmong(pool, among);
 
-          for (const player of among) {
+          among.forEach((player, place) => {
             let touches = 0;
 
             for (const cell of pool) {
               touches += cell.byPlayer.get(player)?.touches ?? 0;
             }
 
-            expect(took.get(player)).toBe(touches);
-          }
+            expect(took[place]).toBe(touches);
+          });
         }
       }
+    });
+
+  it("comes to what adding each position up cell by cell comes to",
+    async () => {
+      vi.resetModules();
+      const loaded = await import("./fitPlayFactors.js");
+      const counted = loaded.countPlays(scatteredRows());
+      const passes = loaded.rowsOf(loaded.cellsUnder(counted.cells, "pass"));
+      const positions = new Map([
+        ["Back", "RB"], ["Wideout", "WR"], ["Slot", "WR"], ["End", "TE"],
+      ]);
+      const numbered = loaded.playerIndex(positions);
+      let all = 0;
+
+      for (const state of scatteredStates()) {
+        const pool = loaded.widenedCells(state, passes).upTo(250);
+        // each cell's positions first, then those over the pool, the way
+        // the maps added them up
+        const byCell = pool.map((cell) => {
+          const sums = new Map<string, number>();
+
+          for (const [player, own] of cell.byPlayer) {
+            const position = positions.get(player);
+
+            if (position) {
+              sums.set(position, (sums.get(position) ?? 0) + own.touches);
+            }
+          }
+
+          return sums;
+        });
+
+        for (const position of ["WR", "RB", "TE", "QB"]) {
+          let touches = 0;
+
+          for (const sums of byCell) {
+            touches += sums.get(position) ?? 0;
+          }
+
+          expect(numbered.positionTouchesOver(pool, position)).toBe(touches);
+        }
+
+        for (const cell of pool) {
+          let here = 0;
+
+          for (const own of cell.byPlayer.values()) {
+            here += own.touches;
+          }
+
+          expect(numbered.castOf(cell).total).toBe(here);
+          all += here;
+        }
+      }
+
+      expect(all).toBeGreaterThan(1000);
     });
 });
 
