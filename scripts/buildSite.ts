@@ -111,6 +111,7 @@ import { buildPreseasonWorld } from "../src/features/preseason.js";
 import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
 import { seededRng } from "../src/sim/rng.js";
 import { loadAdp, loadSleeperAdp, type AdpFormat } from "../src/data/adp.js";
+import { mergeSiteIndex, readSiteIndex } from "../src/data/siteIndex.js";
 import { fitRoles } from "../src/features/fitRoles.js";
 import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
 import { normalDraw } from "../src/sim/normal.js";
@@ -2206,9 +2207,13 @@ async function main(): Promise<void> {
       ? "every player's points a game match his own line"
       : `${argued.length} players do not agree with their own line`);
 
+  const indexPath = join(DOCS, "data", "index.json");
   await writeFile(
-    join(DOCS, "data", "index.json"),
-    JSON.stringify({ weeks: index, boardSeason: season, adpFormat }),
+    indexPath,
+    JSON.stringify(mergeSiteIndex(
+      await readSiteIndex(indexPath),
+      { weeks: index, boardSeason: season, adpFormat },
+    )),
   );
   await mkdir(OLD, { recursive: true });
   await writeFile(
