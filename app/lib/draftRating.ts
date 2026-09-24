@@ -13,6 +13,7 @@
  * them is arbitrary and each is handed a draft slot regardless.
  */
 
+import { boardKeyOf } from "./boardKeys.ts";
 import { lineupOf, type Player } from "./scoring.ts";
 
 /**
@@ -336,45 +337,7 @@ export function gradesFor(
   return said;
 }
 
-/**
- * What a provider calls a side against what the play data calls it.
- * Only the Rams differ: Sleeper writes LAR and the play files write LA.
- */
-const SAME_SIDE: Record<string, string> = { LAR: "LA" };
-
-/**
- * Players the providers spell differently from the board, normalized
- * spelling to the board's key. The board goes by the league's roster
- * name, so Joshua Palmer is joshpalmer there while ESPN and Sleeper
- * both write him out in full, and Marquise Brown goes by Hollywood on
- * ESPN. Found by matching one league's picks against the board.
- */
-const SAME_MAN: Record<string, string> = {
-  joshuapalmer: "joshpalmer",
-  hollywoodbrown: "marquisebrown",
-  drewogletree: "andrewogletree",
-  matthibner: "matthewhibner",
-  mitchtinsley: "mitchelltinsley",
-  scottymiller: "scottmiller",
-  zonovanknight: "bamknight",
-  deamontetrayanum: "chiptrayanum",
-  joshuapitsenberger: "joshpitsenberger",
-};
-
-/**
- * The board's key for a player a provider named. A defence comes back as
- * "Los Angeles Rams" where the board has it as the three letters the
- * league writes on a scoreboard, so it is looked up by its team.
- */
-export function keyForPick(
+/** the board's key for a player a provider says was picked */
+export const keyForPick = (
   pick: { name: string; position: string; team?: string | null },
-  normalize: (s: string) => string,
-): string {
-  if (pick.position !== "DEF" || !pick.team) {
-    const key = normalize(pick.name);
-
-    return SAME_MAN[key] ?? key;
-  }
-
-  return normalize(SAME_SIDE[pick.team.toUpperCase()] ?? pick.team);
-}
+): string => boardKeyOf(pick.name, pick.position, pick.team);

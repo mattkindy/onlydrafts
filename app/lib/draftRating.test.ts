@@ -4,7 +4,6 @@ import {
   worthAt, worthOf,
 } from "./draftRating.ts";
 import type { Player } from "./scoring.ts";
-import { normalizeName } from "./store.ts";
 
 const player = (
   name: string, position: string, adp: number | null, vor: number,
@@ -223,7 +222,7 @@ describe("keeping and drafting are different markets", () => {
 
 describe("finding a provider's pick on the board", () => {
   const key = (name: string, position = "WR", team: string | null = "ANY") =>
-    keyForPick({ name, position, team }, normalizeName);
+    keyForPick({ name, position, team });
 
   it("drops accents, suffixes and punctuation", () => {
     expect(key("Audric Estimé")).toBe("audricestime");

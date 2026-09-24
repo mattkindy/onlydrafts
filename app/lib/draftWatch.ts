@@ -115,7 +115,7 @@ export async function draftNow(options: Options): Promise<DraftNow> {
     // a defence is on the board under the three letters a scoreboard
     // writes, never under a name, so keying one off the name left every
     // defence taken sitting there as though it were free
-    const key = keyForPick({ name, position, team }, normalizeName);
+    const key = keyForPick({ name, position, team });
     const mine = pick.picked_by === league.userId;
     const who = mine
       ? league.team

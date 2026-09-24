@@ -599,9 +599,12 @@ export function verdict(a: SlateRow, b: SlateRow): Verdict {
   };
 }
 
-/** the players on your team, under the same normalized name the board uses */
-export const rosterKeys = (players: { name: string }[]) =>
-  new Set(players.map((m) => normalizeName(m.name)));
+/**
+ * The players on your team, by the board's key. A provider's key already
+ * allows for the board spelling a name another way, and the name does not.
+ */
+export const rosterKeys = (players: { name: string; key?: string }[]) =>
+  new Set(players.map((m) => m.key ?? normalizeName(m.name)));
 
 export const onRoster = (roster: Set<string> | null, row: SlateRow) =>
   Boolean(roster && roster.has(normalizeName(row.name)));

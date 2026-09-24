@@ -7,7 +7,10 @@
  */
 
 import { PLAYED_POSITIONS, type Listed } from "./availability.ts";
-import { normalizeName, stored, keep } from "./store.ts";
+import {
+  boardKeyOf, boardPositionOf, boardTeamOf, ESPN_TEAMS,
+} from "./boardKeys.ts";
+import { stored, keep } from "./store.ts";
 import { paidFor, type Pays } from "./scoring.ts";
 
 export interface RosterPlayer {
@@ -240,15 +243,6 @@ const ESPN_POSITIONS: Record<number, string> = {
   1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DEF",
 };
 
-/** ESPN's number for each pro team, against the code the board uses */
-const ESPN_TEAMS: Record<number, string> = {
-  1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN",
-  8: "DET", 9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV", 14: "LA",
-  15: "MIA", 16: "MIN", 17: "NE", 18: "NO", 19: "NYG", 20: "NYJ",
-  21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC", 25: "SF", 26: "SEA",
-  27: "TB", 28: "WAS", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU",
-};
-
 /**
  * What to call an ESPN player.
  *
@@ -271,6 +265,19 @@ export interface SleeperPlayer {
 }
 
 export type SleeperPlayers = Record<string, SleeperPlayer>;
+
+/** a Sleeper player's key, position and team, in the board's terms */
+export function sleeperOnBoard(
+  player: SleeperPlayer,
+): { key: string; pos: string; team?: string } {
+  const key = boardKeyOf(player.n, player.p, player.t);
+
+  return {
+    key,
+    pos: boardPositionOf(key, player.p),
+    ...(player.t ? { team: boardTeamOf(player.t) } : {}),
+  };
+}
 
 const HOUR = 60 * 60 * 1000;
 
@@ -351,16 +358,18 @@ export function listedPlayers(all: SleeperPlayers): Map<string, Listed> {
   const listed = new Map<string, Listed>();
 
   for (const player of Object.values(all)) {
-    if (!player.hurt || !PLAYED_POSITIONS.has(player.p)) {
+    const his = sleeperOnBoard(player);
+
+    if (!player.hurt || !PLAYED_POSITIONS.has(his.pos)) {
       continue;
     }
 
-    listed.set(normalizeName(player.n), {
+    listed.set(his.key, {
       name: player.n,
       status: player.hurt,
       ...(player.part ? { part: player.part } : {}),
-      ...(player.p ? { position: player.p } : {}),
-      ...(player.t ? { team: player.t } : {}),
+      ...(his.pos ? { position: his.pos } : {}),
+      ...(his.team ? { team: his.team } : {}),
     });
   }
 
@@ -496,9 +505,11 @@ const sleeperPlayerOf = (players: SleeperPlayers, id: string): RosterPlayer | nu
     return null;
   }
 
+  const his = sleeperOnBoard(p);
+
   return {
-    name: p.n, key: normalizeName(p.n), pos: p.p,
-    ...(p.t ? { team: p.t } : {}),
+    name: p.n, key: his.key, pos: his.pos,
+    ...(his.team ? { team: his.team } : {}),
   };
 };
 
@@ -808,12 +819,13 @@ export async function sleeperWeekPoints(
     const ppr = line["pts_ppr"] ?? line["pts_half_ppr"] ?? line["pts_std"] ?? 0;
     const own = priced ? paidFor(line, pays) : 0;
     const took = priced && own !== 0;
+    const his = sleeperOnBoard(player);
 
     out.push({
-      key: normalizeName(player.n),
+      key: his.key,
       name: player.n,
-      position: player.p,
-      team: player.t ?? null,
+      position: his.pos,
+      team: his.team ?? null,
       points: took ? own : ppr,
       scoredBy: took ? "league" : "ppr",
     });
@@ -983,22 +995,27 @@ function espnPlayerOf(players: EspnPlayers, entry: EspnEntry): RosterPlayer | nu
     const pos = ESPN_POSITIONS[player.defaultPositionId ?? -1] ?? listed?.p ?? "";
     const name = espnNameOf(id!, player.fullName, pos);
     const team = ESPN_TEAMS[player.proTeamId ?? -1];
+    const key = boardKeyOf(name, pos, team);
 
     return {
-      name, key: normalizeName(name), pos,
+      name, key, pos: boardPositionOf(key, pos),
       ...(team ? { team } : {}),
       ...(hurt ? { hurt } : {}),
     };
   }
 
-  return listed
-    ? {
-      name: listed.n,
-      key: normalizeName(listed.n),
-      pos: listed.p,
-      ...(hurt ? { hurt } : {}),
-    }
-    : null;
+  if (!listed) {
+    return null;
+  }
+
+  const key = boardKeyOf(listed.n, listed.p);
+
+  return {
+    name: listed.n,
+    key,
+    pos: boardPositionOf(key, listed.p),
+    ...(hurt ? { hurt } : {}),
+  };
 }
 
 interface EspnPick {

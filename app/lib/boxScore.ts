@@ -13,7 +13,7 @@
  * about twenty eight characters and none of that would earn the space.
  */
 
-import { normalizeName } from "./store.ts";
+import { boardKeyOf } from "./boardKeys.ts";
 
 /** the few numbers a matchup row has room to say */
 export interface StatLine {
@@ -142,7 +142,7 @@ export function statLinesFrom(said: BoxScoreSaid): Map<string, StatLine> {
           continue;
         }
 
-        const key = normalizeName(name);
+        const key = boardKeyOf(name, undefined);
         const column: Said = (of) => row.stats?.[keys.indexOf(of)] ?? "";
 
         out.set(key, { ...out.get(key) ?? EMPTY, ...takes(column) });
@@ -365,7 +365,7 @@ export function defenceLinesFrom(said: BoxScoreSaid): Map<string, DefenceLine> {
       }
     }
 
-    out.set(normalizeName(code), line);
+    out.set(boardKeyOf(code, "DEF", code), line);
   }
 
   return out;

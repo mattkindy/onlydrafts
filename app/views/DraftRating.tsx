@@ -9,7 +9,6 @@ import {
   roomFor, sharePicks, shareTeams, type TeamShare, type Took,
 } from "../lib/draftShare.ts";
 import { asRound } from "../lib/picks.ts";
-import { normalizeName } from "../lib/store.ts";
 import type { Pick } from "./Draft.tsx";
 import { useMemo } from "preact/hooks";
 
@@ -96,7 +95,7 @@ export function DraftRating(props: Props) {
   const unmatched: Pick[] = [];
 
   for (const pick of props.made) {
-    const p = byKey.get(keyForPick(pick, normalizeName));
+    const p = byKey.get(keyForPick(pick));
 
     if (!p) {
       unmatched.push(pick);
@@ -123,7 +122,7 @@ export function DraftRating(props: Props) {
     .filter((pick) => pick.mine)
     .map((pick) => ({
       at: pick.overall,
-      p: byKey.get(keyForPick(pick, normalizeName)),
+      p: byKey.get(keyForPick(pick)),
       kept: pick.keeper,
     }))
     .filter((x): x is Took => Boolean(x.p));
@@ -283,7 +282,7 @@ export function MyDraftPicks(props: Props) {
     const mine: Took[] = [];
 
     for (const pick of props.made) {
-      const p = byKey.get(keyForPick(pick, normalizeName));
+      const p = byKey.get(keyForPick(pick));
 
       if (!p) {
         continue;

@@ -30,10 +30,10 @@ import {
   FLEX_POSITIONS, knownSlot, lineupOf, slotTakes, type Player,
 } from "./scoring.ts";
 import type { SlateRow } from "./slate.ts";
+import { boardKeyOf, boardTeamOf } from "./boardKeys.ts";
 import {
   normalCdf, normalQuantile, quantileOf, weeksFromSpread, type Spread,
 } from "./spread.ts";
-import { normalizeName } from "./store.ts";
 import { weekResult, winChance } from "./winShare.ts";
 
 export const SCOREBOARD =
@@ -114,18 +114,6 @@ const SECONDS_IN_HALF = 1800;
 
 /** and an overtime period, which is ten in the regular season */
 const OVERTIME = 10;
-
-/**
- * ESPN's code for a pro team against the board's, where the two differ.
- * Everything else already matches, including JAX.
- */
-const RENAMED: Record<string, string> = { WSH: "WAS", LAR: "LA" };
-
-const boardTeam = (abbreviation: string) => {
-  const code = abbreviation.toUpperCase();
-
-  return RENAMED[code] ?? code;
-};
 
 /** minutes and seconds off the clock, as a number of minutes */
 function clockMinutes(displayClock: string | undefined): number {
@@ -235,7 +223,7 @@ export function hurtFrom(said: Summary): Map<string, InGameStatus> {
       // is playing. Said since kickoff, he has left the field. Out means
       // no more snaps either way, whether he was a scratch or went off.
       if (status === "out" || Date.parse(row.date ?? "") >= kickoff) {
-        out.set(normalizeName(name), status);
+        out.set(boardKeyOf(name, undefined), status);
       }
     }
   }
@@ -291,7 +279,7 @@ export function statesFrom(said: {
       const code = side.team?.abbreviation;
 
       if (code) {
-        out.set(boardTeam(code), state);
+        out.set(boardTeamOf(code), state);
       }
     }
   }
@@ -351,23 +339,23 @@ function situationOf(
     : secondsLeft;
 
   return {
-    home: boardTeam(homeCode),
-    away: boardTeam(awayCode),
+    home: boardTeamOf(homeCode),
+    away: boardTeamOf(awayCode),
     points: {
-      [boardTeam(homeCode)]: Number(home?.score ?? 0),
-      [boardTeam(awayCode)]: Number(away?.score ?? 0),
+      [boardTeamOf(homeCode)]: Number(home?.score ?? 0),
+      [boardTeamOf(awayCode)]: Number(away?.score ?? 0),
     },
     secondsLeft,
     ...(overtimeLeft > 0 ? { overtimeLeft } : {}),
-    withBall: ballCode ? boardTeam(ballCode) : undefined,
+    withBall: ballCode ? boardTeamOf(ballCode) : undefined,
     yardline: ballCode !== undefined && at?.yardLine !== undefined
       ? Math.min(99, Math.max(1, 100 - at.yardLine))
       : undefined,
     down: downOf(at?.down),
     toGo: downOf(at?.down) === undefined ? undefined : at?.distance,
     timeouts: {
-      [boardTeam(homeCode)]: at?.homeTimeouts ?? 3,
-      [boardTeam(awayCode)]: at?.awayTimeouts ?? 3,
+      [boardTeamOf(homeCode)]: at?.homeTimeouts ?? 3,
+      [boardTeamOf(awayCode)]: at?.awayTimeouts ?? 3,
     },
     redZone: at?.isRedZone === true,
     secondHalf: secondsLeft <= SECONDS_IN_HALF,

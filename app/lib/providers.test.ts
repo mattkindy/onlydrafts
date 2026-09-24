@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  espnPays, listedPlayers, playerFileGoodFor,
+  espnPays, listedPlayers, playerFileGoodFor, sleeperOnBoard,
   type EspnScoringItem, type League,
 } from "./providers.ts";
 
@@ -357,6 +357,25 @@ describe("listedPlayers", () => {
 
     expect(listed.has("justinjefferson")).toBe(false);
     expect(listed.get("tylerboyd")?.status).toBe("Out");
+  });
+
+  it("lists a player under the board's key, team and position", () => {
+    const listed = listedPlayers({
+      "7670": { n: "Joshua Palmer", p: "WR", t: "BUF", hurt: "Questionable" },
+      "11510": { n: "Hunter Luepke", p: "FB", t: "DAL", hurt: "Out" },
+      "9": { n: "Kyren Williams", p: "RB", t: "LAR", hurt: "Doubtful" },
+    });
+
+    expect(listed.get("joshpalmer")?.status).toBe("Questionable");
+    expect(listed.get("hunterluepke")?.position).toBe("RB");
+    expect(listed.get("kyrenwilliams")?.team).toBe("LA");
+  });
+});
+
+describe("sleeperOnBoard", () => {
+  it("keys a defence by the board's code for its team", () => {
+    expect(sleeperOnBoard({ n: "LAR", p: "DEF", t: "LAR" }))
+      .toEqual({ key: "la", pos: "DEF", team: "LA" });
   });
 });
 
