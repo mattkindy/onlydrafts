@@ -533,6 +533,8 @@ export async function buildWorld(
   const pairing = await buildMatchupTable({
     learn: [SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1].filter((s2) => s2 >= 2022),
     scoreOn: SCORE_ON,
+    week: live ? onlyWeek : undefined,
+    cast: onTeam,
   });
   const counted = live
     ? countPlays(learnRows as PlayRow[])
