@@ -811,12 +811,30 @@ export function storePlays(rows: PlayRow[]): PlayStore {
  * so about one player, so the same question is asked again in six coarse
  * buckets where everybody has hundreds.
  */
-const scriptOf = (margin: number, down: number, toGo: number) => {
-  const how = margin <= -9 ? "chasing" : margin >= 9 ? "ahead" : "level";
-  const mustThrow = down >= 3 && toGo >= 4;
+const SCRIPTS = [
+  "chasing|normal", "chasing|long", "level|normal", "level|long",
+  "ahead|normal", "ahead|long",
+];
 
-  return `${how}|${mustThrow ? "long" : "normal"}`;
-};
+/** which of the six buckets this is, as a place in SCRIPTS */
+export const scriptAt = (margin: number, down: number, toGo: number) =>
+  (margin <= -9 ? 0 : margin >= 9 ? 4 : 2) + (down >= 3 && toGo >= 4 ? 1 : 0);
+
+const scriptOf = (margin: number, down: number, toGo: number) =>
+  SCRIPTS[scriptAt(margin, down, toGo)]!;
+
+/** how far out a play from a formation was, coarsely */
+const ZONES = ["close", "middle", "back"];
+
+const zoneOf = (yardline: number) =>
+  yardline <= 20 ? 0 : yardline <= 60 ? 1 : 2;
+
+const formationZoneKey = (call: Call, shotgun: boolean, zone: number) =>
+  `${call}|${shotgun ? "gun" : "centre"}|${ZONES[zone]}`;
+
+const formationBandOf = (
+  call: Call, shotgun: boolean, yardline: number,
+) => formationZoneKey(call, shotgun, zoneOf(yardline));
 
 /**
  * How often a call is a run from each formation, by down, distance
@@ -824,12 +842,6 @@ const scriptOf = (margin: number, down: number, toGo: number) => {
  * this is the second half of that draw rather than another way of
  * asking the same question.
  */
-const formationBandOf = (
-  call: Call, shotgun: boolean, yardline: number,
-) =>
-  `${call}|${shotgun ? "gun" : "centre"}|` +
-  `${yardline <= 20 ? "close" : yardline <= 60 ? "middle" : "back"}`;
-
 const atFormation = (
   shotgun: boolean, down: number, toGo: number, yardline: number,
   /**
@@ -853,14 +865,15 @@ const atFormation = (
   return `${spot}|${how}|${secondsLeft <= 900 ? "late" : "early"}`;
 };
 
+/** what the plays from one formation, call and zone came to */
+interface FormationMade { plays: number; yards: number; dry: number; long: number }
+
 export interface CountedPlays {
   cells: Map<string, Counted>;
   /** what each formation led to, for the two step call */
   fromFormation: Map<string, { plays: number; runs: number }>;
   /** and what a play from each formation came to */
-  yardsFromFormation: Map<
-    string, { plays: number; yards: number; dry: number; long: number }
-  >;
+  yardsFromFormation: Map<string, FormationMade>;
   /** and the same with the shell the defence answered with */
   againstLook: Map<string, { plays: number; yards: number; dry: number }>;
   byOffence: Map<string, Counted>;
@@ -1818,6 +1831,70 @@ export const touchesAmong = (
   return totals;
 };
 
+/**
+ * A table kept under `${who}|${call}`, split by the call, so asking about
+ * one player on one call reads it without building the joined key.
+ */
+export const splitByCall = <V>(
+  joined: Map<string, V>,
+): Record<Call, Map<string, V>> => {
+  const split: Record<Call, Map<string, V>> = {
+    run: new Map(), pass: new Map(),
+  };
+
+  for (const [key, value] of joined) {
+    const bar = key.lastIndexOf("|");
+    const call = key.slice(bar + 1);
+
+    if (bar < 0 || (call !== "run" && call !== "pass")) {
+      continue;
+    }
+
+    split[call].set(key.slice(0, bar), value);
+  }
+
+  return split;
+};
+
+/** how often anybody, and each player, took one call in one script bucket */
+interface ScriptTable { plays: number; players: Map<string, number> }
+
+/**
+ * The script counts laid out by call and bucket, so a play finds its
+ * bucket's counts once instead of building a key for every player.
+ */
+export const scriptTablesOf = (
+  inScript: Map<string, number>, scriptPlays: Map<string, number>,
+): Record<Call, ScriptTable[]> => {
+  const byPrefix = new Map<string, ScriptTable>();
+  const tables: Record<Call, ScriptTable[]> = { run: [], pass: [] };
+
+  for (const call of ["run", "pass"] as const) {
+    for (const script of SCRIPTS) {
+      const prefix = `${script}|${call}`;
+      const table = {
+        plays: scriptPlays.get(prefix) ?? 0, players: new Map<string, number>(),
+      };
+      byPrefix.set(prefix, table);
+      tables[call].push(table);
+    }
+  }
+
+  // a key is the bucket, which has one bar in it, then the call, then the player
+  for (const [key, took] of inScript) {
+    const first = key.indexOf("|");
+    const second = first < 0 ? -1 : key.indexOf("|", first + 1);
+    const third = second < 0 ? -1 : key.indexOf("|", second + 1);
+    const table = third < 0 ? undefined : byPrefix.get(key.slice(0, third));
+
+    if (table) {
+      table.players.set(key.slice(third + 1), took);
+    }
+  }
+
+  return tables;
+};
+
 /** a call as a small number for a memo key, with no call at all as its own */
 const CALL_CODES: Record<Call | "both", number> = { run: 0, pass: 1, both: 2 };
 
@@ -1935,7 +2012,9 @@ export function fitPlayFactors(
    * outside a game, so a caller asking about a single snap gets the
    * projected cut on its own.
    */
-  const gameTilt = new Map<string, number>();
+  const gameTilt: Record<Call, Map<string, number>> = {
+    run: new Map(), pass: new Map(),
+  };
   let gameDraw: (() => number) | undefined;
 
   const tiltFor = (player: string, call: Call) => {
@@ -1943,8 +2022,7 @@ export function fitPlayFactors(
       return 1;
     }
 
-    const key = `${player}|${call}`;
-    const already = gameTilt.get(key);
+    const already = gameTilt[call].get(player);
 
     if (already !== undefined) {
       return already;
@@ -1954,7 +2032,7 @@ export function fitPlayFactors(
     // centred so a player's cut over many games still averages what the
     // projection said, since the exponential would otherwise lift it
     const drawn = Math.exp(width * standardNormal(gameDraw) - (width * width) / 2);
-    gameTilt.set(key, drawn);
+    gameTilt[call].set(player, drawn);
 
     return drawn;
   };
@@ -1994,6 +2072,22 @@ export function fitPlayFactors(
     return usual > 0.1 ? Math.max(0.75, Math.min(1.35, its / usual)) : 1;
   };
 
+  /** by call, then the gun before the centre, then the zone */
+  const formationYardsAt: Record<Call, (FormationMade | undefined)[][]> = {
+    run: [], pass: [],
+  };
+
+  for (const call of ["run", "pass"] as const) {
+    for (const shotgun of [true, false]) {
+      formationYardsAt[call].push(ZONES.map((_, zone) =>
+        yardsFromFormation.get(formationZoneKey(call, shotgun, zone))));
+    }
+  }
+
+  /** the same as asking yardsFromFormation, without building its key */
+  const formationYards = (call: Call, shotgun: boolean, yardline: number) =>
+    formationYardsAt[call][shotgun ? 0 : 1]![zoneOf(yardline)];
+
   /**
    * What a play from the formation the side stood in comes to,
    * against what that call comes to over both. Drawn now rather than
@@ -2007,12 +2101,8 @@ export function fitPlayFactors(
       return 1;
     }
 
-    const its = yardsFromFormation.get(
-      formationBandOf(call, shotgun, state.yardline),
-    );
-    const other = yardsFromFormation.get(
-      formationBandOf(call, !shotgun, state.yardline),
-    );
+    const its = formationYards(call, shotgun, state.yardline);
+    const other = formationYards(call, !shotgun, state.yardline);
 
     if (!its || !other || its.plays < 200 || other.plays < 200) {
       return 1;
@@ -2046,12 +2136,8 @@ export function fitPlayFactors(
       return 1;
     }
 
-    const inGun = yardsFromFormation.get(
-      formationBandOf(call, true, state.yardline),
-    );
-    const centre = yardsFromFormation.get(
-      formationBandOf(call, false, state.yardline),
-    );
+    const inGun = formationYards(call, true, state.yardline);
+    const centre = formationYards(call, false, state.yardline);
 
     if (!inGun || !centre || inGun.plays < 200 || centre.plays < 200) {
       return 1;
@@ -2070,6 +2156,10 @@ export function fitPlayFactors(
       : 1;
   };
 
+  const onCallOf = splitByCall(onCall);
+  const byPlayerOf = splitByCall(byPlayer);
+  const scriptTables = scriptTablesOf(inScript, scriptPlays);
+
   /**
    * How much more of the work a player takes when the game is going this
    * way than he takes on that call in general.
@@ -2080,11 +2170,10 @@ export function fitPlayFactors(
    * situation enough, since a player with nine catches while behind
    * should not have his afternoon decided by them.
    */
-  const scriptLeaning = (player: string, call: Call, state: PlayState) => {
-    const script = scriptOf(state.margin, state.down, state.toGo);
-    const here = inScript.get(`${script}|${call}|${player}`) ?? 0;
-    const anybodyHere = scriptPlays.get(`${script}|${call}`) ?? 0;
-    const his = onCall.get(`${player}|${call}`) ?? 0;
+  const scriptLeaning = (player: string, call: Call, script: ScriptTable) => {
+    const here = script.players.get(player) ?? 0;
+    const anybodyHere = script.plays;
+    const his = onCallOf[call].get(player) ?? 0;
     const anybody = callPlays.get(call) ?? 0;
 
     if (!here || !anybodyHere || !his || !anybody) {
@@ -2710,6 +2799,8 @@ export function fitPlayFactors(
     }
   }
 
+  const positionOnCallOf = splitByCall(positionOnCall);
+
   /** and the same at one cell, added up once per cell */
   const cellByPosition = new WeakMap<Counted, Map<string, number>>();
   const positionTouchesOf = (cell: Counted) => {
@@ -2769,7 +2860,7 @@ export function fitPlayFactors(
       return 1;
     }
 
-    const overallShare = (positionOnCall.get(`${position}|${call}`) ?? 0) /
+    const overallShare = (positionOnCallOf[call].get(position) ?? 0) /
       Math.max(1, callPlays.get(call) ?? 0);
     const takenHere = positionTouchesOver(itsCells, position);
 
@@ -2805,7 +2896,7 @@ export function fitPlayFactors(
       return position;
     }
 
-    const hisOverall = (onCall.get(`${player}|${call}`) ?? 0) /
+    const hisOverall = (onCallOf[call].get(player) ?? 0) /
       Math.max(1, callPlays.get(call) ?? 0);
 
     if (hisOverall <= 0 || wideTouches <= 0) {
@@ -3014,7 +3105,7 @@ export function fitPlayFactors(
    * what they say.
    */
   const reconciledSample = (player: string, call: Call, passer?: string) => {
-    const his = byPlayer.get(`${player}|${call}`);
+    const his = byPlayerOf[call].get(player);
     const mine = positionMean(player, call);
     const throwing = call === "pass" && passer
       ? perPlayer?.get(passer)?.throwYards ?? 1
@@ -3075,7 +3166,22 @@ export function fitPlayFactors(
   };
 
   /** widened play lists, one per player and call, built once */
-  const pooled = new Map<string, number[]>();
+  const pooled: Record<Call, Map<string, Map<string, number[]>>> = {
+    run: new Map(), pass: new Map(),
+  };
+  /** the lists already built for this call and passer, by player */
+  const pooledWith = (call: Call, passer: string) => {
+    const already = pooled[call].get(passer);
+
+    if (already) {
+      return already;
+    }
+
+    const made = new Map<string, number[]>();
+    pooled[call].set(passer, made);
+
+    return made;
+  };
 
   const hisOwnDraw = plays
     ? (
@@ -3112,8 +3218,8 @@ export function fitPlayFactors(
          * could never carry comes out of joint sampling instead: what
          * Chase does with Burrow throwing is what those plays were.
          */
-        const poolKey = `${player}|${passer ?? ""}|${call}`;
-        let his = pooled.get(poolKey);
+        const hisPools = pooledWith(call, passer ?? "");
+        let his = hisPools.get(player);
 
         if (!his) {
           const together = call === "pass" && passer
@@ -3150,7 +3256,7 @@ export function fitPlayFactors(
             }
           }
 
-          pooled.set(poolKey, his);
+          hisPools.set(player, his);
         }
 
         if (his.length < 25) {
@@ -3555,7 +3661,8 @@ export function fitPlayFactors(
         leagueRate * ((1 - itsOwn) + itsOwn * leaning)));
     },
     startsGame: (uniform) => {
-      gameTilt.clear();
+      gameTilt.run.clear();
+      gameTilt.pass.clear();
 
       if (GAME_SHARE_RUN <= 0 && GAME_SHARE_PASS <= 0) {
         gameDraw = undefined;
@@ -3592,6 +3699,9 @@ export function fitPlayFactors(
       const tookHere = touchesAmong(itsCells, among);
       const tookWide = wideCells ? touchesAmong(wideCells, among) : undefined;
       const shares = new Map<string, number>();
+      const script = scriptTables[call][
+        scriptAt(state.margin, state.down, state.toGo)
+      ]!;
       let total = 0;
 
       for (const player of among) {
@@ -3607,7 +3717,7 @@ export function fitPlayFactors(
         // anywhere. A player used on third down leans that way whatever his
         // overall share turns out to be next season.
         const hisOverall = POSITION_LEAN
-          ? (onCall.get(`${player}|${call}`) ?? 0) /
+          ? (onCallOf[call].get(player) ?? 0) /
             Math.max(1, callPlays.get(call) ?? 0)
           : (overall.get(player) ?? 0) / Math.max(1, everyTouch);
         const hisHere = here > 0 ? touches / here : 0;
@@ -3653,7 +3763,7 @@ export function fitPlayFactors(
           : projectedShare ** (1 - RECENT_LEVEL) * hisLately ** RECENT_LEVEL;
         // his share of the call over every side, so the denominator is
         // the same for everyone and normalising takes it back out
-        const tookTheCall = onCall.get(`${player}|${call}`) ?? 0;
+        const tookTheCall = onCallOf[call].get(player) ?? 0;
         const blended = FROM_CALLS <= 0 || tookTheCall <= 0 || level <= 0
           ? level
           : level ** (1 - FROM_CALLS) * tookTheCall ** FROM_CALLS;
@@ -3665,7 +3775,7 @@ export function fitPlayFactors(
           tiltFor(player, call) *
           (settings.readsTheScript === false
             ? 1
-            : scriptLeaning(player, call, state));
+            : scriptLeaning(player, call, script));
         shares.set(player, weight);
         total += weight;
       }
@@ -3823,7 +3933,7 @@ export function fitPlayFactors(
        * the same scope: his season average against a goal line average
        * would make every player look twice as good near the line.
        */
-      const wide = byPlayer.get(`${player}|${call}`);
+      const wide = byPlayerOf[call].get(player);
       const atState = own && own.touches >= settings.leastForPlayer
         ? { his: own, league: cell.named }
         : undefined;

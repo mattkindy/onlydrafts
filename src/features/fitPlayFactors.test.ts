@@ -975,6 +975,59 @@ describe("a player's touches over a pool, added up once", () => {
   });
 });
 
+describe("the counts kept under a player and a call, split by the call", () => {
+  const players = ["Back", "Wideout", "Slot", "End", "Nobody", ""];
+
+  it("find what the joined key finds", async () => {
+    vi.resetModules();
+    const loaded = await import("./fitPlayFactors.js");
+    const counted = loaded.countPlays(scatteredRows());
+    const onCall = loaded.splitByCall(counted.onCall);
+    const byPlayer = loaded.splitByCall(counted.byPlayer);
+
+    for (const call of ["run", "pass"] as const) {
+      for (const player of players) {
+        expect(onCall[call].get(player))
+          .toBe(counted.onCall.get(`${player}|${call}`));
+        expect(byPlayer[call].get(player))
+          .toBe(counted.byPlayer.get(`${player}|${call}`));
+      }
+    }
+  });
+
+  it("find each script bucket's counts where its key finds them",
+    async () => {
+      vi.resetModules();
+      const loaded = await import("./fitPlayFactors.js");
+      const counted = loaded.countPlays(scatteredRows());
+      const tables = loaded.scriptTablesOf(counted.inScript, counted.scriptPlays);
+      let found = 0;
+
+      for (const state of scatteredStates()) {
+        const how = state.margin <= -9 ? "chasing"
+          : state.margin >= 9 ? "ahead"
+          : "level";
+        const bucket = `${how}|` +
+          `${state.down >= 3 && state.toGo >= 4 ? "long" : "normal"}`;
+
+        for (const call of ["run", "pass"] as const) {
+          const table =
+            tables[call][loaded.scriptAt(state.margin, state.down, state.toGo)]!;
+          expect(table.plays)
+            .toBe(counted.scriptPlays.get(`${bucket}|${call}`) ?? 0);
+
+          for (const player of players) {
+            const took = counted.inScript.get(`${bucket}|${call}|${player}`);
+            expect(table.players.get(player)).toBe(took);
+            found += took ? 1 : 0;
+          }
+        }
+      }
+
+      expect(found).toBeGreaterThan(50);
+    });
+});
+
 /**
  * Whether two lists of keys fall together in the same places: each old key
  * always meets the same new one, and each new key the same old one.
