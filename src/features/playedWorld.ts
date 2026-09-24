@@ -171,6 +171,55 @@ async function componentPieces(
   return { split, perPlayer, standIn };
 }
 
+interface PasserEvidence {
+  /** throws each passer made for this side over the last fortnight */
+  lately?: Map<string, number>;
+  /** where the August market took a quarterback, when it priced him */
+  adpOf: (playerId: string) => number | undefined;
+  threwLastYear: Map<string, number>;
+}
+
+/**
+ * Who throws for a side, chosen from the players in its cast. The last
+ * fortnight says who has the job, but a starter ruled out this week is
+ * still the busiest passer of the fortnight, so only a quarterback who is
+ * dressed can win on it. Otherwise the market's earliest quarterback on
+ * the roster, and failing that the one who threw most last season.
+ */
+export function chooseThrower(
+  players: { playerId: string; position: string }[],
+  evidence: PasserEvidence,
+): string | undefined {
+  const quarterbacks = players.filter((p) => p.position === "QB");
+  const dressed = new Set(quarterbacks.map((p) => p.playerId));
+  const lately = [...(evidence.lately ?? [])]
+    .filter(([playerId]) => dressed.has(playerId))
+    .sort((a, b) => b[1] - a[1])[0];
+
+  if (lately) {
+    return lately[0];
+  }
+
+  const priced = quarterbacks
+    .map((p) => ({ playerId: p.playerId, adp: evidence.adpOf(p.playerId) }))
+    .filter((p): p is { playerId: string; adp: number } => p.adp !== undefined)
+    .sort((a, b) => a.adp - b.adp);
+
+  if (priced.length > 0) {
+    return priced[0]!.playerId;
+  }
+
+  const threw = quarterbacks
+    .map((p) => ({ playerId: p.playerId, n: evidence.threwLastYear.get(p.playerId) ?? 0 }))
+    .sort((a, b) => b.n - a.n);
+
+  if (threw.length > 0 && threw[0]!.n > 0) {
+    return threw[0]!.playerId;
+  }
+
+  return undefined;
+}
+
 interface WorldOptions {
   /**
    * Take each player's cut of the work from his trailing usage rather than
@@ -660,38 +709,16 @@ export async function buildWorld(
   const throwsFor = new Map<string, string>();
 
   for (const [team, players] of onTeam) {
-    if (live) {
-      const lately = [...(threwLately.get(team) ?? [])]
-        .sort((a, b) => b[1] - a[1])[0];
+    const passer = chooseThrower(players, {
+      lately: live ? threwLately.get(team) : undefined,
+      adpOf: (playerId) => augustAdp.get(
+        `${normalizeName(calledOn.get(playerId) ?? "")}|QB`,
+      )?.adp,
+      threwLastYear,
+    });
 
-      if (lately) {
-        throwsFor.set(team, lately[0]);
-        continue;
-      }
-    }
-
-    const quarterbacks = players.filter((p) => p.position === "QB");
-    const priced = quarterbacks
-      .map((p) => ({
-        playerId: p.playerId,
-        adp: augustAdp.get(
-          `${normalizeName(calledOn.get(p.playerId) ?? "")}|QB`,
-        )?.adp,
-      }))
-      .filter((p): p is { playerId: string; adp: number } => p.adp !== undefined)
-      .sort((a, b) => a.adp - b.adp);
-
-    if (priced.length > 0) {
-      throwsFor.set(team, priced[0]!.playerId);
-      continue;
-    }
-
-    const threw = quarterbacks
-      .map((p) => ({ playerId: p.playerId, n: threwLastYear.get(p.playerId) ?? 0 }))
-      .sort((a, b) => b.n - a.n);
-
-    if (threw.length > 0 && threw[0]!.n > 0) {
-      throwsFor.set(team, threw[0]!.playerId);
+    if (passer) {
+      throwsFor.set(team, passer);
     }
   }
 
