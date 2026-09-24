@@ -74,10 +74,56 @@ interface Kept {
   bends: [string, [number, number]][];
 }
 
-const keptFor = (request: MatchupRequest) =>
+const ON_FIELD = join(RAW_DIR, "onField.csv");
+
+/**
+ * Every row of the on-field file, split, with the header's columns by
+ * name. The file is only published once a season is over.
+ */
+async function eachOnField(
+  visit: (c: string[], at: Record<string, number>) => void,
+): Promise<void> {
+  const reader = createInterface({ input: createReadStream(ON_FIELD) });
+  let header: string[] | undefined;
+  const at: Record<string, number> = {};
+
+  for await (const line of reader) {
+    if (!header) {
+      header = splitLine(line);
+      header.forEach((name, i) => { at[name] = i; });
+      continue;
+    }
+
+    visit(splitLine(line), at);
+  }
+}
+
+/**
+ * The latest season and week the on-field file reaches. It goes into the
+ * name of anything kept from the file, so a table worked out before a
+ * season's plays were published is not read back once they are.
+ */
+async function onFieldReaches(): Promise<string> {
+  let season = 0;
+  let week = 0;
+
+  await eachOnField((c, at) => {
+    const s = Number(c[at["season"]!]);
+    const w = Number(c[at["week"]!]);
+
+    if (s > season || (s === season && w > week)) {
+      season = s;
+      week = w;
+    }
+  }).catch(() => undefined);
+
+  return `${season}w${week}`;
+}
+
+const keptFor = (request: MatchupRequest, reaches: string) =>
   request.keptAt ?? join(
     import.meta.dirname, "..", "..", "data", "kept",
-    `matchup-${request.learn.join("-")}-${request.scoreOn}-` +
+    `matchup-${request.learn.join("-")}-${request.scoreOn}-${reaches}-` +
       `${(request.settings ?? { most: 0.2 }).most}.json`,
   );
 
@@ -101,7 +147,7 @@ const asTable = (kept: Kept): MatchupTable => {
 export async function buildMatchupTable(
   request: MatchupRequest,
 ): Promise<MatchupTable> {
-  const keptAt = keptFor(request);
+  const keptAt = keptFor(request, await onFieldReaches());
   const already = await readFile(keptAt, "utf8").catch(() => "");
 
   if (already) {
@@ -145,20 +191,7 @@ export async function buildMatchupTable(
 
   const learn: { on: Described[]; yards: number }[] = [];
   const seen = new Map<string, { offence: Float64Array[]; defence: Float64Array[] }>();
-  const reader = createInterface({
-    input: createReadStream(join(RAW_DIR, "onField.csv")),
-  });
-  let header: string[] | undefined;
-  const at: Record<string, number> = {};
-
-  for await (const line of reader) {
-    if (!header) {
-      header = splitLine(line);
-      header.forEach((name, i) => { at[name] = i; });
-      continue;
-    }
-
-    const c = splitLine(line);
+  await eachOnField((c, at) => {
     const season = Number(c[at["season"]!]);
     const ids = (text: string) => text.split(";").filter(Boolean);
     const offence = averageOf(ids(c[at["offenceOn"]!] ?? ""), season);
@@ -185,6 +218,11 @@ export async function buildMatchupTable(
         seen.set(team, own);
       }
     }
+  });
+
+  // a table with no sides would pass for one where every pairing is even
+  if (seen.size === 0) {
+    return asTable({ sides: [], bends: [] });
   }
 
   const net = fitInteractionNet(

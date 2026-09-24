@@ -565,7 +565,12 @@ export async function buildWorld(
     ...FACTOR_DEFAULTS,
     readsTheScript: !process.env["NO_SCRIPT"],
   }, {
-    split, lately, pairing: pairing.bend, counted, positions,
+    /**
+     * A season with no sides described leaves the pairing out, so a play
+     * falls through to each side's own counts instead of an even bend.
+     */
+    split, lately, counted, positions,
+    pairing: pairing.sides.length > 0 ? pairing.bend : undefined,
     perPlayer: options.componentRates ? component?.perPlayer : undefined,
     standIn: options.standIn ? component?.standIn : undefined,
     unaimed: fitUnaimed(learnRows),
