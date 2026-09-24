@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Graph-based fantasy football draft analysis and backtesting",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p worker/tsconfig.json",

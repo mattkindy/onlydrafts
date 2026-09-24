@@ -29,11 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
@@ -48,7 +48,7 @@ jobs:
       # expires after a week, so a quiet fortnight means the fill below
       # downloads the history again, which works but takes far longer.
       - name: the nflverse downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: data/raw
           key: nflverse-raw-v1-${{ steps.stamp.outputs.week }}
