@@ -21,6 +21,10 @@ docs/data/league-*
 # these had been committed by the time anyone looked, at 699 megabytes.
 data/kept/counts*.json
 
+# the matchups the live walk works out for one week, from the plays before
+# it. The cast tables beside them are committed and stay tracked.
+data/kept/matchup-*-before[0-9]*.json
+
 # wrangler's local cache has the Cloudflare account name and where the
 # last deploy ran from, and the repo is public
 worker/.wrangler/
