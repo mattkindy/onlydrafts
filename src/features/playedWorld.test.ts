@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { chooseThrower, onTheRoster, rosterWeekFor } from "./playedWorld.js";
+import { chooseThrower, onTheRoster } from "./playedWorld.js";
+import { rosterWeekFor } from "./rosterWeek.js";
 
 describe("rosterWeekFor", () => {
   it("reads the week asked for when the file has it", () => {

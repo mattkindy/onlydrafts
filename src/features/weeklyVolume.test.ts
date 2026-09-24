@@ -117,6 +117,18 @@ describe("buildWeeklyVolume", () => {
     expect(volume.expectedFor("backup", TARGET_WEEK).carries).toBeCloseTo(24);
   });
 
+  it("reads last week's roster when the file does not reach this week", () => {
+    const rosters = PLAYED_WEEKS.flatMap((week) => [
+      onRoster("starter", "DET", week, "ACT"),
+      onRoster("backup", "DET", week, week === 4 ? "RES" : "ACT"),
+    ]);
+    const volume = buildWeeklyVolume(group, noDepth(), rosters);
+
+    expect(volume.isOut("starter", TARGET_WEEK)).toBe(false);
+    expect(volume.isOut("backup", TARGET_WEEK)).toBe(true);
+    expect(volume.expectedFor("starter", TARGET_WEEK).carries).toBeCloseTo(24);
+  });
+
   it("counts a player on reserve as out", () => {
     const rosters = [
       ...PLAYED_WEEKS.flatMap((week) => [

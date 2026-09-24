@@ -22,6 +22,7 @@ import {
   RECENT_GAMES,
   type ClubCalendar,
 } from "./recentWindow.js";
+import { rosterWeekFor } from "./rosterWeek.js";
 
 const MAX_WEEK = 18;
 const ACTIVE_STATUS = "ACT";
@@ -106,6 +107,7 @@ interface RosterView {
 function rosterView(rosters: RosterAppearance[] | undefined): RosterView {
   const active = new Map<string, string>();
   const seen = new Set<string>();
+  const covered = new Set<number>();
 
   for (const row of rosters ?? []) {
     if (!row.playerId) {
@@ -113,6 +115,7 @@ function rosterView(rosters: RosterAppearance[] | undefined): RosterView {
     }
 
     seen.add(row.playerId);
+    covered.add(row.week);
 
     if (row.status === ACTIVE_STATUS) {
       active.set(`${row.playerId}|${row.week}`, row.teamId);
@@ -120,7 +123,8 @@ function rosterView(rosters: RosterAppearance[] | undefined): RosterView {
   }
 
   return {
-    teamFor: (playerId, week) => active.get(`${playerId}|${week}`),
+    teamFor: (playerId, week) =>
+      active.get(`${playerId}|${rosterWeekFor(covered, week)}`),
     known: (playerId) => seen.has(playerId),
   };
 }

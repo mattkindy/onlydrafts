@@ -47,6 +47,7 @@ import { loadDraftPicks } from "../data/draftPicks.js";
 import { buildMatchupTable } from "./matchupTable.js";
 import { countsFor } from "./countsCache.js";
 import { recentShares } from "./recentShares.js";
+import { rosterWeekFor } from "./rosterWeek.js";
 import { buildPlayerVectors } from "./playerVector.js";
 import type { Side } from "../model/gameFromDrives.js";
 import type { Call } from "../model/playFactors.js";
@@ -184,23 +185,6 @@ export function onTheRoster(status: string | undefined, live: boolean): boolean 
   }
 
   return !live && status === "INA";
-}
-
-/**
- * The roster week the cast is read from: the one asked for, or the latest
- * before it when the file stops short, since a club's roster last week is
- * a better guess than an empty one.
- */
-export function rosterWeekFor(weeks: Iterable<number>, wanted: number): number {
-  let best = 0;
-
-  for (const week of weeks) {
-    if (week <= wanted && week > best) {
-      best = week;
-    }
-  }
-
-  return best || wanted;
 }
 
 interface PasserEvidence {
