@@ -2208,12 +2208,18 @@ async function main(): Promise<void> {
       : `${argued.length} players do not agree with their own line`);
 
   const indexPath = join(DOCS, "data", "index.json");
+  const merged = mergeSiteIndex(
+    await readSiteIndex(indexPath),
+    { weeks: index, boardSeason: season, adpFormat },
+  );
+  const onDisk = new Set(await readdir(join(DOCS, "data")));
   await writeFile(
     indexPath,
-    JSON.stringify(mergeSiteIndex(
-      await readSiteIndex(indexPath),
-      { weeks: index, boardSeason: season, adpFormat },
-    )),
+    JSON.stringify({
+      ...merged,
+      weeks: merged.weeks.filter((w) =>
+        onDisk.has(`slate-${w.season}-${w.week}.json`)),
+    }),
   );
   await mkdir(OLD, { recursive: true });
   await writeFile(

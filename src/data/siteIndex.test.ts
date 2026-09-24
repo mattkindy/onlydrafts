@@ -23,8 +23,8 @@ describe("mergeSiteIndex", () => {
     ]);
   });
 
-  it("replaces the older season's weeks rather than listing them twice", () => {
-    const withOld = { ...live, weeks: [{ season: 2025, week: 9 }, ...live.weeks] };
+  it("lists a rebuilt week once", () => {
+    const withOld = { ...live, weeks: [{ season: 2025, week: 10 }, ...live.weeks] };
     const merged = mergeSiteIndex(withOld, {
       weeks: [{ season: 2025, week: 10 }], boardSeason: 2025, adpFormat: "ppr",
     });
@@ -35,14 +35,28 @@ describe("mergeSiteIndex", () => {
     ]);
   });
 
-  it("writes the build as it is for the same season or a newer one", () => {
+  it("keeps the weeks already played when the next one is built", () => {
+    const played: SiteIndex = {
+      ...live, weeks: [{ season: 2026, week: 1 }, { season: 2026, week: 2 }],
+    };
+    const merged = mergeSiteIndex(played, {
+      weeks: [{ season: 2026, week: 3 }], boardSeason: 2026, adpFormat: "standard",
+    });
+
+    expect(merged.weeks).toEqual([
+      { season: 2026, week: 1 },
+      { season: 2026, week: 2 },
+      { season: 2026, week: 3 },
+    ]);
+    expect(merged.adpFormat).toBe("standard");
+  });
+
+  it("starts the list again for a newer season", () => {
     const next: SiteIndex = {
-      weeks: [{ season: 2026, week: 4 }], boardSeason: 2026, adpFormat: "ppr",
+      weeks: [{ season: 2027, week: 1 }], boardSeason: 2027, adpFormat: "ppr",
     };
 
     expect(mergeSiteIndex(live, next)).toEqual(next);
-    expect(mergeSiteIndex(live, { ...next, boardSeason: 2027 }).boardSeason)
-      .toBe(2027);
     expect(mergeSiteIndex(undefined, next)).toEqual(next);
   });
 });

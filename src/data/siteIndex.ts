@@ -2,10 +2,10 @@
  * The site's index file, which tells the page which season's board to
  * open and which slates it can offer.
  *
- * A build writes one for the season it built. Rebuilding an older season
- * by hand, to fix its slates, must not send the live page back to that
- * season, so the index keeps the newer board and adds the older weeks
- * beside the ones it already lists.
+ * A build writes only the coming week's slate, so the index keeps the
+ * weeks it already lists and adds that one, and a build for a newer
+ * season starts the list again. Rebuilding an older season by hand must
+ * not send the live page back to that season, so the newer board stays.
  */
 
 import { readFile } from "node:fs/promises";
@@ -27,13 +27,23 @@ const byWeek = (a: WeekRef, b: WeekRef) =>
 export function mergeSiteIndex(
   previous: SiteIndex | undefined, built: SiteIndex,
 ): SiteIndex {
-  if (!previous || built.boardSeason >= previous.boardSeason) {
+  if (!previous || built.boardSeason > previous.boardSeason) {
     return built;
   }
 
-  const kept = previous.weeks.filter((w) => w.season !== built.boardSeason);
+  const listed = new Map<string, WeekRef>();
 
-  return { ...previous, weeks: [...kept, ...built.weeks].sort(byWeek) };
+  for (const week of [...previous.weeks, ...built.weeks]) {
+    listed.set(`${week.season}-${week.week}`, week);
+  }
+
+  const weeks = [...listed.values()].sort(byWeek);
+
+  if (built.boardSeason === previous.boardSeason) {
+    return { ...built, weeks };
+  }
+
+  return { ...previous, weeks };
 }
 
 /**
