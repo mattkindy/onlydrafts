@@ -1290,6 +1290,113 @@ export function countPlays(
   };
 }
 
+/**
+ * A side's cells split by team and then by call, each keyed by the state
+ * alone, so a walk over one side's widening looks a spot up with the key
+ * the widening already has instead of building one per spot.
+ */
+export type SideCells = Map<string, Map<Call | "both", Map<string, Counted>>>;
+
+const callOfSideKey = (rest: string): [Call | "both", string] => {
+  if (rest.startsWith("run|")) {
+    return ["run", rest.slice(4)];
+  }
+
+  if (rest.startsWith("pass|")) {
+    return ["pass", rest.slice(5)];
+  }
+
+  return ["both", rest];
+};
+
+export const splitBySide = (from: Map<string, Counted>): SideCells => {
+  const sides: SideCells = new Map();
+
+  for (const [key, cell] of from) {
+    const bar = key.indexOf("|");
+    const who = key.slice(0, bar);
+    const [call, cellKey] = callOfSideKey(key.slice(bar + 1));
+    const his = sides.get(who) ?? new Map<Call | "both", Map<string, Counted>>();
+    const onCall = his.get(call) ?? new Map<string, Counted>();
+    onCall.set(cellKey, cell);
+    his.set(call, onCall);
+    sides.set(who, his);
+  }
+
+  return sides;
+};
+
+export interface SidePool {
+  plays: number; runs: number; yardsSum: number;
+  leaguePlays: number; leagueRuns: number;
+}
+
+/**
+ * One side's plays around a state, widened until there are enough, with
+ * the league summed over the same cells the side's plays came from.
+ *
+ * A side rarely has sixty plays at one score and clock, so its pool
+ * widens past them, and a rate read there can only be compared against
+ * the league read there too. Comparing it against the league's tight
+ * pool mixed the any-score team mix into the situation and pulled every
+ * extreme spot toward the middle.
+ */
+export const poolForSide = (
+  state: PlayState, least: number,
+  own: Map<string, Counted> | undefined,
+  leagueAt: (cellKey: string) => Counted | undefined,
+  yardsOf: (cell: Counted) => number,
+): SidePool => {
+  let found = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
+
+  if (!own) {
+    return found;
+  }
+
+  for (const looseness of [0, 1, 2]) {
+    const pooled = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
+
+    for (const packed of wideningPacked(state.toGo, state.yardline)) {
+      if (Math.floor(packed / 100000) !== looseness) {
+        continue;
+      }
+
+      for (const cellKey of keysAt(
+        state.down, Math.floor(packed / 100) % 1000, packed % 100,
+        state.secondsLeft, state.margin, looseness,
+      )) {
+        const cell = own.get(cellKey);
+
+        if (!cell) {
+          continue;
+        }
+
+        pooled.plays += cell.plays;
+        pooled.runs += cell.runs;
+        pooled.yardsSum += yardsOf(cell);
+        const everybody = leagueAt(cellKey);
+
+        if (everybody) {
+          pooled.leaguePlays += everybody.plays;
+          pooled.leagueRuns += everybody.runs;
+        }
+      }
+
+      if (pooled.plays >= least) {
+        break;
+      }
+    }
+
+    found = pooled;
+
+    if (found.plays >= least) {
+      break;
+    }
+  }
+
+  return found;
+};
+
 export function fitPlayFactors(
   rows: PlayRow[],
   settings: FactorSettings = FACTOR_DEFAULTS,
@@ -1573,11 +1680,33 @@ export function fitPlayFactors(
 
     return sum;
   };
-  const sideRemembered = new Map<string, {
-    plays: number; runs: number; yardsSum: number;
-    leaguePlays: number; leagueRuns: number;
-  }>();
+  const sideRemembered = new Map<string, SidePool>();
   const forgetsAt = () => makeRoom(sideRemembered);
+  const sideTables = new WeakMap<Map<string, Counted>, SideCells>();
+  const sideTableOf = (from: Map<string, Counted>) => {
+    const already = sideTables.get(from);
+
+    if (already) {
+      return already;
+    }
+
+    const table = splitBySide(from);
+    sideTables.set(from, table);
+
+    return table;
+  };
+  const sideCellsOf = (
+    from: Map<string, Counted>, who: string, call?: Call,
+  ) => sideTableOf(from).get(who)?.get(call ?? "both");
+  const leagueRun = (cellKey: string) => cells.get(`run|${cellKey}`);
+  const leaguePass = (cellKey: string) => cells.get(`pass|${cellKey}`);
+  const leagueBoth = (cellKey: string) => cells.get(cellKey);
+  const leagueOnCall = { run: leagueRun, pass: leaguePass };
+  /**
+   * Sums only. This used to copy every yard of a side's pooled cells
+   * into a fresh array three times a play, and once the per side counts
+   * were connected those cells held whole team seasons.
+   */
   const forSide = (
     from: Map<string, Counted>, who: string, state: PlayState,
     least: number, call?: Call,
@@ -1592,64 +1721,10 @@ export function fitPlayFactors(
       return already;
     }
 
-    /**
-     * Sums only. This used to copy every yard of a side's pooled cells
-     * into a fresh array three times a play, and once the per side
-     * counts were connected those cells held whole team seasons. The
-     * two callers want a rate and an average, so the numbers travel
-     * and the arrays stay where they are.
-     */
-    /**
-     * The league is summed over the same cells the side's own plays
-     * came from. A side rarely has sixty plays at one score and clock,
-     * so its pool widens past them, and a rate read there can only be
-     * compared against the league read there too. Comparing it against
-     * the league's tight pool mixed the any-score team mix into the
-     * situation and pulled every extreme spot toward the middle.
-     */
-    let found = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
-
-    for (const looseness of [0, 1, 2]) {
-      const pooled = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
-
-      for (const packed of wideningPacked(state.toGo, state.yardline)) {
-        if (Math.floor(packed / 100000) !== looseness) {
-          continue;
-        }
-
-        for (const cellKey of keysAt(
-          state.down, Math.floor(packed / 100) % 1000, packed % 100,
-          state.secondsLeft, state.margin, looseness,
-        )) {
-          const cell = from.get(`${who}|${call ? `${call}|${cellKey}` : cellKey}`);
-
-          if (!cell) {
-            continue;
-          }
-
-          pooled.plays += cell.plays;
-          pooled.runs += cell.runs;
-          pooled.yardsSum += summedOnce(cell);
-          const everybody = cells.get(call ? `${call}|${cellKey}` : cellKey);
-
-          if (everybody) {
-            pooled.leaguePlays += everybody.plays;
-            pooled.leagueRuns += everybody.runs;
-          }
-        }
-
-        if (pooled.plays >= least) {
-          break;
-        }
-      }
-
-      found = pooled;
-
-      if (found.plays >= least) {
-        break;
-      }
-    }
-
+    const found = poolForSide(
+      state, least, sideCellsOf(from, who, call),
+      call ? leagueOnCall[call] : leagueBoth, summedOnce,
+    );
     sideRemembered.set(key, found);
     return found;
   };

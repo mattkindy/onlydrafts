@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CountedPlays, GoalSample, PlayRow } from "./fitPlayFactors.js";
-import type { PlayState } from "../model/playFactors.js";
+import {
+  keysAt, wideningPacked, type Call, type PlayState,
+} from "../model/playFactors.js";
 import { seededRng } from "../sim/rng.js";
 
 /**
@@ -589,4 +591,146 @@ describe("a thin cell rests on a player's own leaning at a wider one", () => {
       expect(shares.get("RedZone")! - shares.get("Midfield")!)
         .toBeGreaterThan(0.1);
     });
+});
+
+/**
+ * A small league of random plays, with gains that are not whole yards so
+ * that adding them in a different order would show in the last digit.
+ */
+const scatteredRows = (): PlayRow[] => {
+  const uniform = seededRng(17);
+  const pick = <T>(from: T[]) => from[Math.floor(uniform() * from.length)]!;
+  const rows: PlayRow[] = [];
+
+  for (let i = 0; i < 4000; i++) {
+    const offence = pick(["NE", "NYJ", "MIA"]);
+    rows.push({
+      offence, defence: offence === "NE" ? "MIA" : "NE",
+      down: 1 + Math.floor(uniform() * 4),
+      toGo: 1 + Math.floor(uniform() * 15),
+      yardline: 1 + Math.floor(uniform() * 99),
+      margin: Math.floor(uniform() * 41) - 20,
+      secondsLeft: Math.floor(uniform() * 3600),
+      call: uniform() < 0.45 ? "run" : "pass",
+      yards: Math.round((uniform() * 30 - 5) * 100) / 100,
+      touchdown: uniform() < 0.05 ? 1 : 0,
+      player: pick(["", "Back", "Wideout", "Slot", "End"]),
+    });
+  }
+
+  return rows;
+};
+
+const scatteredStates = (): PlayState[] => {
+  const uniform = seededRng(29);
+
+  return Array.from({ length: 16 }, () => ({
+    down: 1 + Math.floor(uniform() * 4),
+    toGo: 1 + Math.floor(uniform() * 15),
+    yardline: 1 + Math.floor(uniform() * 99),
+    margin: Math.floor(uniform() * 41) - 20,
+    secondsLeft: Math.floor(uniform() * 3600),
+  }));
+};
+
+const LEASTS = [0, 7, 60, 250, 1000, 100000];
+
+/** each spot of the widening in order, with the looseness it was let go by */
+const spotsInOrder = (state: PlayState) =>
+  [0, 1, 2].flatMap((looseness) =>
+    [...wideningPacked(state.toGo, state.yardline)]
+      .filter((packed) => Math.floor(packed / 100000) === looseness)
+      .map((packed) => ({
+        looseness,
+        keys: keysAt(
+          state.down, Math.floor(packed / 100) % 1000, packed % 100,
+          state.secondsLeft, state.margin, looseness,
+        ),
+      })));
+
+describe("a side's pool read through its own cells", () => {
+  /** the walk as it was written against the whole side table */
+  type Cell = CountedPlays["cells"] extends Map<string, infer C> ? C : never;
+  const sideAsWalked = (
+    counted: CountedPlays, from: Map<string, Cell>, who: string,
+    spots: ReturnType<typeof spotsInOrder>, least: number, call?: Call,
+  ) => {
+    let found = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
+
+    for (const looseness of [0, 1, 2]) {
+      const pooled = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
+
+      for (const spot of spots) {
+        if (spot.looseness !== looseness) {
+          continue;
+        }
+
+        for (const cellKey of spot.keys) {
+          const cell = from.get(`${who}|${call ? `${call}|${cellKey}` : cellKey}`);
+
+          if (!cell) {
+            continue;
+          }
+
+          pooled.plays += cell.plays;
+          pooled.runs += cell.runs;
+          pooled.yardsSum += cell.yards.reduce((a, b) => a + b, 0);
+          const everybody = counted.cells.get(call ? `${call}|${cellKey}` : cellKey);
+
+          if (everybody) {
+            pooled.leaguePlays += everybody.plays;
+            pooled.leagueRuns += everybody.runs;
+          }
+        }
+
+        if (pooled.plays >= least) {
+          break;
+        }
+      }
+
+      found = pooled;
+
+      if (found.plays >= least) {
+        break;
+      }
+    }
+
+    return found;
+  };
+
+  it("sums the same cells in the same order as the keyed walk", async () => {
+    vi.resetModules();
+    const loaded = await import("./fitPlayFactors.js");
+    const counted = loaded.countPlays(scatteredRows());
+    const yardsOf = (cell: Cell) => cell.yards.reduce((a, b) => a + b, 0);
+    let filled = 0;
+
+    for (const from of [counted.byOffence, counted.byDefence]) {
+      const split = loaded.splitBySide(from);
+
+      for (const state of scatteredStates()) {
+        const spots = spotsInOrder(state);
+
+        for (const who of ["NE", "NYJ", "BUF"]) {
+          for (const call of ["run", "pass", undefined] as const) {
+            const leagueAt = (cellKey: string) =>
+              counted.cells.get(call ? `${call}|${cellKey}` : cellKey);
+
+            for (const least of LEASTS) {
+              const found = loaded.poolForSide(
+                state, least, split.get(who)?.get(call ?? "both"),
+                leagueAt, yardsOf,
+              );
+              expect(found)
+                .toEqual(sideAsWalked(counted, from, who, spots, least, call));
+              filled += found.plays > 0 ? 1 : 0;
+            }
+          }
+        }
+      }
+    }
+
+    // most of the pools found plays, so the order was put to the test
+    expect(filled).toBeGreaterThan(500);
+  });
 });
