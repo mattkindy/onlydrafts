@@ -62,15 +62,23 @@ export default {
       "?" + (wantedViews.length ? wantedViews : DRAFT_VIEWS)
         .map((view) => `view=${view}`).join("&") +
       (week ? `&scoringPeriodId=${week}` : "");
-    const said = await fetch(at, {
-      headers: swid && s2 ? { cookie: `SWID=${swid}; espn_s2=${s2}` } : {},
-    });
+    let said: Response;
 
-    if (said.status === 401) {
+    // an upstream failure has to come back with the CORS headers, or the
+    // browser hides it and the page can only guess what went wrong
+    try {
+      said = await fetch(at, {
+        headers: swid && s2 ? { cookie: `SWID=${swid}; espn_s2=${s2}` } : {},
+      });
+    } catch (e) {
+      return answer({ error: `could not reach ESPN: ${(e as Error).message}` }, 502);
+    }
+
+    if (said.status === 401 || said.status === 403) {
       return answer({
         error: "ESPN refused. A private league needs both of your cookies, " +
           "and they go stale, so take them fresh from espn.com.",
-      }, 401);
+      }, said.status);
     }
 
     if (!said.ok) {
