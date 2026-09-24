@@ -34,3 +34,20 @@ Sleeper's last word before kickoff and nothing here remembers what it
 said a month out. Anything measuring how good Sleeper is weeks in
 advance has to be collected as the season runs; it cannot be read back
 out of this file.
+
+`adp/` has the draft boards for the season being played, taken before it
+started. Sleeper and Fantasy Football Calculator both serve only the
+drafts of the last few days, so a board pulled in October describes a
+different room from the one the league drafted in, and the weekly build
+has no copy of its own. `scripts/pullSleeperAdp.ts` and
+`scripts/pullAdp.ts` write here and will not replace a board without
+`--force`. The loaders read this folder first and fall back to
+`data/raw`, which is where an older season's board still comes from:
+the mocks site serves a past season's preseason board on request.
+
+For 2026, the Sleeper board was pulled on 22 August, eighteen days before
+the first game on 9 September. The two Fantasy Football Calculator
+boards cover drafts from 7 to 14 September, so most of those drafts
+happened after kickoff. They are the only 2026 copies there are, since
+the site serves only the last week. Pull the next season's boards in the
+week before it starts.

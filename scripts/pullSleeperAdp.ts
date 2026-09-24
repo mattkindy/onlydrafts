@@ -1,19 +1,22 @@
 /**
- * Where Sleeper's own drafters are taking people.
+ * Where Sleeper's own drafters are taking people, into the committed
+ * ADP folder so the weekly build has it too. Run it before the season
+ * starts; it will not replace a snapshot without --force, because
+ * Sleeper's number keeps moving once the games begin.
  *
- * The public mocks we were reading come from a different site, and
- * the two rooms disagree by rounds: Bucky Irving goes at 47 in those
- * mocks and at 32 on Sleeper. The league drafts on Sleeper, so
- * Sleeper is the room to price against.
+ * The mocks come from a different site, and the two rooms disagree by
+ * rounds: Bucky Irving goes at 47 in those mocks and at 32 on Sleeper.
+ * Sleeper gives a number per scoring and no range, so the spread comes
+ * from the mocks.
  *
- * Sleeper gives a number per scoring, and no range, so the spread
- * comes from the mocks we already have.
- *
- * Run: npx tsx scripts/pullSleeperAdp.ts 2026
+ * Run: npx tsx scripts/pullSleeperAdp.ts 2026 [--force]
  */
 
-import { writeFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { join } from "node:path";
+import { ADP_DIR, sleeperBoardFile } from "../src/data/adp.js";
+import { fetchWithRetry } from "../src/data/fetchWithRetry.js";
+import { writeAtomically } from "../src/data/writeAtomically.js";
 
 const WANTED = ["QB", "RB", "WR", "TE", "K", "DEF"];
 
@@ -28,10 +31,19 @@ interface Row {
 }
 
 async function pull(season: number): Promise<void> {
+  const at = join(ADP_DIR, sleeperBoardFile(season));
+  const already = await access(at).then(() => true, () => false);
+
+  if (already && !process.argv.includes("--force")) {
+    throw new Error(`${at} is already there; pass --force to replace it`);
+  }
+
   const url = "https://api.sleeper.app/projections/nfl/" + season +
     "?season_type=regular&order_by=adp" +
     WANTED.map((p) => `&position[]=${p}`).join("");
-  const rows = await (await fetch(url)).json() as Row[];
+  const rows = await (await fetchWithRetry(url, {
+    label: `sleeper adp ${season}`,
+  })).json() as Row[];
   const out: {
     name: string; position: string; team: string;
     standard: number; half: number; ppr: number;
@@ -69,10 +81,7 @@ async function pull(season: number): Promise<void> {
   }
 
   out.sort((a, b) => a.standard - b.standard);
-  const at = join(
-    import.meta.dirname, "..", "data", "raw", `adp_sleeper_${season}.json`,
-  );
-  await writeFile(at, JSON.stringify({ season, players: out }, null, 1));
+  await writeAtomically(at, JSON.stringify({ season, players: out }, null, 1));
   console.log(`${out.length} players drafted on Sleeper, written to ${at}`);
   console.log(out.slice(0, 3)
     .map((p) => `  ${p.standard.toFixed(1).padStart(6)}  ${p.name}`).join("\n"));

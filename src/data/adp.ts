@@ -27,6 +27,24 @@ export interface AdpEntry {
 export type AdpFormat = "ppr" | "standard";
 
 /**
+ * The committed preseason snapshots. Both sources serve only the last few
+ * days of drafts, so a board pulled in October is a different room.
+ */
+export const ADP_DIR = join(RAW_DIR, "..", "curated", "adp");
+
+/** the committed snapshot when there is one, and the downloaded copy if not */
+export async function readAdpSnapshot(fileName: string): Promise<string> {
+  return readFile(join(ADP_DIR, fileName), "utf8").catch(() =>
+    readFile(join(RAW_DIR, fileName), "utf8"));
+}
+
+export const mockBoardFile = (format: AdpFormat, season: number) =>
+  `adp_${format}_${season}.json`;
+
+export const sleeperBoardFile = (season: number) =>
+  `adp_sleeper_${season}.json`;
+
+/**
  * Preseason ADP from Fantasy Football Calculator mock drafts,
  * snapshotted in the final week before each season. Keyed by
  * normalized name plus position, since the source has no gsis ids.
@@ -40,10 +58,7 @@ export async function loadAdp(
   season: number,
   format: AdpFormat = "ppr",
 ): Promise<Map<string, AdpEntry>> {
-  const text = await readFile(
-    join(RAW_DIR, `adp_${format}_${season}.json`),
-    "utf8",
-  );
+  const text = await readAdpSnapshot(mockBoardFile(format, season));
   const parsed = JSON.parse(text) as {
     meta?: { total_drafts?: number };
     players: {
@@ -92,9 +107,8 @@ export async function loadSleeperAdp(
   season: number,
   format: "standard" | "half" | "ppr" = "standard",
 ): Promise<Map<string, AdpEntry>> {
-  const text = await readFile(
-    join(RAW_DIR, `adp_sleeper_${season}.json`), "utf8",
-  ).catch(() => "");
+  const text = await readAdpSnapshot(sleeperBoardFile(season))
+    .catch(() => "");
 
   if (!text) {
     return new Map();

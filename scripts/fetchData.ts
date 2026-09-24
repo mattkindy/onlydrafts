@@ -6,6 +6,7 @@ import { mkdir, access } from "node:fs/promises";
 import { join } from "node:path";
 import { seasonsAsked } from "../src/data/seasons.js";
 import { currentSeason } from "../src/data/nflverse.js";
+import { ADP_DIR, mockBoardFile } from "../src/data/adp.js";
 import { fetchWithRetry } from "../src/data/fetchWithRetry.js";
 import { writeAtomically } from "../src/data/writeAtomically.js";
 
@@ -200,12 +201,16 @@ async function main(): Promise<void> {
     await tryDownload(injuriesUrl(season), `injuries_${season}.csv`);
     await tryDownload(depthChartsUrl(season), `depth_charts_${season}.csv`);
 
-    for (const format of ["ppr", "standard"]) {
-      await tryDownload(
-        adpUrl(format, season),
-        `adp_${format}_${season}.json`,
-        false,
-      );
+    for (const format of ["ppr", "standard"] as const) {
+      const board = mockBoardFile(format, season);
+
+      // the loader reads a committed snapshot first, so a download
+      // would never be read
+      if (await exists(join(ADP_DIR, board))) {
+        continue;
+      }
+
+      await tryDownload(adpUrl(format, season), board, false);
     }
 
     if (!plays) {
