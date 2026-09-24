@@ -1,0 +1,39 @@
+name: check
+
+# Typecheck and test every change to the code. The weekly refresh only
+# commits the built site and the curated tables, and a push that changes
+# nothing else has no code to check, so it is skipped. Tests that read
+# the nflverse downloads skip themselves here, since this job does not
+# restore them.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "data/curated/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
