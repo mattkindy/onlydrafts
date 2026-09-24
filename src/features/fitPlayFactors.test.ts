@@ -801,9 +801,9 @@ describe("the share pool cut from one walk for any number of plays", () => {
         const spots = spotsInOrder(state);
 
         for (const call of ["run", "pass", undefined] as const) {
-          const walk = loaded.widenedCells(
-            state, call ? loaded.cellsUnder(counted.cells, call) : counted.cells,
-          );
+          const walk = loaded.widenedCells(state, loaded.rowsOf(
+            call ? loaded.cellsUnder(counted.cells, call) : counted.cells,
+          ));
 
           for (const least of asked) {
             const found = walk.upTo(least);
@@ -818,6 +818,66 @@ describe("the share pool cut from one walk for any number of plays", () => {
       }
 
       expect(widened).toBeGreaterThan(100);
+    });
+});
+
+describe("a widening walked over two formations at once", () => {
+  it("reaches the cells in the order the keyed walk reached them",
+    async () => {
+      vi.resetModules();
+      const loaded = await import("./fitPlayFactors.js");
+      const rows = scatteredRows().map((row, i) => ({ ...row, shotgun: i % 3 > 0 }));
+      const counted = loaded.countPlays(rows);
+      const forms = ["gun", "centre"];
+      const inForm = forms.map((form) =>
+        loaded.rowsOf(loaded.cellsUnder(counted.cells, form)));
+      let reached = 0;
+
+      for (const state of scatteredStates()) {
+        const spots = spotsInOrder(state);
+
+        for (const looseness of [0, 1, 2]) {
+          for (const least of LEASTS) {
+            const expected: [string, Cell][] = [];
+            let plays = 0;
+
+            for (const spot of spots) {
+              if (spot.looseness !== looseness) {
+                continue;
+              }
+
+              for (const cellKey of spot.keys) {
+                for (const form of forms) {
+                  const cell = counted.cells.get(`${form}|${cellKey}`);
+
+                  if (cell) {
+                    expected.push([form, cell]);
+                    plays += cell.plays;
+                  }
+                }
+              }
+
+              if (plays >= least) {
+                break;
+              }
+            }
+
+            const found: [string, Cell][] = [];
+            let walked = 0;
+            loaded.walkWidening(inForm, state, looseness, ({ cell }, set) => {
+              found.push([forms[set]!, cell]);
+              walked += cell.plays;
+            }, () => walked >= least);
+
+            expect(found.length).toBe(expected.length);
+            expect(found.every(([form, cell], i) =>
+              form === expected[i]![0] && cell === expected[i]![1])).toBe(true);
+            reached += found.length;
+          }
+        }
+      }
+
+      expect(reached).toBeGreaterThan(1000);
     });
 });
 
@@ -853,7 +913,7 @@ describe("a player's touches over a pool, added up once", () => {
       return cell.byPlayer.get(player)?.touches ?? 0;
     });
 
-    const passes = loaded.cellsUnder(counted.cells, "pass");
+    const passes = loaded.rowsOf(loaded.cellsUnder(counted.cells, "pass"));
 
     for (const state of scatteredStates()) {
       const pool = loaded.widenedCells(state, passes).upTo(250);
