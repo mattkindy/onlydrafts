@@ -239,6 +239,14 @@ function addCost(paid: { drop: string } | null): string {
   return paid.drop === OPEN_SPOT ? ", no drop needed" : ", drop " + paid.drop;
 }
 
+/** who a spot for an add costs, and how often you win either side of the pair */
+interface Paid {
+  drop: string;
+  net: number;
+  before: number;
+  after: number;
+}
+
 function AddRow(
   { row, at, figures, absent, paid, span, sky, onMore }: {
     row: Add;
@@ -247,7 +255,7 @@ function AddRow(
     figures: Figures | null;
     absent: string;
     /** who a spot for him costs and what the pair is worth, when priced */
-    paid: { drop: string; net: number } | null;
+    paid: Paid | null;
     span: Span;
     /** his row on this week's slate, which is where the forecast is */
     sky?: SlateRow;
@@ -255,11 +263,16 @@ function AddRow(
   },
 ) {
   return (
-    <tr onClick={onMore}>
+    <tr onClick={onMore} class={paid ? "paired" : ""}>
       {/* the move as you would say it, which a phone leads the card with
           and a wide screen has in its own columns already */}
       <td data-label="move" class="move">
         Add {row.p.name} ({row.p.position}){addCost(paid)}
+      </td>
+      {/* a phone's big number is the whole move, drop included, where a
+          wide screen shows the add and the pair in columns of their own */}
+      <td data-label="move win %" class="net">
+        {paid && <Swing before={paid.before} after={paid.after} by={paid.net} />}
       </td>
       <td data-label="player">
         <span class="who link">{row.p.name}</span>
@@ -349,6 +362,52 @@ function missingWeek(
   }
 
   return null;
+}
+
+/** the move the page leads with: who to add, who goes, and the win % either side */
+export interface BestMove {
+  add: string;
+  /** nobody when there is a spot open for him */
+  drop: string | null;
+  before: number;
+  after: number;
+}
+
+/** the best add with a drop worked out over the season, if one clears the bar */
+export function seasonBest(worth: { row: Add; paid: Net }[]): BestMove | null {
+  const top = worth[0];
+
+  if (!top) {
+    return null;
+  }
+
+  return {
+    add: top.row.p.name,
+    drop: top.paid.drop?.name ?? null,
+    before: top.paid.before,
+    after: top.paid.after,
+  };
+}
+
+/** and the same for this week's game, off the week's own price for each pair */
+export function weekBest(
+  priced: { row: Add }[], week: WeekPrices | null, nameFor: (key: string) => string,
+): BestMove | null {
+  const top = priced
+    .map(({ row }) => ({ row, net: week?.nets.get(row.p.key) }))
+    .filter((one) => one.net && one.net.net >= WORTH_ADDING)
+    .sort((a, b) => b.net!.net - a.net!.net)[0];
+
+  if (!top) {
+    return null;
+  }
+
+  return {
+    add: top.row.p.name,
+    drop: top.net!.drop ? nameFor(top.net!.drop) : null,
+    before: top.net!.before,
+    after: top.net!.after,
+  };
 }
 
 /** the positions a reader filters by, the way the draft board lists them */
@@ -463,8 +522,6 @@ export function Waivers(props: Props) {
    */
   const worth = priced.filter(({ paid }) => paid.net >= WORTH_ADDING);
   const rest = listed.slice(PRICED).filter((row) => row.added >= WORTH_ADDING);
-  const hidden = listed.length - worth.length - rest.length;
-  const best = worth[0] ?? null;
   const wanted = normalizeName(query.trim());
   const matching = (row: { p: Player }) =>
     !wanted || normalizeName(row.p.name).includes(wanted);
@@ -493,6 +550,20 @@ export function Waivers(props: Props) {
       .sort((a, b) => b.by - a.by);
   }, [worth, rest, wanted, span, week]);
 
+  /**
+   * How many of the listed players the span on screen leaves out. This
+   * week only prices the top of the list, so the rest are left out too.
+   */
+  const shownThisWeek = [...worth.map(({ row }) => row), ...rest]
+    .filter((row) => (week?.adds.get(row.p.key)?.added ?? 0) >= WORTH_ADDING)
+    .length;
+  const hidden = span === "week"
+    ? listed.length - shownThisWeek
+    : listed.length - worth.length - rest.length;
+  const best = span === "week"
+    ? weekBest(priced, week, nameFor)
+    : seasonBest(worth);
+
   const yours = drops.filter(matching);
   const missing = missingWeek(
     props.week, rows, states, ours, props.gamesStatus);
@@ -515,7 +586,7 @@ export function Waivers(props: Props) {
         absent,
         figures: seasonAdd(row),
         paid: paid
-          ? { drop: paid.drop?.name ?? OPEN_SPOT, net: paid.net }
+          ? { ...paid, drop: paid.drop?.name ?? OPEN_SPOT }
           : null,
       };
     }
@@ -525,10 +596,7 @@ export function Waivers(props: Props) {
       absent,
       figures: his ? weekAdd(his, nameFor) : null,
       paid: net
-        ? {
-            drop: net.drop ? nameFor(net.drop) : OPEN_SPOT,
-            net: net.net,
-          }
+        ? { ...net, drop: net.drop ? nameFor(net.drop) : OPEN_SPOT }
         : null,
     };
   };
@@ -680,8 +748,11 @@ export function Waivers(props: Props) {
       )}
 
       {hidden > 0 && (
-        <p class="hint" title={"they came out under half a point of win " +
-          "probability a week, which is inside the noise"}>
+        <p class="hint" title={span === "week"
+          ? "they add under half a point of win probability this week, or " +
+            "sit too far down the list to be priced for it"
+          : "they came out under half a point of win probability a week, " +
+            "which is inside the noise"}>
           {hidden} hidden
         </p>
       )}
@@ -723,18 +794,17 @@ export function Waivers(props: Props) {
 
       {best && (
         <p class="hint">
-          {best.paid.drop
+          {best.drop
             ? (
               <>
-                Best move: add <b>{best.row.p.name}</b>, drop{" "}
-                <b>{best.paid.drop.name}</b>. Win %{" "}
-                {pct(best.paid.before)} to {pct(best.paid.after)}.
+                Best move: add <b>{best.add}</b>, drop <b>{best.drop}</b>.
+                Win % {pct(best.before)} to {pct(best.after)}.
               </>
             )
             : (
               <>
-                Best move: add <b>{best.row.p.name}</b> to your open spot.
-                Win % {pct(best.paid.before)} to {pct(best.paid.after)}.
+                Best move: add <b>{best.add}</b> to your open spot.
+                Win % {pct(best.before)} to {pct(best.after)}.
               </>
             )}
         </p>

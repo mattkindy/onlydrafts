@@ -562,7 +562,7 @@
     color: var(--ink); }
   /* the move as a sentence, which only a phone shows: a wide screen has
      the player and the drop in columns of their own already */
-  table.pairs td.move { display: none; }
+  table.pairs td.move, table.pairs td.net { display: none; }
   /* how often you win either side of a move. The two figures and the
      arrow between them are one reading, so they never break apart */
   .swing { white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -893,14 +893,19 @@
     table.pairs td[data-label="team"], table.pairs td[data-label="drop"],
     table.pairs td[data-label="ppg"], table.pairs td[data-label="starts"] {
       display: none; }
-    /* the one big number: what the move does to your week */
-    table.pairs td[data-label="win %"] { display: block;
-      font-size: var(--t5); font-weight: 800; margin-top: var(--s1); }
-    table.pairs td[data-label="win %"]::before { display: none; }
+    /* the one big number: what the move does to your week, and where the
+       move drops somebody, what the pair does rather than the add alone */
+    table.pairs td[data-label="win %"], table.pairs tr.paired td.net {
+      display: block; font-size: var(--t5); font-weight: 800;
+      margin-top: var(--s1); }
+    table.pairs tr.paired td[data-label="win %"] { display: none; }
+    table.pairs td[data-label="win %"]::before,
+    table.pairs td.net::before { display: none; }
     /* a move that costs you is not green, whatever the big number does */
-    table.pairs td[data-label="win %"] b { margin-left: var(--s2);
-      color: var(--muted); }
-    table.pairs td[data-label="win %"] b.up { color: var(--go); }
+    table.pairs td[data-label="win %"] b, table.pairs td.net b {
+      margin-left: var(--s2); color: var(--muted); }
+    table.pairs td[data-label="win %"] b.up,
+    table.pairs td.net b.up { color: var(--go); }
     /* and the rest as one muted line, which is detail rather than answer */
     table.pairs td[data-label="pts"],
     table.pairs td[data-label="pts a week"],

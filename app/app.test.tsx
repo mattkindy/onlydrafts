@@ -22,7 +22,8 @@ import { Roster } from "./views/Roster.tsx";
 import { readSlate } from "./lib/slate.ts";
 import { DraftView } from "./views/Draft.tsx";
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
-import { Waivers } from "./views/Waivers.tsx";
+import { Waivers, weekBest } from "./views/Waivers.tsx";
+import type { Add } from "./lib/waivers.ts";
 import { pairedRows } from "./views/Matchups.tsx";
 import { nameOf } from "./views/Advice.tsx";
 
@@ -169,6 +170,33 @@ describe("the views", () => {
       .toBeGreaterThan(5);
   });
 
+  it("leads a phone card that drops somebody with what the pair is worth", async () => {
+    render(
+      <Waivers
+        players={players} league={league} posFilter="ALL" rows={new Map()}
+        games={[]} schedule={null} season={2026} week={null}
+        slate={null} roster={null} listed={new Map()}
+        onMore={() => {}}
+      />,
+      where,
+    );
+
+    for (let i = 0; i < 200 && !where.querySelector("tr.paired"); i++) {
+      await new Promise((settle) => setTimeout(settle, 25));
+    }
+
+    const paired = Array.from(where.querySelectorAll("tr.paired"));
+
+    expect(paired.length).toBeGreaterThan(0);
+
+    for (const row of paired) {
+      const big = row.querySelector("td.net b")?.textContent;
+      const drop = row.querySelector('td[data-label="drop"] b')?.textContent;
+
+      expect(big).toBe(drop);
+    }
+  });
+
   it("lists the free agents the board underpriced", async () => {
     const taken = new Set(
       league.allRosters.flatMap((r) => r.keys.map((m) => m.key)));
@@ -245,6 +273,29 @@ describe("the views", () => {
       "against his price: +2.1 a game over his price as of week 1, " +
         "on work share, scoring so far",
     );
+  });
+});
+
+describe("the best waiver move for the span on screen", () => {
+  const add = (name: string) => ({ row: { p: { key: name, name } } as Add });
+  const priced = [add("Season Pick"), add("Week Pick")];
+
+  it("takes this week's best pair from the week's own prices", () => {
+    const week = {
+      opponent: "brad", odds: 0.4, drops: new Map(), adds: new Map(),
+      nets: new Map([
+        ["Season Pick", { drop: null, before: 0.4, after: 0.41, net: 0.01 }],
+        ["Week Pick", { drop: "benchguy", before: 0.4, after: 0.47, net: 0.07 }],
+      ]),
+    };
+
+    expect(weekBest(priced, week, (key) => key.toUpperCase())).toEqual({
+      add: "Week Pick", drop: "BENCHGUY", before: 0.4, after: 0.47,
+    });
+  });
+
+  it("says nothing this week before the week has been priced", () => {
+    expect(weekBest(priced, null, (key) => key)).toBeNull();
   });
 });
 
