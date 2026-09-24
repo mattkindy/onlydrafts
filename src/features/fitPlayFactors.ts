@@ -9,7 +9,8 @@
  */
 
 import {
-  emptyCell, marginBand, nearnessWeight, spotOrder, stateKey, timeBand,
+  emptyCell, marginBand, nearnessWeight, spotOrder, stateCode, stateKey,
+  STATE_CODES, timeBand, wholeIn,
   type Call, type PlayFactors, type PlayState, type StateCell,
 } from "../model/playFactors.js";
 import type { RunParts } from "./runParts.js";
@@ -1356,9 +1357,6 @@ export const cellsUnder = (cells: Map<string, Counted>, prefix: string) => {
   return under;
 };
 
-const wholeIn = (value: number, most: number) =>
-  Number.isInteger(value) && value >= 0 && value <= most;
-
 const startsWithDigit = (key: string) => {
   const first = key.charCodeAt(0);
 
@@ -1820,6 +1818,62 @@ export const touchesAmong = (
   return totals;
 };
 
+/** a call as a small number for a memo key, with no call at all as its own */
+const CALL_CODES: Record<Call | "both", number> = { run: 0, pass: 1, both: 2 };
+
+export const callCode = (call?: Call) => CALL_CODES[call ?? "both"];
+
+/** where a side stood, when a count is asked of one formation */
+type Form = "gun" | "centre";
+
+const FORM_CODES: Record<Form | "", number> = { "": 0, gun: 1, centre: 2 };
+
+/** how many numbers of plays a packed memo key has room for */
+const LEAST_CODES = 1 << 16;
+
+/**
+ * What a memo is kept under: a small whole number for whatever else the
+ * question turned on, the state, and how many plays were asked for. It is
+ * a number when all three pack and a string otherwise, and a number never
+ * equals a string, so two questions share a key exactly when the string
+ * keys the memos used to build would have matched.
+ */
+export const memoKey = (
+  asked: number, state: PlayState, least: number,
+): number | string => {
+  const code = stateCode(
+    state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
+  );
+  const packed = typeof code === "number" && wholeIn(least, LEAST_CODES - 1)
+    ? (asked * STATE_CODES + code) * LEAST_CODES + least
+    : undefined;
+
+  if (packed !== undefined && Number.isSafeInteger(packed)) {
+    return packed;
+  }
+
+  return `${asked}|${code}|${least}`;
+};
+
+/**
+ * The key a widening walk is kept under. It reads the distance and the
+ * yardline as they are rather than capped, because the walk itself does.
+ */
+export const walkKey = (state: PlayState, call?: Call): number | string => {
+  const down = Math.min(4, state.down);
+  const time = timeBand(state.secondsLeft);
+  const band = marginBand(state.margin);
+
+  if (!wholeIn(down, 4) || !wholeIn(state.toGo, 40) ||
+      !wholeIn(state.yardline, 99)) {
+    return `${call ?? "both"}|${down}|${state.toGo}|${state.yardline}` +
+      `|${time}|${band}`;
+  }
+
+  return ((((callCode(call) * 5 + down) * 41 + state.toGo) * 100 +
+    state.yardline) * 5 + time) * 9 + band;
+};
+
 export function fitPlayFactors(
   rows: PlayRow[],
   settings: FactorSettings = FACTOR_DEFAULTS,
@@ -2116,8 +2170,21 @@ export function fitPlayFactors(
 
     return sum;
   };
-  const sideRemembered = new Map<string, SidePool>();
+  const sideRemembered = new Map<number | string, SidePool>();
   const forgetsAt = () => makeRoom(sideRemembered);
+  /** each side as a small number, in the order it was first asked about */
+  const sideCodes = new Map<string, number>();
+  const sideCode = (who: string) => {
+    const known = sideCodes.get(who);
+
+    if (known !== undefined) {
+      return known;
+    }
+
+    sideCodes.set(who, sideCodes.size);
+
+    return sideCodes.size - 1;
+  };
   const sideTables = new WeakMap<Map<string, Counted>, SideCells>();
   const sideTableOf = (from: Map<string, Counted>) => {
     const already = sideTables.get(from);
@@ -2144,9 +2211,7 @@ export function fitPlayFactors(
     least: number, call?: Call,
   ) => {
     forgetsAt();
-    const key = `${who}|${call ?? "both"}|${stateKey(
-      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
-    )}|${least}`;
+    const key = memoKey(sideCode(who) * 3 + callCode(call), state, least);
     const already = sideRemembered.get(key);
 
     if (already) {
@@ -2174,14 +2239,14 @@ export function fitPlayFactors(
    * the same states repeat and the memory flat.
    */
   const REMEMBERS = Number(process.env["REMEMBERS"] ?? 30000);
-  const remembered = new Map<string, Counted>();
+  const remembered = new Map<number | string, Counted>();
   /**
    * Half goes rather than all of it: clearing everything made every
    * following lookup a fresh gather, and a map iterates in insertion
    * order, so dropping the older half keeps what the walk is asking
    * about right now.
    */
-  const makeRoom = (cache: Map<string, unknown>) => {
+  const makeRoom = <K, V>(cache: Map<K, V>) => {
     if (cache.size <= REMEMBERS) {
       return;
     }
@@ -2205,9 +2270,7 @@ export function fitPlayFactors(
   const settledAt = new WeakMap<Counted, number>();
   const at = (state: PlayState, least: number, call?: Call) => {
     makeRoom(remembered);
-    const key = `${call ?? "both"}|${stateKey(
-      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
-    )}|${least}`;
+    const key = memoKey(callCode(call), state, least);
     const already = remembered.get(key);
 
     if (already) {
@@ -2275,12 +2338,11 @@ export function fitPlayFactors(
 
     return dry;
   };
-  const situationRemembered = new Map<string, { gain: number; dry: number }>();
+  const situationRemembered =
+    new Map<number | string, { gain: number; dry: number }>();
   const situationTilt = (state: PlayState, call: Call) => {
     makeRoom(situationRemembered);
-    const key = `${call}|${stateKey(
-      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
-    )}`;
+    const key = memoKey(callCode(call), state, 0);
     const already = situationRemembered.get(key);
 
     if (already !== undefined) {
@@ -2347,22 +2409,20 @@ export function fitPlayFactors(
    * merge, which was 95% of a game's cost.
    */
   const countsRemembered =
-    new Map<string, { plays: number; runs: number; scores: number }>();
+    new Map<number | string, { plays: number; runs: number; scores: number }>();
   /**
    * The two formations counted over one widening pass, so they stand
    * on the same states. Widening them apart put the gun and the
    * centre on different supports, and a ratio between those is not a
    * leaning, it is two answers to different questions.
    */
-  const bothFormsRemembered = new Map<string, {
+  const bothFormsRemembered = new Map<number | string, {
     gun: { plays: number; runs: number };
     centre: { plays: number; runs: number };
   }>();
   const atBothForms = (state: PlayState, least: number) => {
     makeRoom(bothFormsRemembered);
-    const key = `${stateKey(
-      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
-    )}|${least}`;
+    const key = memoKey(0, state, least);
     const already = bothFormsRemembered.get(key);
 
     if (already) {
@@ -2406,12 +2466,12 @@ export function fitPlayFactors(
      * table of its own read the call off yardline deciles and came
      * out a point and a bit under what the plays did.
      */
-    form?: string,
+    form?: Form,
   ) => {
     makeRoom(countsRemembered);
-    const key = `${form ?? ""}|${call ?? "both"}|${stateKey(
-      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
-    )}|${least}`;
+    const key = memoKey(
+      FORM_CODES[form ?? ""] * 3 + callCode(call), state, least,
+    );
     const already = countsRemembered.get(key);
 
     if (already) {
@@ -2528,12 +2588,10 @@ export function fitPlayFactors(
    * here. With the sacks back in the pool the whole rate is the one
    * that matches it.
    */
-  const crossRemembered = new Map<string, GoalSample>();
+  const crossRemembered = new Map<number | string, GoalSample>();
   const goalSample = (state: PlayState, call: Call): GoalSample => {
     makeRoom(crossRemembered);
-    const key = `${call}|${stateKey(
-      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
-    )}`;
+    const key = memoKey(callCode(call), state, 0);
     const already = crossRemembered.get(key);
 
     if (already) {
@@ -2577,11 +2635,10 @@ export function fitPlayFactors(
    * number grows with the cast and the same state was walked again for
    * every size of cast. Its key has everything the widening reads.
    */
-  const walksRemembered = new Map<string, WidenedCells>();
+  const walksRemembered = new Map<number | string, WidenedCells>();
   const widenedAt = (state: PlayState, call?: Call) => {
     makeRoom(walksRemembered);
-    const key = `${call ?? "both"}|${Math.min(4, state.down)}|${state.toGo}` +
-      `|${state.yardline}|${timeBand(state.secondsLeft)}|${marginBand(state.margin)}`;
+    const key = walkKey(state, call);
     const already = walksRemembered.get(key);
 
     if (already) {
@@ -2593,12 +2650,10 @@ export function fitPlayFactors(
 
     return widened;
   };
-  const cellsRemembered = new Map<string, Counted[]>();
+  const cellsRemembered = new Map<number | string, Counted[]>();
   const atCells = (state: PlayState, least: number, call?: Call) => {
     makeRoom(cellsRemembered);
-    const key = `${call ?? "both"}|${stateKey(
-      state.down, state.toGo, state.yardline, state.secondsLeft, state.margin,
-    )}|${least}`;
+    const key = memoKey(callCode(call), state, least);
     const already = cellsRemembered.get(key);
 
     if (already) {

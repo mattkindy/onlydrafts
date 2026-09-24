@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CountedPlays, GoalSample, PlayRow } from "./fitPlayFactors.js";
 import {
-  keysAt, wideningPacked, type Call, type PlayState,
+  keysAt, marginBand, stateKey, timeBand, wideningPacked,
+  type Call, type PlayState,
 } from "../model/playFactors.js";
 import { seededRng } from "../sim/rng.js";
 
@@ -972,4 +973,81 @@ describe("a player's touches over a pool, added up once", () => {
     expect(asked).toBe(once);
     expect(once).toBeGreaterThan(before);
   });
+});
+
+/**
+ * Whether two lists of keys fall together in the same places: each old key
+ * always meets the same new one, and each new key the same old one.
+ */
+const sameMatches = (pairs: { old: string; key: number | string }[]) => {
+  const forward = new Map<string, number | string>();
+  const back = new Map<number | string, string>();
+
+  return pairs.every(({ old, key }) => {
+    const wasKey = forward.get(old) ?? key;
+    const wasOld = back.get(key) ?? old;
+    forward.set(old, key);
+    back.set(key, old);
+
+    return wasKey === key && wasOld === old;
+  });
+};
+
+describe("the keys the memos are kept under", () => {
+  const states = (): PlayState[] => [
+    ...scatteredStates(),
+    // two scores in the same band, which the key folds together
+    { down: 2, toGo: 6, yardline: 40, margin: 1, secondsLeft: 1200 },
+    { down: 2, toGo: 6, yardline: 40, margin: 3, secondsLeft: 1300 },
+    // distances past the cap, which only the capped key folds together
+    { down: 4, toGo: 41, yardline: 60, margin: -30, secondsLeft: 10 },
+    { down: 4, toGo: 45, yardline: 60, margin: -30, secondsLeft: 10 },
+    // and a spot that is not a whole yard, which only a string can keep
+    { down: 2, toGo: 7, yardline: 33.5, margin: 3, secondsLeft: 1200 },
+    { down: 5, toGo: 0, yardline: 0, margin: 0, secondsLeft: 0 },
+  ];
+  const leasts = [0, 7, 60.5, 300, 520, 70000];
+
+  it("match where the string keys they replace matched", async () => {
+    vi.resetModules();
+    const loaded = await import("./fitPlayFactors.js");
+    const pairs: { old: string; key: number | string }[] = [];
+
+    for (const state of states()) {
+      for (const call of ["run", "pass", undefined] as const) {
+        for (const least of leasts) {
+          pairs.push({
+            old: `${call ?? "both"}|${stateKey(
+              state.down, state.toGo, state.yardline, state.secondsLeft,
+              state.margin,
+            )}|${least}`,
+            key: loaded.memoKey(loaded.callCode(call), state, least),
+          });
+        }
+      }
+    }
+
+    expect(sameMatches(pairs)).toBe(true);
+    // most of them packed into numbers, and a few fell back to strings
+    expect(pairs.filter(({ key }) => typeof key === "number").length)
+      .toBeGreaterThan(pairs.length / 2);
+    expect(pairs.some(({ key }) => typeof key === "string")).toBe(true);
+  });
+
+  it("keep a walk's distance and yardline as they are, as its key did",
+    async () => {
+      vi.resetModules();
+      const loaded = await import("./fitPlayFactors.js");
+      const pairs = states().flatMap((state) =>
+        (["run", "pass", undefined] as const).map((call) => ({
+          old: `${call ?? "both"}|${Math.min(4, state.down)}|${state.toGo}` +
+            `|${state.yardline}|${timeBand(state.secondsLeft)}` +
+            `|${marginBand(state.margin)}`,
+          key: loaded.walkKey(state, call),
+        })));
+
+      expect(sameMatches(pairs)).toBe(true);
+      expect(new Set(pairs.map(({ key }) => key)).size)
+        .toBe(new Set(pairs.map(({ old }) => old)).size);
+    });
 });

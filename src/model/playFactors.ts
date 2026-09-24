@@ -366,6 +366,35 @@ export const stateKey = (
   `${Math.min(4, down)}|${Math.min(40, toGo)}|${Math.min(99, yardline)}` +
   `|${timeBand(secondsLeft)}|${marginBand(margin)}`;
 
+/** whether a value is a whole number from nought up to `most` */
+export const wholeIn = (value: number, most: number) =>
+  Number.isInteger(value) && value >= 0 && value <= most;
+
+/** how many numbers `stateCode` hands out */
+export const STATE_CODES = 5 * 41 * 100 * 5 * 9;
+
+/**
+ * The state key as a number, so a memo can be kept without building a
+ * string on every play. A state whose parts are not small whole numbers
+ * keeps its string key, and a number never equals a string, so two states
+ * share a code exactly when they share a key.
+ */
+export const stateCode = (
+  down: number, toGo: number, yardline: number,
+  secondsLeft = 1800, margin = 0,
+): number | string => {
+  const atDown = Math.min(4, down);
+  const atToGo = Math.min(40, toGo);
+  const atYard = Math.min(99, yardline);
+
+  if (!wholeIn(atDown, 4) || !wholeIn(atToGo, 40) || !wholeIn(atYard, 99)) {
+    return stateKey(down, toGo, yardline, secondsLeft, margin);
+  }
+
+  return (((atDown * 41 + atToGo) * 100 + atYard) * 5 + timeBand(secondsLeft)) *
+    9 + marginBand(margin);
+};
+
 /**
  * The same state with the score let go by however much. Built once per
  * banded state and remembered, because the walk asks for these lists
