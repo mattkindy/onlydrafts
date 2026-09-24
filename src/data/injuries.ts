@@ -3,6 +3,38 @@ import { join } from "node:path";
 import { parseCsv } from "./csv.js";
 import { RAW_DIR } from "./nflverse.js";
 
+/** a season's injury report, or no rows when it has not been downloaded */
+async function loadInjuryRows(
+  season: number,
+): Promise<Record<string, string>[]> {
+  const text = await readFile(
+    join(RAW_DIR, `injuries_${season}.csv`),
+    "utf8",
+  ).catch(() => "");
+
+  return text ? parseCsv(text) : [];
+}
+
+/**
+ * How many players the clubs listed as questionable for a week at the
+ * given positions. A row with the status left blank is a club filing its
+ * practice report before it has ruled anybody in or out.
+ */
+export function countQuestionable(
+  rows: Record<string, string>[], week: number, positions: string[],
+): number {
+  return rows.filter((row) =>
+    Number(row["week"]) === week &&
+    (row["report_status"] ?? "").trim() === "Questionable" &&
+    positions.includes((row["position"] ?? "").trim())).length;
+}
+
+export async function loadQuestionableCount(
+  season: number, week: number, positions: string[],
+): Promise<number> {
+  return countQuestionable(await loadInjuryRows(season), week, positions);
+}
+
 /**
  * Weeks a player appeared on the injury report with his practice or
  * game status limited. A player who suits up while listed is playing
@@ -11,18 +43,9 @@ import { RAW_DIR } from "./nflverse.js";
 export async function loadCompromisedWeeks(
   season: number,
 ): Promise<Set<string>> {
-  const text = await readFile(
-    join(RAW_DIR, `injuries_${season}.csv`),
-    "utf8",
-  ).catch(() => "");
-
-  if (!text) {
-    return new Set();
-  }
-
   const compromised = new Set<string>();
 
-  for (const row of parseCsv(text)) {
+  for (const row of await loadInjuryRows(season)) {
     if (row["game_type"] !== "REG" || !row["gsis_id"]) {
       continue;
     }
@@ -69,17 +92,9 @@ const SOFT_TISSUE = [
 export async function loadInjuryDetail(
   season: number,
 ): Promise<Map<string, InjuryWeek[]>> {
-  const text = await readFile(
-    join(RAW_DIR, `injuries_${season}.csv`),
-    "utf8",
-  ).catch(() => "");
   const byPlayer = new Map<string, InjuryWeek[]>();
 
-  if (!text) {
-    return byPlayer;
-  }
-
-  for (const row of parseCsv(text)) {
+  for (const row of await loadInjuryRows(season)) {
     if (row["game_type"] !== "REG" || !row["gsis_id"]) {
       continue;
     }
