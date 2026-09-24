@@ -11,7 +11,9 @@ mentions a script that is no longer here, it says so.
 **Entry points**, the ones a person runs on purpose:
 
 - `week.ts` is the weekly refresh. `npm run week` runs it, and it calls
-  the next five in order.
+  six of the scripts below in order: `fetchData.ts`,
+  `fetchSleeperProjections.ts`, `aggregateTouches.ts`,
+  `aggregateLeverage.ts`, `fetchWeather.ts` and `buildSite.ts`.
 - `fetchData.ts` downloads the nflverse files into `data/raw/`.
 - `fetchSleeperProjections.ts` pulls Sleeper's weekly projections, every
   week of the season and not only the one coming up.

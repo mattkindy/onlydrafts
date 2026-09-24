@@ -32,23 +32,27 @@ walk, `data/` the loaders, `sim/` the season and lineup simulation,
 
 ## Getting started
 
+Use the Node version in `.nvmrc`. Then install, and download the
+nflverse files the model reads:
+
 ```
 npm install
-npm test
+npx tsx scripts/fetchData.ts --seasons 2015-2025 --no-plays
 npm run typecheck
+npm test
 ```
 
-`npm test` runs vitest over everything, `src/` and `app/` alike.
-`npm run typecheck` checks the node code and the app separately, since
-they have their own tsconfigs.
+The files land in `data/raw/`, which stays out of git. The weekly model
+trains on every season from 2016, and each of those reads the season
+before it, so the download starts at 2015 and ends at the last finished
+season. `--no-plays` leaves out the per-play files, about 1.2 GB, which
+only the `aggregate*.ts` scripts and some benches read. `npm run week`
+downloads the season being played, plays included.
 
-To download the nflverse files the model reads:
-
-```
-npx tsx scripts/fetchData.ts --seasons 2021-2025
-```
-
-They land in `data/raw/`, which stays out of git.
+`npm test` runs vitest over everything, `src/` and `app/` alike. Tests
+that read `data/raw/` skip themselves when it is missing and say so.
+`npm run typecheck` checks the node code, the app, the scripts that
+import from the app, and the worker, since each has its own tsconfig.
 
 ## The weekly refresh
 
@@ -56,7 +60,7 @@ They land in `data/raw/`, which stays out of git.
 npm run week
 ```
 
-That is `scripts/week.ts`, and it runs four steps in order:
+That is `scripts/week.ts`, and it runs six steps in order:
 
 1. `fetchData.ts` pulls this season's nflverse files again, forced, so a
    week that has since been played comes back.
@@ -64,7 +68,15 @@ That is `scripts/week.ts`, and it runs four steps in order:
    season.
 3. `aggregateTouches.ts` recounts the season's touches into
    `data/curated/touches.csv`.
-4. `buildSite.ts` writes the site.
+4. `aggregateLeverage.ts` counts the same touches again by leverage,
+   which the board's sleeper score reads.
+5. `fetchWeather.ts` pulls the forecast for the season's outdoor games
+   into `data/curated/weatherWeekly.csv`.
+6. `buildSite.ts` writes the site.
+
+A GitHub Actions workflow runs the same thing on Tuesday and Sunday
+mornings and commits the result. Another typechecks and tests every
+push to `main` and every pull request.
 
 It picks the current season on its own. Pass `--season` to override it,
 and anything else you pass goes through to `buildSite.ts`:
@@ -105,16 +117,14 @@ npx tsx scripts/start.ts --season 2025 --week 10 "st. brown" "nacua"
 
 ## Where the rest of the writing is
 
-- `src/README.md`: how the model is put together, level by level, and
-  what is still doubled up.
+- `src/README.md`: how the model is put together, level by level, what
+  is still doubled up, and which bench measured each constant in it.
 - `docs/scoreboard.md`: the bench log. Every change that moved a number,
   in the order it landed, scored on the same three instruments.
 - `data/curated/README.md`: what each curated file is, which ones a
   script reproduces, and which are compiled by hand.
 - `scripts/README.md`: findings from the benches, and a guide to which
   scripts are entry points.
-- `src/README.md`: how the model is put together, and which bench
-  measured each constant in it.
 - `worker/README.md`: the ESPN worker and why it exists.
 - `BACKLOG.md`: what is designed but not built.
 
