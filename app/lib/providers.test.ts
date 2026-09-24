@@ -16,9 +16,10 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  espnPays, listedPlayers, playerFileGoodFor, sleeperOnBoard,
+  espnPays, espnSlotsOf, listedPlayers, playerFileGoodFor, sleeperOnBoard,
   type EspnScoringItem, type League,
 } from "./providers.ts";
+import { knownSlot, slotTakes } from "./scoring.ts";
 
 const items = JSON.parse(readFileSync(
   join(import.meta.dirname, "..", "fixtures", "espnScoringItems.json"), "utf8",
@@ -344,6 +345,54 @@ describe("this week's matchups on ESPN", () => {
     expect(home.bench)
       .toEqual([{ key: "pukanacua", name: "Puka Nacua", points: 7.2 }]);
     expect(away.starters.map((s) => s.slot)).toEqual(["RB", "WR"]);
+  });
+
+  it("reads OP as a superflex and the two narrow flexes by their own names", async () => {
+    serve({
+      "/players?": [],
+      "/leagues/77": {
+        teams: [{ id: 1, name: "Team One" }, { id: 2, name: "Team Two" }],
+        schedule: [{
+          matchupPeriodId: 4,
+          home: {
+            teamId: 1, totalPoints: 0,
+            rosterForCurrentScoringPeriod: { entries: [
+              entry(3918298, "Josh Allen", 1, 0, 0, 2),
+              entry(4361741, "Bo Nix", 1, 7, 0, 7),
+              entry(4430807, "Bijan Robinson", 2, 3, 0, 1),
+              entry(4361307, "Trey McBride", 4, 5, 0, 22),
+            ] },
+          },
+          away: { teamId: 2, totalPoints: 0 },
+        }],
+      },
+    });
+
+    const { PROVIDERS } = await import("./providers.ts");
+    const league = leagueLike({ provider: "espn", leagueId: "77" });
+    const games = await PROVIDERS["espn"]!.matchupsFor!(league, 4);
+
+    expect(games[0]!.sides[0]!.starters.map((s) => s.slot))
+      .toEqual(["QB", "SUPER_FLEX", "WRRB_FLEX", "REC_FLEX"]);
+  });
+});
+
+describe("espnSlotsOf", () => {
+  it("reads a superflex league's lineup off ESPN's slot counts", () => {
+    const counts = {
+      "0": 1, "2": 2, "3": 1, "4": 2, "5": 1, "6": 1, "7": 1,
+      "16": 1, "17": 1, "20": 7, "21": 1, "23": 1,
+    };
+    const slots = espnSlotsOf(counts).filter((s) => s !== "BN" && s !== "IR");
+
+    expect(slots).toEqual([
+      "QB", "RB", "RB", "WRRB_FLEX", "WR", "WR", "REC_FLEX", "TE",
+      "SUPER_FLEX", "DEF", "K", "FLEX",
+    ]);
+    expect(slots.every(knownSlot)).toBe(true);
+    expect(slotTakes("SUPER_FLEX", "QB")).toBe(true);
+    expect(slotTakes("REC_FLEX", "RB")).toBe(false);
+    expect(slotTakes("WRRB_FLEX", "TE")).toBe(false);
   });
 });
 

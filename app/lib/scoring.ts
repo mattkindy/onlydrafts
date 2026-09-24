@@ -250,30 +250,29 @@ export interface Lineup {
   flex: number;
 }
 
-const FLEX_SLOTS = ["FLEX", "WRRB_FLEX", "REC_FLEX", "SUPER_FLEX"];
-
 /** the positions a flex takes, which is what lets one back displace another */
 export const FLEX_POSITIONS = ["RB", "WR", "TE"];
+
+/** who each kind of flex takes, in Sleeper's names for them */
+const FLEX_TAKES: Record<string, string[]> = {
+  FLEX: FLEX_POSITIONS,
+  WRRB_FLEX: ["RB", "WR"],
+  REC_FLEX: ["WR", "TE"],
+  SUPER_FLEX: ["QB", ...FLEX_POSITIONS],
+};
+
+const FLEX_SLOTS = Object.keys(FLEX_TAKES);
 
 /** whether a lineup is counted under this slot at all */
 export const knownSlot = (slot: string): boolean =>
   slot in { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DEF: 0 } ||
   FLEX_SLOTS.includes(slot);
 
-/**
- * Whether a starting slot takes a player of this position. A superflex takes
- * a quarterback as well, which is the whole point of one.
- */
+/** whether a starting slot takes a player of this position */
 export function slotTakes(slot: string, position: string): boolean {
-  if (slot === "SUPER_FLEX") {
-    return position === "QB" || FLEX_POSITIONS.includes(position);
-  }
+  const takes = FLEX_TAKES[slot];
 
-  if (FLEX_SLOTS.includes(slot)) {
-    return FLEX_POSITIONS.includes(position);
-  }
-
-  return slot === position;
+  return takes ? takes.includes(position) : slot === position;
 }
 
 /** the lineup a league starts, split into named slots and flexes */

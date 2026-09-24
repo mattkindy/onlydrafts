@@ -226,13 +226,26 @@ const ESPN_PTS_ALLOWED: [string, number[]][] = [
   ["pts_allow_35p", [124, 125]],
 ];
 
-/** and what it calls the slots a lineup is made of */
+/**
+ * ESPN's lineup slots, in the names Sleeper uses, which is what the rest
+ * of the page knows. 3 is RB/WR, 5 is WR/TE and 7 is the superflex ESPN
+ * calls OP.
+ */
 const ESPN_SLOTS: Record<number, string> = {
-  0: "QB", 2: "RB", 4: "WR", 6: "TE", 16: "DEF", 17: "K",
-  23: "FLEX", 7: "FLEX",
+  0: "QB", 2: "RB", 3: "WRRB_FLEX", 4: "WR", 5: "REC_FLEX", 6: "TE",
+  7: "SUPER_FLEX", 16: "DEF", 17: "K", 23: "FLEX",
   // the bench and the injured list count toward the roster, not the lineup
   20: "BN", 21: "IR",
 };
+
+/** a league's lineup, off ESPN's count of each slot */
+export function espnSlotsOf(counts: Record<string, number>): string[] {
+  return Object.entries(counts).flatMap(([slot, howMany]) => {
+    const named = ESPN_SLOTS[Number(slot)];
+
+    return named ? Array<string>(howMany).fill(named) : [];
+  });
+}
 
 /**
  * What position a player plays. ESPN numbers a lineup slot and a position
@@ -1112,17 +1125,7 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
 
   const settings = said.settings ?? {};
   const pays = espnPays(settings.scoringSettings?.scoringItems ?? []);
-  const slots: string[] = [];
-
-  for (const [slot, howMany] of Object.entries<number>(
-    settings.rosterSettings?.lineupSlotCounts ?? {},
-  )) {
-    const named = ESPN_SLOTS[Number(slot)];
-
-    for (let i = 0; named && i < howMany; i++) {
-      slots.push(named);
-    }
-  }
+  const slots = espnSlotsOf(settings.rosterSettings?.lineupSlotCounts ?? {});
 
   const teams = said.teams as EspnTeam[];
   const nameOf = (team: EspnTeam) =>
