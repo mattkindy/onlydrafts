@@ -902,6 +902,40 @@ describe("the cells under a call or a formation", () => {
   });
 });
 
+describe("the touches of the players on the field over a pool", () => {
+  it("comes to what adding each of them up cell by cell comes to",
+    async () => {
+      vi.resetModules();
+      const loaded = await import("./fitPlayFactors.js");
+      const counted = loaded.countPlays(scatteredRows());
+      const passes = loaded.rowsOf(loaded.cellsUnder(counted.cells, "pass"));
+      // one short cast and one longer than any cell, so both ways of
+      // going through a cell are taken
+      const casts = [
+        ["Back", "Nobody"],
+        ["Back", "Wideout", "Slot", "End", "Nobody", "Else", "Other"],
+      ];
+
+      for (const state of scatteredStates()) {
+        const pool = loaded.widenedCells(state, passes).upTo(250);
+
+        for (const among of casts) {
+          const took = loaded.touchesAmong(pool, among);
+
+          for (const player of among) {
+            let touches = 0;
+
+            for (const cell of pool) {
+              touches += cell.byPlayer.get(player)?.touches ?? 0;
+            }
+
+            expect(took.get(player)).toBe(touches);
+          }
+        }
+      }
+    });
+});
+
 describe("a player's touches over a pool, added up once", () => {
   it("comes to what adding him up cell by cell comes to", async () => {
     vi.resetModules();

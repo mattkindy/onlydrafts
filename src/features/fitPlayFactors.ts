@@ -1785,6 +1785,41 @@ export const summedOverCells = (
   };
 };
 
+/**
+ * Each of these players' touches over a pooled list of cells, added up
+ * cell by cell in the list's order. A cell with fewer players in it than
+ * are being asked about is gone through instead of asked about each.
+ */
+export const touchesAmong = (
+  list: Counted[], among: string[],
+): Map<string, number> => {
+  const totals = new Map(among.map((player) => [player, 0]));
+
+  for (const cell of list) {
+    if (cell.byPlayer.size < totals.size) {
+      for (const [player, own] of cell.byPlayer) {
+        const sum = totals.get(player);
+
+        if (sum !== undefined) {
+          totals.set(player, sum + own.touches);
+        }
+      }
+
+      continue;
+    }
+
+    for (const [player, sum] of totals) {
+      const own = cell.byPlayer.get(player);
+
+      if (own) {
+        totals.set(player, sum + own.touches);
+      }
+    }
+  }
+
+  return totals;
+};
+
 export function fitPlayFactors(
   rows: PlayRow[],
   settings: FactorSettings = FACTOR_DEFAULTS,
@@ -2596,9 +2631,6 @@ export function fitPlayFactors(
     return sum;
   };
   const allTouchesOver = summedOverCells((cell) => touchesOf(cell));
-  const hisTouchesOver = summedOverCells(
-    (cell, player) => cell.byPlayer.get(player)?.touches ?? 0,
-  );
 
   /**
    * What each position took of a call anywhere on the field, once.
@@ -2646,9 +2678,27 @@ export function fitPlayFactors(
 
     return sums;
   };
-  const positionTouchesOver = summedOverCells(
-    (cell, position) => positionTouchesOf(cell).get(position) ?? 0,
-  );
+  /** and over a pooled list, every position in one pass over its cells */
+  const listByPosition = new WeakMap<Counted[], Map<string, number>>();
+  const positionTouchesOver = (list: Counted[], position: string) => {
+    const already = listByPosition.get(list);
+
+    if (already) {
+      return already.get(position) ?? 0;
+    }
+
+    const sums = new Map<string, number>();
+
+    for (const cell of list) {
+      for (const [at, took] of positionTouchesOf(cell)) {
+        sums.set(at, (sums.get(at) ?? 0) + took);
+      }
+    }
+
+    listByPosition.set(list, sums);
+
+    return sums.get(position) ?? 0;
+  };
 
   /**
    * How much more of the work this position takes here than it takes
@@ -2692,17 +2742,16 @@ export function fitPlayFactors(
    */
   const restingPlace = (
     player: string, call: Call, itsCells: Counted[], here: number,
-    wideCells: Counted[] | undefined, wideHere: number,
+    wideTouches: number | undefined, wideHere: number,
   ) => {
     const position = positionLeaning(player, call, itsCells, here);
 
-    if (!wideCells || wideHere <= 0) {
+    if (wideTouches === undefined || wideHere <= 0) {
       return position;
     }
 
     const hisOverall = (onCall.get(`${player}|${call}`) ?? 0) /
       Math.max(1, callPlays.get(call) ?? 0);
-    const wideTouches = hisTouchesOver(wideCells, player);
 
     if (hisOverall <= 0 || wideTouches <= 0) {
       return position;
@@ -3485,11 +3534,13 @@ export function fitPlayFactors(
         ? atCells(state, WIDE_LEAN * Math.max(1, among.length), call)
         : undefined;
       const wideHere = wideCells ? allTouchesOver(wideCells, "") : 0;
+      const tookHere = touchesAmong(itsCells, among);
+      const tookWide = wideCells ? touchesAmong(wideCells, among) : undefined;
       const shares = new Map<string, number>();
       let total = 0;
 
       for (const player of among) {
-        const touches = hisTouchesOver(itsCells, player);
+        const touches = tookHere.get(player)!;
 
         if (!projected && !split) {
           shares.set(player, touches);
@@ -3508,7 +3559,7 @@ export function fitPlayFactors(
         const believed = LEAN_K > 0 ? touches / (touches + LEAN_K) : 1;
         // and where he is left while his own count is too thin to say
         const towards = restingPlace(
-          player, call, itsCells, here, wideCells, wideHere,
+          player, call, itsCells, here, tookWide?.get(player), wideHere,
         );
         const leaning = hisOverall > 0 && hisHere > 0
           ? towards * ((hisHere / hisOverall) / towards) ** believed
