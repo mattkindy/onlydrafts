@@ -236,7 +236,7 @@ export function pregameOf(
 
   return games.map((game) => {
     const { odds, projected } = standingFor(
-      beforeKickoff(game), rows, before, lines, draws);
+      beforeKickoff(game), { rows, states: before, lines, draws });
 
     return { odds, projected };
   });

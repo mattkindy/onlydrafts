@@ -231,8 +231,7 @@ export function Game(
   },
 ) {
   const { odds, projected, toCome } = useMemo(
-    () => standingFor(
-      game, rows, states, lines, undefined, remainder ?? undefined),
+    () => standingFor(game, { rows, states, lines, remainder }),
     [game, rows, states, lines, remainder],
   );
 
@@ -371,7 +370,7 @@ export function Matchups(
       week,
       games: ordered.map((game) => {
         const { odds, projected } = standingFor(
-          game, rows, states, lines, undefined, remainder ?? undefined);
+          game, { rows, states, lines, remainder });
 
         return shareGameOf(game, odds, projected);
       }),

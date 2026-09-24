@@ -87,7 +87,7 @@ describe("Advice", () => {
     const opp = side("them", [{ key: "qb", points: 0, slot: "QB" }]);
     const states = new Map([["KC", { where: "pre" as const, left: 1 }]]);
 
-    const standing = standingFor({ sides: [mine, opp] }, rows, states, lines);
+    const standing = standingFor({ sides: [mine, opp] }, { rows, states, lines });
 
     expect(standing.projected[0]).toBe(0);
 

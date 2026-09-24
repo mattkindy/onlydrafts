@@ -1026,16 +1026,25 @@ export interface Standing {
   toCome: Map<string, number>;
 }
 
+/**
+ * What pricing a week from here needs to know. Every page that prices the
+ * same week has to hand over the same remainder, or two numbers on one
+ * screen are drawn from different games.
+ */
+export interface WeekPricing {
+  rows: Map<string, SlateRow>;
+  states: Map<string, GameState>;
+  lines?: Lines | undefined;
+  /** what the remainder engine says a player in a live game still has to come */
+  remainder?: Map<string, number[]> | null | undefined;
+  draws?: number | undefined;
+}
+
 /** a matchup from here, both sides drawn against each other once */
-export function standingFor(
-  matchup: Matchup,
-  rows: Map<string, SlateRow>,
-  states: Map<string, GameState>,
-  lines?: Lines,
-  draws = LIVE_DRAWS,
-  remainder?: Map<string, number[]>,
-): Standing {
-  const live = liveDraws(playersOf(matchup), rows, states, draws, lines, remainder);
+export function standingFor(matchup: Matchup, week: WeekPricing): Standing {
+  const { rows, states, lines, draws = LIVE_DRAWS } = week;
+  const live = liveDraws(
+    playersOf(matchup), rows, states, draws, lines, week.remainder ?? undefined);
   const home = sideTotals(matchup.sides[0], rows, states, draws, live);
   const away = sideTotals(matchup.sides[1], rows, states, draws, live);
   // a side with no lineup has not lost the week, it has not set one yet,
@@ -1052,16 +1061,8 @@ export function standingFor(
 }
 
 /** how often each side of a matchup wins it from here */
-export function oddsFor(
-  matchup: Matchup,
-  rows: Map<string, SlateRow>,
-  states: Map<string, GameState>,
-  draws = LIVE_DRAWS,
-  lines?: Lines,
-  remainder?: Map<string, number[]>,
-): [number, number] {
-  return standingFor(matchup, rows, states, lines, draws, remainder).odds;
-}
+export const oddsFor = (matchup: Matchup, week: WeekPricing): [number, number] =>
+  standingFor(matchup, week).odds;
 
 export interface Swap {
   /** the bench player who goes in */
@@ -1116,15 +1117,12 @@ export function bestLineupFor(
   side: Side,
   against: Side,
   slots: string[] | null | undefined,
-  rows: Map<string, SlateRow>,
-  states: Map<string, GameState>,
-  draws = LIVE_DRAWS,
-  lines?: Lines,
-  remainder?: Map<string, number[]>,
+  week: WeekPricing,
 ): Best {
+  const { rows, states, lines, draws = LIVE_DRAWS } = week;
   const live = liveDraws(
     [...side.starters, ...side.bench, ...against.starters, ...against.bench],
-    rows, states, draws, lines, remainder,
+    rows, states, draws, lines, week.remainder ?? undefined,
   );
   const theirs = sideTotals(against, rows, states, draws, live);
   const benched = side.bench
@@ -1281,15 +1279,12 @@ export function alternativesFor(
   side: Side,
   against: Side,
   slots: string[] | null | undefined,
-  rows: Map<string, SlateRow>,
-  states: Map<string, GameState>,
-  draws = CHOICE_DRAWS,
-  lines?: Lines,
-  remainder?: Map<string, number[]>,
+  week: WeekPricing,
 ): SlotChoice[] {
+  const { rows, states, lines, draws = CHOICE_DRAWS } = week;
   const live = liveDraws(
     [...side.starters, ...side.bench, ...against.starters, ...against.bench],
-    rows, states, draws, lines, remainder,
+    rows, states, draws, lines, week.remainder ?? undefined,
   );
   const theirs = sideTotals(against, rows, states, draws, live);
   const scoredBy = (player: Starter, i: number) =>

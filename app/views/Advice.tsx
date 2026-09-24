@@ -122,20 +122,18 @@ export function Who(
 export function Advice(
   { side, against, slots, rows, states, lines, odds, remainder, onMore }: Props,
 ) {
-  const played = remainder ?? undefined;
   const said = useMemo(() => namesIn([side, against]), [side, against]);
   const best = useMemo(
-    () => bestLineupFor(
-      side, against, slots, rows, states, undefined, lines, played),
-    [side, against, slots, rows, states, lines, played],
+    () => bestLineupFor(side, against, slots, { rows, states, lines, remainder }),
+    [side, against, slots, rows, states, lines, remainder],
   );
   const standing = useMemo(
     () => odds === undefined
       ? standingFor(
-          { sides: [side, against] }, rows, states, lines, undefined, played,
+          { sides: [side, against] }, { rows, states, lines, remainder },
         ).odds[0]
       : odds,
-    [odds, side, against, rows, states, lines, played],
+    [odds, side, against, rows, states, lines, remainder],
   );
 
   if (!hasLineup(side)) {

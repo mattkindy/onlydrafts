@@ -17,7 +17,7 @@ import { useMemo } from "preact/hooks";
 import type { Listed } from "../lib/availability.ts";
 import { leadFor, type Explanation } from "../lib/explain.ts";
 import {
-  alternativesFor, lineFor, myGameIn, starterState,
+  alternativesFor, lineFor, myGameIn, standingFor, starterState,
   type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
@@ -255,20 +255,21 @@ function Slot(
 }
 
 function Lineup(
-  { side, against, slots, rows, states, lines, listed, onMore }: {
+  { side, against, slots, rows, states, lines, remainder, listed, onMore }: {
     side: Side;
     against: Side;
     slots: string[] | null;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
+    remainder: Map<string, number[]> | null;
     listed: Map<string, Listed>;
     onMore?: ((key: string) => void) | undefined;
   },
 ) {
   const choices = useMemo(
-    () => alternativesFor(side, against, slots, rows, states, undefined, lines),
-    [side, against, slots, rows, states, lines],
+    () => alternativesFor(side, against, slots, { rows, states, lines, remainder }),
+    [side, against, slots, rows, states, lines, remainder],
   );
 
   return (
@@ -297,6 +298,13 @@ export function MyMatchup(props: Props) {
     () => new Map(props.players.map((p) => [p.key, p])), [props.players]);
   const ours = useMemo(
     () => myGameIn(games, mine, mineId), [games, mine, mineId]);
+  // the headline and the card under it have to price the same game
+  const odds = useMemo(
+    () => ours && states
+      ? standingFor(ours.game, { rows, states, lines, remainder }).odds[ours.at]
+      : undefined,
+    [ours, rows, states, lines, remainder],
+  );
 
   if (!props.weeks.length) {
     return (
@@ -352,6 +360,8 @@ export function MyMatchup(props: Props) {
             rows={rows}
             states={states}
             lines={lines}
+            odds={odds}
+            remainder={remainder}
             onMore={onMore}
           />
           <p class="hint">
@@ -364,6 +374,7 @@ export function MyMatchup(props: Props) {
             rows={rows}
             states={states}
             lines={lines}
+            remainder={remainder}
             listed={props.listed}
             onMore={onMore}
           />

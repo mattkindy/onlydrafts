@@ -126,7 +126,7 @@ export function weekPricesFor(
   const { side, against, slots: slotNames, rows, states, lines } = room;
   const draws = room.draws ?? CHOICE_DRAWS;
   const best = bestLineupFor(
-    side, against, slotNames, rows, states, draws, lines);
+    side, against, slotNames, { rows, states, draws, lines });
   const live = liveDraws(
     [
       ...side.starters, ...side.bench,

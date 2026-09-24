@@ -54,12 +54,11 @@ describe("oddsFor", () => {
         side("you", 80, [{ key: "behind", slot: "WR", points: 80 }]),
       ],
     };
-    const [mine, theirs] = oddsFor(
-      matchup,
+    const [mine, theirs] = oddsFor(matchup, {
       rows,
-      states({ BUF: { where: "post", left: 0 }, MIA: { where: "post", left: 0 } }),
-      500,
-    );
+      states: states({ BUF: { where: "post", left: 0 }, MIA: { where: "post", left: 0 } }),
+      draws: 500,
+    });
 
     expect(mine).toBe(1);
     expect(theirs).toBe(0);
@@ -76,15 +75,14 @@ describe("oddsFor", () => {
         ]),
       ],
     };
-    const [mine] = oddsFor(
-      matchup,
+    const [mine] = oddsFor(matchup, {
       rows,
-      states({
+      states: states({
         BUF: { where: "post", left: 0 },
         LA: { where: "pre", left: 1 },
       }),
-      2000,
-    );
+      draws: 2000,
+    });
 
     expect(mine).toBeGreaterThan(0.9);
   });
@@ -217,11 +215,11 @@ describe("alternativesFor", () => {
     starters: [{ key: "scrub2", slot: "WR", points: 12 }],
     bench: [],
   };
-  const choices = alternativesFor(
-    mySide, them, ["QB", "WR"], rows,
-    states({ BUF: { where: "pre", left: 1 }, KC: { where: "pre", left: 1 },
+  const choices = alternativesFor(mySide, them, ["QB", "WR"], {
+    rows,
+    states: states({ BUF: { where: "pre", left: 1 }, KC: { where: "pre", left: 1 },
       DEN: { where: "pre", left: 1 }, LA: { where: "pre", left: 1 } }),
-  );
+  });
 
   it("gives one section per slot, in lineup order", () => {
     expect(choices.map((c) => c.slot)).toEqual(["QB", "WR"]);
@@ -257,7 +255,7 @@ describe("alternativesFor", () => {
       bench: [],
     };
     const calls = alternativesFor(
-      slot, level, ["QB", "WR"], close, states({}));
+      slot, level, ["QB", "WR"], { rows: close, states: states({}) });
     const why = calls[1]!.options[0]!.why!;
 
     expect(why.points + why.spread + why.opponent + why.ownLineup)
@@ -267,10 +265,9 @@ describe("alternativesFor", () => {
   });
 
   it("marks a player whose game has kicked off as locked", () => {
-    const shut = alternativesFor(
-      mySide, them, ["QB", "WR"], rows,
-      states({ KC: { where: "in", left: 0.5 } }),
-    );
+    const shut = alternativesFor(mySide, them, ["QB", "WR"], {
+      rows, states: states({ KC: { where: "in", left: 0.5 } }),
+    });
 
     expect(shut[1]!.options.find((o) => o.key === "stud")!.locked).toBe(true);
   });
@@ -466,7 +463,8 @@ describe("bestLineupFor", () => {
       starters: [{ key: "scrub", slot: "WR", points: 0 }],
       bench: [{ key: "stud", points: 0 }],
     };
-    const best = bestLineupFor(mine, them, ["WR"], rows, yetToPlay, 3000);
+    const best = bestLineupFor(
+      mine, them, ["WR"], { rows, states: yetToPlay, draws: 3000 });
 
     expect(best.swaps).toHaveLength(1);
     expect(best.swaps[0]).toMatchObject({ starts: "stud", benches: "scrub", slot: "WR" });
@@ -482,7 +480,8 @@ describe("bestLineupFor", () => {
       starters: [{ key: "locked", slot: "WR", points: 2 }],
       bench: [{ key: "stud", points: 0 }],
     };
-    const best = bestLineupFor(mine, them, ["WR"], rows, yetToPlay, 3000);
+    const best = bestLineupFor(
+      mine, them, ["WR"], { rows, states: yetToPlay, draws: 3000 });
 
     expect(best.swaps).toEqual([]);
     expect(best.starters.map((s) => s.key)).toEqual(["locked"]);
@@ -731,7 +730,8 @@ describe("standingFor", () => {
       ]),
     ] };
     const remainder = new Map([["wr", [5, 7, 9]]]);
-    const standing = standingFor(game, rows, now, undefined, 2000, remainder);
+    const standing = standingFor(
+      game, { rows, states: now, draws: 2000, remainder });
 
     for (const [at, his] of game.sides.entries()) {
       const summed = his.starters.reduce(
@@ -739,6 +739,27 @@ describe("standingFor", () => {
 
       expect(summed).toBeCloseTo(standing.projected[at]!, 6);
     }
+  });
+
+  it("gives the lineup advice the same chance as the card, once a game is played out", () => {
+    const rows = rowsFor(
+      row("wr", "BUF", 16, "WR", "MIA"), row("far", "MIA", 12, "WR", "BUF"),
+    );
+    const now = states({
+      BUF: { where: "in", left: 0.4 }, MIA: { where: "in", left: 0.4 },
+    });
+    const me = side("me", 3, [{ key: "wr", points: 3, slot: "WR" }]);
+    const them = side("them", 14, [{ key: "far", points: 14, slot: "WR" }]);
+    // the engine says he has a big second half coming
+    const remainder = new Map([["wr", Array.from({ length: 64 }, () => 20)]]);
+    const week = { rows, states: now, remainder };
+
+    const card = standingFor({ sides: [me, them] }, week).odds[0];
+    const best = bestLineupFor(me, them, ["WR"], week);
+    const without = standingFor({ sides: [me, them] }, { rows, states: now }).odds[0];
+
+    expect(best.odds).toBeCloseTo(card, 10);
+    expect(Math.abs(card - without)).toBeGreaterThan(0.05);
   });
 
   it("gives a finished loser 0% and the winner 100%, however the sides are ordered", () => {
@@ -754,13 +775,13 @@ describe("standingFor", () => {
     const theirs = side("them", 100, [{ key: "qb2", points: 100, slot: "QB" }]);
 
     // the summary line always puts your own side first
-    const summary = standingFor({ sides: [mine, theirs] }, rows, now);
+    const summary = standingFor({ sides: [mine, theirs] }, { rows, states: now });
 
     expect(summary.odds).toEqual([0, 1]);
 
     // the card draws the game in whichever order the league handed it
     // back, and it has to land on the same answer either way
-    const card = standingFor({ sides: [theirs, mine] }, rows, now);
+    const card = standingFor({ sides: [theirs, mine] }, { rows, states: now });
 
     expect(card.odds).toEqual([1, 0]);
   });
@@ -773,7 +794,7 @@ describe("standingFor", () => {
 
     expect(hasLineup(empty)).toBe(false);
 
-    const standing = standingFor({ sides: [empty, theirs] }, rows, now);
+    const standing = standingFor({ sides: [empty, theirs] }, { rows, states: now });
 
     expect(standing.projected[0]).toBe(0);
     // nobody has played and the empty side may still set a lineup, so
