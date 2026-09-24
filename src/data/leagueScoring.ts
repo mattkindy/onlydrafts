@@ -1,5 +1,6 @@
 import { presets, type ScoringRules } from "../scoring/fantasyPoints.js";
 import type { StarterSlots } from "../features/replacement.js";
+import { fetchWithRetry } from "./fetchWithRetry.js";
 
 /**
  * A league's scoring, read from Sleeper so projections match the rules
@@ -9,7 +10,7 @@ import type { StarterSlots } from "../features/replacement.js";
 export async function fetchLeagueScoring(
   leagueId: string,
 ): Promise<ScoringRules> {
-  const league = (await fetch(
+  const league = (await fetchWithRetry(
     "https://api.sleeper.app/v1/league/" + leagueId,
   ).then((r) => r.json())) as { scoring_settings?: Record<string, number> };
   const s = league.scoring_settings ?? {};
@@ -37,7 +38,7 @@ export async function fetchLeagueScoring(
 export async function fetchStarterSlots(
   leagueId: string,
 ): Promise<StarterSlots> {
-  const league = (await fetch(
+  const league = (await fetchWithRetry(
     "https://api.sleeper.app/v1/league/" + leagueId,
   ).then((r) => r.json())) as {
     roster_positions?: string[];

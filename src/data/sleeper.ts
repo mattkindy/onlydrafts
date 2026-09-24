@@ -1,7 +1,9 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "./csv.js";
+import { fetchWithRetry } from "./fetchWithRetry.js";
 import { RAW_DIR } from "./nflverse.js";
+import { writeAtomically } from "./writeAtomically.js";
 
 const API = "https://api.sleeper.app/v1";
 
@@ -25,14 +27,16 @@ async function loadSleeperPlayerFile(): Promise<
   try {
     return JSON.parse(await readFile(cachePath, "utf8"));
   } catch {
-    const response = await fetch(`${API}/players/nfl`);
+    const response = await fetchWithRetry(`${API}/players/nfl`, {
+      label: "sleeper players",
+    });
 
     if (!response.ok) {
       throw new Error(`sleeper players returned ${response.status}`);
     }
 
     const raw = (await response.json()) as Record<string, RawSleeperPlayer>;
-    await writeFile(cachePath, JSON.stringify(raw));
+    await writeAtomically(cachePath, JSON.stringify(raw));
     return raw;
   }
 }
@@ -61,14 +65,16 @@ async function loadPlayerIdCrosswalk(): Promise<Record<string, string>[]> {
   try {
     return parseCsv(await readFile(cachePath, "utf8"));
   } catch {
-    const response = await fetch(PLAYER_IDS_URL);
+    const response = await fetchWithRetry(PLAYER_IDS_URL, {
+      label: "player id crosswalk",
+    });
 
     if (!response.ok) {
       throw new Error(`player id crosswalk returned ${response.status}`);
     }
 
     const text = await response.text();
-    await writeFile(cachePath, text);
+    await writeAtomically(cachePath, text);
     return parseCsv(text);
   }
 }
@@ -118,8 +124,8 @@ export async function fetchLeagueRosters(
   leagueId: string,
 ): Promise<LeagueRoster[]> {
   const [rostersRes, usersRes] = await Promise.all([
-    fetch(`${API}/league/${leagueId}/rosters`),
-    fetch(`${API}/league/${leagueId}/users`),
+    fetchWithRetry(`${API}/league/${leagueId}/rosters`),
+    fetchWithRetry(`${API}/league/${leagueId}/users`),
   ]);
 
   if (!rostersRes.ok || !usersRes.ok) {

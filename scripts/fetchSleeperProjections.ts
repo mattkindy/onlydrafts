@@ -15,8 +15,9 @@
  * Run: npx tsx scripts/fetchSleeperProjections.ts [--seasons 2024,2025,2026]
  */
 
-import { writeFile } from "node:fs/promises";
+import { fetchWithRetry } from "../src/data/fetchWithRetry.js";
 import { fetchSleeperGsisIds } from "../src/data/sleeper.js";
+import { writeAtomically } from "../src/data/writeAtomically.js";
 import {
   defenceProjectionsToCsv,
   joinDefenceProjections,
@@ -52,7 +53,9 @@ async function fetchWeek(
   season: number,
   week: number,
 ): Promise<SleeperProjectionRow[]> {
-  const response = await fetch(projectionsUrl(season, week));
+  const response = await fetchWithRetry(projectionsUrl(season, week), {
+    label: `sleeper projections ${season} week ${week}`,
+  });
 
   if (!response.ok) {
     throw new Error(
@@ -141,7 +144,7 @@ async function main(): Promise<void> {
       a.week - b.week ||
       a.gsisId.localeCompare(b.gsisId),
   );
-  await writeFile(SLEEPER_WEEKLY_PATH, toCsv(merged));
+  await writeAtomically(SLEEPER_WEEKLY_PATH, toCsv(merged));
   console.log(`fetched ${all.length} rows, wrote ${merged.length}`);
 
   /**
@@ -159,7 +162,7 @@ async function main(): Promise<void> {
       season: Number(season), week: Number(week), gsisId: gsisId ?? "",
     }));
   const allQuiet = [...keptQuiet, ...quiet];
-  await writeFile(SLEEPER_QUIET_PATH, quietToCsv(allQuiet));
+  await writeAtomically(SLEEPER_QUIET_PATH, quietToCsv(allQuiet));
   console.log(
     `fetched ${quiet.length} rows with no points, wrote ${allQuiet.length}`,
   );
@@ -170,7 +173,7 @@ async function main(): Promise<void> {
     keptDefences.set(projectionKey(row.season, row.week, row.team), row);
   }
 
-  await writeFile(
+  await writeAtomically(
     SLEEPER_DEFENCE_PATH, defenceProjectionsToCsv([...keptDefences.values()]),
   );
   console.log(

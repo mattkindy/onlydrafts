@@ -9,10 +9,12 @@
  * anyone converting a zone.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HOME } from "../features/climate.js";
+import { fetchWithRetry } from "./fetchWithRetry.js";
 import { RAW_DIR } from "./nflverse.js";
+import { writeAtomically } from "./writeAtomically.js";
 
 const ARCHIVE_DIR = join(RAW_DIR, "weatherArchive");
 const ENDPOINT = "https://archive-api.open-meteo.com/v1/archive";
@@ -74,7 +76,9 @@ async function download(team: string, season: number): Promise<Hourly> {
     timezone: ZONE,
   });
 
-  const answer = await fetch(`${ENDPOINT}?${query.toString()}`);
+  const answer = await fetchWithRetry(`${ENDPOINT}?${query.toString()}`, {
+    label: `Open-Meteo archive ${team} ${season}`,
+  });
 
   if (!answer.ok) {
     throw new Error(
@@ -110,7 +114,7 @@ export async function hoursAt(
 
   const hourly = await download(team, season);
   await mkdir(ARCHIVE_DIR, { recursive: true });
-  await writeFile(path, JSON.stringify(hourly), "utf8");
+  await writeAtomically(path, JSON.stringify(hourly));
 
   return hourly;
 }

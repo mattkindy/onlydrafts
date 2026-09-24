@@ -2,10 +2,12 @@
 // on disk unless --force. In-season: --seasons 2026 --force. History
 // without the big per-play files: --seasons 2016-2025 --no-plays.
 
-import { mkdir, writeFile, access } from "node:fs/promises";
+import { mkdir, access } from "node:fs/promises";
 import { join } from "node:path";
 import { seasonsAsked } from "../src/data/seasons.js";
 import { currentSeason } from "../src/data/nflverse.js";
+import { fetchWithRetry } from "../src/data/fetchWithRetry.js";
+import { writeAtomically } from "../src/data/writeAtomically.js";
 
 const RAW_DIR = join(import.meta.dirname, "..", "data", "raw");
 
@@ -120,6 +122,9 @@ async function exists(path: string): Promise<boolean> {
 
 const force = process.argv.includes("--force");
 
+/** a season of plays is about a hundred megabytes */
+const DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
+
 async function download(
   url: string,
   fileName: string,
@@ -132,13 +137,17 @@ async function download(
     return;
   }
 
-  const response = await fetch(url, { redirect: "follow" });
+  const response = await fetchWithRetry(url, {
+    init: { redirect: "follow" },
+    timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    label: fileName,
+  });
 
   if (!response.ok) {
     throw new Error(`GET ${url} returned ${response.status}`);
   }
 
-  await writeFile(path, Buffer.from(await response.arrayBuffer()));
+  await writeAtomically(path, Buffer.from(await response.arrayBuffer()));
   console.log(`saved ${fileName}`);
 }
 

@@ -8,8 +8,10 @@
  * Run: npx tsx scripts/fetchWeather.ts [--season 2026]
  */
 
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fetchWithRetry } from "../src/data/fetchWithRetry.js";
+import { writeAtomically } from "../src/data/writeAtomically.js";
 import {
   comingWeek, currentSeason, loadGames, RAW_DIR,
 } from "../src/data/nflverse.js";
@@ -63,7 +65,9 @@ async function forecastAt(team: string): Promise<Hourly | undefined> {
     forecast_days: String(HORIZON_DAYS),
   });
 
-  const answer = await fetch(`${ENDPOINT}?${query.toString()}`);
+  const answer = await fetchWithRetry(`${ENDPOINT}?${query.toString()}`, {
+    label: `Open-Meteo ${team}`,
+  });
 
   if (!answer.ok) {
     console.error(`Open-Meteo said ${answer.status} for ${team}`);
@@ -135,7 +139,10 @@ async function main(): Promise<void> {
   const hourlies = new Map<string, Hourly | undefined>();
 
   for (const team of grounds) {
-    hourlies.set(team, await forecastAt(team).catch(() => undefined));
+    hourlies.set(team, await forecastAt(team).catch((error: unknown) => {
+      console.error(`no forecast for ${team}: ${String(error)}`);
+      return undefined;
+    }));
     await wait(POLITE_MS);
   }
 
@@ -169,10 +176,9 @@ async function main(): Promise<void> {
 
   rows.sort((a, b) => a.week - b.week || a.homeTeam.localeCompare(b.homeTeam));
 
-  const text = [HEADER, ...rows.map(rowOf)].join("\n") + "\n";
-  const part = `${WEATHER_FILE}.part`;
-  await writeFile(part, text, "utf8");
-  await rename(part, WEATHER_FILE);
+  await writeAtomically(
+    WEATHER_FILE, [HEADER, ...rows.map(rowOf)].join("\n") + "\n",
+  );
 
   const forecast = rows.filter((r) => r.source === "forecast").length;
   console.log(
