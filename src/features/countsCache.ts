@@ -7,7 +7,9 @@
  * named for the play file's timestamp so a rebuilt file counts anew.
  */
 
-import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import {
+  readFile, writeFile, mkdir, rename, stat, unlink,
+} from "node:fs/promises";
 import { join } from "node:path";
 import {
   countPlays, POOL_WASTE, type CountedPlays, type PlayRow,
@@ -121,31 +123,79 @@ const raise = (flat: Flat): CountedPlays => ({
 });
 
 /**
+ * The weeks of the season being played that a count read as well, for a
+ * walk played in season, and how many times over it read them.
+ */
+interface InSeason {
+  beforeWeek: number;
+  again: number;
+}
+
+/** what goes in the file's name for those weeks, nothing in August */
+const inSeasonTag = (inSeason?: InSeason) => {
+  if (!inSeason) {
+    return "";
+  }
+
+  const repeated = inSeason.again === 1 ? "" : `x${inSeason.again}`;
+
+  return `w${inSeason.beforeWeek}${repeated}`;
+};
+
+/** the counts as they come back after being kept on the disk */
+export const asKept = (counted: CountedPlays): CountedPlays =>
+  raise(JSON.parse(JSON.stringify(flatten(counted))) as Flat);
+
+/** a kept count read back, or nothing when the file does not parse */
+const readCounts = (text: string): CountedPlays | undefined => {
+  try {
+    return raise(JSON.parse(text) as Flat);
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Written aside and then moved into place, so a share that reads the file
+ * while another share is still writing it finds the whole count or none.
+ */
+const keep = async (at: string, counted: CountedPlays) => {
+  const part = `${at.replace(/\.json$/, "")}.${process.pid}.part.json`;
+  await mkdir(KEPT, { recursive: true }).catch(() => undefined);
+  await writeFile(part, JSON.stringify(flatten(counted)))
+    .then(() => rename(part, at))
+    .catch(() => unlink(part).catch(() => undefined));
+};
+
+/**
  * The counts for rows below this season, from the disk when they are
  * there. The per side counts ride along, because leaving them out
  * disconnected every team from its own run rate and its own yards:
  * the walk played four seasons of evals with the teams identical at
  * the play level, and four in season experiments read as null against
  * maps that were empty.
+ *
+ * A walk played in season also reads this season's weeks before the one
+ * being played, so its count is kept under that week as well.
  */
 export async function countsFor(
-  maxSeason: number, rows: () => PlayRow[],
+  maxSeason: number, rows: () => PlayRow[], inSeason?: InSeason,
 ): Promise<CountedPlays> {
   const stamp = await stat(TOUCHES).then((s) => s.mtimeMs).catch(() => 0);
   // the counting changes shape sometimes, and an older file would come
   // back missing whatever was added since. What the depth pools keep
   // is in the name for the same reason.
   const at = join(KEPT, `counts16${POOL_WASTE ? "w" : ""}` +
-    `-${maxSeason}-${Math.round(stamp)}.json`);
+    `-${maxSeason}${inSeasonTag(inSeason)}-${Math.round(stamp)}.json`);
   const already = await readFile(at, "utf8").catch(() => "");
+  const kept = already ? readCounts(already) : undefined;
 
-  if (already) {
-    return raise(JSON.parse(already) as Flat);
+  if (kept) {
+    return kept;
   }
 
   const counted = countPlays(rows());
-  await mkdir(KEPT, { recursive: true }).catch(() => undefined);
-  await writeFile(at, JSON.stringify(flatten(counted))).catch(() => undefined);
+  await keep(at, counted);
 
   return counted;
 }

@@ -28,7 +28,7 @@ import { loadAdp, type AdpEntry } from "../data/adp.js";
 import { normalizeName } from "../data/names.js";
 import { fitEndings } from "./fitEndings.js";
 import {
-  fitPlayFactors, countPlays, storePlays, FACTOR_DEFAULTS,
+  fitPlayFactors, storePlays, FACTOR_DEFAULTS,
   type PerPlayerLevel, type PlayRow,
 } from "./fitPlayFactors.js";
 import { fitFourthDown, climbTo, type FourthRow } from "./fitFourthDown.js";
@@ -536,9 +536,10 @@ export async function buildWorld(
     week: live ? onlyWeek : undefined,
     cast: onTeam,
   });
-  const counted = live
-    ? countPlays(learnRows as PlayRow[])
-    : await countsFor(SCORE_ON, () => learnRows as PlayRow[]);
+  const counted = await countsFor(
+    SCORE_ON, () => learnRows as PlayRow[],
+    live ? { beforeWeek: onlyWeek, again: AGAIN } : undefined,
+  );
   /**
    * The same rows the counts read, but season by season, so the level
    * of who gets the ball can come off the latest evidence instead of a
