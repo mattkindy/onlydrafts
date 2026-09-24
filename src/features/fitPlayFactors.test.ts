@@ -813,3 +813,41 @@ describe("the share pool cut from one walk for any number of plays", () => {
       expect(widened).toBeGreaterThan(100);
     });
 });
+
+describe("a player's touches over a pool, added up once", () => {
+  it("comes to what adding him up cell by cell comes to", async () => {
+    vi.resetModules();
+    const loaded = await import("./fitPlayFactors.js");
+    const counted = loaded.countPlays(scatteredRows());
+    let asked = 0;
+    const hisTouches = loaded.summedOverCells((cell, player) => {
+      asked++;
+      return cell.byPlayer.get(player)?.touches ?? 0;
+    });
+
+    for (const state of scatteredStates()) {
+      const pool = loaded.widenedCells(state, (cellKey) =>
+        counted.cells.get(`pass|${cellKey}`)).upTo(250);
+
+      for (const player of ["Back", "Wideout", "Nobody"]) {
+        let touches = 0;
+
+        for (const cell of pool) {
+          touches += cell.byPlayer.get(player)?.touches ?? 0;
+        }
+
+        expect(hisTouches(pool, player)).toBe(touches);
+      }
+    }
+
+    // and a second time without going back over the cells
+    const before = asked;
+    const pool = loaded.widenedCells(scatteredStates()[0]!, (cellKey) =>
+      counted.cells.get(`pass|${cellKey}`)).upTo(250);
+    hisTouches(pool, "Back");
+    const once = asked;
+    hisTouches(pool, "Back");
+    expect(asked).toBe(once);
+    expect(once).toBeGreaterThan(before);
+  });
+});

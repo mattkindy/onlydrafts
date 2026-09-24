@@ -1539,6 +1539,48 @@ export const widenedCells = (
   };
 };
 
+/**
+ * A sum over a pooled list of cells, added up once per list and key in
+ * the list's own order. A state asked about again hands back the same
+ * list, so a player is summed over it once rather than once a play.
+ */
+export const summedOverCells = (
+  each: (cell: Counted, key: string) => number,
+) => {
+  const remembered = new WeakMap<Counted[], Map<string, number>>();
+  const keptFor = (list: Counted[]) => {
+    const already = remembered.get(list);
+
+    if (already) {
+      return already;
+    }
+
+    const made = new Map<string, number>();
+    remembered.set(list, made);
+
+    return made;
+  };
+
+  return (list: Counted[], key: string) => {
+    const kept = keptFor(list);
+    const already = kept.get(key);
+
+    if (already !== undefined) {
+      return already;
+    }
+
+    let sum = 0;
+
+    for (const cell of list) {
+      sum += each(cell, key);
+    }
+
+    kept.set(key, sum);
+
+    return sum;
+  };
+};
+
 export function fitPlayFactors(
   rows: PlayRow[],
   settings: FactorSettings = FACTOR_DEFAULTS,
@@ -2394,6 +2436,10 @@ export function fitPlayFactors(
 
     return sum;
   };
+  const allTouchesOver = summedOverCells((cell) => touchesOf(cell));
+  const hisTouchesOver = summedOverCells(
+    (cell, player) => cell.byPlayer.get(player)?.touches ?? 0,
+  );
 
   /**
    * What each position took of a call anywhere on the field, once.
@@ -2441,6 +2487,9 @@ export function fitPlayFactors(
 
     return sums;
   };
+  const positionTouchesOver = summedOverCells(
+    (cell, position) => positionTouchesOf(cell).get(position) ?? 0,
+  );
 
   /**
    * How much more of the work this position takes here than it takes
@@ -2458,11 +2507,7 @@ export function fitPlayFactors(
 
     const overallShare = (positionOnCall.get(`${position}|${call}`) ?? 0) /
       Math.max(1, callPlays.get(call) ?? 0);
-    let takenHere = 0;
-
-    for (const cell of itsCells) {
-      takenHere += positionTouchesOf(cell).get(position) ?? 0;
-    }
+    const takenHere = positionTouchesOver(itsCells, position);
 
     if (overallShare <= 0 || takenHere <= 0) {
       return 1;
@@ -2498,11 +2543,7 @@ export function fitPlayFactors(
 
     const hisOverall = (onCall.get(`${player}|${call}`) ?? 0) /
       Math.max(1, callPlays.get(call) ?? 0);
-    let wideTouches = 0;
-
-    for (const cell of wideCells) {
-      wideTouches += cell.byPlayer.get(player)?.touches ?? 0;
-    }
+    const wideTouches = hisTouchesOver(wideCells, player);
 
     if (hisOverall <= 0 || wideTouches <= 0) {
       return position;
@@ -3275,11 +3316,7 @@ export function fitPlayFactors(
         ? (call === "run" ? GOAL_LEAST_RUN : GOAL_LEAST_PASS)
         : settings.leastForPlayer) * Math.max(1, among.length);
       const itsCells = atCells(state, wants, call);
-      let here = 0;
-
-      for (const cell of itsCells) {
-        here += touchesOf(cell);
-      }
+      const here = allTouchesOver(itsCells, "");
 
       /**
        * The same spot asked of a pool several times the size, which is
@@ -3288,21 +3325,12 @@ export function fitPlayFactors(
       const wideCells = WIDE_LEAN > 0
         ? atCells(state, WIDE_LEAN * Math.max(1, among.length), call)
         : undefined;
-      let wideHere = 0;
-
-      for (const cell of wideCells ?? []) {
-        wideHere += touchesOf(cell);
-      }
-
+      const wideHere = wideCells ? allTouchesOver(wideCells, "") : 0;
       const shares = new Map<string, number>();
       let total = 0;
 
       for (const player of among) {
-        let touches = 0;
-
-        for (const cell of itsCells) {
-          touches += cell.byPlayer.get(player)?.touches ?? 0;
-        }
+        const touches = hisTouchesOver(itsCells, player);
 
         if (!projected && !split) {
           shares.set(player, touches);
