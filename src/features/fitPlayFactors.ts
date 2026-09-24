@@ -1327,6 +1327,24 @@ const callOfSideKey = (rest: string): [Call | "both", string] => {
   return ["both", rest];
 };
 
+/**
+ * The cells whose key starts with this prefix, keyed by the rest, so a
+ * walk looks a spot up with the key the widening already has instead of
+ * building the prefixed one.
+ */
+export const cellsUnder = (cells: Map<string, Counted>, prefix: string) => {
+  const under = new Map<string, Counted>();
+  const lead = `${prefix}|`;
+
+  for (const [key, cell] of cells) {
+    if (key.startsWith(lead)) {
+      under.set(key.slice(lead.length), cell);
+    }
+  }
+
+  return under;
+};
+
 const wholeIn = (value: number, most: number) =>
   Number.isInteger(value) && value >= 0 && value <= most;
 
@@ -1430,7 +1448,7 @@ const bySpot: (SideCell | undefined)[] = [];
 export const poolForSide = (
   state: PlayState, least: number,
   own: SideRows | undefined,
-  leagueAt: (cellKey: string) => Counted | undefined,
+  league: Map<string, Counted>,
   yardsOf: (cell: Counted) => number,
 ): SidePool => {
   let found = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
@@ -1471,7 +1489,7 @@ export const poolForSide = (
         pooled.plays += cell.plays;
         pooled.runs += cell.runs;
         pooled.yardsSum += yardsOf(cell);
-        const everybody = leagueAt(side.cellKey);
+        const everybody = league.get(side.cellKey);
 
         if (everybody) {
           pooled.leaguePlays += everybody.plays;
@@ -1544,7 +1562,7 @@ const firstReaching = (plays: number[], least: number) => {
 };
 
 export const widenedCells = (
-  state: PlayState, cellAt: (cellKey: string) => Counted | undefined,
+  state: PlayState, cellsHere: Map<string, Counted>,
 ): WidenedCells => {
   // copied out, since the walk resumes long after a caller may have
   // moved its state on
@@ -1572,7 +1590,7 @@ export const widenedCells = (
       down, Math.floor(packed / 100) % 1000, packed % 100,
       secondsLeft, margin, looseness,
     )) {
-      const cell = cellAt(cellKey);
+      const cell = cellsHere.get(cellKey);
 
       if (!cell) {
         continue;
@@ -1703,6 +1721,25 @@ export function fitPlayFactors(
       string, { plays: number; yards: number; dry: number }
     >(),
   } = extras.counted ?? countPlays(rows, !pairing);
+
+  const underRemembered = new Map<string, Map<string, Counted>>();
+  /** the cells under a call or a formation, or all of them without one */
+  const cellsAt = (prefix?: string) => {
+    if (!prefix) {
+      return cells;
+    }
+
+    const already = underRemembered.get(prefix);
+
+    if (already) {
+      return already;
+    }
+
+    const made = cellsUnder(cells, prefix);
+    underRemembered.set(prefix, made);
+
+    return made;
+  };
 
   /**
    * What this game is doing to each player's cut, drawn the first time he
@@ -1885,6 +1922,7 @@ export function fitPlayFactors(
     state: PlayState, least: number, looseness: number, call?: Call,
   ) => {
     const pooled = emptyCounted();
+    const lookIn = cellsAt(call);
 
     for (const packed of wideningPacked(state.toGo, state.yardline)) {
       if (Math.floor(packed / 100000) !== looseness) {
@@ -1895,7 +1933,7 @@ export function fitPlayFactors(
         state.down, Math.floor(packed / 100) % 1000, packed % 100,
         state.secondsLeft, state.margin, looseness,
       )) {
-      const cell = cells.get(call ? `${call}|${at}` : at);
+      const cell = lookIn.get(at);
 
       if (!cell) {
         continue;
@@ -1983,10 +2021,6 @@ export function fitPlayFactors(
   const sideCellsOf = (
     from: Map<string, Counted>, who: string, call?: Call,
   ) => sideTableOf(from).get(who)?.get(call ?? "both");
-  const leagueRun = (cellKey: string) => cells.get(`run|${cellKey}`);
-  const leaguePass = (cellKey: string) => cells.get(`pass|${cellKey}`);
-  const leagueBoth = (cellKey: string) => cells.get(cellKey);
-  const leagueOnCall = { run: leagueRun, pass: leaguePass };
   /**
    * Sums only. This used to copy every yard of a side's pooled cells
    * into a fresh array three times a play, and once the per side counts
@@ -2008,7 +2042,7 @@ export function fitPlayFactors(
 
     const found = poolForSide(
       state, least, sideCellsOf(from, who, call),
-      call ? leagueOnCall[call] : leagueBoth, summedOnce,
+      cellsAt(call), summedOnce,
     );
     sideRemembered.set(key, found);
     return found;
@@ -2159,7 +2193,7 @@ export function fitPlayFactors(
             state.down, Math.floor(packed / 100) % 1000, packed % 100,
             state.secondsLeft, state.margin, looseness,
           )) {
-            const cell = cells.get(`${call}|${cellKey}`);
+            const cell = cellsAt(call).get(cellKey);
 
             if (!cell) {
               continue;
@@ -2244,6 +2278,7 @@ export function fitPlayFactors(
     let found = {
       gun: { plays: 0, runs: 0 }, centre: { plays: 0, runs: 0 },
     };
+    const inForm = { gun: cellsAt("gun"), centre: cellsAt("centre") };
 
     for (const looseness of [0, 1, 2]) {
       if (found.gun.plays + found.centre.plays >= least) {
@@ -2264,7 +2299,7 @@ export function fitPlayFactors(
           state.secondsLeft, state.margin, looseness,
         )) {
           for (const form of ["gun", "centre"] as const) {
-            const cell = cells.get(`${form}|${cellKey}`);
+            const cell = inForm[form].get(cellKey);
 
             if (cell) {
               pooled[form].plays += cell.plays;
@@ -2307,6 +2342,7 @@ export function fitPlayFactors(
     }
 
     let found = { plays: 0, runs: 0, scores: 0 };
+    const lookIn = cellsAt([form, call].filter(Boolean).join("|"));
 
     for (const looseness of [0, 1, 2]) {
       if (found.plays >= least) {
@@ -2324,8 +2360,7 @@ export function fitPlayFactors(
           state.down, Math.floor(packed / 100) % 1000, packed % 100,
           state.secondsLeft, state.margin, looseness,
         )) {
-          const spot = call ? `${call}|${cellKey}` : cellKey;
-          const cell = cells.get(form ? `${form}|${spot}` : spot);
+          const cell = lookIn.get(cellKey);
 
           if (!cell) {
             continue;
@@ -2495,7 +2530,7 @@ export function fitPlayFactors(
       return already;
     }
 
-    const widened = widenedCells(state, call ? leagueOnCall[call] : leagueBoth);
+    const widened = widenedCells(state, cellsAt(call));
     walksRemembered.set(key, widened);
 
     return widened;

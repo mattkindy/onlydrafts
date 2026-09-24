@@ -719,13 +719,14 @@ describe("a side's pool read through its own cells", () => {
 
         for (const who of ["NE", "NYJ", "BUF"]) {
           for (const call of ["run", "pass", undefined] as const) {
-            const leagueAt = (cellKey: string) =>
-              counted.cells.get(call ? `${call}|${cellKey}` : cellKey);
+            const league = call
+              ? loaded.cellsUnder(counted.cells, call)
+              : counted.cells;
 
             for (const least of LEASTS) {
               const found = loaded.poolForSide(
                 state, least, split.get(who)?.get(call ?? "both"),
-                leagueAt, yardsOf,
+                league, yardsOf,
               );
               expect(found)
                 .toEqual(sideAsWalked(counted, from, who, spots, least, call));
@@ -800,8 +801,9 @@ describe("the share pool cut from one walk for any number of plays", () => {
         const spots = spotsInOrder(state);
 
         for (const call of ["run", "pass", undefined] as const) {
-          const walk = loaded.widenedCells(state, (cellKey) =>
-            counted.cells.get(call ? `${call}|${cellKey}` : cellKey));
+          const walk = loaded.widenedCells(
+            state, call ? loaded.cellsUnder(counted.cells, call) : counted.cells,
+          );
 
           for (const least of asked) {
             const found = walk.upTo(least);
@@ -819,6 +821,27 @@ describe("the share pool cut from one walk for any number of plays", () => {
     });
 });
 
+describe("the cells under a call or a formation", () => {
+  it("finds what the prefixed key finds, and nothing else", async () => {
+    vi.resetModules();
+    const loaded = await import("./fitPlayFactors.js");
+    const rows = scatteredRows().map((row, i) => ({ ...row, shotgun: i % 3 > 0 }));
+    const counted = loaded.countPlays(rows);
+
+    for (const prefix of ["run", "pass", "gun", "centre", "gun|run"]) {
+      const under = loaded.cellsUnder(counted.cells, prefix);
+
+      for (const [key, cell] of under) {
+        expect(counted.cells.get(`${prefix}|${key}`)).toBe(cell);
+      }
+
+      const expected = [...counted.cells.keys()]
+        .filter((key) => key.startsWith(`${prefix}|`)).length;
+      expect(under.size).toBe(expected);
+    }
+  });
+});
+
 describe("a player's touches over a pool, added up once", () => {
   it("comes to what adding him up cell by cell comes to", async () => {
     vi.resetModules();
@@ -830,9 +853,10 @@ describe("a player's touches over a pool, added up once", () => {
       return cell.byPlayer.get(player)?.touches ?? 0;
     });
 
+    const passes = loaded.cellsUnder(counted.cells, "pass");
+
     for (const state of scatteredStates()) {
-      const pool = loaded.widenedCells(state, (cellKey) =>
-        counted.cells.get(`pass|${cellKey}`)).upTo(250);
+      const pool = loaded.widenedCells(state, passes).upTo(250);
 
       for (const player of ["Back", "Wideout", "Nobody"]) {
         let touches = 0;
@@ -847,8 +871,7 @@ describe("a player's touches over a pool, added up once", () => {
 
     // and a second time without going back over the cells
     const before = asked;
-    const pool = loaded.widenedCells(scatteredStates()[0]!, (cellKey) =>
-      counted.cells.get(`pass|${cellKey}`)).upTo(250);
+    const pool = loaded.widenedCells(scatteredStates()[0]!, passes).upTo(250);
     hisTouches(pool, "Back");
     const once = asked;
     hisTouches(pool, "Back");
