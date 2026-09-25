@@ -75,6 +75,18 @@ function aLeague(named = "Mildred League XIV", team = "mattkindy"): League {
   };
 }
 
+/** the same league with your roster taken from well down the board */
+function weakLeague(league: League): League {
+  const low = file.players.filter((p) => p.position !== "DEF").slice(300, 312)
+    .map((p) => ({ name: p.name, key: p.key, pos: p.position }));
+
+  return {
+    ...league,
+    myRoster: low,
+    allRosters: [{ ...league.allRosters[0]!, keys: low }, ...league.allRosters.slice(1)],
+  };
+}
+
 const boardFor = (league: League) =>
   rescore(file.players, {
     teams: league.size, slots: league.slots, pays: league.pays,
@@ -171,9 +183,13 @@ describe("the views", () => {
   });
 
   it("leads a phone card that drops somebody with what the pair is worth", async () => {
+    // the usual fixture team wins almost every week, so no add clears the
+    // bar for a pair; a team from far down the board always has one
+    const weak = weakLeague(league);
+
     render(
       <Waivers
-        players={players} league={league} posFilter="ALL" rows={new Map()}
+        players={players} league={weak} posFilter="ALL" rows={new Map()}
         games={[]} schedule={null} season={2026} week={null}
         slate={null} roster={null} listed={new Map()}
         onMore={() => {}}
