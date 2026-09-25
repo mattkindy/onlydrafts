@@ -1471,6 +1471,11 @@ export function countPlays(
 interface PlacedCell {
   cellKey: string;
   cell: Counted;
+  /**
+   * For a side's cell, the league's cell at the same spot once it has been
+   * looked up, null when the league has none, and undefined before.
+   */
+  league: Counted | null | undefined;
 }
 
 /**
@@ -1581,8 +1586,20 @@ const addToRows = (rows: DraftRows, cellKey: string, cell: Counted) => {
   const [row, at] = placed;
   const inRow = rows.get(row) ?? { at: [], cells: [] };
   inRow.at.push(at);
-  inRow.cells.push({ cellKey, cell });
+  inRow.cells.push({ cellKey, cell, league: undefined });
   rows.set(row, inRow);
+};
+
+/**
+ * Points each of a side's cells at the league's cell counted at the same
+ * spot, so a walk over the side's pool does not look each one up by key.
+ */
+export const linkToLeague = (rows: CellRows, league: Map<string, Counted>) => {
+  for (const row of rows.values()) {
+    for (const placed of row.cells) {
+      placed.league = league.get(placed.cellKey) ?? null;
+    }
+  }
 };
 
 const sealed = (draft: DraftRows): CellRows =>
@@ -1787,11 +1804,12 @@ export const poolForSide = (
   for (const looseness of [0, 1, 2]) {
     const pooled = { plays: 0, runs: 0, yardsSum: 0, leaguePlays: 0, leagueRuns: 0 };
 
-    walkWidening([own], state, looseness, ({ cell, cellKey }) => {
+    walkWidening([own], state, looseness, ({ cell, cellKey, league: linked }) => {
       pooled.plays += cell.plays;
       pooled.runs += cell.runs;
       pooled.yardsSum += yardsOf(cell);
-      const everybody = league.get(cellKey);
+      // a side's cells are linked to the same league map the caller passes
+      const everybody = linked === undefined ? league.get(cellKey) : linked;
 
       if (everybody) {
         pooled.leaguePlays += everybody.plays;
@@ -2648,9 +2666,20 @@ export function fitPlayFactors(
 
     return table;
   };
+  /** the side rows already pointed at the league cells `forSide` passes */
+  const linked = new WeakSet<CellRows>();
   const sideCellsOf = (
     from: Map<string, Counted>, who: string, call?: Call,
-  ) => sideTableOf(from).get(who)?.get(call ?? "both");
+  ) => {
+    const rows = sideTableOf(from).get(who)?.get(call ?? "both");
+
+    if (rows && !linked.has(rows)) {
+      linkToLeague(rows, cellsAt(call));
+      linked.add(rows);
+    }
+
+    return rows;
+  };
   /**
    * Sums only. This used to copy every yard of a side's pooled cells
    * into a fresh array three times a play, and once the per side counts

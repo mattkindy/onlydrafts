@@ -1446,3 +1446,46 @@ describe("the lists a count keeps as it goes", () => {
       expect(checked).toBeGreaterThan(1000);
     });
 });
+
+describe("a side's cells pointed at the league's", () => {
+  it("pool the same as looking each league cell up by key", async () => {
+    vi.resetModules();
+    const loaded = await import("./fitPlayFactors.js");
+    const counted = loaded.countPlays(scatteredRows());
+    const yardsOf = (cell: Cell) => cell.yards.reduce((a, b) => a + b, 0);
+    let filled = 0;
+
+    for (const from of [counted.byOffence, counted.byDefence]) {
+      const keyed = loaded.splitBySide(from);
+      const linked = loaded.splitBySide(from);
+
+      for (const who of ["NE", "NYJ", "MIA"]) {
+        for (const call of ["run", "pass", undefined] as const) {
+          const league = call
+            ? loaded.cellsUnder(counted.cells, call)
+            : counted.cells;
+          const rows = linked.get(who)?.get(call ?? "both");
+
+          if (rows) {
+            loaded.linkToLeague(rows, league);
+          }
+
+          for (const state of scatteredStates()) {
+            for (const least of LEASTS) {
+              const found = loaded.poolForSide(
+                state, least, rows, league, yardsOf,
+              );
+              expect(found).toEqual(loaded.poolForSide(
+                state, least, keyed.get(who)?.get(call ?? "both"), league,
+                yardsOf,
+              ));
+              filled += found.leaguePlays > 0 ? 1 : 0;
+            }
+          }
+        }
+      }
+    }
+
+    expect(filled).toBeGreaterThan(500);
+  });
+});
