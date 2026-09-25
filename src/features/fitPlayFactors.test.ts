@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CountedPlays, GoalSample, PlayRow } from "./fitPlayFactors.js";
 import {
-  keysAt, marginBand, nearnessWeight, stateKey, timeBand, wideningPacked,
+  keysAt, nearnessWeight, stateKey, wideningPacked,
   type Call, type PlayState,
 } from "../model/playFactors.js";
 import { seededRng } from "../sim/rng.js";
@@ -1375,23 +1375,6 @@ describe("the keys the memos are kept under", () => {
       .toBeGreaterThan(pairs.length / 2);
     expect(pairs.some(({ key }) => typeof key === "string")).toBe(true);
   });
-
-  it("keep a walk's distance and yardline as they are, as its key did",
-    async () => {
-      vi.resetModules();
-      const loaded = await import("./fitPlayFactors.js");
-      const pairs = states().flatMap((state) =>
-        (["run", "pass", undefined] as const).map((call) => ({
-          old: `${call ?? "both"}|${Math.min(4, state.down)}|${state.toGo}` +
-            `|${state.yardline}|${timeBand(state.secondsLeft)}` +
-            `|${marginBand(state.margin)}`,
-          key: loaded.walkKey(state, call),
-        })));
-
-      expect(sameMatches(pairs)).toBe(true);
-      expect(new Set(pairs.map(({ key }) => key)).size)
-        .toBe(new Set(pairs.map(({ old }) => old)).size);
-    });
 });
 
 describe("the lists a count keeps as it goes", () => {

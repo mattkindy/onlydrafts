@@ -2334,25 +2334,6 @@ export const memoKey = (
   return `${asked}|${code}|${least}`;
 };
 
-/**
- * The key a widening walk is kept under. It reads the distance and the
- * yardline as they are rather than capped, because the walk itself does.
- */
-export const walkKey = (state: PlayState, call?: Call): number | string => {
-  const down = Math.min(4, state.down);
-  const time = timeBand(state.secondsLeft);
-  const band = marginBand(state.margin);
-
-  if (!wholeIn(down, 4) || !wholeIn(state.toGo, 40) ||
-      !wholeIn(state.yardline, 99)) {
-    return `${call ?? "both"}|${down}|${state.toGo}|${state.yardline}` +
-      `|${time}|${band}`;
-  }
-
-  return ((((callCode(call) * 5 + down) * 41 + state.toGo) * 100 +
-    state.yardline) * 5 + time) * 9 + band;
-};
-
 export function fitPlayFactors(
   rows: PlayRow[],
   settings: FactorSettings = FACTOR_DEFAULTS,
@@ -3111,26 +3092,6 @@ export function fitPlayFactors(
     return sample;
   };
 
-  /**
-   * The walk is kept per state and not per number of plays, since that
-   * number grows with the cast and the same state was walked again for
-   * every size of cast. Its key has everything the widening reads.
-   */
-  const walksRemembered = new Map<number | string, WidenedCells>();
-  const widenedAt = (state: PlayState, call?: Call) => {
-    makeRoom(walksRemembered);
-    const key = walkKey(state, call);
-    const already = walksRemembered.get(key);
-
-    if (already) {
-      return already;
-    }
-
-    const widened = widenedCells(state, rowsAt(call));
-    walksRemembered.set(key, widened);
-
-    return widened;
-  };
   const cellsRemembered = new Map<number | string, Counted[]>();
   const atCells = (state: PlayState, least: number, call?: Call) => {
     makeRoom(cellsRemembered);
@@ -3141,7 +3102,7 @@ export function fitPlayFactors(
       return already;
     }
 
-    const found = widenedAt(state, call).upTo(least);
+    const found = widenedCells(state, rowsAt(call)).upTo(least);
     cellsRemembered.set(key, found);
 
     return found;
