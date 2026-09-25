@@ -19,7 +19,7 @@ import { createInterface } from "node:readline";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { splitLine } from "../data/csv.js";
-import { RAW_DIR } from "../data/nflverse.js";
+import { ON_FIELD_CSV as ON_FIELD } from "../data/onField.js";
 import { buildPlayerVectors, ATTRIBUTES } from "./playerVector.js";
 import { matchup, type AgainstSettings } from "./defenceStrength.js";
 import {
@@ -50,7 +50,6 @@ interface MatchupRequest {
 }
 
 const KEPT = join(import.meta.dirname, "..", "..", "data", "kept");
-const ON_FIELD = join(RAW_DIR, "onField.csv");
 
 /** the state the network is asked about, which is a first and ten */
 const stateOf = (run: boolean) =>

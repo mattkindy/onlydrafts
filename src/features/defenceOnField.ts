@@ -14,9 +14,8 @@
 
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
-import { join } from "node:path";
 import { splitLine } from "../data/csv.js";
-import { RAW_DIR } from "../data/nflverse.js";
+import { ON_FIELD_CSV } from "../data/onField.js";
 import { fitPlusMinus, type Snap } from "../model/plusMinus.js";
 
 export interface DefenceOnField {
@@ -45,7 +44,7 @@ export async function buildDefenceOnField(
   /** `${season}|${week}|${team}` -> how many snaps each player played */
   const played = new Map<string, Map<string, number>>();
   const reader = createInterface({
-    input: createReadStream(join(RAW_DIR, "onField.csv")),
+    input: createReadStream(ON_FIELD_CSV),
   });
   let header: string[] | undefined;
   const at: Record<string, number> = {};

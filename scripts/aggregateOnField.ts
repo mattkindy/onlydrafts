@@ -17,10 +17,11 @@ import { createWriteStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { RAW_DIR } from "../src/data/nflverse.js";
+import { ON_FIELD_CSV } from "../src/data/onField.js";
 import { splitLine } from "../src/data/csv.js";
 
 const SEASONS = [2022, 2023, 2024, 2025];
-const OUT = join(RAW_DIR, "onField.csv");
+const OUT = ON_FIELD_CSV;
 
 async function playersFor(season: number) {
   const path = join(RAW_DIR, `participation_${season}.csv`);
