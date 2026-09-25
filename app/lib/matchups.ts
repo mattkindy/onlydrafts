@@ -31,7 +31,7 @@ import { sleeperGames } from "./sleeperScores.ts";
 import {
   FLEX_POSITIONS, knownSlot, lineupOf, slotTakes, type Player,
 } from "./scoring.ts";
-import type { SlateRow } from "./slate.ts";
+import { movedForCatches, type SlateRow } from "./slate.ts";
 import { boardKeyOf, boardTeamOf } from "./boardKeys.ts";
 import {
   normalCdf, normalQuantile, quantileOf, weeksFromSpread, type Spread,
@@ -637,8 +637,22 @@ export const spreadOf = (row: SlateRow) => ({
   q3: row.q3 ?? (row.blend + row.ceiling) / 2,
 });
 
-/** the board in this league's terms, by the key a lineup uses for a player */
-export type Lines = Map<string, Player>;
+/**
+ * The board in this league's terms, by the key a lineup uses for a player.
+ * Built for a week, it also says which week and what this league pays a
+ * catch over the board, so a player the slate has no row for can take the
+ * board's line for that week rather than his season.
+ */
+export type Lines = Map<string, Player> & {
+  week?: number | null;
+  catchShift?: number;
+};
+
+/** the board as lines for one week */
+export const linesFor = (
+  players: Player[], week?: number | null, catchShift = 0,
+): Lines => Object.assign(
+  new Map(players.map((p) => [p.key, p])), { week, catchShift });
 
 /** what anybody knows about a player's week */
 export interface Line {
@@ -686,14 +700,50 @@ export const stockLine = (position: string, team?: string): Line | null => {
 };
 
 /**
+ * The board's line for one week of his, where the lines were built for a
+ * week the board has him playing. It is the week's blend with Sleeper
+ * moved to this league's catch price, or failing that the week's multiple
+ * of his season game. It is drawn with his season game's shape, and it
+ * says which side he plays.
+ */
+function boardWeekLine(player: Player, lines: Lines): Line | null {
+  const said = player.weeks?.find((w) => w.w === lines.week);
+  const game = player.game ?? {};
+  const ev = game["ev"] ?? 0;
+
+  if (!said || (said.blend === undefined && !ev)) {
+    return null;
+  }
+
+  const blend = said.blend === undefined
+    ? Number((said.of * ev).toFixed(1))
+    : movedForCatches(
+      said.blend, said.blend, said.catches ?? 0, lines.catchShift ?? 0);
+  const at = (q: string) =>
+    ev > 0 && game[q] !== undefined ? game[q]! * (blend / ev) : blend;
+
+  return {
+    spread: {
+      ev: blend, mid: at("mid"), low: at("low"), high: at("high"),
+      q1: at("q1"), q3: at("q3"),
+    },
+    position: player.position,
+    team: player.team?.toUpperCase() ?? null,
+    opponent: said.opp.replace(/^[v@]\s*/, "").toUpperCase() || null,
+    blend,
+    stock: false,
+  };
+}
+
+/**
  * What the week says about a player, and failing that what the board does.
  *
  * A slate covers the players some model was run for, which leaves out a
- * backup and a kicker nobody has a record of. Those have a season long
- * game of their own on the board, in this league's scoring, and a game
- * of that is a better guess at the rest of his Sunday than nothing at
- * all. The fixture does not come with it, so he shares no factor with
- * anybody.
+ * backup and a kicker nobody has a record of. The board has a line for
+ * each week of his, blended with Sleeper where Sleeper had a number, and
+ * that comes first. Lines built with no week fall back to his season long
+ * game, in this league's scoring. That game has no opponent, so he shares
+ * no factor with anybody.
  */
 export function lineOf(
   key: string, rows: Map<string, SlateRow>, lines?: Lines, position?: string,
@@ -713,6 +763,12 @@ export function lineOf(
   }
 
   const player = lines?.get(key);
+  const week = player && lines ? boardWeekLine(player, lines) : null;
+
+  if (week) {
+    return week;
+  }
+
   const game = player?.game;
 
   if (!player || !game?.["ev"]) {

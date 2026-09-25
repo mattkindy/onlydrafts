@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { Listed } from "./availability.ts";
-import { lineOf, liveDraws, spreadOf } from "./matchups.ts";
+import { lineOf, linesFor, liveDraws, spreadOf } from "./matchups.ts";
+import type { Player } from "./scoring.ts";
 import {
   hasGameIn, isSplit, onTheBooks, readSlate, slateUnder, withByesZeroed,
   withOutPlayersZeroed,
@@ -401,5 +402,71 @@ describe("a player whose team is on bye", () => {
     const got = withByesZeroed(rows, books, () => false);
 
     expect(got.get(chase)).toBe(rows.get(chase));
+  });
+});
+
+/**
+ * Brock Bowers had no slate row in week 3, and the matchup page started
+ * him on his season game: no opponent, and none of Sleeper's word on him.
+ */
+describe("a player the week has no row for", () => {
+  const bowers: Player = {
+    name: "Brock Bowers",
+    key: "brockbowers",
+    position: "TE",
+    team: "LV",
+    ppg: 14.2,
+    game: { ev: 14.2, q1: 8.5, mid: 13.2, q3: 18.9, low: 4.8, high: 25.8 },
+    weeks: [
+      { w: 2, opp: "@ LAC", of: 0.998 },
+      { w: 3, opp: "@ NO", of: 1.008, blend: 13.9, catches: 5.57 },
+      { w: 4, opp: "v KC", of: 0.991 },
+    ],
+  };
+
+  it("takes the board's line for the week over his season game", () => {
+    const line = lineOf("brockbowers", new Map(), linesFor([bowers], 3));
+
+    expect(line!.blend).toBe(13.9);
+    expect(line!.spread.ev).toBe(13.9);
+    expect(line!.opponent).toBe("NO");
+    expect(line!.spread.high).toBeCloseTo(25.8 * 13.9 / 14.2, 5);
+  });
+
+  it("moves the week's blend to what this league pays a catch", () => {
+    const line = lineOf("brockbowers", new Map(), linesFor([bowers], 3, -1));
+
+    expect(line!.blend).toBe(8.3);
+  });
+
+  it("takes the week's multiple of his game where Sleeper had nothing", () => {
+    const line = lineOf("brockbowers", new Map(), linesFor([bowers], 4));
+
+    expect(line!.blend).toBe(14.1);
+    expect(line!.opponent).toBe("KC");
+  });
+
+  it("keeps his season game when the lines were built for no week", () => {
+    const line = lineOf("brockbowers", new Map(), linesFor([bowers]));
+
+    expect(line!.blend).toBe(14.2);
+    expect(line!.opponent).toBeNull();
+  });
+
+  it("reads the slate's row first where there is one", () => {
+    const rows = new Map(readSlate({
+      season: 2026,
+      week: 3,
+      perCatch: 1,
+      players: [{
+        name: "Brock Bowers", position: "TE", team: "LV", opponent: "@ NO",
+        ours: 14.3, sleeper: 13.4, average: 13.9, floor: 5, ceiling: 25,
+        catches: 5.57, lineFrom: "board",
+      }],
+    }).rows.map((row) => [normalizeName(row.name), row]));
+    const line = lineOf("brockbowers", rows, linesFor([bowers], 3));
+
+    expect(line!.blend).toBe(13.9);
+    expect(rows.get("brockbowers")!.lineFrom).toBe("board");
   });
 });

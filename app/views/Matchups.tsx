@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { statsSay } from "../lib/boxScore.ts";
 import {
-  hasLineup, lineFor, settledGames, standingFor, starterState,
+  hasLineup, lineFor, linesFor, settledGames, standingFor, starterState,
   type GameState, type InGameStatus, type Lines,
 } from "../lib/matchups.ts";
 import type {
@@ -26,7 +26,7 @@ import type {
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import { layoutGame, layoutWeek, shareLayout } from "../lib/shareImage.ts";
 import type { ShareGame } from "../lib/shareImage.ts";
-import type { SlateRow } from "../lib/slate.ts";
+import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
 import { pregameOf, reportFor } from "../lib/weekReport.ts";
 import { Advice, nameOf, pct, pctPair } from "./Advice.tsx";
 import { PlayerName } from "./PlayerName.tsx";
@@ -46,6 +46,8 @@ interface Props {
   slots: string[] | null;
   /** what this league pays, since the remainder engine scores its own plays */
   pays: Pays;
+  /** what the board paid a catch, so its week lines move to this league's */
+  boardPerCatch?: number | undefined;
   /** whose scoreboard says where each game is, which is the league's own */
   provider?: League["provider"] | undefined;
   season: number;
@@ -298,12 +300,13 @@ export function Game(
 
 export function Matchups(
   {
-    games: asRead, rows, players, mine, slots, pays, provider, season, week,
-    league, status, rosters, weekPointsFor, onMore,
+    games: asRead, rows, players, mine, slots, pays, boardPerCatch, provider,
+    season, week, league, status, rosters, weekPointsFor, onMore,
   }: Props,
 ) {
   const lines = useMemo(
-    () => new Map(players.map((p) => [p.key, p])), [players]);
+    () => linesFor(players, week, catchShiftOf(pays, boardPerCatch)),
+    [players, week, pays, boardPerCatch]);
   const { states, remainder, read, trouble } =
     useLiveWeek(season, week, pays, provider);
   const games = useMemo(

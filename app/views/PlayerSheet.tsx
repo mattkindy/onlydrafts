@@ -6,7 +6,9 @@ import type { Pays, Player } from "../lib/scoring.ts";
 import { payFor } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
 import { claimWords, reasonWords, roleWords } from "../lib/sleeperWords.ts";
-import { movedForCatches, type SlateRow } from "../lib/slate.ts";
+import {
+  catchShiftOf, movedForCatches, type SlateRow,
+} from "../lib/slate.ts";
 import { WeatherMark, weatherWords } from "./WeatherMark.tsx";
 import { lineOver, movedBy } from "../lib/statLine.ts";
 
@@ -70,11 +72,8 @@ function WeekByWeek(
     ? { low: g["low"]! / ev, q1: g["q1"]! / ev, q3: g["q3"]! / ev, high: g["high"]! / ev }
     : { low: 1, q1: 1, q3: 1, high: 1 };
   // The blend was scored once, at the build. A league paying a catch
-  // differently moves it, the same way the slate moves, and a page with
-  // no league connected leaves it where the board put it.
-  const shift = pays["rec"] === undefined || boardPerCatch === undefined
-    ? 0
-    : pays["rec"] - boardPerCatch;
+  // differently moves it, the same way the slate moves.
+  const shift = catchShiftOf(pays, boardPerCatch);
   const blendOf = (w: Week) => {
     if (w.blend === undefined) {
       return undefined;

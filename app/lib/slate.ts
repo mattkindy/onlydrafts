@@ -50,6 +50,11 @@ export interface SlateRow {
   ruledOut: boolean;
   /** his team has no game this week, so the row is all zeros */
   bye?: boolean;
+  /**
+   * The weekly model had nothing on him, since he has not played this
+   * season, so `ours` is the board's line for the week.
+   */
+  lineFrom?: "board";
   /** the word his club used, where it said anything */
   status?: string;
   gamesMissedRecent: number;
@@ -168,6 +173,7 @@ interface FileRow {
   absenceShare?: number;
   weather?: WeatherNote;
   weatherLift?: number;
+  lineFrom?: string;
 }
 
 interface FileSlate {
@@ -206,6 +212,7 @@ function readRow(row: FileRow): SlateRow {
     absenceShare: row.absenceShare ?? 0,
     weather: row.weather,
     weatherLift: row.weatherLift,
+    ...(row.lineFrom === "board" ? { lineFrom: "board" as const } : {}),
   };
 }
 
@@ -235,6 +242,21 @@ export function movedForCatches(
   const share = average > 0 ? points / average : 1;
 
   return Number((points + shift * catches * share).toFixed(1));
+}
+
+/**
+ * What this league pays a catch over what the board was scored at. A
+ * page with no league connected, or a board that did not say, leaves the
+ * board's numbers where they are.
+ */
+export function catchShiftOf(
+  pays: Record<string, number>, boardPerCatch: number | undefined,
+): number {
+  if (pays["rec"] === undefined || boardPerCatch === undefined) {
+    return 0;
+  }
+
+  return pays["rec"] - boardPerCatch;
 }
 
 /**

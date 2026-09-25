@@ -1038,6 +1038,7 @@ function App() {
             slots={active?.slots ?? null}
             league={active?.name}
             pays={active?.pays ?? {}}
+            boardPerCatch={board?.perCatch}
             provider={active?.provider}
             status={gamesStatus || weekStatus}
             onMore={openKey}
@@ -1058,6 +1059,7 @@ function App() {
                   mine={active.team}
                   slots={active.slots ?? null}
                   pays={active.pays ?? {}}
+                  boardPerCatch={board.perCatch}
                   provider={active.provider}
                   season={week.season}
                   week={week.week}
@@ -1094,6 +1096,7 @@ function App() {
             season={week?.season ?? null}
             week={week?.week ?? null}
             slate={slate}
+            boardPerCatch={board.perCatch}
             roster={rosterKeys(active.myRoster)}
             listed={listed}
             gamesStatus={gamesStatus}

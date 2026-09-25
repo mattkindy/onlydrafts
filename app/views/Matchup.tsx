@@ -17,12 +17,14 @@ import { useMemo } from "preact/hooks";
 import type { Listed } from "../lib/availability.ts";
 import { leadFor, type Explanation } from "../lib/explain.ts";
 import {
-  alternativesFor, lineFor, myGameIn, settledGames, standingFor, starterState,
-  type GameState, type Lines, type SlotChoice,
+  alternativesFor, lineFor, linesFor, myGameIn, settledGames, standingFor,
+  starterState, type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
 import type { League, Matchup, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
-import { hurtWord, type Slate, type SlateRow, type WeekRef } from "../lib/slate.ts";
+import {
+  catchShiftOf, hurtWord, type Slate, type SlateRow, type WeekRef,
+} from "../lib/slate.ts";
 import { WeatherMark } from "./WeatherMark.tsx";
 import { Advice, gainPct, nameOf, pct } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
@@ -52,6 +54,8 @@ interface Props {
   league?: string;
   /** what this league pays, for playing out the rest of a live game */
   pays?: Pays;
+  /** what the board paid a catch, so its week lines move to this league's */
+  boardPerCatch?: number | undefined;
   /** whose scoreboard says where each game is, which is the league's own */
   provider?: League["provider"] | undefined;
   status?: string;
@@ -298,7 +302,10 @@ export function MyMatchup(props: Props) {
     props.provider);
 
   const lines = useMemo(
-    () => new Map(props.players.map((p) => [p.key, p])), [props.players]);
+    () => linesFor(
+      props.players, props.picked?.week,
+      catchShiftOf(props.pays ?? {}, props.boardPerCatch)),
+    [props.players, props.picked, props.pays, props.boardPerCatch]);
   const games = useMemo(
     () => settledGames(props.games, rows, states, lines),
     [props.games, rows, states, lines],

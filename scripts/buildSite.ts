@@ -18,7 +18,6 @@ import {
   sleeperPointsUnder,
   withoutQuiet,
   type SleeperDefence,
-  type SleeperProjection,
 } from "../src/data/sleeperProjections.js";
 import {
   bracketOf,
@@ -65,7 +64,6 @@ import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import {
   buildResidualModel,
   outcomeQuantile,
-  type ResidualModel,
 } from "../src/backtest/intervals.js";
 import { normalizeName } from "../src/data/names.js";
 import { parseCsv } from "../src/data/csv.js";
@@ -135,6 +133,13 @@ import {
 } from "../src/features/jointParts.js";
 import type { StatParts } from "../src/features/seasonSummary.js";
 import { partsIn } from "../src/data/advancedParts.js";
+import { loadWeeklyInjuryStatus } from "../src/data/weeklyStatus.js";
+import {
+  clubCalendar, recentClubWeeks,
+} from "../src/features/recentWindow.js";
+import {
+  boardSlateRows, fixturesIn, slateRow, type BoardPlayer, type SlateRowShape,
+} from "./slateRows.js";
 
 /**
  * The site is the site, so it goes at the top rather than down a path
@@ -215,82 +220,6 @@ function earlyWeekLine(
     week, points !== undefined && points > 0 ? points : undefined, ridge,
   );
 }
-
-/**
- * One row a player, in the slate file the app reads. `ours` is our
- * per-position ridge and `sleeper` is Sleeper's number, null when they
- * have no row for him. A player Sleeper listed without a number is a backup
- * or a player who is out, so he gets a Sleeper 0 and an average of 0; a
- * player Sleeper never listed keeps ours alone. Otherwise `average` is the
- * two averaged, and the file is sorted by it. `floor` and
- * `ceiling` are the tenth and ninetieth of the outcome around that
- * average. `snaps` is a whole percent; `gamesMissed` is out of his last
- * four club weeks; `absenceShare` runs 0 to 1. Every point figure is
- * in the build's scoring, and `catches` says how many receptions are
- * behind them, so a league paying a catch differently can move them.
- *
- * Both the in-season slate and the preseason one below are written
- * through here, so the two files have the same shape and the app does
- * not have to know which it is reading.
- */
-function slateRow(
-  residuals: ResidualModel,
-  e: WeeklyExample,
-  ours: number,
-  projection: SleeperProjection | undefined,
-  quiet: boolean,
-  sky?: { note: WeatherNote | undefined; lift: number },
-) {
-  const said = projection
-    ? sleeperPointsUnder(projection, scoring().receptions)
-    : quiet ? 0 : undefined;
-  // his club has said he is not playing, so there is no week to project.
-  // He stays on the slate with the word they used, since leaving him off
-  // sent the app to his season-long game and it started him.
-  const level = e.ruledOut ? 0 : ours;
-  const sleeper = e.ruledOut ? 0 : said;
-  // Sleeper leaves a player blank when he is not going to play, and a
-  // half of our number would still rank him over players who will
-  const average =
-    sleeper === undefined
-      ? level
-      : sleeper === 0
-        ? 0
-        : blendPoints(
-          level, debiasedSleeper(e.position, sleeper), SHIPPED_BLEND_WEIGHT);
-  // a player who is not playing has no week to draw around
-  const quantile = (q: number) =>
-    average === 0 ? 0 : outcomeQuantile(residuals, e.position, average, q);
-
-  return {
-    name: e.playerName,
-    key: normalizeName(e.playerName),
-    position: e.position,
-    team: e.teamId,
-    opponent: (e.home ? "v " : "@ ") + e.opponent,
-    ours: Number(level.toFixed(1)),
-    sleeper: sleeper === undefined ? null : Number(sleeper.toFixed(1)),
-    average: Number(average.toFixed(1)),
-    floor: Number(quantile(0.1).toFixed(1)),
-    ceiling: Number(quantile(0.9).toFixed(1)),
-    q1: Number(quantile(0.25).toFixed(1)),
-    q3: Number(quantile(0.75).toFixed(1)),
-    catches: Number((projection?.catches ?? e.receptionsRecent).toFixed(2)),
-    snaps: Math.round(e.snapRecent * 100),
-    questionable: e.questionable,
-    ruledOut: e.ruledOut,
-    status: e.status,
-    gamesMissed: e.gamesMissedRecent,
-    absenceShare: Number(e.absenceShare.toFixed(2)),
-    // left off a mild day entirely, which is most rows
-    ...(sky?.note ? { weather: sky.note } : {}),
-    ...(sky && sky.lift !== 1
-      ? { weatherLift: Number(sky.lift.toFixed(3)) }
-      : {}),
-  };
-}
-
-type SlateRowShape = ReturnType<typeof slateRow>;
 
 interface Slate {
   season: number;
@@ -381,7 +310,8 @@ async function defenceSlateRows(
   const lastSeason = await loadTeamDefenceWeeks(season - 1);
   const allowed = new Map<string, number>();
   const implied = new Map<string, number>();
-  const fixtures: { team: string; against: string; home: boolean }[] = [];
+  const fixtures = [...fixturesIn(games, season, week)]
+    .map(([team, { against, home }]) => ({ team, against, home }));
 
   for (const g of games) {
     const at = (team: string) => `${g.season}|${g.week}|${team}`;
@@ -394,13 +324,6 @@ async function defenceSlateRows(
     if (g.totalLine !== undefined && g.spreadLine !== undefined) {
       implied.set(at(g.homeTeamId), g.totalLine / 2 - g.spreadLine / 2);
       implied.set(at(g.awayTeamId), g.totalLine / 2 + g.spreadLine / 2);
-    }
-
-    if (g.season === season && g.week === week) {
-      fixtures.push(
-        { team: g.homeTeamId, against: g.awayTeamId, home: true },
-        { team: g.awayTeamId, against: g.homeTeamId, home: false },
-      );
     }
   }
 
@@ -1139,6 +1062,69 @@ async function main(): Promise<void> {
     return anchored ? anchored.points : ridge;
   };
 
+  /**
+   * The board's week chart for one player. The early weeks lean on his
+   * usage and his rates instead of his season anchor, fading out as the
+   * anchor takes over, since so early there is almost nothing of this
+   * season for it to stand on yet.
+   */
+  const boardWeeksOf = (p: { playerId: string; position: string }) =>
+    anchoredWeeks.get(p.playerId)?.map((w) => ({
+      ...w,
+      points: earlyWeekLine(
+        w.week,
+        p.position,
+        w.points,
+        earlyHistories.get(w.week)?.get(p.playerId),
+        priors,
+      ),
+    }));
+
+  /**
+   * What the forecast does to a player's week. The roof and the kickoff
+   * time are already in every line through the season chart, so only the
+   * forecast is left to apply.
+   */
+  const skyFor = (
+    team: string, week: number, position: string, catchShare: number,
+  ) => {
+    const sky = settingOf(team, week).weather;
+    const lift = sky
+      ? settingLift(
+        position,
+        { indoors: false, night: false, restDays: 7, weather: sky },
+        catchShare,
+      )
+      : 1;
+
+    return { note: weatherNote(forecastFor(team, week)), lift };
+  };
+
+  /**
+   * The board's skill players with the board's own line for a week, for
+   * the ones the weekly model has nothing on. A player with no week chart
+   * takes his level.
+   */
+  const boardPlayersFor = (week: number): BoardPlayer[] => world.players
+    .filter((p) => ["QB", "RB", "WR", "TE"].includes(p.position))
+    .map((p) => {
+      const parts = p.projectedParts;
+      const touches = (parts?.targets ?? 0) + (parts?.carries ?? 0);
+
+      return {
+        playerId: p.playerId,
+        name: p.name,
+        position: p.position,
+        teamId: p.teamId,
+        line: boardWeeksOf(p)?.find((w) => w.week === week)?.points ??
+          p.projectedPpg,
+        catches: parts?.receptions ?? 0,
+        catchShare: touches > 0 ? (parts?.targets ?? 0) / touches : 0,
+      };
+    });
+  const injuries = await loadWeeklyInjuryStatus(season);
+  const calendar = clubCalendar(thisSeason);
+
   for (const week of weeks) {
     const histories = earlyHistories.get(week) ?? new Map<string, History>();
     const ours = new Map<string, number>();
@@ -1151,17 +1137,8 @@ async function main(): Promise<void> {
           histories.get(e.playerId),
           priors,
         );
-        // the roof and the kickoff time are already in the line through
-        // the season chart, so only the forecast is left to apply
-        const sky = settingOf(e.teamId, week).weather;
-        const lift = sky
-          ? settingLift(
-            e.position,
-            { indoors: false, night: false, restDays: 7, weather: sky },
-            catchShareOf(e),
-          )
-          : 1;
-        const line = said * lift;
+        const sky = skyFor(e.teamId, week, e.position, catchShareOf(e));
+        const line = said * sky.lift;
 
         // his card says what the slate says, and the slate has him at zero
         ours.set(e.playerId, e.ruledOut ? 0 : line);
@@ -1172,16 +1149,38 @@ async function main(): Promise<void> {
           line,
           projections.get(projectionKey(season, week, e.playerId)),
           quiet.has(projectionKey(season, week, e.playerId)),
-          { note: weatherNote(forecastFor(e.teamId, week)), lift },
+          sky,
         );
       });
 
     slateLine.set(week, ours);
-    const rows = [
+    const written = [
       ...players,
       ...(await defenceSlateRows(season, week, games)),
       ...(await kickerSlateRows(season, week, games)),
-    ].sort((a, b) => b.average - a.average);
+    ];
+    // the board's rows stay out of `slateLine`, so each card keeps its
+    // own week and the Sleeper blend the board writes beside it
+    const fromBoard = boardSlateRows(boardPlayersFor(week), {
+      season,
+      week,
+      residuals,
+      fixtures: fixturesIn(games, season, week),
+      written,
+      modelled: new Set(ours.keys()),
+      statusOf: (playerId) => injuries.get(`${playerId}|${week}`),
+      projections,
+      quiet,
+      missedOf: (playerId, team) => recentClubWeeks(calendar, team, week)
+        .filter((w) => !playedByPlayer.get(playerId)?.has(w)).length,
+      skyOf: (team, position, catchShare) =>
+        skyFor(team, week, position, catchShare),
+    });
+    console.log(
+      `week ${week}: ${fromBoard.length} players take the board's line`,
+    );
+    const rows = [...written, ...fromBoard]
+      .sort((a, b) => b.average - a.average);
 
     await writeSlate(
       join(DOCS, "data", `slate-${season}-${week}.json`),
@@ -1534,28 +1533,11 @@ async function main(): Promise<void> {
   const weeklyByPlayer = new Map<string, WeeklyProjection[]>();
 
   for (const p of world.players) {
-    const anchored = anchoredWeeks.get(p.playerId);
+    const shape = boardWeeksOf(p);
 
-    if (!anchored) {
+    if (!shape) {
       continue;
     }
-
-    /**
-     * The early weeks lean on his usage and his rates instead of his
-     * season anchor, fading out as the season anchor takes over, since
-     * so early there is almost nothing of this season for it to stand
-     * on yet.
-     */
-    const shape = anchored.map((w) => ({
-      ...w,
-      points: earlyWeekLine(
-        w.week,
-        p.position,
-        w.points,
-        earlyHistories.get(w.week)?.get(p.playerId),
-        priors,
-      ),
-    }));
 
     /**
      * A week a slate covers takes the slate's own number.

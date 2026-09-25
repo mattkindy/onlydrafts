@@ -19,8 +19,8 @@ import { normalizeName } from "../lib/store.ts";
 import type { Player } from "../lib/scoring.ts";
 import { claimWords, reasonWords } from "../lib/sleeperWords.ts";
 import type { League, Matchup } from "../lib/providers.ts";
-import { myGameIn, type Lines } from "../lib/matchups.ts";
-import type { Slate, SlateRow } from "../lib/slate.ts";
+import { linesFor, myGameIn, type Lines } from "../lib/matchups.ts";
+import { catchShiftOf, type Slate, type SlateRow } from "../lib/slate.ts";
 import { WeatherMark } from "./WeatherMark.tsx";
 import type { Listed } from "../lib/availability.ts";
 import {
@@ -62,6 +62,8 @@ interface Props {
   week: number | null;
   /** the week as it was built, which the rankings table lists off */
   slate: Slate | null;
+  /** what the board paid a catch, so its week lines move to this league's */
+  boardPerCatch?: number | undefined;
   /** the players on your team, so the rankings can mark them */
   roster: Set<string> | null;
   /** who the injury report has listed, for the rankings table's badges */
@@ -487,7 +489,9 @@ export function Waivers(props: Props) {
     players, league, props.schedule, posFilter);
 
   const lines: Lines = useMemo(
-    () => new Map(players.map((p) => [p.key, p])), [players]);
+    () => linesFor(
+      players, props.week, catchShiftOf(league.pays, props.boardPerCatch)),
+    [players, props.week, league, props.boardPerCatch]);
   const ours = useMemo(
     () => myGameIn(games, league.team, league.userId), [games, league]);
   const nameFor = (key: string) => nameOf(key, rows, lines);
