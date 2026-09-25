@@ -1,12 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, hasLineup,
-  hurtFrom, initialForm, liveDraws, myGameIn, nextKickoffFrom, outscoreShare,
-  oddsFor, settledGame, standingFor, sideTotals, situationsFrom, spreadOf,
-  starterState, statesFrom, stockLine,
+  alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, gameStates,
+  hasLineup, hurtFrom, initialForm, liveDraws, myGameIn, nextKickoffFrom,
+  outscoreShare, oddsFor, settledGame, standingFor, sideTotals, situationsFrom,
+  spreadOf, starterState, statesFrom, stockLine,
 } from "./matchups.ts";
 import type { GameState, InGameStatus } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
@@ -510,12 +510,28 @@ describe("clockLeftOf", () => {
 });
 
 describe("nextKickoffFrom", () => {
+  const teams = (home: string, away: string) => [{
+    competitors: [
+      { homeAway: "home", team: { abbreviation: home } },
+      { homeAway: "away", team: { abbreviation: away } },
+    ],
+  }];
+
   it("gives the earliest kickoff among games not yet started", () => {
     const got = nextKickoffFrom({
       events: [
-        { date: "2026-09-27T17:00Z", status: { type: { state: "in" } } },
-        { date: "2026-09-27T20:25Z", status: { type: { state: "pre" } } },
-        { date: "2026-09-28T00:20Z", status: { type: { state: "pre" } } },
+        {
+          date: "2026-09-27T17:00Z", status: { type: { state: "in" } },
+          competitions: teams("BUF", "LAC"),
+        },
+        {
+          date: "2026-09-27T20:25Z", status: { type: { state: "pre" } },
+          competitions: teams("SF", "DAL"),
+        },
+        {
+          date: "2026-09-28T00:20Z", status: { type: { state: "pre" } },
+          competitions: teams("KC", "DEN"),
+        },
       ],
     });
 
@@ -524,7 +540,10 @@ describe("nextKickoffFrom", () => {
 
   it("gives null once every game has started", () => {
     expect(nextKickoffFrom({
-      events: [{ date: "2026-09-27T17:00Z", status: { type: { state: "post" } } }],
+      events: [{
+        date: "2026-09-27T17:00Z", status: { type: { state: "post" } },
+        competitions: teams("BUF", "LAC"),
+      }],
     })).toBeNull();
   });
 });
@@ -976,6 +995,9 @@ const fixture = <T>(name: string) => JSON.parse(readFileSync(
 const espnBoard = fixture<Parameters<typeof situationsFrom>[0]>(
   "espnScoreboardLive.json");
 
+const sleeperLive = fixture<{ status: string; metadata: object }[]>(
+  "sleeperScoresLive.json");
+
 describe("the yard line on ESPN's scoreboard", () => {
   it("reads the away side at its own 47 as 53 yards out", () => {
     const live = situationsFrom(espnBoard).get("ATL")!;
@@ -984,5 +1006,84 @@ describe("the yard line on ESPN's scoreboard", () => {
     expect(live.yardline).toBe(53);
     expect(live.down).toBe(2);
     expect(live.toGo).toBe(8);
+  });
+});
+
+describe("gameStates", () => {
+  const was = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = was;
+  });
+
+  const answered = (body: unknown) => () => Promise.resolve({
+    ok: true, status: 200, json: () => Promise.resolve(body),
+  });
+
+  /** ESPN's scoreboard and summaries, and Sleeper's scores however given */
+  const serveScores = (sleeper: () => Promise<unknown>) => {
+    globalThis.fetch = ((url: string) => {
+      const at = String(url);
+
+      if (at.includes("/scores/nfl/")) {
+        return sleeper();
+      }
+
+      return answered(at.includes("/scoreboard") ? espnBoard : {})();
+    }) as unknown as typeof fetch;
+  };
+
+  it("reads a Sleeper league's clock off Sleeper", async () => {
+    serveScores(answered(sleeperLive));
+
+    const got = await gameStates(2026, 3, "sleeper");
+    const live = got.situations.get("GB")!;
+
+    // Sleeper had 5:52 left where ESPN, a moment ahead, had 5:17
+    expect(live.secondsLeft).toBe(352);
+    expect(live.yardline).toBe(53);
+    expect(live.timeouts).toEqual({ GB: 3, ATL: 3 });
+    expect(got.states.get("BUF")).toEqual({ where: "pre", left: 1 });
+    expect(got.nextKickoff).toBe(1790528400000);
+  });
+
+  it("falls back to ESPN's scoreboard when Sleeper's will not answer", async () => {
+    serveScores(() => Promise.resolve({
+      ok: false, status: 503, json: () => Promise.resolve(null),
+    }));
+
+    const got = await gameStates(2026, 3, "sleeper");
+
+    expect(got.situations.get("GB")!.secondsLeft).toBe(317);
+    expect(got.states.get("ATL")?.where).toBe("in");
+  });
+
+  it("takes a game from ESPN when Sleeper's has no clock for it", async () => {
+    const clockless = sleeperLive.map((game) => game.status === "in_game"
+      ? { ...game, metadata: { ...game.metadata, time_remaining: null } }
+      : game);
+
+    serveScores(answered(clockless));
+
+    const got = await gameStates(2026, 3, "sleeper");
+
+    expect(got.situations.get("GB")!.secondsLeft).toBe(317);
+    // the game Sleeper could read is still Sleeper's
+    expect(got.states.get("BUF")).toEqual({ where: "pre", left: 1 });
+  });
+
+  it("leaves an ESPN league on ESPN's scoreboard", async () => {
+    let askedSleeper = false;
+
+    serveScores(() => {
+      askedSleeper = true;
+
+      return answered(sleeperLive)();
+    });
+
+    const got = await gameStates(2026, 3, "espn");
+
+    expect(askedSleeper).toBe(false);
+    expect(got.situations.get("GB")!.secondsLeft).toBe(317);
   });
 });

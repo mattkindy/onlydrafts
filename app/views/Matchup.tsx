@@ -20,7 +20,7 @@ import {
   alternativesFor, lineFor, myGameIn, settledGames, standingFor, starterState,
   type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
-import type { Matchup, Side } from "../lib/providers.ts";
+import type { League, Matchup, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import { hurtWord, type Slate, type SlateRow, type WeekRef } from "../lib/slate.ts";
 import { WeatherMark } from "./WeatherMark.tsx";
@@ -52,6 +52,8 @@ interface Props {
   league?: string;
   /** what this league pays, for playing out the rest of a live game */
   pays?: Pays;
+  /** whose scoreboard says where each game is, which is the league's own */
+  provider?: League["provider"] | undefined;
   status?: string;
   /** opens a player's sheet, since every name on the page opens one */
   onMore?: (key: string) => void;
@@ -292,7 +294,8 @@ function Lineup(
 export function MyMatchup(props: Props) {
   const { mine, mineId, rows, slots, slate, onMore } = props;
   const { states, remainder, trouble } = useLiveWeek(
-    props.picked?.season, props.picked?.week, props.pays ?? {});
+    props.picked?.season, props.picked?.week, props.pays ?? {},
+    props.provider);
 
   const lines = useMemo(
     () => new Map(props.players.map((p) => [p.key, p])), [props.players]);

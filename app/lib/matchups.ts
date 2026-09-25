@@ -3,14 +3,14 @@
  *
  * The provider says what everybody has scored so far. What is left to
  * come is drawn from the week's projections, and how much is left
- * depends on where each player's game is: nothing more for a game that has
- * finished, a whole week for one that has not kicked off, and a share of
- * one for a game in progress. The public ESPN scoreboard is what says
- * which of the three a game is in, and it needs no sign in.
+ * depends on where each player's game is: nothing more once it is over,
+ * a whole week before kickoff, and a share of one while it is on. A
+ * Sleeper league reads where each game is off Sleeper's own scores, so
+ * the clock and the points come from one place, and ESPN's public
+ * scoreboard covers everything else.
  *
  * Players in the same game share the factors the season draws share, and
- * what they have scored is evidence about those factors, so a
- * quarterback hot at half time lifts his receivers.
+ * what they have scored is evidence about those factors.
  */
 
 import {
@@ -22,8 +22,12 @@ import {
   type Explanation, type Opening,
 } from "./explain.ts";
 import {
-  sideTotalOf, type Matchup, type Played, type Side,
+  clockSeconds, downOf, onTheField, type GameRead, type Where,
+} from "./gameRead.ts";
+import {
+  sideTotalOf, type League, type Matchup, type Played, type Side,
 } from "./providers.ts";
+import { sleeperGames } from "./sleeperScores.ts";
 import {
   FLEX_POSITIONS, knownSlot, lineupOf, slotTakes, type Player,
 } from "./scoring.ts";
@@ -60,7 +64,7 @@ export const hurtShareOf = (status: InGameStatus | undefined) =>
   status ? HURT_SHARE[status] : 1;
 
 export interface GameState {
-  where: "pre" | "in" | "post";
+  where: Where;
   /** how much of the game is still to play, zero to one */
   left: number;
   /** who has gone off, by the key the slate gives a player */
@@ -109,17 +113,6 @@ const SECONDS_IN_HALF = 1800;
 /** and an overtime period, which is ten in the regular season */
 const OVERTIME = 10;
 
-/** minutes and seconds off the clock, as a number of minutes */
-function clockMinutes(displayClock: string | undefined): number {
-  const said = /(\d+):(\d+)/.exec(displayClock ?? "");
-
-  if (!said) {
-    return 0;
-  }
-
-  return Number(said[1]) + Number(said[2]) / 60;
-}
-
 /**
  * How much of a game in progress is left, as a share of a whole game.
  *
@@ -128,20 +121,22 @@ function clockMinutes(displayClock: string | undefined): number {
  * sliver. Callers scale a player's week by this, so a period the length
  * of a sixth of a game is worth about a sixth of one.
  */
-export function fractionLeft(
-  period: number | undefined, displayClock: string | undefined,
-): number {
-  const at = period ?? 1;
-  const onTheClock = clockMinutes(displayClock);
+export function fractionLeftAt(period: number, seconds: number): number {
+  const onTheClock = seconds / 60;
 
-  if (at > 4) {
+  if (period > 4) {
     return Math.min(OVERTIME, onTheClock) / REGULATION;
   }
 
-  const quartersToCome = Math.max(0, 4 - at) * 15;
+  const quartersToCome = Math.max(0, 4 - period) * 15;
 
   return Math.min(1, Math.max(0, (quartersToCome + onTheClock) / REGULATION));
 }
+
+/** the same off ESPN's quarter and its clock as it writes it */
+export const fractionLeft = (
+  period: number | undefined, displayClock: string | undefined,
+) => fractionLeftAt(period ?? 1, clockSeconds(displayClock) ?? 0);
 
 interface ScoreboardStatus {
   period?: number;
@@ -226,22 +221,12 @@ export function hurtFrom(said: Summary): Map<string, InGameStatus> {
   return out;
 }
 
-/** one game's state, read off however the scoreboard describes it */
-function stateOf(status: ScoreboardStatus | undefined): GameState {
-  const where = status?.type?.state === "in"
-    ? "in"
-    : status?.type?.state === "post" ? "post" : "pre";
-
-  if (where === "post") {
-    return { where, left: 0 };
-  }
-
-  if (where === "pre") {
-    return { where, left: 1 };
-  }
-
-  return { where, left: fractionLeft(status?.period, status?.displayClock) };
-}
+/** how much of a game is left, by where it has got to */
+const LEFT: Record<Where, (game: GameRead) => number> = {
+  pre: () => 1,
+  in: (game) => fractionLeftAt(game.period, game.clock),
+  post: () => 0,
+};
 
 /** what one game's own summary says, over and above the scoreboard */
 export interface GameReading {
@@ -251,28 +236,28 @@ export interface GameReading {
 /** each game's reading, by ESPN's id for the game */
 export type ReadingByGame = Map<string, GameReading>;
 
+/** who has gone off in each game, under both of its teams' codes */
+export type HurtByTeam = Map<string, Map<string, InGameStatus>>;
+
+const hurtIn = (game: GameRead, hurt: HurtByTeam | undefined) =>
+  hurt?.get(game.home) ?? hurt?.get(game.away);
+
 /** every team playing this week, and where its game has got to */
-export function statesFrom(said: {
-  events?: ScoreboardEvent[];
-}, readings?: ReadingByGame): Map<string, GameState> {
+export function statesOf(
+  games: GameRead[], hurt?: HurtByTeam,
+): Map<string, GameState> {
   const out = new Map<string, GameState>();
 
-  for (const event of said.events ?? []) {
-    const game = event.competitions?.[0];
-    const bare = stateOf(game?.status ?? event.status);
-    const its = event.id ? readings?.get(event.id) : undefined;
-    const state = {
-      ...bare,
-      ...(its?.hurt.size ? { hurt: its.hurt } : {}),
+  for (const game of games) {
+    const its = hurtIn(game, hurt);
+    const state: GameState = {
+      where: game.where,
+      left: LEFT[game.where](game),
+      ...(its?.size ? { hurt: its } : {}),
     };
 
-    for (const side of game?.competitors ?? []) {
-      const code = side.team?.abbreviation;
-
-      if (code) {
-        out.set(boardTeamOf(code), state);
-      }
-    }
+    out.set(game.home, state);
+    out.set(game.away, state);
   }
 
   return out;
@@ -286,77 +271,43 @@ export interface ClockLeft {
   overtimeLeft: number;
 }
 
-export function clockLeftOf(status: ScoreboardStatus | undefined): ClockLeft {
-  const at = status?.period ?? 1;
-  const onTheClock = Math.max(0, status?.clock ?? 0);
+export function clockLeftAt(period: number, seconds: number): ClockLeft {
+  const onTheClock = Math.max(0, seconds);
 
-  if (at > 4) {
+  if (period > 4) {
     return { secondsLeft: 0, overtimeLeft: onTheClock };
   }
 
   return {
-    secondsLeft: Math.max(0, (4 - at) * SECONDS_IN_QUARTER + onTheClock),
+    secondsLeft: Math.max(0, (4 - period) * SECONDS_IN_QUARTER + onTheClock),
     overtimeLeft: 0,
   };
 }
 
-const sideOf = (
-  competitors: ScoreboardCompetitor[], homeAway: string, fallback: number,
-) => competitors.find((c) => c.homeAway === homeAway) ?? competitors[fallback];
-
-const downOf = (down: number | undefined) =>
-  down !== undefined && down >= 1 && down <= 4 ? down : undefined;
-
-/**
- * ESPN counts the yard line from the home side's own goal line whoever
- * has the ball, so the away side at its own 30 is at 70 and the home side
- * at its own 13 is at 13. The engine wants yards to the goal attacked.
- */
-const espnYardsToGo = (yardLine: number, homeHasIt: boolean) =>
-  Math.min(99, Math.max(1, homeHasIt ? 100 - yardLine : yardLine));
+/** the same off ESPN's status for a game */
+export const clockLeftOf = (status: ScoreboardStatus | undefined) =>
+  clockLeftAt(status?.period ?? 1, status?.clock ?? 0);
 
 function situationOf(
-  game: ScoreboardCompetition, status: ScoreboardStatus | undefined,
-  hurt: Map<string, InGameStatus> | undefined,
-): LiveSituation | undefined {
-  const competitors = game.competitors ?? [];
-  const home = sideOf(competitors, "home", 0);
-  const away = sideOf(competitors, "away", 1);
-  const homeCode = home?.team?.abbreviation;
-  const awayCode = away?.team?.abbreviation;
-
-  if (!homeCode || !awayCode) {
-    return undefined;
-  }
-
-  const at = game.situation;
-  const withBall = competitors.find((c) => c.team?.id === at?.possession);
-  const ballCode = withBall?.team?.abbreviation;
-  const { secondsLeft, overtimeLeft } = clockLeftOf(status);
+  game: GameRead, hurt: Map<string, InGameStatus> | undefined,
+): LiveSituation {
+  const { secondsLeft, overtimeLeft } = clockLeftAt(game.period, game.clock);
   const leftInHalf = secondsLeft > SECONDS_IN_HALF
     ? secondsLeft - SECONDS_IN_HALF
     : secondsLeft;
 
   return {
-    home: boardTeamOf(homeCode),
-    away: boardTeamOf(awayCode),
-    points: {
-      [boardTeamOf(homeCode)]: Number(home?.score ?? 0),
-      [boardTeamOf(awayCode)]: Number(away?.score ?? 0),
-    },
+    home: game.home,
+    away: game.away,
+    points: game.points,
     secondsLeft,
     ...(overtimeLeft > 0 ? { overtimeLeft } : {}),
-    withBall: ballCode ? boardTeamOf(ballCode) : undefined,
-    yardline: ballCode !== undefined && at?.yardLine !== undefined
-      ? espnYardsToGo(at.yardLine, ballCode === homeCode)
-      : undefined,
-    down: downOf(at?.down),
-    toGo: downOf(at?.down) === undefined ? undefined : at?.distance,
-    timeouts: {
-      [boardTeamOf(homeCode)]: at?.homeTimeouts ?? 3,
-      [boardTeamOf(awayCode)]: at?.awayTimeouts ?? 3,
-    },
-    redZone: at?.isRedZone === true,
+    withBall: game.withBall,
+    yardline: game.withBall === undefined ? undefined : game.yardline,
+    down: game.down,
+    toGo: game.down === undefined ? undefined : game.toGo,
+    timeouts: game.timeouts,
+    redZone: game.redZone,
     secondHalf: secondsLeft <= SECONDS_IN_HALF,
     warningLeft: overtimeLeft === 0 && leftInHalf > 120,
     ...(hurt?.size ? { hurt: Object.fromEntries(hurt) } : {}),
@@ -367,30 +318,153 @@ function situationOf(
  * The games that are on, each one under both teams' board codes so a
  * lookup by either side finds it.
  */
-export function situationsFrom(said: {
-  events?: ScoreboardEvent[];
-}, readings?: ReadingByGame): Map<string, LiveSituation> {
+export function situationsOf(
+  games: GameRead[], hurt?: HurtByTeam,
+): Map<string, LiveSituation> {
   const out = new Map<string, LiveSituation>();
 
-  for (const event of said.events ?? []) {
-    const game = event.competitions?.[0];
-    const status = game?.status ?? event.status;
-
-    if (!game || stateOf(status).where !== "in") {
+  for (const game of games) {
+    if (game.where !== "in") {
       continue;
     }
 
-    const live = situationOf(
-      game, status, event.id ? readings?.get(event.id)?.hurt : undefined);
+    const live = situationOf(game, hurtIn(game, hurt));
 
-    if (live) {
-      out.set(live.home, live);
-      out.set(live.away, live);
+    out.set(live.home, live);
+    out.set(live.away, live);
+  }
+
+  return out;
+}
+
+/** when the first game not yet started kicks off, or null if none is left */
+export function nextKickoffOf(games: GameRead[]): number | null {
+  const times = games
+    .filter((game) => game.where === "pre")
+    .map((game) => game.kickoff)
+    .filter((at): at is number => at !== undefined && Number.isFinite(at));
+
+  return times.length ? Math.min(...times) : null;
+}
+
+const ESPN_WHERE: Record<string, Where> = { in: "in", post: "post" };
+
+const espnWhereOf = (status: ScoreboardStatus | undefined): Where =>
+  ESPN_WHERE[status?.type?.state ?? ""] ?? "pre";
+
+const sideOf = (
+  competitors: ScoreboardCompetitor[], homeAway: string, fallback: number,
+) => competitors.find((c) => c.homeAway === homeAway) ?? competitors[fallback];
+
+/**
+ * ESPN counts the yard line from the home side's own goal line whoever
+ * has the ball, so the away side at its own 30 is at 70 and the home side
+ * at its own 13 is at 13. The engine wants yards to the goal attacked.
+ */
+const espnYardsToGo = (yardLine: number, homeHasIt: boolean) =>
+  onTheField(homeHasIt ? 100 - yardLine : yardLine);
+
+/** an ESPN game, with the event id its summary is asked for by */
+export type EspnGame = GameRead & { id?: string };
+
+/** one scoreboard event as a game, or null when it does not say who plays */
+export function espnGameOf(event: ScoreboardEvent): EspnGame | null {
+  const game = event.competitions?.[0];
+  const status = game?.status ?? event.status;
+  const competitors = game?.competitors ?? [];
+  const homeSide = sideOf(competitors, "home", 0);
+  const awaySide = sideOf(competitors, "away", 1);
+  const homeCode = homeSide?.team?.abbreviation;
+  const awayCode = awaySide?.team?.abbreviation;
+
+  if (!homeCode || !awayCode) {
+    return null;
+  }
+
+  const home = boardTeamOf(homeCode);
+  const away = boardTeamOf(awayCode);
+  const at = game?.situation;
+  const ballCode = competitors
+    .find((c) => c.team?.id === at?.possession)?.team?.abbreviation;
+  const withBall = ballCode ? boardTeamOf(ballCode) : undefined;
+  const kickoff = Date.parse(event.date ?? "");
+  const down = downOf(at?.down);
+
+  return {
+    ...(event.id ? { id: event.id } : {}),
+    where: espnWhereOf(status),
+    home,
+    away,
+    points: {
+      [home]: Number(homeSide?.score ?? 0),
+      [away]: Number(awaySide?.score ?? 0),
+    },
+    ...(Number.isFinite(kickoff) ? { kickoff } : {}),
+    period: status?.period ?? 1,
+    clock: status?.clock ?? clockSeconds(status?.displayClock) ?? 0,
+    ...(withBall ? { withBall } : {}),
+    ...(withBall && at?.yardLine !== undefined
+      ? { yardline: espnYardsToGo(at.yardLine, withBall === home) }
+      : {}),
+    ...(down !== undefined ? { down } : {}),
+    ...(down !== undefined && at?.distance !== undefined
+      ? { toGo: at.distance }
+      : {}),
+    timeouts: {
+      [home]: at?.homeTimeouts ?? 3,
+      [away]: at?.awayTimeouts ?? 3,
+    },
+    redZone: at?.isRedZone === true,
+  };
+}
+
+interface Scoreboard {
+  events?: ScoreboardEvent[];
+}
+
+export const espnGamesFrom = (said: Scoreboard): EspnGame[] =>
+  (said.events ?? [])
+    .map(espnGameOf)
+    .filter((game): game is EspnGame => game !== null);
+
+/** each game's summary, moved from ESPN's id for it onto its two teams */
+export function hurtByTeamFrom(
+  games: EspnGame[], readings: ReadingByGame | undefined,
+): HurtByTeam {
+  const out: HurtByTeam = new Map();
+
+  for (const game of games) {
+    const hurt = game.id ? readings?.get(game.id)?.hurt : undefined;
+
+    if (hurt) {
+      out.set(game.home, hurt);
+      out.set(game.away, hurt);
     }
   }
 
   return out;
 }
+
+/** every team on ESPN's scoreboard, and where its game has got to */
+export function statesFrom(
+  said: Scoreboard, readings?: ReadingByGame,
+): Map<string, GameState> {
+  const games = espnGamesFrom(said);
+
+  return statesOf(games, hurtByTeamFrom(games, readings));
+}
+
+/** the games on ESPN's scoreboard that are on, under both teams' codes */
+export function situationsFrom(
+  said: Scoreboard, readings?: ReadingByGame,
+): Map<string, LiveSituation> {
+  const games = espnGamesFrom(said);
+
+  return situationsOf(games, hurtByTeamFrom(games, readings));
+}
+
+export const nextKickoffFrom = (said: Scoreboard) =>
+  nextKickoffOf(espnGamesFrom(said));
 
 /**
  * Games that have finished, so the page stops asking about them. A
@@ -407,9 +481,7 @@ const summaryOf = (id: string): Promise<GameReading | null> =>
     .catch(() => null);
 
 /** a finished game is read once and then remembered for the session */
-async function readingOf(
-  id: string, where: GameState["where"],
-): Promise<GameReading> {
+async function readingOf(id: string, where: Where): Promise<GameReading> {
   const already = kept.get(id);
 
   if (already) {
@@ -427,39 +499,30 @@ async function readingOf(
 }
 
 /**
- * Who has gone off in each game that has kicked off. The scoreboard does
- * not say, so every started game costs a call to ESPN's summary of it. A
- * read that fails leaves that game saying nothing.
+ * Who has gone off in each game that has kicked off. Neither scoreboard
+ * says, and Sleeper has nothing newer than its weekly injury report, so
+ * every started game costs a call to ESPN's summary of it. A read that
+ * fails leaves that game saying nothing.
  */
-async function readGames(
-  events: ScoreboardEvent[],
-): Promise<ReadingByGame> {
-  const started = events
-    .map((event) => ({
-      id: event.id,
-      where: stateOf(event.competitions?.[0]?.status ?? event.status).where,
-    }))
-    .filter((event) => event.id !== undefined && event.where !== "pre");
+async function readGames(games: EspnGame[]): Promise<ReadingByGame> {
+  const started = games.filter(
+    (game): game is EspnGame & { id: string } =>
+      game.id !== undefined && game.where !== "pre");
   const asked = await Promise.all(
-    started.map((event) => readingOf(event.id!, event.where)));
+    started.map((game) => readingOf(game.id, game.where)));
 
-  return new Map(started.map((event, at) => [event.id!, asked[at]!]));
+  return new Map(started.map((game, at) => [game.id, asked[at]!]));
 }
 
 /**
- * The scoreboard for one week. Asked for by week rather than taken as it
- * comes, because the bare scoreboard is whatever ESPN thinks today is,
- * and the page is looking at the week the slate was built for. Season
- * type two is the regular season.
+ * ESPN's scoreboard for one week, and who has gone off in it. Asked for
+ * by week rather than taken as it comes, because the bare scoreboard is
+ * whatever ESPN thinks today is, and the page is looking at the week the
+ * slate was built for. Season type two is the regular season.
  */
-export async function gameStates(
+async function espnWeek(
   season: number, week: number,
-): Promise<{
-  states: Map<string, GameState>;
-  situations: Map<string, LiveSituation>;
-  /** the earliest kickoff among games still to start, in epoch ms */
-  nextKickoff: number | null;
-}> {
+): Promise<{ games: EspnGame[]; hurt: HurtByTeam }> {
   const answered = await fetch(
     `${SCOREBOARD}?seasontype=2&week=${week}&dates=${season}`);
 
@@ -467,25 +530,83 @@ export async function gameStates(
     throw new Error("ESPN would not hand over the scoreboard.");
   }
 
-  const said = await answered.json() as { events?: ScoreboardEvent[] };
-  const readings = await readGames(said.events ?? []);
+  const games = espnGamesFrom(await answered.json() as Scoreboard);
+  const readings = await readGames(games);
 
-  return {
-    states: statesFrom(said, readings),
-    situations: situationsFrom(said, readings),
-    nextKickoff: nextKickoffFrom(said),
-  };
+  return { games, hurt: hurtByTeamFrom(games, readings) };
 }
 
-/** when the first game not yet started kicks off, or null if none is left */
-export function nextKickoffFrom(said: { events?: ScoreboardEvent[] }): number | null {
-  const times = (said.events ?? [])
-    .filter((event) =>
-      stateOf(event.competitions?.[0]?.status ?? event.status).where === "pre")
-    .map((event) => Date.parse(event.date ?? ""))
-    .filter((at) => Number.isFinite(at));
+/**
+ * The games a league's own provider can describe, or null for a provider
+ * with no scoreboard of its own. A game it cannot read is left out, and
+ * ESPN's scoreboard fills that gap.
+ */
+const OWN_GAMES: Record<League["provider"], (
+  season: number, week: number,
+) => Promise<GameRead[] | null>> = {
+  sleeper: sleeperGames,
+  espn: () => Promise.resolve(null),
+};
 
-  return times.length ? Math.min(...times) : null;
+/** the provider's own games, with ESPN's for any team those leave out */
+export function withEspnFilling(
+  own: GameRead[] | null, espn: GameRead[],
+): GameRead[] {
+  if (!own) {
+    return espn;
+  }
+
+  const covered = new Set(own.flatMap((game) => [game.home, game.away]));
+  const missing = espn.filter(
+    (game) => !covered.has(game.home) && !covered.has(game.away));
+
+  if (missing.length && own.length) {
+    sayOnce(`game state for ${missing.map((g) => g.away + "@" + g.home)
+      .join(", ")} comes from ESPN, since the league's feed could not say`);
+  }
+
+  return [...own, ...missing];
+}
+
+/** the week's games, read so that everything downstream prices them alike */
+export interface WeekGames {
+  states: Map<string, GameState>;
+  situations: Map<string, LiveSituation>;
+  /** the earliest kickoff among games still to start, in epoch ms */
+  nextKickoff: number | null;
+}
+
+/**
+ * Where every game in a week has got to. A Sleeper league reads it off
+ * Sleeper, so the clock is on the same feed as the points, and ESPN's
+ * scoreboard fills whatever that leaves out. ESPN's summaries are still
+ * where in-game injuries come from, whoever runs the league.
+ */
+export async function gameStates(
+  season: number, week: number, provider: League["provider"] = "espn",
+): Promise<WeekGames> {
+  const [espn, own] = await Promise.all([
+    espnWeek(season, week).catch((e: Error) => e),
+    OWN_GAMES[provider](season, week).catch((e: Error) => {
+      sayOnce(`${provider}'s scores could not be read, so ESPN's stand in: ` +
+        e.message);
+
+      return null;
+    }),
+  ]);
+
+  if (espn instanceof Error && !own?.length) {
+    throw espn;
+  }
+
+  const games = withEspnFilling(own, espn instanceof Error ? [] : espn.games);
+  const hurt = espn instanceof Error ? undefined : espn.hurt;
+
+  return {
+    states: statesOf(games, hurt),
+    situations: situationsOf(games, hurt),
+    nextKickoff: nextKickoffOf(games),
+  };
 }
 
 /** things worth a line in the console once a session, and not every minute */

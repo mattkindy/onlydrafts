@@ -16,10 +16,13 @@
 import { useEffect, useState } from "preact/hooks";
 
 import { gameStates, type GameState, type LiveSituation } from "../lib/matchups.ts";
+import type { League } from "../lib/providers.ts";
 import {
   gamesToPlay, REMAINDER_DRAWS, remainderInWorker, simTablesFor,
 } from "../lib/remainderDraws.ts";
 import type { Pays } from "../lib/scoring.ts";
+
+type Provider = League["provider"];
 
 /** how often the scoreboard is read again while a game is on */
 const EVERY = 60_000;
@@ -74,6 +77,7 @@ interface PolledWeek {
 
 function usePolledScoreboard(
   season: number | undefined, week: number | undefined,
+  provider: Provider = "espn",
 ): PolledWeek {
   const [reading, setReading] = useState<Reading | null>(null);
   const [trouble, setTrouble] = useState("");
@@ -81,7 +85,7 @@ function usePolledScoreboard(
   const [asks, setAsks] = useState(0);
   /** bumped when a read comes back, either way, which arms the next one */
   const [answers, setAnswers] = useState(0);
-  const of = `${season}/${week}`;
+  const of = `${provider}/${season}/${week}`;
 
   useEffect(() => {
     if (season === undefined || week === undefined) {
@@ -90,7 +94,7 @@ function usePolledScoreboard(
 
     let stale = false;
 
-    gameStates(season, week)
+    gameStates(season, week, provider)
       .then((got) => {
         if (!stale) {
           setReading({ of, ...got, read: new Date() });
@@ -109,7 +113,7 @@ function usePolledScoreboard(
       });
 
     return () => { stale = true; };
-  }, [asks, season, week]);
+  }, [asks, season, week, provider]);
 
   // a read for last week must not stand in for this one while it loads
   const current = reading?.of === of ? reading : null;
@@ -179,8 +183,10 @@ export interface LiveWeek {
  */
 export function useLiveWeek(
   season: number | undefined, week: number | undefined, pays: Pays,
+  provider?: Provider,
 ): LiveWeek {
-  const { states, situations, read, trouble } = usePolledScoreboard(season, week);
+  const { states, situations, read, trouble } =
+    usePolledScoreboard(season, week, provider);
   const [remainder, setRemainder] =
     useState<Map<string, number[]> | null>(null);
 

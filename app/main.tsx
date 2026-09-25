@@ -1038,6 +1038,7 @@ function App() {
             slots={active?.slots ?? null}
             league={active?.name}
             pays={active?.pays ?? {}}
+            provider={active?.provider}
             status={gamesStatus || weekStatus}
             onMore={openKey}
           />
@@ -1057,6 +1058,7 @@ function App() {
                   mine={active.team}
                   slots={active.slots ?? null}
                   pays={active.pays ?? {}}
+                  provider={active.provider}
                   season={week.season}
                   week={week.week}
                   league={active.name}
