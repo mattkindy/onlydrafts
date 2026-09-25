@@ -24,6 +24,9 @@ export interface DraftPick {
   team: string;
 }
 
+/** the seasons whose rosters a pick without an id is matched against */
+export const PICK_ROSTER_SEASONS = [2026, 2025];
+
 /**
  * Everyone ever drafted, by the id the rest of the model uses.
  *
@@ -35,7 +38,7 @@ export interface DraftPick {
  * instead.
  */
 export async function loadDraftPicks(
-  seasons: number[] = [2026, 2025],
+  seasons: number[] = PICK_ROSTER_SEASONS,
 ): Promise<Map<string, DraftPick>> {
   const rows = parseCsv(
     await readFile(join(RAW_DIR, "draft_picks.csv"), "utf8"),

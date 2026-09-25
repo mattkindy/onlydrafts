@@ -7,10 +7,9 @@
  * named for the play file's timestamp so a rebuilt file counts anew.
  */
 
-import {
-  readFile, writeFile, mkdir, rename, stat, unlink,
-} from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { writeAside } from "./keptFile.js";
 import {
   countPlays, POOL_WASTE, type CountedPlays, type PlayRow,
 } from "./fitPlayFactors.js";
@@ -155,17 +154,8 @@ const readCounts = (text: string): CountedPlays | undefined => {
   }
 };
 
-/**
- * Written aside and then moved into place, so a share that reads the file
- * while another share is still writing it finds the whole count or none.
- */
-const keep = async (at: string, counted: CountedPlays) => {
-  const part = `${at.replace(/\.json$/, "")}.${process.pid}.part.json`;
-  await mkdir(KEPT, { recursive: true }).catch(() => undefined);
-  await writeFile(part, JSON.stringify(flatten(counted)))
-    .then(() => rename(part, at))
-    .catch(() => unlink(part).catch(() => undefined));
-};
+const keep = (at: string, counted: CountedPlays) =>
+  writeAside(at, JSON.stringify(flatten(counted)));
 
 /**
  * The counts for rows below this season, from the disk when they are

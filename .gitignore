@@ -25,6 +25,10 @@ data/kept/counts*.json
 # it. The cast tables beside them are committed and stay tracked.
 data/kept/matchup-*-before[0-9]*.json
 
+# and the split projection it works out for that week, which comes back
+# from the same files the next time the week is walked
+data/kept/split-live-*.json
+
 # wrangler's local cache has the Cloudflare account name and where the
 # last deploy ran from, and the repo is public
 worker/.wrangler/

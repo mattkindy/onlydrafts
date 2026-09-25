@@ -13,10 +13,13 @@
  * is what a drafter knew in August.
  */
 
-import { readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../data/csv.js";
-import { loadPlayerStats, loadWeeklyRosters } from "../data/nflverse.js";
+import {
+  loadPlayerStats, loadWeeklyRosters, RAW_DIR,
+} from "../data/nflverse.js";
 import { presets } from "../scoring/fantasyPoints.js";
 import {
   componentRates, componentUsage, emptyBox, historiesForWeek,
@@ -24,7 +27,9 @@ import {
 } from "./componentWeek.js";
 import { fitDriveRules, fitTeamDriveRules } from "./driveRules.js";
 import { fitPasserQuality } from "./passerQuality.js";
-import { loadAdp, type AdpEntry } from "../data/adp.js";
+import {
+  ADP_DIR, loadAdp, mockBoardFile, type AdpEntry,
+} from "../data/adp.js";
 import { normalizeName } from "../data/names.js";
 import { fitEndings } from "./fitEndings.js";
 import {
@@ -43,9 +48,10 @@ import { buildPlayLevel } from "./playLevel.js";
 import {
   experienceBefore, pastShares, projectSplitShares, SHARING_POSITIONS,
 } from "./projectedShares.js";
-import { loadDraftPicks } from "../data/draftPicks.js";
+import { loadDraftPicks, PICK_ROSTER_SEASONS } from "../data/draftPicks.js";
 import { buildMatchupTable } from "./matchupTable.js";
 import { countsFor } from "./countsCache.js";
+import { writeAside } from "./keptFile.js";
 import { recentShares } from "./recentShares.js";
 import { rosterWeekFor } from "./rosterWeek.js";
 import { buildPlayerVectors } from "./playerVector.js";
@@ -236,6 +242,79 @@ export function chooseThrower(
   return undefined;
 }
 
+const KEPT_DIR = join(import.meta.dirname, "..", "..", "data", "kept");
+const CURATED_DIR = join(import.meta.dirname, "..", "..", "data", "curated");
+
+type Split = Map<string, { carries: number; targets: number }>;
+
+/** a kept split projection, or nothing when there is none or it does not parse */
+async function readSplit(at: string): Promise<Split | undefined> {
+  const text = await readFile(at, "utf8").catch(() => "");
+
+  if (!text) {
+    return undefined;
+  }
+
+  try {
+    return new Map(JSON.parse(text) as [string, { carries: number; targets: number }][]);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether every share comes back from JSON as the same number. A share that
+ * is not finite comes back as null and a negative zero as zero, so a split
+ * with either is worked out again rather than kept.
+ */
+const keepsExactly = (split: Split) =>
+  [...split.values()].every(({ carries, targets }) =>
+    [carries, targets].every((share) =>
+      Number.isFinite(share) && !Object.is(share, -0)));
+
+/**
+ * Which version of the split projection a kept file came from. It has to
+ * change whenever the projection or what feeds it changes, or a walk will
+ * read a projection the code would no longer make.
+ */
+const SPLIT_VERSION = 1;
+
+/**
+ * Where the split projection for one week in season is kept. The name has
+ * a hash of everything the projection reads: the cast and the names and
+ * positions it goes by, when each file behind the past shares, the draft
+ * picks, the players' experience and the August prices last changed, and
+ * the two settings it takes from the environment.
+ */
+async function liveSplitPath(
+  season: number, week: number,
+  roster: { playerId: string; position: string; team: string }[],
+  positions: Map<string, string>, calledOn: Map<string, string>,
+): Promise<string> {
+  const files = [
+    ...[season - 3, season - 2, season - 1].flatMap((past) => [
+      join(RAW_DIR, `stats_player_week_${past}.csv`),
+      join(RAW_DIR, `player_stats_${past}.csv`),
+    ]),
+    join(CURATED_DIR, "touches.csv"),
+    join(RAW_DIR, "draft_picks.csv"),
+    ...PICK_ROSTER_SEASONS.map((s) => join(RAW_DIR, `roster_weekly_${s}.csv`)),
+    join(RAW_DIR, `roster_weekly_${season - 1}.csv`),
+    join(ADP_DIR, mockBoardFile("ppr", season)),
+    join(RAW_DIR, mockBoardFile("ppr", season)),
+  ];
+  const stamps = await Promise.all(files.map((file) =>
+    stat(file).then((s) => s.mtimeMs, () => -1)));
+  const inputs = JSON.stringify({
+    version: SPLIT_VERSION, season, week, stamps,
+    settings: [process.env["ROOM_ADP_LEAN"], process.env["ROOM_ORDER"]],
+    roster, positions: [...positions], calledOn: [...calledOn],
+  });
+  const hash = createHash("sha1").update(inputs).digest("hex").slice(0, 16);
+
+  return join(KEPT_DIR, `split-live-${season}w${week}-${hash}.json`);
+}
+
 interface WorldOptions {
   /**
    * Take each player's cut of the work from his trailing usage rather than
@@ -413,47 +492,49 @@ export async function buildWorld(
       .map((p) => ({ playerId: p.playerId, position: p.position, team })),
   );
   // deterministic per season, so it is worked out once and kept
-  const splitAt = join(
-    import.meta.dirname, "..", "..", "data", "kept", `split-${SCORE_ON}.json`,
-  );
-  const splitKept = await readFile(splitAt, "utf8").catch(() => "");
-  const split = splitKept
-    ? new Map<string, { carries: number; targets: number }>(
-        JSON.parse(splitKept) as [string, { carries: number; targets: number }][],
-      )
-    : projectSplitShares({
-        season: SCORE_ON,
-        roster,
-        past: await pastShares(
-          [SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1],
-          (s, team) => teamPlays.get(`${s}|${team}`) ?? 1000,
-        ),
-        picks: await loadDraftPicks(),
-        experience: await experienceBefore(SCORE_ON),
-        priced: await (async () => {
-          const august = await loadAdp(SCORE_ON, "ppr").catch(() => null);
-          const priced = new Map<string, number>();
+  const splitAt = join(KEPT_DIR, `split-${SCORE_ON}.json`);
+  const splitKept = await readSplit(splitAt);
+  // and in season per week, under everything that goes into it
+  const liveAt = live && !splitKept
+    ? await liveSplitPath(SCORE_ON, onlyWeek, roster, positions, calledOn)
+    : undefined;
+  const liveKept = liveAt ? await readSplit(liveAt) : undefined;
+  const split = splitKept ?? liveKept ?? projectSplitShares({
+    season: SCORE_ON,
+    roster,
+    past: await pastShares(
+      [SCORE_ON - 3, SCORE_ON - 2, SCORE_ON - 1],
+      (s, team) => teamPlays.get(`${s}|${team}`) ?? 1000,
+    ),
+    picks: await loadDraftPicks(),
+    experience: await experienceBefore(SCORE_ON),
+    priced: await (async () => {
+      const august = await loadAdp(SCORE_ON, "ppr").catch(() => null);
+      const priced = new Map<string, number>();
 
-          if (august) {
-            for (const [playerId, position] of positions) {
-              const name = calledOn.get(playerId);
-              const at = name
-                ? august.get(`${normalizeName(name)}|${position}`)
-                : undefined;
+      if (august) {
+        for (const [playerId, position] of positions) {
+          const name = calledOn.get(playerId);
+          const at = name
+            ? august.get(`${normalizeName(name)}|${position}`)
+            : undefined;
 
-              if (at) {
-                priced.set(playerId, at.adp);
-              }
-            }
+          if (at) {
+            priced.set(playerId, at.adp);
           }
+        }
+      }
 
-          return priced;
-        })(),
-      });
+      return priced;
+    })(),
+  });
 
   if (!splitKept && !live) {
-    await writeFile(splitAt, JSON.stringify([...split.entries()]))
-      .catch(() => undefined);
+    await writeAside(splitAt, JSON.stringify([...split.entries()]));
+  }
+
+  if (liveAt && !liveKept && keepsExactly(split)) {
+    await writeAside(liveAt, JSON.stringify([...split.entries()]));
   }
 
   if (live) {
