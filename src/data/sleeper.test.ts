@@ -1,5 +1,77 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { freshOrCached, injuryStatuses } from "./sleeper.js";
+import {
+  freshOrCached, injuryStatuses, linkByName, type RosterPlayer,
+} from "./sleeper.js";
+
+describe("linkByName", () => {
+  const strand = { full_name: "Jack Strand", team: "ATL", position: "QB" };
+  const onRoster = (
+    playerId: string, name = "Jack Strand", rawPosition = "QB",
+  ): RosterPlayer => ({ playerId, name, teamId: "ATL", rawPosition });
+
+  it("links a player neither Sleeper nor the crosswalk has a gsis id for", () => {
+    const links = linkByName(
+      { "13602": strand }, new Map(), [onRoster("00-0041194")],
+    );
+
+    expect(links).toEqual(new Map([["13602", "00-0041194"]]));
+  });
+
+  it("matches through a suffix and the club's other spelling", () => {
+    const links = linkByName(
+      { "13305": { full_name: "Mike Washington", team: "LAR", position: "RB" } },
+      new Map(),
+      [{
+        playerId: "00-0040878", name: "Mike Washington Jr.",
+        teamId: "LA", rawPosition: "RB",
+      }],
+    );
+
+    expect(links.get("13305")).toBe("00-0040878");
+  });
+
+  it("links neither when two roster players share the name, club and position", () => {
+    const links = linkByName(
+      { "13602": strand }, new Map(), [onRoster("00-1"), onRoster("00-2")],
+    );
+
+    expect(links.size).toBe(0);
+  });
+
+  it("does not reuse a gsis id another Sleeper id already has", () => {
+    const links = linkByName(
+      { "13602": strand }, new Map([["99999", "00-0041194"]]),
+      [onRoster("00-0041194")],
+    );
+
+    expect(links.size).toBe(0);
+  });
+
+  it("links neither when two Sleeper players match the same roster player", () => {
+    const links = linkByName(
+      { "13602": strand, "13603": strand }, new Map(), [onRoster("00-0041194")],
+    );
+
+    expect(links.size).toBe(0);
+  });
+
+  it("does not link across positions", () => {
+    const links = linkByName(
+      { "13602": strand }, new Map(), [onRoster("00-0041194", "Jack Strand", "TE")],
+    );
+
+    expect(links.size).toBe(0);
+  });
+
+  it("leaves a player the other sources already link alone", () => {
+    const links = linkByName(
+      { "13602": strand }, new Map([["13602", "00-0041194"]]),
+      [onRoster("00-0041194")],
+    );
+
+    expect(links.size).toBe(0);
+  });
+});
 
 describe("freshOrCached", () => {
   afterEach(() => {

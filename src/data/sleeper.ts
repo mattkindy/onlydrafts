@@ -2,8 +2,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "./csv.js";
 import { fetchWithRetry } from "./fetchWithRetry.js";
-import { RAW_DIR } from "./nflverse.js";
+import { normalizeName } from "./names.js";
+import {
+  canonicalTeam, comingWeek, currentSeason, loadGames, loadWeeklyRosters,
+  RAW_DIR,
+} from "./nflverse.js";
 import { writeAtomically } from "./writeAtomically.js";
+import { rosterWeekFor } from "../features/rosterWeek.js";
 
 const API = "https://api.sleeper.app/v1";
 
@@ -134,7 +139,8 @@ function loadPlayerIdCrosswalk(): Promise<Record<string, string>[]> {
  * Sleeper's own player file has a gsis_id field, but it is empty for
  * anyone who came into the league in the last few years, which is a third
  * of the players we care about. The DynastyProcess crosswalk covers them, so
- * it goes first and Sleeper's own field fills whatever it misses.
+ * it goes first and Sleeper's own field fills whatever it misses. A player
+ * neither of them links is matched by name against this week's roster.
  */
 export async function fetchSleeperGsisIds(): Promise<Map<string, string>> {
   return gsisIdsFrom(await loadSleeperPlayerFile());
@@ -166,7 +172,108 @@ async function gsisIdsFrom(
     }
   }
 
+  for (const [sleeperId, gsisId] of linkByName(raw, ids, await rosterThisWeek())) {
+    ids.set(sleeperId, gsisId);
+    logLinkOnce(sleeperId, raw[sleeperId]?.full_name ?? "", gsisId);
+  }
+
   return ids;
+}
+
+/** the parts of a weekly roster row a name link needs */
+export interface RosterPlayer {
+  playerId: string;
+  name: string;
+  teamId: string;
+  rawPosition: string;
+}
+
+const rosterKey = (name: string, team: string, position: string) =>
+  `${normalizeName(name)}|${canonicalTeam(team)}|${position}`;
+
+/**
+ * sleeper id -> gsis id for players neither Sleeper nor the crosswalk
+ * links, matched on normalized name, club and position against the
+ * roster. A link is made only when exactly one roster player matches,
+ * exactly one unlinked Sleeper player matches him, and no other Sleeper
+ * id already has his gsis id.
+ */
+export function linkByName(
+  raw: Record<string, RawSleeperPlayer>,
+  linked: Map<string, string>,
+  roster: RosterPlayer[],
+): Map<string, string> {
+  const taken = new Set(linked.values());
+  const onRoster = new Map<string, Set<string>>();
+
+  for (const row of roster) {
+    const key = rosterKey(row.name, row.teamId, row.rawPosition);
+    onRoster.set(key, (onRoster.get(key) ?? new Set()).add(row.playerId));
+  }
+
+  const claims = new Map<string, string[]>();
+
+  for (const [sleeperId, player] of Object.entries(raw)) {
+    if (linked.has(sleeperId) || !player.full_name || !player.team) {
+      continue;
+    }
+
+    const matches = onRoster.get(
+      rosterKey(player.full_name, player.team, player.position ?? ""),
+    );
+    const gsisId = matches?.size === 1 ? [...matches][0] : undefined;
+
+    if (!gsisId || taken.has(gsisId)) {
+      continue;
+    }
+
+    claims.set(gsisId, [...(claims.get(gsisId) ?? []), sleeperId]);
+  }
+
+  const links = new Map<string, string>();
+
+  for (const [gsisId, sleeperIds] of claims) {
+    if (sleeperIds.length === 1) {
+      links.set(sleeperIds[0]!, gsisId);
+    }
+  }
+
+  return links;
+}
+
+/**
+ * The current season's roster for the week the refresh builds, or the
+ * latest week the file has before it. No roster file means no name links.
+ */
+async function rosterThisWeek(): Promise<RosterPlayer[]> {
+  const season = currentSeason();
+  const rosters = await loadWeeklyRosters(season).catch(() => []);
+
+  if (rosters.length === 0) {
+    return [];
+  }
+
+  const games = await loadGames().catch(() => []);
+  const week = rosterWeekFor(
+    rosters.map((row) => row.week), comingWeek(games, season),
+  );
+
+  return rosters.filter((row) => row.week === week);
+}
+
+const linksLogged = new Set<string>();
+
+// the ids are read more than once a run, and a wrong match should be
+// easy to spot in the log without reading it twice
+function logLinkOnce(sleeperId: string, name: string, gsisId: string): void {
+  if (linksLogged.has(sleeperId)) {
+    return;
+  }
+
+  linksLogged.add(sleeperId);
+  console.log(
+    `linked Sleeper ${sleeperId} (${name}) to ${gsisId} by name, club and position`,
+  );
 }
 
 export interface SleeperInjury {
