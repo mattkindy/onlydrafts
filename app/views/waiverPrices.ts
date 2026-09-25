@@ -67,18 +67,18 @@ export interface WaiverPrices {
  * The waiver page's season figures.
  *
  * `week` is the coming week, and only it and the weeks after it are
- * drawn. `listed` is the injury report, which takes the weeks a list
+ * drawn. `report` is the injury report, which takes the weeks a list
  * costs a player off his season. The report is read again while the page
  * is open, and the board is priced again only when what it says changes.
  */
 export function useWaiverPrices(
   players: Player[], league: League, schedule: Schedule | null, posFilter: string,
-  listed: Map<string, Listed> = NOBODY, week: number | null = null,
+  report: Map<string, Listed> = NOBODY, week: number | null = null,
 ): WaiverPrices {
   const [said, setSaid] = useState<Said | null>(null);
   const [nets, setNets] = useState<Map<string, Net>>(new Map());
   const [pricer, setPricer] = useState<Pricer | null>(null);
-  const hurtNow = statusesOn(players, listed);
+  const hurtNow = statusesOn(players, report);
   const hurtSays = JSON.stringify(hurtNow);
   const hurt = useMemo(() => hurtNow, [hurtSays]);
 
