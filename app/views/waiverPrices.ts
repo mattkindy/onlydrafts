@@ -13,14 +13,18 @@
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 
+import type { Listed } from "../lib/availability.ts";
 import type { League } from "../lib/providers.ts";
 import { rostersOf } from "../lib/replacementPool.ts";
 import type { Player } from "../lib/scoring.ts";
 import { openSpotsFor, type Add, type Drop, type Net } from "../lib/waivers.ts";
 import {
-  pricerInWorker, type Pricer, type Schedule,
+  pricerInWorker, statusesOn, type Pricer, type Schedule,
 } from "../lib/waiversSeason.ts";
 import { matchesFilter } from "./Draft.tsx";
+
+/** nobody listed, as one map rather than a new one every render */
+const NOBODY = new Map<string, Listed>();
 
 /**
  * Fewer draws than the draft board takes, because the wire is the whole
@@ -59,12 +63,24 @@ export interface WaiverPrices {
   working: boolean;
 }
 
+/**
+ * The waiver page's season figures.
+ *
+ * `week` is the coming week, and only it and the weeks after it are
+ * drawn. `listed` is the injury report, which takes the weeks a list
+ * costs a player off his season. The report is read again while the page
+ * is open, and the board is priced again only when what it says changes.
+ */
 export function useWaiverPrices(
   players: Player[], league: League, schedule: Schedule | null, posFilter: string,
+  listed: Map<string, Listed> = NOBODY, week: number | null = null,
 ): WaiverPrices {
   const [said, setSaid] = useState<Said | null>(null);
   const [nets, setNets] = useState<Map<string, Net>>(new Map());
   const [pricer, setPricer] = useState<Pricer | null>(null);
+  const hurtNow = statusesOn(players, listed);
+  const hurtSays = JSON.stringify(hurtNow);
+  const hurt = useMemo(() => hurtNow, [hurtSays]);
 
   useEffect(() => {
     const rostered = new Set(
@@ -86,6 +102,8 @@ export function useWaiverPrices(
         rosters: rostersOf(league),
         mine: league.myRoster.map((m) => m.key),
         pool: players.filter((p) => !rostered.has(p.key)).map((p) => p.key),
+        ...(week === null ? {} : { from: week }),
+        hurt,
       })
       .then((answered) => {
         if (stale) {
@@ -106,7 +124,7 @@ export function useWaiverPrices(
       stale = true;
       mill.close();
     };
-  }, [players, league, schedule]);
+  }, [players, league, schedule, hurt, week]);
 
   const wire = useMemo(
     () => (said?.adds ?? []).filter((row) => matchesFilter(row.p, posFilter)),

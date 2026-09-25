@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  gamesLeft, outThisWeek, playChance, pricedDown, WEEKS_OUT,
+  gamesLeft, outThisWeek, playChance, playsByWeek, pricedDown, WEEKS_OUT,
 } from "./availability.ts";
 
 describe("what a player on a list is expected to play", () => {
@@ -30,6 +30,65 @@ describe("what a player on a list is expected to play", () => {
 
   it("takes a player with nothing said about him as playing them all", () => {
     expect(gamesLeft(undefined, null)).toBe(17);
+  });
+});
+
+/**
+ * Dillon Gabriel had been on reserve for three weeks when the waiver page
+ * still priced him at 6.1 games of a whole season, the weeks already
+ * played included.
+ */
+describe("the games left from a week in the season", () => {
+  it("counts only the weeks still to come", () => {
+    // weeks 4 to 18 with the bye in week 10 leave fourteen games
+    expect(gamesLeft(17, null, 4, 10)).toBeCloseTo(14, 10);
+    expect(gamesLeft(8.5, null, 4, 10)).toBeCloseTo(7, 10);
+  });
+
+  it("does not count a bye already gone", () => {
+    expect(gamesLeft(17, null, 4, 2)).toBeCloseTo(15, 10);
+  });
+
+  it("takes six games off a man on reserve", () => {
+    expect(gamesLeft(17, "IR", 4, 10)).toBe(14 - WEEKS_OUT);
+  });
+
+  it("takes one game off a man ruled out of the coming one", () => {
+    expect(gamesLeft(17, "Out", 4, 10)).toBe(13);
+  });
+
+  it("has nothing left for a man on reserve through the last week", () => {
+    expect(gamesLeft(17, "IR", 15, 10)).toBe(0);
+  });
+});
+
+describe("his chance of playing each week that is left", () => {
+  it("is nothing for the weeks a reserve list costs him", () => {
+    const plays = playsByWeek(17, "IR", 4, 10);
+
+    // weeks 4 to 9 are the six games; week 10 is the bye
+    expect(plays.slice(0, 7)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(plays.slice(7)).toEqual([1, 1, 1, 1, 1, 1, 1, 1]);
+  });
+
+  it("is nothing for the coming week only when he is ruled out of it", () => {
+    const plays = playsByWeek(17, "Out", 4, 10);
+
+    expect(plays[0]).toBe(0);
+    expect(plays[1]).toBe(1);
+  });
+
+  it("adds up to the games left", () => {
+    const plays = playsByWeek(6.1, "IR", 3, 9);
+    const total = plays.reduce((sum, p) => sum + p, 0);
+
+    expect(total).toBeCloseTo(gamesLeft(6.1, "IR", 3, 9), 10);
+    expect(plays[0]).toBe(0);
+    expect(Math.max(...plays)).toBeLessThan(1);
+  });
+
+  it("covers the coming week and every one after it, and nothing before", () => {
+    expect(playsByWeek(17, null, 4, 10)).toHaveLength(15);
   });
 });
 

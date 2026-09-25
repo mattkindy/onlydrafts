@@ -91,6 +91,13 @@ export interface Player {
   /** absent before a week has been played, and on a player nobody counted */
   sleeper?: Sleeper | null;
   games?: number;
+  /**
+   * The part of the season still to play, for a page pricing him from
+   * the coming week: the first week drawn, and his chance of playing
+   * each week from there with the injury report laid over `games`. With
+   * none, his weeks are drawn over the whole season at `games` in 17.
+   */
+  weeksLeft?: { from: number; plays: number[] };
   /** worked out for the league in front of you */
   ppg?: number;
   vor?: number;

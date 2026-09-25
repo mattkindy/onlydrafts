@@ -5,11 +5,14 @@
 
 import { describe, expect, it } from "vitest";
 
+import { WEEKS_OUT } from "./availability.ts";
 import { roomFor } from "./draftShare.ts";
 import type { Player } from "./scoring.ts";
 import { addsFor, dropsFor, netsFor } from "./waivers.ts";
-import { pricerHere, type SeasonAsk } from "./waiversSeason.ts";
-import { weeksOf } from "./winShare.ts";
+import {
+  forTheWeeksLeft, pricerHere, statusesOn, type SeasonAsk,
+} from "./waiversSeason.ts";
+import { weekOfDraw, weeksOf } from "./winShare.ts";
 
 const SLOTS = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF", "BN"];
 
@@ -85,5 +88,79 @@ describe("the season pricing a worker answers", () => {
       .nets({ ask: "nets", keys: ["bigWr"], openSpots: 0 });
 
     expect(answered.nets).toEqual([]);
+  });
+});
+
+/**
+ * Dillon Gabriel had been on reserve three weeks and the waiver page drew
+ * him every week of the season at his August availability, the weeks
+ * already played included.
+ */
+describe("the season a waiver page prices", () => {
+  const FROM = 4;
+  const aWeek = (i: number) => weekOfDraw(i, FROM);
+
+  it("draws no week already played", () => {
+    const weeks = new Set(Array.from({ length: DRAWN }, (_, i) => aWeek(i)));
+
+    expect(Math.min(...weeks)).toBe(FROM);
+    expect(Math.max(...weeks)).toBe(18);
+    expect(weeks.size).toBe(18 - FROM + 1);
+  });
+
+  it("never draws a bye already gone", () => {
+    const [him] = forTheWeeksLeft([{ ...aMan("early", "WR", 14), bye: 2 }], FROM);
+    const drawn = weeksOf(him!, DRAWN);
+    const fromTheStart = weeksOf({ ...aMan("early", "WR", 14), bye: 2 }, DRAWN);
+
+    expect(drawn.filter((w) => w === 0).length)
+      .toBeLessThan(fromTheStart.filter((w) => w === 0).length);
+  });
+
+  it("gives a man on reserve nothing for the weeks the list costs him", () => {
+    const [him] = forTheWeeksLeft(
+      [{ ...aMan("parked", "QB", 12.1), bye: 12 }], FROM, { parked: "IR" });
+    const drawn = weeksOf(him!, DRAWN);
+    const parked = drawn.filter((_, i) => aWeek(i) < FROM + WEEKS_OUT);
+    const back = drawn.filter((_, i) => aWeek(i) >= FROM + WEEKS_OUT);
+
+    expect(parked.length).toBeGreaterThan(0);
+    expect(parked.every((w) => w === 0)).toBe(true);
+    expect(back.some((w) => w > 0)).toBe(true);
+  });
+
+  it("gives a man ruled out of the coming week nothing for it alone", () => {
+    const [him] = forTheWeeksLeft(
+      [{ ...aMan("hamstring", "WR", 14), bye: 12 }], FROM, { hamstring: "Out" });
+    const drawn = weeksOf(him!, DRAWN);
+
+    expect(drawn.filter((_, i) => aWeek(i) === FROM).every((w) => w === 0))
+      .toBe(true);
+    expect(drawn.filter((_, i) => aWeek(i) === FROM + 1).some((w) => w > 0))
+      .toBe(true);
+  });
+
+  it("prices an add on reserve below the same add healthy", async () => {
+    const asked = (hurt: Record<string, string>) => pricerHere().season({
+      ...anAsk(), from: FROM, hurt,
+    });
+    const healthy = await asked({});
+    const parked = await asked({ bigWr: "IR" });
+    const added = (said: typeof healthy) =>
+      said.adds.find((row) => row.p.key === "bigWr")!.added;
+
+    expect(added(parked)).toBeLessThan(added(healthy));
+  });
+
+  it("takes the injury report's word only for the player it is about", () => {
+    const said = statusesOn(
+      [aMan("parked", "QB", 12), aMan("sameName", "WR", 9)],
+      new Map([
+        ["parked", { name: "parked", status: "IR", position: "QB" }],
+        ["sameName", { name: "sameName", status: "Out", position: "LB" }],
+      ]),
+    );
+
+    expect(said).toEqual({ parked: "IR" });
   });
 });

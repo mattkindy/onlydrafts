@@ -12,6 +12,7 @@
  * and a player is worth the change in how often it beats a typical side.
  */
 
+import { SEASON_WEEKS } from "./availability.ts";
 import { factorFor, mixFor, PASS_CATCHERS, type Mix } from "./copula.ts";
 import { FLEX_POSITIONS, lineupOf, type Player } from "./scoring.ts";
 import { DRAWS, streamFor, weeksFromNormals } from "./spread.ts";
@@ -77,17 +78,39 @@ export function slotOf(
   return slot;
 }
 
-/** The season is this many weeks, and every player has a bye in one of them. */
-export const SEASON_WEEKS = 18;
+export { SEASON_WEEKS };
 
 /**
- * Which week of the season a drawn week is. Every player's draws share
- * the count, so two players with the same bye miss the same draws, and a
- * roster that stacks a bye week feels it instead of each player missing
- * a week of his own.
+ * Which week of the season a drawn week is, cycling over the weeks from
+ * `from` to the last. Every player's draws share the count, so two
+ * players with the same bye miss the same draws, and a roster that stacks
+ * a bye week feels it instead of each player missing a week of his own.
  */
-export function weekOfDraw(i: number): number {
-  return (i % SEASON_WEEKS) + 1;
+export function weekOfDraw(i: number, from = 1): number {
+  return from + (i % weeksFrom(from));
+}
+
+/** how many weeks a draw cycles over when it starts at `from` */
+const weeksFrom = (from: number) => SEASON_WEEKS - from + 1;
+
+/** the first week his draws cover, which every player in one pricing shares */
+const firstWeekOf = (p: Player) => p.weeksLeft?.from ?? 1;
+
+/**
+ * His chance of taking the field in one week. With nothing said about the
+ * weeks left he plays any week but his bye at `games` in 17, which is how
+ * his injury history and his age are priced.
+ */
+function playsIn(p: Player, week: number): number {
+  if (p.bye != null && week === p.bye) {
+    return 0;
+  }
+
+  if (p.weeksLeft) {
+    return p.weeksLeft.plays[week - p.weeksLeft.from] ?? 0;
+  }
+
+  return (p.games ?? SEASON_WEEKS - 1) / (SEASON_WEEKS - 1);
 }
 
 /** the other side each team plays in a given week, when anybody knows */
@@ -135,7 +158,7 @@ export function notePassCatchers(
  * kept, since filling a lineup asks for them over and over.
  */
 function mixAt(p: Player, i: number): Mix {
-  const week = weekOfDraw(i);
+  const week = weekOfDraw(i, firstWeekOf(p));
   const at = `${p.key}|${week}`;
   let his = mixes.get(at);
 
@@ -170,7 +193,8 @@ interface Loaded {
  * was most of what drawing a board cost.
  */
 function normalsFor(p: Player, draws: number): number[] {
-  const byWeek: Loaded[] = Array.from({ length: SEASON_WEEKS }, (_, w) => {
+  const count = weeksFrom(firstWeekOf(p));
+  const byWeek: Loaded[] = Array.from({ length: count }, (_, w) => {
     const mix = mixAt(p, w);
 
     return {
@@ -183,7 +207,7 @@ function normalsFor(p: Player, draws: number): number[] {
   });
 
   return Array.from({ length: draws }, (_, i) => {
-    const his = byWeek[i % SEASON_WEEKS]!;
+    const his = byWeek[i % count]!;
     let z = 0;
 
     for (const term of his.terms) {
@@ -198,7 +222,8 @@ function normalsFor(p: Player, draws: number): number[] {
  * A player's weeks, zeroed where he does not play: his bye, and the games
  * he is expected to miss. How many games he is expected to play already
  * prices his injury history and his age, so a fragile player misses weeks
- * here rather than being marked down evenly.
+ * here rather than being marked down evenly. A player priced for the
+ * weeks left misses the ones the injury report has him out for.
  */
 export function weeksOf(p: Player, draws = DRAWS): number[] {
   let his = drawn.get(p);
@@ -229,7 +254,7 @@ let drawn = new WeakMap<Player, Map<number, number[]>>();
 
 function drawWeeks(p: Player, draws: number): number[] {
   const g = p.game;
-  const plays = (p.games ?? SEASON_WEEKS - 1) / (SEASON_WEEKS - 1);
+  const from = firstWeekOf(p);
 
   if (!g?.["ev"]) {
     return new Array(draws).fill(0) as number[];
@@ -246,13 +271,8 @@ function drawWeeks(p: Player, draws: number): number[] {
 
   const out = streamFor(p.key + "|out", draws);
 
-  return weeks.map((week, i) => {
-    if (p.bye != null && weekOfDraw(i) === p.bye) {
-      return 0;
-    }
-
-    return out[i]! < plays ? week : 0;
-  });
+  return weeks.map((week, i) =>
+    out[i]! < playsIn(p, weekOfDraw(i, from)) ? week : 0);
 }
 
 interface Slot {

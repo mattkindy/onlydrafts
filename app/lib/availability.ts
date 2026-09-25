@@ -30,10 +30,10 @@
  * designation, and the players carrying it are Peyton Hillis, Derek Carr
  * and Adam Thielen: retired, or a stale note nobody cleared. Reading it
  * as not active docked six games from anybody with an old flag on him.
+ * Out is not one either. It is the club's word for the coming game, and
+ * both Sleeper and ESPN say IR for a man who is on the list.
  */
-export const OUT_FOR_A_WHILE = new Set([
-  "IR", "PUP", "Sus", "DNR", "COV", "Out",
-]);
+export const OUT_FOR_A_WHILE = new Set(["IR", "PUP", "Sus", "DNR", "COV"]);
 
 /**
  * The words that mean he does not play this week.
@@ -136,19 +136,68 @@ export interface Listed {
 /** and how many games that costs him */
 export const WEEKS_OUT = 6;
 
+/** The regular season runs this many weeks, and a side plays in all but one. */
+export const SEASON_WEEKS = 18;
+
+const SEASON_GAMES = SEASON_WEEKS - 1;
+
+/** how many of his side's games, from the coming one, the list costs him */
+export function gamesOutFor(status: string | null | undefined): number {
+  if (status && OUT_FOR_A_WHILE.has(status)) {
+    return WEEKS_OUT;
+  }
+
+  return outThisWeek(status) ? 1 : 0;
+}
+
 /**
- * His expected games, with the list taken into account. A player already
- * marked down below this keeps the lower number, since the board knows
- * something the list does not say.
+ * The weeks from `from` to the end of the season his side has a game in.
+ * With his bye unknown a side is taken to play every week but one.
+ */
+export function gameWeeksFrom(from: number, bye?: number | null): number[] {
+  const weeks = Array.from(
+    { length: Math.max(0, SEASON_WEEKS - from + 1) }, (_, i) => from + i)
+    .filter((w) => w !== bye);
+
+  return bye == null ? weeks.slice(0, SEASON_GAMES) : weeks;
+}
+
+/**
+ * The games he is expected to play from week `from` to the end of the
+ * season, with the list taken into account. `games` is the board's
+ * expectation over a whole season, so the weeks already gone take their
+ * share of it with them. A player the board already has below what the
+ * list leaves him keeps the lower number, since the board knows something
+ * the list does not say.
  */
 export function gamesLeft(
   games: number | undefined, status: string | null | undefined,
+  from = 1, bye?: number | null,
 ): number {
-  const had = games ?? 17;
+  const left = gameWeeksFrom(from, bye).length;
+  const expected = (games ?? SEASON_GAMES) * (left / SEASON_GAMES);
 
-  if (!status || !OUT_FOR_A_WHILE.has(status)) {
-    return had;
-  }
+  return Math.min(expected, Math.max(0, left - gamesOutFor(status)));
+}
 
-  return Math.min(had, 17 - WEEKS_OUT);
+/**
+ * His chance of playing each week from `from` to the end of the season,
+ * first week first. The list takes the games it costs him from the front,
+ * and the rest share out what `gamesLeft` expects of him, so the weeks add
+ * up to it. His bye is a zero.
+ */
+export function playsByWeek(
+  games: number | undefined, status: string | null | undefined,
+  from: number, bye?: number | null,
+): number[] {
+  const playing = gameWeeksFrom(from, bye).slice(gamesOutFor(status));
+  const each = playing.length
+    ? Math.min(1, gamesLeft(games, status, from, bye) / playing.length)
+    : 0;
+  const open = new Set(playing);
+
+  return Array.from(
+    { length: Math.max(0, SEASON_WEEKS - from + 1) },
+    (_, i) => open.has(from + i) ? each : 0,
+  );
 }

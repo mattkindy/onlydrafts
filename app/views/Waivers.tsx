@@ -486,7 +486,7 @@ export function Waivers(props: Props) {
     props.season ?? undefined, props.week ?? undefined);
 
   const { drops, listed, priced, wire, working } = useWaiverPrices(
-    players, league, props.schedule, posFilter);
+    players, league, props.schedule, posFilter, props.listed, props.week);
 
   const lines: Lines = useMemo(
     () => linesFor(

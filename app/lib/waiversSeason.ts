@@ -13,6 +13,7 @@
  * quick however often the filter changes.
  */
 
+import { listingFits, playsByWeek, type Listed } from "./availability.ts";
 import type { Room } from "./draftShare.ts";
 import { roomFor } from "./draftShare.ts";
 import type { Roster } from "./providers.ts";
@@ -41,6 +42,48 @@ export interface SeasonAsk {
   /** your roster and the wire by key, since the board has the rest */
   mine: string[];
   pool: string[];
+  /**
+   * The coming week. Only it and the weeks after it are drawn, since the
+   * weeks already played are over for a player picked up now. Without it
+   * the whole season is drawn, the way the draft board draws it.
+   */
+  from?: number;
+  /** what the injury report says of each player listed, by his key */
+  hurt?: Record<string, string>;
+}
+
+/**
+ * What the injury report says of each player on the board, by his key.
+ * A listing whose position is not his is somebody else with his name.
+ */
+export function statusesOn(
+  players: Player[], listed: Map<string, Listed>,
+): Record<string, string> {
+  const said: Record<string, string> = {};
+
+  for (const p of players) {
+    const his = listed.get(p.key);
+
+    if (his?.status && listingFits(his, p.position)) {
+      said[p.key] = his.status;
+    }
+  }
+
+  return said;
+}
+
+/**
+ * The board priced for the weeks left: each player drawn from the coming
+ * week on, with his games there cut by what the injury report says. A man
+ * on reserve scores nothing for the weeks the list costs him.
+ */
+export function forTheWeeksLeft(
+  players: Player[], from: number, hurt: Record<string, string> = {},
+): Player[] {
+  return players.map((p) => ({
+    ...p,
+    weeksLeft: { from, plays: playsByWeek(p.games, hurt[p.key], from, p.bye) },
+  }));
 }
 
 export interface NetsAsk {
@@ -77,13 +120,16 @@ export interface Kept {
 export function priceSeason(
   ask: SeasonAsk,
 ): { answer: SeasonAnswer; kept: Kept } {
-  const byKey = new Map(ask.players.map((p) => [p.key, p]));
+  const players = ask.from === undefined
+    ? ask.players
+    : forTheWeeksLeft(ask.players, ask.from, ask.hurt);
+  const byKey = new Map(players.map((p) => [p.key, p]));
   const ours = (keys: string[]) => keys
     .map((key) => byKey.get(key))
     .filter((p): p is Player => Boolean(p));
   const mine = ours(ask.mine);
   const room = roomFor(
-    ask.players, ask.slots, ask.teams, ask.draws, ask.rosters);
+    players, ask.slots, ask.teams, ask.draws, ask.rosters);
   const adds = addsFor(mine, ours(ask.pool), ask.slots, room);
 
   return {
