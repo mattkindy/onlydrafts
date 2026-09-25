@@ -4,7 +4,7 @@
  * the playoffs and postseason stats would distort per-game numbers.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseCsv } from "./csv.js";
@@ -102,6 +102,42 @@ async function readRows(fileName: string): Promise<Record<string, string>[]> {
   return parseCsv(text);
 }
 
+/** when each of these files last changed, as one string, -1 for a missing one */
+const stampOf = async (fileNames: string[]) =>
+  (await Promise.all(fileNames.map((fileName) =>
+    stat(join(RAW_DIR, fileName)).then((s) => s.mtimeMs, () => -1)))).join("|");
+
+const loadedOnce = new Map<string, { stamp: string; rows: Promise<unknown[]> }>();
+
+/**
+ * A loader's rows, read once per process for as long as the files behind
+ * them are unchanged. A walked week asked for the same seasons' stats and
+ * rosters from three or four places and parsed the file each time.
+ *
+ * Every caller is handed its own deep copy, so a caller that changes what
+ * it is handed changes nothing for the next one.
+ */
+export async function onceAndCopied<T>(
+  key: string, stamp: string, load: () => Promise<T[]>,
+): Promise<T[]> {
+  let entry = loadedOnce.get(key);
+
+  if (!entry || entry.stamp !== stamp) {
+    const rows: Promise<unknown[]> = load();
+    const made = { stamp, rows };
+    loadedOnce.set(key, made);
+    // a failed read is not kept, so a file that appears later is read
+    rows.catch(() => {
+      if (loadedOnce.get(key) === made) {
+        loadedOnce.delete(key);
+      }
+    });
+    entry = made;
+  }
+
+  return structuredClone(await entry.rows) as T[];
+}
+
 export async function loadGames(): Promise<GameRow[]> {
   const rows = await readRows("games.csv");
 
@@ -186,7 +222,17 @@ export function canonicalTeam(team: string): string {
 export async function loadWeeklyRosters(
   season: number,
 ): Promise<RosterAppearance[]> {
-  const rows = await readRows(`roster_weekly_${season}.csv`);
+  const fileName = `roster_weekly_${season}.csv`;
+
+  return onceAndCopied(
+    fileName, await stampOf([fileName]), () => rostersFrom(fileName, season),
+  );
+}
+
+async function rostersFrom(
+  fileName: string, season: number,
+): Promise<RosterAppearance[]> {
+  const rows = await readRows(fileName);
 
   return rows
     .filter((row) => row["game_type"] === "REG" && row["gsis_id"])
@@ -431,6 +477,16 @@ export async function loadPlayerStats(
   // after-catch numbers are only there, so the old one is the fallback.
   const renamed = `stats_player_week_${season}.csv`;
   const legacy = `player_stats_${season}.csv`;
+
+  return onceAndCopied(
+    renamed, await stampOf([renamed, legacy]),
+    () => statsFrom(renamed, legacy, season),
+  );
+}
+
+async function statsFrom(
+  renamed: string, legacy: string, season: number,
+): Promise<PlayerWeekStats[]> {
   const rows = await readRows(renamed).catch(() => readRows(legacy));
 
   return rows
