@@ -1,0 +1,126 @@
+{
+  "events": [
+    {
+      "id": "401872948",
+      "date": "2026-09-25T00:15Z",
+      "status": {
+        "clock": 317,
+        "displayClock": "5:17",
+        "period": 4,
+        "type": {
+          "id": "2",
+          "name": "STATUS_IN_PROGRESS",
+          "state": "in",
+          "completed": false,
+          "description": "In Progress",
+          "detail": "5:17 - 4th Quarter",
+          "shortDetail": "5:17 - 4th"
+        }
+      },
+      "competitions": [
+        {
+          "status": {
+            "clock": 317,
+            "displayClock": "5:17",
+            "period": 4,
+            "type": {
+              "id": "2",
+              "name": "STATUS_IN_PROGRESS",
+              "state": "in",
+              "completed": false,
+              "description": "In Progress",
+              "detail": "5:17 - 4th Quarter",
+              "shortDetail": "5:17 - 4th"
+            },
+            "isTBDFlex": false
+          },
+          "situation": {
+            "possession": "1",
+            "yardLine": 53,
+            "down": 2,
+            "distance": 8,
+            "downDistanceText": "2nd & 8 at ATL 47",
+            "possessionText": "ATL 47",
+            "homeTimeouts": 3,
+            "awayTimeouts": 3,
+            "isRedZone": false
+          },
+          "competitors": [
+            {
+              "homeAway": "home",
+              "score": "14",
+              "team": {
+                "id": "9",
+                "abbreviation": "GB"
+              }
+            },
+            {
+              "homeAway": "away",
+              "score": "27",
+              "team": {
+                "id": "1",
+                "abbreviation": "ATL"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "401872953",
+      "date": "2026-09-27T17:00Z",
+      "status": {
+        "clock": 0,
+        "displayClock": "0:00",
+        "period": 0,
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Sun, September 27th at 1:00 PM EDT",
+          "shortDetail": "9/27 - 1:00 PM EDT"
+        }
+      },
+      "competitions": [
+        {
+          "status": {
+            "clock": 0,
+            "displayClock": "0:00",
+            "period": 0,
+            "type": {
+              "id": "1",
+              "name": "STATUS_SCHEDULED",
+              "state": "pre",
+              "completed": false,
+              "description": "Scheduled",
+              "detail": "Sun, September 27th at 1:00 PM EDT",
+              "shortDetail": "9/27 - 1:00 PM EDT"
+            },
+            "isTBDFlex": false
+          },
+          "situation": null,
+          "competitors": [
+            {
+              "homeAway": "home",
+              "score": "0",
+              "team": {
+                "id": "2",
+                "abbreviation": "BUF"
+              }
+            },
+            {
+              "homeAway": "away",
+              "score": "0",
+              "team": {
+                "id": "24",
+                "abbreviation": "LAC"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

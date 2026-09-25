@@ -50,8 +50,9 @@ describe("a week one game, end to end", () => {
     expect(game.home).toBe("CLE");
     expect(game.away).toBe("CIN");
     expect(game.withBall).toBe("CIN");
-    // ESPN counts from the offence's own goal, the engine from the other
-    expect(game.yardline).toBe(38);
+    // ESPN counts from the home side's goal line, so the visitors driving
+    // at 62 are 62 yards from Cleveland's
+    expect(game.yardline).toBe(62);
     expect(game.secondsLeft).toBe(1440);
     expect(game.secondHalf).toBe(true);
     expect(game.points["CIN"]).toBe(17);

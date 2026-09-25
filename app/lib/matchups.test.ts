@@ -897,3 +897,25 @@ describe("myGameIn", () => {
     expect(myGameIn(games, "Nobody", "7")).toBe(null);
   });
 });
+
+const fixture = <T>(name: string) => JSON.parse(readFileSync(
+  join(import.meta.dirname, "..", "fixtures", name), "utf8")) as T;
+
+/**
+ * Falcons at Packers on a Thursday night, read off ESPN's scoreboard and
+ * Sleeper's scores within a second of each other: Atlanta with the ball
+ * at its own 47, second and eight, early in the fourth.
+ */
+const espnBoard = fixture<Parameters<typeof situationsFrom>[0]>(
+  "espnScoreboardLive.json");
+
+describe("the yard line on ESPN's scoreboard", () => {
+  it("reads the away side at its own 47 as 53 yards out", () => {
+    const live = situationsFrom(espnBoard).get("ATL")!;
+
+    expect(live.withBall).toBe("ATL");
+    expect(live.yardline).toBe(53);
+    expect(live.down).toBe(2);
+    expect(live.toGo).toBe(8);
+  });
+});

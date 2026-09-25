@@ -165,7 +165,7 @@ interface ScoreboardCompetitor {
 
 interface ScoreboardSituation {
   possession?: string;
-  /** counted from the goal line the team with the ball is defending */
+  /** counted from the home side's own goal line, whoever has the ball */
   yardLine?: number;
   down?: number;
   distance?: number;
@@ -316,6 +316,14 @@ const sideOf = (
 const downOf = (down: number | undefined) =>
   down !== undefined && down >= 1 && down <= 4 ? down : undefined;
 
+/**
+ * ESPN counts the yard line from the home side's own goal line whoever
+ * has the ball, so the away side at its own 30 is at 70 and the home side
+ * at its own 13 is at 13. The engine wants yards to the goal attacked.
+ */
+const espnYardsToGo = (yardLine: number, homeHasIt: boolean) =>
+  Math.min(99, Math.max(1, homeHasIt ? 100 - yardLine : yardLine));
+
 function situationOf(
   game: ScoreboardCompetition, status: ScoreboardStatus | undefined,
   hurt: Map<string, InGameStatus> | undefined,
@@ -349,7 +357,7 @@ function situationOf(
     ...(overtimeLeft > 0 ? { overtimeLeft } : {}),
     withBall: ballCode ? boardTeamOf(ballCode) : undefined,
     yardline: ballCode !== undefined && at?.yardLine !== undefined
-      ? Math.min(99, Math.max(1, 100 - at.yardLine))
+      ? espnYardsToGo(at.yardLine, ballCode === homeCode)
       : undefined,
     down: downOf(at?.down),
     toGo: downOf(at?.down) === undefined ? undefined : at?.distance,
