@@ -41,6 +41,14 @@ const wire = [
 
 const players = [...mine, ...wire];
 
+/** every other team's players, from the best at each position down */
+const theRestOfTheLeague = (): Player[] =>
+  ([["QB", 14, 22, 12], ["RB", 36, 19, 5], ["WR", 40, 18, 5],
+    ["TE", 14, 13, 4], ["K", 12, 10, 6], ["DEF", 12, 10, 5]] as const)
+    .flatMap(([position, count, top, bottom]) =>
+      Array.from({ length: count }, (_, i) => aMan(
+        `${position}${i}`, position, top - (top - bottom) * i / (count - 1))));
+
 const anAsk = (): SeasonAsk => ({
   ask: "season",
   players,
@@ -141,8 +149,10 @@ describe("the season a waiver page prices", () => {
   });
 
   it("prices an add on reserve below the same add healthy", async () => {
+    // the rest of a league, so the typical opponent fills a lineup and an
+    // add can move the win chance off a hundred percent
     const asked = (hurt: Record<string, string>) => pricerHere().season({
-      ...anAsk(), from: FROM, hurt,
+      ...anAsk(), players: [...players, ...theRestOfTheLeague()], from: FROM, hurt,
     });
     const healthy = await asked({});
     const parked = await asked({ bigWr: "IR" });
