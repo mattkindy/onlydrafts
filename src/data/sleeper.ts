@@ -121,7 +121,9 @@ async function gsisIdsFrom(
     const sleeperId = row["sleeper_id"]?.trim();
     const gsisId = row["gsis_id"]?.trim();
 
-    if (sleeperId && gsisId) {
+    // the crosswalk writes NA for a player it has no gsis id for, which
+    // would otherwise replace the one Sleeper's own file gave him
+    if (sleeperId && gsisId && gsisId !== "NA") {
       ids.set(sleeperId, gsisId);
     }
   }
