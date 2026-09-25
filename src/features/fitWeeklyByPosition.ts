@@ -76,11 +76,14 @@ const WEEKLY_EXTRAS: Record<string, (e: WeeklyExample) => number> = {
   gamesBehindLast4: (e) => Math.min(e.gamesBehind, 4) * e.last4,
 };
 
+// A back gets no qbAbsence: with the usual passer out his line came out worse
+// in five of seven held out seasons, where a receiver's and a tight end's came
+// out better in all seven.
 export const POSITION_EXTRAS: Record<string, readonly string[]> = {
   QB: ["spread", "snapSpread"],
   RB: ["spread", "rushYdsRecent", "absence", "carriesExpected", "targetsExpected"],
-  WR: ["absence", "targetsExpected"],
-  TE: ["spread", "passTend", "absence"],
+  WR: ["absence", "targetsExpected", "qbAbsence"],
+  TE: ["spread", "passTend", "absence", "qbAbsence"],
 };
 
 function positionFeatures(position: string): string[] {
