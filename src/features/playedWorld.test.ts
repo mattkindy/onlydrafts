@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mergeWeekStatus } from "../data/injuries.js";
 import { chooseThrower, onTheRoster } from "./playedWorld.js";
 import { rosterWeekFor } from "./rosterWeek.js";
 
@@ -82,5 +83,43 @@ describe("chooseThrower", () => {
     );
 
     expect(passer).toBe("backup");
+  });
+});
+
+describe("a quarterback Sleeper has as Doubtful before the final report", () => {
+  const roster = [
+    { playerId: "williams", position: "QB", status: "ACT" },
+    { playerId: "bagent", position: "QB", status: "ACT" },
+    { playerId: "keenum", position: "QB", status: "ACT" },
+  ];
+  const evidence = {
+    lately: new Map([["williams", 60], ["bagent", 9]]),
+    adpOf: (playerId: string) => (playerId === "williams" ? 30 : undefined),
+    threwLastYear: new Map([["williams", 686], ["bagent", 4]]),
+  };
+
+  // the same test the live walk puts each roster row through
+  const castOf = (calls: ReturnType<typeof mergeWeekStatus>) =>
+    roster.filter((row) =>
+      !calls.get(row.playerId)?.out && onTheRoster(row.status, true));
+
+  it("leaves the cast, so the backup throws", () => {
+    const calls = mergeWeekStatus(2026, 3, new Map(), [{
+      season: 2026, week: 3, gsisId: "williams", team: "CHI",
+      status: "Doubtful", fetchedAt: "2026-09-23T11:20:00Z",
+    }]);
+    const cast = castOf(calls);
+
+    expect(cast.map((p) => p.playerId)).toEqual(["bagent", "keenum"]);
+    expect(chooseThrower(cast, evidence)).toBe("bagent");
+  });
+
+  it("keeps his job when the snapshot is for another week", () => {
+    const calls = mergeWeekStatus(2026, 3, new Map(), [{
+      season: 2026, week: 2, gsisId: "williams", team: "CHI",
+      status: "Doubtful", fetchedAt: "2026-09-16T11:20:00Z",
+    }]);
+
+    expect(chooseThrower(castOf(calls), evidence)).toBe("williams");
   });
 });

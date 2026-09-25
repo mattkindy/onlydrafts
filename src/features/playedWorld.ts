@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "../data/csv.js";
+import { loadWeekStatus } from "../data/injuries.js";
 import {
   loadPlayerStats, loadWeeklyRosters, RAW_DIR,
 } from "../data/nflverse.js";
@@ -393,7 +394,8 @@ export async function buildWorld(
   const castWeek = live ? onlyWeek : 1;
 
   /**
-   * The week's injury report, which anyone setting a lineup has read.
+   * The week's injury report, which anyone setting a lineup has read, and
+   * Sleeper's status for a player his club has not yet given a final one.
    * A player ruled Out or Doubtful leaves the cast; a Questionable player
    * stays, since most of them play. Only the live walk reads it: in
    * August nobody knows who will be hurt in December.
@@ -402,22 +404,14 @@ export async function buildWorld(
   const questionable = new Set<string>();
 
   if (live && !process.env["NO_INJURY"]) {
-    for (const r of parseCsv(await readFile(
-      join(import.meta.dirname, "..", "..", "data", "raw", `injuries_${SCORE_ON}.csv`),
-      "utf8",
-    ).catch(() => ""))) {
-      if (Number(r["week"]) !== onlyWeek) {
-        continue;
+    for (const [playerId, call] of await loadWeekStatus(SCORE_ON, onlyWeek)) {
+      if (call.out) {
+        ruledOut.add(playerId);
       }
 
-      if (["Out", "Doubtful"].includes(r["report_status"] ?? "")) {
-        ruledOut.add(r["gsis_id"] ?? "");
+      if (call.questionable) {
+        questionable.add(playerId);
       }
-
-      if (r["report_status"] === "Questionable") {
-        questionable.add(r["gsis_id"] ?? "");
-      }
-
     }
   }
 

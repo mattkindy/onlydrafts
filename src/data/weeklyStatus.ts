@@ -5,7 +5,8 @@
  *
  * A player ruled Out or Doubtful is treated as not playing, the same call
  * the played world makes when it builds a week. Questionable players stay,
- * because most of them play.
+ * because most of them play. For the week the refresh is building, a
+ * player his club has not yet given a final status gets Sleeper's.
  *
  * The depth chart release changed shape in 2025: dated snapshots with
  * no week column, so those seasons use the last chart published before
@@ -17,6 +18,9 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseCsv } from "./csv.js";
 import { loadDepthChart } from "./depthCharts.js";
+import {
+  loadSleeperStatus, loadWeekStatus, readReportStatus,
+} from "./injuries.js";
 import { RAW_DIR } from "./nflverse.js";
 
 export interface WeekStatus {
@@ -33,8 +37,6 @@ export interface WeekStatus {
   team: string;
   position: string;
 }
-
-const RULED_OUT = ["Out", "Doubtful"];
 
 function statusKey(playerId: string, week: number): string {
   return `${playerId}|${week}`;
@@ -66,9 +68,8 @@ export async function loadWeeklyInjuryStatus(
     const practice = (row["practice_status"] ?? "").toLowerCase();
 
     byWeek.set(statusKey(playerId, week), {
-      out: RULED_OUT.includes(report),
+      ...readReportStatus(report),
       report,
-      questionable: report === "Questionable",
       limitedPractice:
         practice.includes("limited") || practice.includes("did not"),
       team: row["team"] ?? "",
@@ -166,11 +167,46 @@ export interface WeeklyAvailability {
   depth: WeeklyDepth;
 }
 
+/**
+ * Lays Sleeper's status over the report for the week the snapshot was
+ * taken for, wherever the club has not filed a final status. His practice
+ * participation, if the club has filed any, is kept.
+ */
+async function withSleeperStatus(
+  season: number, status: Map<string, WeekStatus>,
+): Promise<Map<string, WeekStatus>> {
+  const weeks = new Set((await loadSleeperStatus())
+    .filter((row) => row.season === season)
+    .map((row) => row.week));
+
+  for (const week of weeks) {
+    for (const [playerId, call] of await loadWeekStatus(season, week)) {
+      if (call.source !== "sleeper") {
+        continue;
+      }
+
+      const key = statusKey(playerId, week);
+      const filed = status.get(key);
+
+      status.set(key, {
+        limitedPractice: filed?.limitedPractice ?? false,
+        team: filed?.team ?? "",
+        position: filed?.position ?? "",
+        out: call.out,
+        questionable: call.questionable,
+        report: call.report,
+      });
+    }
+  }
+
+  return status;
+}
+
 export async function loadWeeklyAvailability(
   season: number,
 ): Promise<WeeklyAvailability> {
   const [status, depth] = await Promise.all([
-    loadWeeklyInjuryStatus(season),
+    loadWeeklyInjuryStatus(season).then((s) => withSleeperStatus(season, s)),
     loadWeeklyDepthRanks(season),
   ]);
 

@@ -65,7 +65,9 @@ That is `scripts/week.ts`, and it runs six steps in order:
 1. `fetchData.ts` pulls this season's nflverse files again, forced, so a
    week that has since been played comes back.
 2. `fetchSleeperProjections.ts` pulls Sleeper's projections for the
-   season.
+   season, and every player's injury status on Sleeper today into
+   `data/curated/sleeperStatus.csv`. Until a club files its final report,
+   usually on Friday, that status decides who is out for the coming week.
 3. `aggregateTouches.ts` recounts the season's touches into
    `data/curated/touches.csv`.
 4. `aggregateLeverage.ts` counts the same touches again by leverage,

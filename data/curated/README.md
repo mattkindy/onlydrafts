@@ -35,6 +35,31 @@ said a month out. Anything measuring how good Sleeper is weeks in
 advance has to be collected as the season runs; it cannot be read back
 out of this file.
 
+`sleeperStatus.csv` is every player's injury status on Sleeper at the
+time of the last refresh, for players on a club who have one. The same
+script writes it, and every row is for the one week the site was being
+built for then, the earliest week with a game still to be scored. A club
+whose game that week was played on an earlier day is left out, since
+what Sleeper says the morning after a Thursday game is about injuries in
+that game. The next refresh replaces the file, and a refresh where
+nobody's status moved leaves it as it was, so `fetchedAt` is when this
+set of statuses was first seen.
+
+The nflverse injury file fills in its `report_status` column (Out,
+Doubtful, Questionable) only from a club's final report, usually on
+Friday. Earlier in the week it has practice participation and nothing
+else, and a player who has not practised can be missing from it
+altogether. Until the final report lists a player, the weekly model and
+the live walk use Sleeper's status for him instead: Out, Doubtful, IR,
+PUP and Sus count as out, and Questionable as questionable. Once the
+final report lists him, its status is used and Sleeper's is ignored.
+
+The file is only read for the season and week in its rows, so a
+backtest of any other week reads the nflverse report alone. A backtest
+of the week it was taken for does read it, and that is fair: it is what
+somebody setting a lineup could see before kickoff. Sleeper does not
+serve its old statuses, so nothing can rebuild a past week's file.
+
 `adp/` has the draft boards for the season being played, taken before it
 started. Sleeper and Fantasy Football Calculator both serve only the
 drafts of the last few days, so a board pulled in October describes a

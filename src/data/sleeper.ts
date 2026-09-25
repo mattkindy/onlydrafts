@@ -12,32 +12,41 @@ interface SleeperPlayer {
   position: string;
 }
 
-interface RawSleeperPlayer {
+export interface RawSleeperPlayer {
   full_name?: string;
   position?: string;
   gsis_id?: string | null;
+  /** the club he is on, null for a free agent or a retired player */
+  team?: string | null;
+  injury_status?: string | null;
 }
 
-/** the whole player file, downloaded once and kept on disk (about 5MB) */
+const PLAYER_FILE = join(RAW_DIR, "sleeper_players.json");
+
+async function downloadSleeperPlayerFile(): Promise<
+  Record<string, RawSleeperPlayer>
+> {
+  const response = await fetchWithRetry(`${API}/players/nfl`, {
+    label: "sleeper players",
+  });
+
+  if (!response.ok) {
+    throw new Error(`sleeper players returned ${response.status}`);
+  }
+
+  const raw = (await response.json()) as Record<string, RawSleeperPlayer>;
+  await writeAtomically(PLAYER_FILE, JSON.stringify(raw));
+  return raw;
+}
+
+/** the whole player file, downloaded once and kept on disk (about 15MB) */
 async function loadSleeperPlayerFile(): Promise<
   Record<string, RawSleeperPlayer>
 > {
-  const cachePath = join(RAW_DIR, "sleeper_players.json");
-
   try {
-    return JSON.parse(await readFile(cachePath, "utf8"));
+    return JSON.parse(await readFile(PLAYER_FILE, "utf8"));
   } catch {
-    const response = await fetchWithRetry(`${API}/players/nfl`, {
-      label: "sleeper players",
-    });
-
-    if (!response.ok) {
-      throw new Error(`sleeper players returned ${response.status}`);
-    }
-
-    const raw = (await response.json()) as Record<string, RawSleeperPlayer>;
-    await writeAtomically(cachePath, JSON.stringify(raw));
-    return raw;
+    return downloadSleeperPlayerFile();
   }
 }
 
@@ -90,8 +99,13 @@ async function loadPlayerIdCrosswalk(): Promise<Record<string, string>[]> {
  * it goes first and Sleeper's own field fills whatever it misses.
  */
 export async function fetchSleeperGsisIds(): Promise<Map<string, string>> {
+  return gsisIdsFrom(await loadSleeperPlayerFile());
+}
+
+async function gsisIdsFrom(
+  raw: Record<string, RawSleeperPlayer>,
+): Promise<Map<string, string>> {
   const ids = new Map<string, string>();
-  const raw = await loadSleeperPlayerFile();
 
   // Sleeper writes some ids with a leading space, which no gsis key
   // anywhere else has, so an untrimmed one never matches
@@ -113,6 +127,51 @@ export async function fetchSleeperGsisIds(): Promise<Map<string, string>> {
   }
 
   return ids;
+}
+
+export interface SleeperInjury {
+  status: string;
+  /** his club as Sleeper spells it */
+  team: string;
+}
+
+/**
+ * gsis id -> Sleeper's injury status, for every player on a club who has
+ * one. The crosswalk gives a few gsis ids two Sleeper ids, and the first
+ * status found for him is kept.
+ */
+export function injuryStatuses(
+  raw: Record<string, RawSleeperPlayer>,
+  gsisBySleeperId: Map<string, string>,
+): Map<string, SleeperInjury> {
+  const statuses = new Map<string, SleeperInjury>();
+
+  for (const [sleeperId, player] of Object.entries(raw)) {
+    const gsisId = gsisBySleeperId.get(sleeperId);
+    const status = player.injury_status?.trim();
+    const team = player.team?.trim();
+
+    if (!gsisId || !status || !team || statuses.has(gsisId)) {
+      continue;
+    }
+
+    statuses.set(gsisId, { status, team });
+  }
+
+  return statuses;
+}
+
+/**
+ * Every player's injury status as Sleeper has it right now. The copy of the
+ * player file on disk is kept for weeks, so this downloads it again and
+ * replaces the copy, which also brings the gsis crosswalk up to date.
+ */
+export async function fetchSleeperInjuryStatuses(): Promise<
+  Map<string, SleeperInjury>
+> {
+  const raw = await downloadSleeperPlayerFile();
+
+  return injuryStatuses(raw, await gsisIdsFrom(raw));
 }
 
 interface LeagueRoster {

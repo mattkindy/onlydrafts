@@ -1,6 +1,6 @@
 // The weekly refresh, in order: pull this season's nflverse files, pull
-// Sleeper's projections, count this season's touches, count the same
-// work again by leverage, pull the forecast, build the site.
+// Sleeper's projections and injury statuses, count this season's touches,
+// count the same work again by leverage, pull the forecast, build the site.
 // Run: npm run week [-- --season 2026]
 
 import { spawn } from "node:child_process";
@@ -57,7 +57,9 @@ async function main(): Promise<void> {
       args: ["--seasons", String(season), "--force"],
     },
     {
-      what: "Sleeper's projections",
+      // after the nflverse files, because the injury snapshot is for the
+      // week the schedule says comes next
+      what: "Sleeper's projections and injury statuses",
       script: "fetchSleeperProjections.ts",
       args: ["--seasons", String(season)],
     },

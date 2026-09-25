@@ -1,22 +1,29 @@
 /**
- * Downloads Sleeper's weekly projections and writes them to
- * data/curated/sleeperWeekly.csv, one row per player-week, keyed by gsis id.
- * The defences come down in the same call and go to
- * data/curated/sleeperDefenceWeekly.csv, keyed by team abbreviation. A
- * player who matches a gsis id but has no points goes to
- * data/curated/sleeperQuiet.csv.
+ * Downloads Sleeper's weekly projections into sleeperWeekly.csv, keyed by
+ * gsis id, the defences into sleeperDefenceWeekly.csv, and the players who
+ * match but have no points into sleeperQuiet.csv. It also writes every
+ * player's injury status today to sleeperStatus.csv, for the week the site
+ * is about to be built for, whatever seasons were asked for. All four are
+ * in data/curated, whose README says what each one is for.
  *
  * The endpoint needs no auth, so the only politeness is going one week at a
  * time with a pause between calls. A week nobody has projected yet comes
- * back empty, which is how a season still to start stops itself. Every week
- * is fetched, not only the one coming up, because the player card shows a
- * line for each week ahead.
+ * back empty, which is how a season still to start stops itself.
  *
  * Run: npx tsx scripts/fetchSleeperProjections.ts [--seasons 2024,2025,2026]
  */
 
 import { fetchWithRetry } from "../src/data/fetchWithRetry.js";
-import { fetchSleeperGsisIds } from "../src/data/sleeper.js";
+import {
+  loadSleeperStatus, sameSleeperStatus, SLEEPER_STATUS_PATH,
+  sleeperStatusToCsv, teamsAlreadyPlayed, type SleeperStatus,
+} from "../src/data/injuries.js";
+import {
+  canonicalTeam, comingWeek, currentSeason, loadGames,
+} from "../src/data/nflverse.js";
+import {
+  fetchSleeperGsisIds, fetchSleeperInjuryStatuses,
+} from "../src/data/sleeper.js";
 import { writeAtomically } from "../src/data/writeAtomically.js";
 import {
   defenceProjectionsToCsv,
@@ -77,9 +84,39 @@ function parseSeasons(arg: string | undefined): number[] {
   return arg.split(",").map(Number);
 }
 
+/**
+ * The week comes from the same schedule reading the site build uses, so
+ * the snapshot is for the week the build shows. The file is left alone
+ * when nobody's status moved, so a quiet day commits nothing.
+ */
+async function saveInjuryStatuses(): Promise<void> {
+  const season = currentSeason();
+  const games = await loadGames();
+  const week = comingWeek(games, season);
+  const fetchedAt = new Date().toISOString();
+  const played = teamsAlreadyPlayed(games, season, week, fetchedAt.slice(0, 10));
+  const rows: SleeperStatus[] = [...await fetchSleeperInjuryStatuses()]
+    .filter(([, { team }]) => !played.has(canonicalTeam(team)))
+    .map(([gsisId, { status, team }]) =>
+      ({ season, week, gsisId, team, status, fetchedAt }));
+
+  if (sameSleeperStatus(await loadSleeperStatus(), rows)) {
+    console.log(`${season} week ${week}: no injury status has moved`);
+    return;
+  }
+
+  await writeAtomically(SLEEPER_STATUS_PATH, sleeperStatusToCsv(rows));
+  console.log(
+    `${season} week ${week}: ${rows.length} players have an injury status`,
+  );
+}
+
 async function main(): Promise<void> {
   const flag = process.argv.indexOf("--seasons");
   const seasons = parseSeasons(flag === -1 ? undefined : process.argv[flag + 1]);
+  // this downloads the player file again, so it goes before the
+  // crosswalk below and that reads the fresh copy
+  await saveInjuryStatuses();
   const gsisBySleeperId = await fetchSleeperGsisIds();
   console.log(`${gsisBySleeperId.size} sleeper players have a gsis id`);
 
