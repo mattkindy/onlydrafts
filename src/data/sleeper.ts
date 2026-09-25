@@ -67,25 +67,63 @@ export async function fetchSleeperPlayers(): Promise<Map<string, SleeperPlayer>>
 const PLAYER_IDS_URL =
   "https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_playerids.csv";
 
-/** the DynastyProcess id crosswalk, cached on disk like the player file */
-async function loadPlayerIdCrosswalk(): Promise<Record<string, string>[]> {
-  const cachePath = join(RAW_DIR, "db_playerids.csv");
+const CROSSWALK_FILE = join(RAW_DIR, "db_playerids.csv");
 
+async function downloadCrosswalk(): Promise<string> {
+  const response = await fetchWithRetry(PLAYER_IDS_URL, {
+    label: "player id crosswalk",
+  });
+
+  if (!response.ok) {
+    throw new Error(`player id crosswalk returned ${response.status}`);
+  }
+
+  const text = await response.text();
+  await writeAtomically(CROSSWALK_FILE, text);
+  return text;
+}
+
+/**
+ * The downloaded text, or the copy on disk when the download fails and a
+ * copy exists, with a warning. With no copy on disk the download's error
+ * is thrown.
+ */
+export async function freshOrCached(
+  download: () => Promise<string>,
+  readCached: () => Promise<string>,
+  label: string,
+): Promise<string> {
   try {
-    return parseCsv(await readFile(cachePath, "utf8"));
-  } catch {
-    const response = await fetchWithRetry(PLAYER_IDS_URL, {
-      label: "player id crosswalk",
-    });
+    return await download();
+  } catch (error) {
+    const cached = await readCached().catch(() => "");
 
-    if (!response.ok) {
-      throw new Error(`player id crosswalk returned ${response.status}`);
+    if (!cached) {
+      throw error;
     }
 
-    const text = await response.text();
-    await writeAtomically(cachePath, text);
-    return parseCsv(text);
+    console.warn(`${label} did not download, using the copy on disk: ${String(error)}`);
+    return cached;
   }
+}
+
+let crosswalkThisRun: Promise<Record<string, string>[]> | undefined;
+
+/**
+ * The DynastyProcess id crosswalk, downloaded again once per process.
+ * Players who came into the league lately get their Sleeper id in it
+ * during the season, and in CI the copy on disk comes back from a cache
+ * that nothing else replaces. A stale copy is still better than failing
+ * the whole refresh.
+ */
+function loadPlayerIdCrosswalk(): Promise<Record<string, string>[]> {
+  crosswalkThisRun ??= freshOrCached(
+    downloadCrosswalk,
+    () => readFile(CROSSWALK_FILE, "utf8"),
+    "the player id crosswalk",
+  ).then(parseCsv);
+
+  return crosswalkThisRun;
 }
 
 /**
