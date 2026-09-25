@@ -490,10 +490,9 @@ export function Waivers(props: Props) {
   const { drops, listed, priced, wire, working } = useWaiverPrices(
     players, league, props.schedule, posFilter, props.listed, props.week);
 
+  const shift = catchShiftOf(league.pays, props.boardPerCatch);
   const lines: Lines = useMemo(
-    () => linesFor(
-      players, props.week, catchShiftOf(league.pays, props.boardPerCatch)),
-    [players, props.week, league, props.boardPerCatch]);
+    () => linesFor(players, props.week, shift), [players, props.week, shift]);
   const ours = useMemo(
     () => myGameIn(games, league.team, league.userId), [games, league]);
   const nameFor = (key: string) => nameOf(key, rows, lines);

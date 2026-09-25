@@ -303,11 +303,10 @@ export function MyMatchup(props: Props) {
     props.picked?.season, props.picked?.week, props.pays ?? {},
     props.provider, props.scoreboard);
 
+  const shift = catchShiftOf(props.pays ?? {}, props.boardPerCatch);
   const lines = useMemo(
-    () => linesFor(
-      props.players, props.picked?.week,
-      catchShiftOf(props.pays ?? {}, props.boardPerCatch)),
-    [props.players, props.picked, props.pays, props.boardPerCatch]);
+    () => linesFor(props.players, props.picked?.week, shift),
+    [props.players, props.picked?.week, shift]);
   const games = useMemo(
     () => settledGames(props.games, rows, states, lines),
     [props.games, rows, states, lines],

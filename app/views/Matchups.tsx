@@ -306,9 +306,9 @@ export function Matchups(
     scoreboard, season, week, league, status, rosters, weekPointsFor, onMore,
   }: Props,
 ) {
+  const shift = catchShiftOf(pays, boardPerCatch);
   const lines = useMemo(
-    () => linesFor(players, week, catchShiftOf(pays, boardPerCatch)),
-    [players, week, pays, boardPerCatch]);
+    () => linesFor(players, week, shift), [players, week, shift]);
   const { states, remainder, read, trouble } =
     useLiveWeek(season, week, pays, provider, scoreboard);
   const games = useMemo(
