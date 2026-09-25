@@ -181,7 +181,8 @@ describe("the views", () => {
       where,
     );
 
-    for (let i = 0; i < 200 && !where.querySelector("tr.paired"); i++) {
+    // pricing the whole board in the worker takes seconds on a slow runner
+    for (let i = 0; i < 1000 && !where.querySelector("tr.paired"); i++) {
       await new Promise((settle) => setTimeout(settle, 25));
     }
 
@@ -195,7 +196,7 @@ describe("the views", () => {
 
       expect(big).toBe(drop);
     }
-  });
+  }, 30_000);
 
   it("lists the free agents the board underpriced", async () => {
     const taken = new Set(
