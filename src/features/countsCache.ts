@@ -8,8 +8,8 @@
  */
 
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
-import { writeAside } from "./keptFile.js";
+import { basename, join } from "node:path";
+import { pruneOlder, writeAside } from "./keptFile.js";
 import {
   countPlays, POOL_WASTE, type CountedPlays, type PlayRow,
 } from "./fitPlayFactors.js";
@@ -154,8 +154,31 @@ const readCounts = (text: string): CountedPlays | undefined => {
   }
 };
 
-const keep = (at: string, counted: CountedPlays) =>
-  writeAside(at, JSON.stringify(flatten(counted)));
+/**
+ * What a counts file's name says it counted: whether the depth pools kept
+ * the sacks, the season, and the weeks of it. The version and the play
+ * file's stamp are left out, since those are what make a file stale.
+ */
+const COUNTS_NAME = /^counts\d+(w?)-(\d+)((?:w\d+(?:x[^-]+)?)?)-\d+\.json$/;
+
+export const countedAs = (name: string) => {
+  const parts = COUNTS_NAME.exec(name);
+
+  return parts ? `${parts[1]}|${parts[2]}|${parts[3]}` : undefined;
+};
+
+/**
+ * Kept, and the older counts of the same rows cleared out, since a count
+ * of about 40 MB is written for every week walked in season.
+ */
+const keep = async (at: string, counted: CountedPlays) => {
+  await writeAside(at, JSON.stringify(flatten(counted)));
+  const mine = countedAs(basename(at));
+
+  if (mine !== undefined) {
+    await pruneOlder(at, (name) => countedAs(name) === mine);
+  }
+};
 
 /**
  * The counts for rows below this season, from the disk when they are

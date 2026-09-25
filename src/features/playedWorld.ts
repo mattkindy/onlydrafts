@@ -51,7 +51,7 @@ import {
 import { loadDraftPicks, PICK_ROSTER_SEASONS } from "../data/draftPicks.js";
 import { buildMatchupTable } from "./matchupTable.js";
 import { countsFor } from "./countsCache.js";
-import { writeAside } from "./keptFile.js";
+import { pruneOlder, writeAside } from "./keptFile.js";
 import { recentShares } from "./recentShares.js";
 import { rosterWeekFor } from "./rosterWeek.js";
 import { buildPlayerVectors } from "./playerVector.js";
@@ -535,6 +535,9 @@ export async function buildWorld(
 
   if (liveAt && !liveKept && keepsExactly(split)) {
     await writeAside(liveAt, JSON.stringify([...split.entries()]));
+    await pruneOlder(liveAt, (name) =>
+      name.startsWith(`split-live-${SCORE_ON}w${onlyWeek}-`) &&
+      !name.endsWith(".part.json"));
   }
 
   if (live) {
