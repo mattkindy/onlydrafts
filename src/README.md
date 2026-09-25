@@ -179,6 +179,7 @@ when you want to measure it again.
 | The season the board reads the walk out of | `data/kept/played-<season>.json` | written by `scripts/playedSeason.ts` |
 | How often a failed throw reached nobody, and what a sack cost | `features/fitUnaimed.ts` | `scripts/walkVolumeEval.ts` |
 | `COMPONENT_THROUGH_WEEK`, where the component line hands over to the ridge | `features/componentWeek.ts` | the component week finding in `scripts/README.md` |
+| `qbAbsence` in the receivers' and tight ends' fits and not the backs', and the reserve list counting toward it | `features/fitWeeklyByPosition.ts`, `features/weekly.ts` | the quarterback out finding in `scripts/README.md` |
 | `SHIPPED_PRIOR_GAMES`, how far a slate row's recent means are pulled toward last season | `features/recentPrior.ts` | `scripts/earlyWeekEval.ts` |
 | `ANCHOR_THROUGH_WEEK`, the last week the board's anchor writes the slate instead of the ridge | `scripts/buildSite.ts` | `scripts/earlyWeekEval.ts` |
 | `SHIPPED_FIT`, whether the price curve is windowed or a line on log price | `features/marketPrice.ts` | `scripts/marketPriceProbe.ts` |

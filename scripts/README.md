@@ -3033,3 +3033,83 @@ rescale to `wanted` is what discards it, and `wanted` is fitted from
 recent pay and the game total with no weather column at all. Fitting a
 weather column into `wanted` is the change that would make any of this
 reach the slate's headline number.
+
+# What a receiver loses when his quarterback is out
+
+The weekly ridge heard about a club's quarterback change only through
+the implied team total. `qbAbsenceShare` was already on every row, the
+cut of the club's pass attempts over its last four game weeks thrown by
+quarterbacks ruled Out or Doubtful that week, and no position used it.
+The sweep that added it in 83804d9 tried it at every position, judged by
+Spearman over every player-week of 2024 and 2025, and kept it nowhere.
+Its numbers were not written down.
+
+It also missed most of the weeks it was meant for. Over 2016 to 2025
+there are 561 club weeks after week four where the club's busiest
+recent passer threw nothing. The report flags 155 of them, because a
+club never lists a player on a reserve list on its report, while the
+slate saw those players through Sleeper's IR status. The share now also
+counts a quarterback the week's roster has on a reserve list, released,
+or with another club. That flags 251, and in four of them the starter
+threw after all. A game-day inactive is not counted, since that is
+decided at kickoff.
+
+Scored walk-forward: each season from 2019 to 2025 by a fit on 2016
+through the season before, the same player-weeks for every column. The
+rival is the ridge as shipped. The report column uses the share as it
+was. The two ceilings know things nobody knows before the game: which
+quarterbacks threw that week, and that plus how many passes the club
+actually threw. Change in mean absolute error against the rival, PPR:
+
+```
+                                  n    rival  report  +reserve  who threw  attempts
+WR  flagged before the game     805    3.975  -0.071    -0.126     -0.103    -0.157
+WR  usual passer threw nothing 1778    4.182  -0.027    -0.051     -0.097    -0.125
+WR  every week                11993    4.569  -0.001    -0.001     -0.000    -0.064
+TE  flagged before the game     397    3.353  -0.043    -0.024     -0.001    -0.045
+TE  usual passer threw nothing  912    3.491  -0.017    -0.009     -0.001    -0.047
+TE  every week                 5897    3.641  -0.001    -0.000     -0.000    -0.055
+RB  flagged before the game     507    4.727  +0.089    +0.022     -0.014    -0.001
+RB  usual passer threw nothing 1127    4.590  +0.036    +0.009     -0.012    +0.000
+RB  every week                 7507    4.595  +0.001    +0.000     -0.000    -0.001
+```
+
+The standard error on the paired difference is about 0.02 for receivers
+flagged before the game and under 0.01 for tight ends. Over every week
+the change is nothing, which is why a sweep scored on every week threw
+it out: Spearman within a week goes from 0.6548 to 0.6545 for receivers
+and from 0.5824 to 0.5828 for tight ends.
+
+On the weeks it is for, it helps. The rival had flagged receivers 0.54
+points too high, and with the share that is -0.06. It helps receivers
+in all seven held out seasons and tight ends in all seven. On the
+flagged weeks, knowing who actually threw does no better than knowing
+who was ruled out, and knowing the club's actual attempts as well adds
+only another 0.03 for receivers. Across every week the usual passer
+threw nothing, knowing who threw does twice as well, because it also
+catches the benchings. Fitted on every season, a receiver loses
+0.87 points with the whole of the club's recent passing out, and a
+tight end 0.16, on top of what the lower implied total already takes.
+
+Backs are worse off with it in five of seven seasons, so they do not get
+it. The same share multiplied by the back's own last four games does
+help them, -0.046 on the flagged weeks and in all seven seasons, but
+that was the second of two forms tried, so it is not shipped on one
+bench.
+
+Chicago in week 3 of 2026, with Caleb Williams doubtful and 86% of the
+club's recent attempts his: Rome Odunze's ridge line goes from 8.2 to
+7.6, Luther Burden's from 8.3 to 7.7, Kalif Raymond's from 8.9 to 8.2,
+and Colston Loveland's from 5.7 to 5.6.
+
+## What to try next
+
+Benchings. In more than 200 of the 561 weeks the usual passer was
+active on the week's roster with nothing on the report, which is a
+coach's decision the injury data never sees. The club's depth chart for the week is the one pre-game
+source that says it, and it has a week column through 2024.
+
+Take the walk's line into the slate for the pass catchers on these
+weeks. The walk plays the game with the quarterback who is going to
+play, so his accuracy and his depth of target reach the receivers,
+which one share across the whole room cannot do.
