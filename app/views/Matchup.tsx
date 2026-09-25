@@ -17,7 +17,7 @@ import { useMemo } from "preact/hooks";
 import type { Listed } from "../lib/availability.ts";
 import { leadFor, type Explanation } from "../lib/explain.ts";
 import {
-  alternativesFor, lineFor, myGameIn, standingFor, starterState,
+  alternativesFor, lineFor, myGameIn, settledGames, standingFor, starterState,
   type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
 import type { Matchup, Side } from "../lib/providers.ts";
@@ -290,12 +290,16 @@ function Lineup(
 }
 
 export function MyMatchup(props: Props) {
-  const { games, mine, mineId, rows, slots, slate, onMore } = props;
+  const { mine, mineId, rows, slots, slate, onMore } = props;
   const { states, remainder, trouble } = useLiveWeek(
     props.picked?.season, props.picked?.week, props.pays ?? {});
 
   const lines = useMemo(
     () => new Map(props.players.map((p) => [p.key, p])), [props.players]);
+  const games = useMemo(
+    () => settledGames(props.games, rows, states, lines),
+    [props.games, rows, states, lines],
+  );
   const ours = useMemo(
     () => myGameIn(games, mine, mineId), [games, mine, mineId]);
   // the headline and the card under it have to price the same game

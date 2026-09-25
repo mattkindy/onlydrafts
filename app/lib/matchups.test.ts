@@ -1,12 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, hasLineup,
   hurtFrom, initialForm, liveDraws, myGameIn, nextKickoffFrom, outscoreShare,
-  oddsFor, standingFor, sideTotals, situationsFrom, spreadOf, starterState,
-  statesFrom, stockLine,
+  oddsFor, settledGame, standingFor, sideTotals, situationsFrom, spreadOf,
+  starterState, statesFrom, stockLine,
 } from "./matchups.ts";
 import type { GameState, InGameStatus } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
@@ -559,29 +559,36 @@ describe("statesFrom", () => {
     expect(got.has("WSH")).toBe(false);
   });
 
-  it("hands a finished game's box score to both of its teams", () => {
-    const stats = new Map([["derrickhenry", {
-      passCmp: 0, passAtt: 0, passYds: 0, passTd: 0, interceptions: 0,
-      carries: 18, rushYds: 117, rushTd: 3,
-      receptions: 0, targets: 0, recYds: 0, recTd: 0,
-      fgm: 0, fga: 0, xpm: 0, xpa: 0, fumblesLost: 0,
-    }]]);
+  it("hands a game's injuries to both of its teams", () => {
+    const hurt = new Map<string, InGameStatus>([["zayflowers", "questionable"]]);
     const got = statesFrom({
       events: [{
         id: "401872659",
-        status: { type: { state: "post" } },
+        status: { type: { state: "in" } },
         competitions: [{
           competitors: [
             { team: { abbreviation: "BAL" } },
             { team: { abbreviation: "IND" } },
           ],
         }],
+      }, {
+        id: "401872660",
+        status: { type: { state: "post" } },
+        competitions: [{
+          competitors: [
+            { team: { abbreviation: "KC" } },
+            { team: { abbreviation: "LAC" } },
+          ],
+        }],
       }],
-    }, new Map([["401872659", { hurt: new Map(), stats, defences: new Map() }]]));
+    }, new Map([
+      ["401872659", { hurt }],
+      ["401872660", { hurt: new Map() }],
+    ]));
 
-    expect(got.get("BAL")?.stats?.get("derrickhenry")?.rushYds).toBe(117);
-    expect(got.get("IND")?.stats).toBe(stats);
-    expect(got.get("BAL")).not.toHaveProperty("hurt");
+    expect(got.get("BAL")?.hurt).toBe(hurt);
+    expect(got.get("IND")?.hurt).toBe(hurt);
+    expect(got.get("KC")).not.toHaveProperty("hurt");
   });
 });
 
@@ -895,6 +902,66 @@ describe("myGameIn", () => {
 
     expect(myGameIn(games, "Mine", "7")?.at).toBe(0);
     expect(myGameIn(games, "Nobody", "7")).toBe(null);
+  });
+});
+
+describe("settledGame", () => {
+  const rows = rowsFor(
+    row("london", "ATL", 14, "WR", "GB"), row("puka", "LA", 15, "WR", "SF"),
+  );
+  const puka = { key: "puka", team: "LA", slot: "WR", points: 3, booked: 3 };
+  const game = (booked = 10): Matchup => ({
+    sides: [
+      {
+        owner: "me", points: 18.4, adjustment: 0,
+        starters: [{
+          key: "london", name: "Drake London", team: "ATL", slot: "WR",
+          points: 15.4, booked,
+        }, puka],
+        bench: [],
+      },
+      side("them", 0, []),
+    ],
+  });
+
+  it("takes the league's matchup figure once his game is over", () => {
+    const got = settledGame(game(), {
+      rows,
+      states: states({
+        ATL: { where: "post", left: 0 }, LA: { where: "in", left: 0.5 },
+      }),
+    });
+
+    expect(got.sides[0].starters[0]!.points).toBe(10);
+    expect(got.sides[0].starters[1]!.points).toBe(3);
+    // the side is added up again, so the card's rows reach its total
+    expect(got.sides[0].points).toBe(13);
+  });
+
+  it("keeps the stats feed's figure while his game is on", () => {
+    const now = states({
+      ATL: { where: "in", left: 0.2 }, LA: { where: "in", left: 0.5 },
+    });
+    const before = game();
+
+    expect(settledGame(before, { rows, states: now })).toBe(before);
+  });
+
+  it("says once in the console that the two figures disagreed", () => {
+    const told = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const over = states({
+      ATL: { where: "post", left: 0 }, LA: { where: "post", left: 0 },
+    });
+
+    // a figure no other test settles on, since each gap is told only once
+    settledGame(game(11), { rows, states: over });
+    settledGame(game(11), { rows, states: over });
+
+    const aboutLondon = told.mock.calls
+      .filter(([said]) => String(said).startsWith("Drake London"));
+
+    expect(aboutLondon).toHaveLength(1);
+    told.mockRestore();
   });
 });
 

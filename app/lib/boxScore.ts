@@ -1,19 +1,16 @@
 /**
- * What a player has actually done in a game that is on or over.
+ * What a player has actually done in a game that is on or over, read off
+ * the same record the league scores him from.
  *
- * ESPN's game summary includes a box score alongside the injury list, one
- * entry per team, each with a table per category (passing, rushing,
- * receiving, kicking, fumbles). Every table lists its column names in
- * `keys`, and each athlete's `stats` are in that same order, so a column
- * is looked up by name rather than by counting. A player turns up in as
- * many tables as he did things in, and they all fold into one line.
+ * Taking the points from the league and the line from ESPN's public box
+ * score put two clocks on one card, and it could say 10 points beside
+ * 138 yards in a league paying a tenth a yard. Each provider hands back
+ * one record per player for the week, and both come off that record.
  *
- * Only the figures a fantasy card shows are kept. Sacks, punt returns and
- * the defensive tables are read past, because a matchup row has room for
- * about twenty eight characters and none of that would earn the space.
+ * Sleeper's record is keyed by the names its leagues price things under
+ * (rec_yd, pass_td), and ESPN's by the number it gives each stat. Only
+ * the figures a matchup row has room for are kept.
  */
-
-import { boardKeyOf } from "./boardKeys.ts";
 
 /** the few numbers a matchup row has room to say */
 export interface StatLine {
@@ -36,128 +33,99 @@ export interface StatLine {
   fumblesLost: number;
 }
 
-interface Athlete {
-  athlete?: { displayName?: string; fullName?: string };
-  stats?: string[];
+/** what a team's defence has done */
+export interface DefenceLine {
+  allowed: number;
+  sacks: number;
+  picks: number;
+  recovered: number;
+  defTd: number;
 }
-
-interface Category {
-  name?: string;
-  keys?: string[];
-  athletes?: Athlete[];
-  /** the team's column sums, which is all a defence's line needs */
-  totals?: string[];
-}
-
-interface TeamBox {
-  team?: { abbreviation?: string };
-  statistics?: Category[];
-}
-
-/** the part of ESPN's game summary this file reads */
-export interface BoxScoreSaid {
-  boxscore?: { players?: TeamBox[] };
-  header?: { competitions?: { competitors?: Competitor[] }[] };
-}
-
-const EMPTY: StatLine = {
-  passCmp: 0, passAtt: 0, passYds: 0, passTd: 0, interceptions: 0,
-  carries: 0, rushYds: 0, rushTd: 0,
-  receptions: 0, targets: 0, recYds: 0, recTd: 0,
-  fgm: 0, fga: 0, xpm: 0, xpa: 0, fumblesLost: 0,
-};
-
-/** one column of an athlete's row, by the name the table gives it */
-type Said = (key: string) => string;
-
-const number = (said: string | undefined) => {
-  const n = Number(said);
-
-  return Number.isFinite(n) ? n : 0;
-};
-
-/** ESPN writes a made and attempted pair as one "3/4" column */
-function pair(said: string): [number, number] {
-  const halves = said.split("/");
-
-  return [number(halves[0]), number(halves[1])];
-}
-
-/** what each category contributes to a player's line */
-const FROM: Record<string, (said: Said) => Partial<StatLine>> = {
-  passing: (said) => {
-    const [passCmp, passAtt] = pair(said("completions/passingAttempts"));
-
-    return {
-      passCmp, passAtt,
-      passYds: number(said("passingYards")),
-      passTd: number(said("passingTouchdowns")),
-      interceptions: number(said("interceptions")),
-    };
-  },
-  rushing: (said) => ({
-    carries: number(said("rushingAttempts")),
-    rushYds: number(said("rushingYards")),
-    rushTd: number(said("rushingTouchdowns")),
-  }),
-  receiving: (said) => ({
-    receptions: number(said("receptions")),
-    targets: number(said("receivingTargets")),
-    recYds: number(said("receivingYards")),
-    recTd: number(said("receivingTouchdowns")),
-  }),
-  kicking: (said) => {
-    const [fgm, fga] = pair(said("fieldGoalsMade/fieldGoalAttempts"));
-    const [xpm, xpa] = pair(said("extraPointsMade/extraPointAttempts"));
-
-    return { fgm, fga, xpm, xpa };
-  },
-  fumbles: (said) => ({ fumblesLost: number(said("fumblesLost")) }),
-};
-
-const nothingIn = (line: StatLine) =>
-  Object.values(line).every((n) => n === 0);
 
 /**
- * Every player's line in one game, keyed the way the slate keys a player
- * so a matchup row can look him up by the same key it uses for injuries.
+ * A player's week so far, from his league's own feed. A defence is read
+ * by different figures from everybody else, so the two are kept apart.
  */
-export function statLinesFrom(said: BoxScoreSaid): Map<string, StatLine> {
-  const out = new Map<string, StatLine>();
+export type PlayerStats =
+  | { kind: "player"; line: StatLine }
+  | { kind: "defence"; line: DefenceLine };
 
-  for (const team of said.boxscore?.players ?? []) {
-    for (const table of team.statistics ?? []) {
-      const takes = FROM[table.name ?? ""];
+/** one provider's record for one player in one week, by its own stat names */
+export type StatRecord = Record<string, number | null | undefined>;
 
-      if (!takes) {
-        continue;
-      }
+/** the provider's names for each figure, added up where there are several */
+type Names<T> = Record<keyof T, (string | number)[]>;
 
-      const keys = table.keys ?? [];
+const count = (record: StatRecord, names: (string | number)[]) =>
+  names.reduce<number>((sum, name) => {
+    const n = record[String(name)];
 
-      for (const row of table.athletes ?? []) {
-        const name = row.athlete?.displayName ?? row.athlete?.fullName;
+    return sum + (typeof n === "number" && Number.isFinite(n) ? n : 0);
+  }, 0);
 
-        if (!name) {
-          continue;
-        }
+function lineFrom<T>(record: StatRecord, names: Names<T>): T {
+  const pairs = Object.entries(names) as [string, (string | number)[]][];
 
-        const key = boardKeyOf(name, undefined);
-        const column: Said = (of) => row.stats?.[keys.indexOf(of)] ?? "";
-
-        out.set(key, { ...out.get(key) ?? EMPTY, ...takes(column) });
-      }
-    }
-  }
-
-  for (const [key, line] of out) {
-    if (nothingIn(line)) {
-      out.delete(key);
-    }
-  }
-
-  return out;
+  return Object.fromEntries(
+    pairs.map(([field, called]) => [field, count(record, called)]),
+  ) as T;
 }
+
+function statsFrom(
+  record: StatRecord,
+  position: string | undefined,
+  player: Names<StatLine>,
+  defence: Names<DefenceLine>,
+): PlayerStats {
+  if (position === "DEF") {
+    return { kind: "defence", line: lineFrom(record, defence) };
+  }
+
+  return { kind: "player", line: lineFrom(record, player) };
+}
+
+const SLEEPER_LINE: Names<StatLine> = {
+  passCmp: ["pass_cmp"], passAtt: ["pass_att"], passYds: ["pass_yd"],
+  passTd: ["pass_td"], interceptions: ["pass_int"],
+  carries: ["rush_att"], rushYds: ["rush_yd"], rushTd: ["rush_td"],
+  receptions: ["rec"], targets: ["rec_tgt"], recYds: ["rec_yd"],
+  recTd: ["rec_td"],
+  fgm: ["fgm"], fga: ["fga"], xpm: ["xpm"], xpa: ["xpa"],
+  fumblesLost: ["fum_lost"],
+};
+
+const SLEEPER_DEFENCE: Names<DefenceLine> = {
+  allowed: ["pts_allow"], sacks: ["sack"], picks: ["int"],
+  recovered: ["fum_rec"], defTd: ["def_td"],
+};
+
+/**
+ * ESPN's stat numbers. 53 is the catch its leagues pay for, where 41
+ * counts the same catches again, and a defence's touchdowns are split
+ * by how it scored them.
+ */
+const ESPN_LINE: Names<StatLine> = {
+  passCmp: [1], passAtt: [0], passYds: [3], passTd: [4], interceptions: [20],
+  carries: [23], rushYds: [24], rushTd: [25],
+  receptions: [53], targets: [58], recYds: [42], recTd: [43],
+  fgm: [83], fga: [84], xpm: [86], xpa: [87],
+  fumblesLost: [72],
+};
+
+const ESPN_DEFENCE: Names<DefenceLine> = {
+  allowed: [120], sacks: [99], picks: [95], recovered: [96],
+  defTd: [93, 101, 102, 103, 104],
+};
+
+/** a player's line off Sleeper's weekly stats record for him */
+export const sleeperStatsOf = (
+  record: StatRecord, position: string | undefined,
+): PlayerStats => statsFrom(record, position, SLEEPER_LINE, SLEEPER_DEFENCE);
+
+/** and off the stats ESPN puts on a roster entry for the week */
+export const espnStatsOf = (
+  record: StatRecord, position: string | undefined,
+): PlayerStats => statsFrom(record, position, ESPN_LINE, ESPN_DEFENCE);
 
 /** a touchdown count, left out when he has not scored */
 const scored = (td: number) => td > 0 ? `, ${td} TD` : "";
@@ -254,122 +222,6 @@ export function statLineSays(
 
   return says(line);
 }
-/** what a team's defence has done, kept on the same line type under the team's key */
-export interface DefenceLine {
-  allowed: number;
-  sacks: number;
-  picks: number;
-  recovered: number;
-  defTd: number;
-}
-
-const NO_DEFENCE: DefenceLine = {
-  allowed: 0, sacks: 0, picks: 0, recovered: 0, defTd: 0,
-};
-
-export interface Competitor {
-  homeAway?: string;
-  score?: string | number;
-  team?: { abbreviation?: string };
-}
-
-/** the columns of one team's table added up, by column name */
-const totalsOf = (table: Category): Said => {
-  const keys = table.keys ?? [];
-  const totals = table.totals ?? [];
-
-  return (of) => totals[keys.indexOf(of)] ?? "";
-};
-
-/**
- * A recovery is only a takeaway when somebody else fumbled. ESPN lists a
- * player's own fumbles and his recoveries in one table, so a defender's
- * row has no fumbles beside the recovery and a runner falling on his own
- * ball does.
- */
-function recoveriesIn(table: Category): number {
-  const keys = table.keys ?? [];
-  let recovered = 0;
-
-  for (const row of table.athletes ?? []) {
-    const column: Said = (of) => row.stats?.[keys.indexOf(of)] ?? "";
-
-    if (number(column("fumbles")) === 0) {
-      recovered += number(column("fumblesRecovered"));
-    }
-  }
-
-  return recovered;
-}
-
-const DEFENCE_FROM: Record<string, (table: Category) => Partial<DefenceLine>> = {
-  defensive: (table) => {
-    const said = totalsOf(table);
-
-    return {
-      sacks: number(said("sacks")),
-      defTd: number(said("defensiveTouchdowns")),
-    };
-  },
-  interceptions: (table) => {
-    const said = totalsOf(table);
-
-    return {
-      picks: number(said("interceptions")),
-      defTd: number(said("interceptionTouchdowns")),
-    };
-  },
-  fumbles: (table) => ({ recovered: recoveriesIn(table) }),
-};
-
-/** what each side has given up, by team code, off the header's scores */
-function allowedIn(said: BoxScoreSaid): Map<string, number> {
-  const out = new Map<string, number>();
-  const sides = said.header?.competitions?.[0]?.competitors ?? [];
-
-  for (const side of sides) {
-    const other = sides.find((s) => s !== side);
-    const code = side.team?.abbreviation;
-
-    if (code && other) {
-      out.set(code, number(String(other.score ?? "")));
-    }
-  }
-
-  return out;
-}
-
-/**
- * Each defence's line, keyed the way a lineup keys a defence, which is
- * its team code run through the same normalizing as a name.
- */
-export function defenceLinesFrom(said: BoxScoreSaid): Map<string, DefenceLine> {
-  const out = new Map<string, DefenceLine>();
-  const allowed = allowedIn(said);
-
-  for (const team of said.boxscore?.players ?? []) {
-    const code = team.team?.abbreviation;
-
-    if (!code) {
-      continue;
-    }
-
-    let line: DefenceLine = { ...NO_DEFENCE, allowed: allowed.get(code) ?? 0 };
-
-    for (const table of team.statistics ?? []) {
-      const takes = DEFENCE_FROM[table.name ?? ""];
-
-      if (takes) {
-        const took = takes(table);
-        line = { ...line, ...took, defTd: line.defTd + (took.defTd ?? 0) };
-      }
-    }
-
-    out.set(boardKeyOf(code, "DEF", code), line);
-  }
-
-  return out;
-}
 
 const counted = (n: number, what: string) => n > 0 ? `, ${n} ${what}` : "";
 
@@ -388,4 +240,24 @@ export function defenceLineSays(line: DefenceLine | undefined): string[] {
   const allowed = `${line.allowed} allowed`;
 
   return taken ? [allowed, taken] : [allowed];
+}
+
+type Says = (stats: PlayerStats, position: string | undefined) => string[];
+
+const STATS_SAY: Record<PlayerStats["kind"], Says> = {
+  player: (stats, position) =>
+    statLineSays(stats.kind === "player" ? stats.line : undefined, position),
+  defence: (stats) =>
+    defenceLineSays(stats.kind === "defence" ? stats.line : undefined),
+};
+
+/** whatever a player's week says, in the terms his position is read by */
+export function statsSay(
+  stats: PlayerStats | undefined, position: string | undefined,
+): string[] {
+  if (!stats) {
+    return [];
+  }
+
+  return STATS_SAY[stats.kind](stats, position);
 }

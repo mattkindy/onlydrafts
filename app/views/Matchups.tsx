@@ -15,9 +15,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
-import { defenceLineSays, statLineSays } from "../lib/boxScore.ts";
+import { statsSay } from "../lib/boxScore.ts";
 import {
-  hasLineup, lineFor, standingFor, starterState,
+  hasLineup, lineFor, settledGames, standingFor, starterState,
   type GameState, type InGameStatus, type Lines,
 } from "../lib/matchups.ts";
 import type { Matchup, PlayerWeek, Roster, Side } from "../lib/providers.ts";
@@ -113,9 +113,7 @@ function StarterCell(
       <PlayerName
         name={nameOf(starter.key, rows, lines, starter.name)}
         team={line?.team}
-        stats={line?.position === "DEF"
-          ? defenceLineSays(state?.defences?.get(starter.key))
-          : statLineSays(state?.stats?.get(starter.key), line?.position)}
+        stats={statsSay(starter.stats, line?.position)}
         onOpen={onMore ? () => onMore(starter.key) : undefined}
       />
       <span class="num">
@@ -296,14 +294,18 @@ export function Game(
 
 export function Matchups(
   {
-    games, rows, players, mine, slots, pays, season, week, league, status,
-    rosters, weekPointsFor, onMore,
+    games: asRead, rows, players, mine, slots, pays, season, week, league,
+    status, rosters, weekPointsFor, onMore,
   }: Props,
 ) {
   const lines = useMemo(
     () => new Map(players.map((p) => [p.key, p])), [players]);
   const { states, remainder, read, trouble } =
     useLiveWeek(season, week, pays);
+  const games = useMemo(
+    () => settledGames(asRead, rows, states, lines),
+    [asRead, rows, states, lines],
+  );
 
   /** your own game first */
   const ordered = useMemo(() => {

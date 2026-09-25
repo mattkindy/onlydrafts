@@ -18,14 +18,12 @@ import {
   posteriorDraws, posteriorFor, sharedAt, type From, type Mix, type Pace,
 } from "./copula.ts";
 import {
-  defenceLinesFrom, statLinesFrom,
-  type BoxScoreSaid, type Competitor, type DefenceLine, type StatLine,
-} from "./boxScore.ts";
-import {
   chanceWith, explainSwap, worthExplaining,
   type Explanation, type Opening,
 } from "./explain.ts";
-import type { Matchup, Side } from "./providers.ts";
+import {
+  sideTotalOf, type Matchup, type Played, type Side,
+} from "./providers.ts";
 import {
   FLEX_POSITIONS, knownSlot, lineupOf, slotTakes, type Player,
 } from "./scoring.ts";
@@ -67,10 +65,6 @@ export interface GameState {
   left: number;
   /** who has gone off, by the key the slate gives a player */
   hurt?: Map<string, InGameStatus>;
-  /** what each player has done so far, by the same key, once he has done any */
-  stats?: Map<string, StatLine>;
-  /** and each defence's, under its team key */
-  defences?: Map<string, DefenceLine>;
 }
 
 /**
@@ -196,8 +190,9 @@ interface SummaryInjury {
   athlete?: { displayName?: string; fullName?: string };
 }
 
-interface Summary extends BoxScoreSaid {
-  header?: { competitions?: { date?: string; competitors?: Competitor[] }[] };
+/** the part of ESPN's game summary this file reads */
+interface Summary {
+  header?: { competitions?: { date?: string }[] };
   injuries?: { injuries?: SummaryInjury[] }[];
 }
 
@@ -251,8 +246,6 @@ function stateOf(status: ScoreboardStatus | undefined): GameState {
 /** what one game's own summary says, over and above the scoreboard */
 export interface GameReading {
   hurt: Map<string, InGameStatus>;
-  stats: Map<string, StatLine>;
-  defences: Map<string, DefenceLine>;
 }
 
 /** each game's reading, by ESPN's id for the game */
@@ -271,8 +264,6 @@ export function statesFrom(said: {
     const state = {
       ...bare,
       ...(its?.hurt.size ? { hurt: its.hurt } : {}),
-      ...(its?.stats.size ? { stats: its.stats } : {}),
-      ...(its?.defences.size ? { defences: its.defences } : {}),
     };
 
     for (const side of game?.competitors ?? []) {
@@ -401,30 +392,19 @@ export function situationsFrom(said: {
   return out;
 }
 
-const nothingRead = (): GameReading => ({
-  hurt: new Map<string, InGameStatus>(),
-  stats: new Map<string, StatLine>(),
-  defences: new Map<string, DefenceLine>(),
-});
-
-const readingFrom = (said: Summary): GameReading => ({
-  hurt: hurtFrom(said),
-  stats: statLinesFrom(said),
-  defences: defenceLinesFrom(said),
-});
-
 /**
- * Games that have finished, so the page stops asking about them. A box
- * score that is over does not change, and on a Sunday evening a dozen
+ * Games that have finished, so the page stops asking about them. A
+ * summary that is over does not change, and on a Sunday evening a dozen
  * finished games would otherwise be read again every minute.
  */
 const kept = new Map<string, GameReading>();
 
-const summaryOf = (id: string): Promise<GameReading> =>
+/** one game's summary, or null when ESPN did not hand it over */
+const summaryOf = (id: string): Promise<GameReading | null> =>
   fetch(`${SUMMARY}?event=${id}`)
     .then((answered) => answered.ok ? answered.json() : null)
-    .then((said) => said ? readingFrom(said as Summary) : nothingRead())
-    .catch(() => nothingRead());
+    .then((said) => said ? { hurt: hurtFrom(said as Summary) } : null)
+    .catch(() => null);
 
 /** a finished game is read once and then remembered for the session */
 async function readingOf(
@@ -436,23 +416,20 @@ async function readingOf(
     return already;
   }
 
+  // a read that failed is not remembered, since the next minute may get it
   const read = await summaryOf(id);
 
-  // a read that failed is not worth remembering, since the next minute
-  // may well get it
-  if (where === "post" && (read.hurt.size || read.stats.size)) {
+  if (where === "post" && read) {
     kept.set(id, read);
   }
 
-  return read;
+  return read ?? { hurt: new Map() };
 }
 
 /**
- * What each game that has kicked off says about the players in it.
- *
- * The scoreboard includes neither injuries nor a box score, so every game
- * costs a call of its own. A game that has not started is not asked
- * about, and a read that fails leaves that game saying nothing.
+ * Who has gone off in each game that has kicked off. The scoreboard does
+ * not say, so every started game costs a call to ESPN's summary of it. A
+ * read that fails leaves that game saying nothing.
  */
 async function readGames(
   events: ScoreboardEvent[],
@@ -509,6 +486,18 @@ export function nextKickoffFrom(said: { events?: ScoreboardEvent[] }): number | 
     .filter((at) => Number.isFinite(at));
 
   return times.length ? Math.min(...times) : null;
+}
+
+/** things worth a line in the console once a session, and not every minute */
+const alreadySaid = new Set<string>();
+
+function sayOnce(message: string) {
+  if (alreadySaid.has(message)) {
+    return;
+  }
+
+  alreadySaid.add(message);
+  console.info(message);
 }
 
 /**
@@ -975,6 +964,72 @@ export const playersOf = (matchup: Matchup) =>
  * not a projection.
  */
 export const hasLineup = (side: Side) => side.starters.length > 0;
+
+type Settle = <P extends Played & { slot?: string; team?: string }>(
+  player: P) => P;
+
+function settledSide(side: Side, settle: Settle): Side {
+  const starters = side.starters.map(settle);
+  const bench = side.bench.map(settle);
+  const moved = starters.some((his, i) => his !== side.starters[i]) ||
+    bench.some((his, i) => his !== side.bench[i]);
+
+  if (!moved) {
+    return side;
+  }
+
+  const adjustment = side.adjustment ??
+    side.points - sideTotalOf(side.starters, 0);
+
+  return {
+    ...side, starters, bench, points: sideTotalOf(starters, adjustment),
+  };
+}
+
+/**
+ * A matchup with each finished game's players on the provider's matchup
+ * figure. While a game is on, a player's points come off the same stats
+ * record as his line. Once it is over the matchup feed is the result, and
+ * a gap between the two is usually a stat correction, so it is logged.
+ */
+export function settledGame(
+  game: Matchup, week: Pick<WeekPricing, "rows" | "states" | "lines">,
+): Matchup {
+  const settle: Settle = (player) => {
+    const booked = player.booked;
+
+    if (booked === undefined || booked === player.points) {
+      return player;
+    }
+
+    const state = starterState(player, week.rows, week.states, week.lines);
+
+    if (state?.where !== "post") {
+      return player;
+    }
+
+    sayOnce(`${player.name ?? player.key} has ${booked} in the league's ` +
+      `matchups for a finished game and ${player.points} off its stats, ` +
+      "so the matchup figure stands");
+
+    return { ...player, points: booked };
+  };
+  const sides = game.sides.map((side) => settledSide(side, settle));
+
+  if (sides[0] === game.sides[0] && sides[1] === game.sides[1]) {
+    return game;
+  }
+
+  return { ...game, sides: sides as [Side, Side] };
+}
+
+/** every game settled, or left as read until the scoreboard has answered */
+export const settledGames = (
+  games: Matchup[], rows: Map<string, SlateRow>,
+  states: Map<string, GameState> | null, lines?: Lines,
+) => states
+  ? games.map((game) => settledGame(game, { rows, states, lines }))
+  : games;
 
 /** what a side ends the week on, draw by draw */
 export function sideTotals(

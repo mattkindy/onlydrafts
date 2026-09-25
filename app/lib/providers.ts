@@ -10,6 +10,9 @@ import { PLAYED_POSITIONS, type Listed } from "./availability.ts";
 import {
   boardKeyOf, boardPositionOf, boardTeamOf, ESPN_TEAMS,
 } from "./boardKeys.ts";
+import {
+  espnStatsOf, sleeperStatsOf, type PlayerStats, type StatRecord,
+} from "./boxScore.ts";
 import { stored, keep } from "./store.ts";
 import { paidFor, type Pays } from "./scoring.ts";
 
@@ -83,6 +86,26 @@ export interface Matchup {
   sides: [Side, Side];
 }
 
+/** one player in a week's lineup, starting or not */
+export interface Played {
+  key: string;
+  /**
+   * The provider's own spelling, kept because a player the board and the
+   * week both miss would otherwise be drawn as his key, and "treysmack"
+   * on a lineup row reads as somebody's username.
+   */
+  name?: string;
+  /** what he has scored so far, off the same record as his stats */
+  points: number;
+  stats?: PlayerStats;
+  /**
+   * What the provider's matchup feed has him on. It can trail his stats
+   * by a play or two while his game is on, and once the game is over it
+   * is the result.
+   */
+  booked?: number;
+}
+
 export interface Side {
   owner: string;
   /**
@@ -93,16 +116,29 @@ export interface Side {
   ownerId?: string;
   points: number;
   /**
-   * Each starter, in lineup order, with what he has scored so far this
-   * week. The name is the provider's own spelling, kept because a player the
-   * board and the week both miss would otherwise be drawn as his key, and
-   * "treysmack" on a lineup row reads as somebody's username.
+   * What the provider's total gives a side beyond its starters' own
+   * figures, a commissioner's correction for one, so a total rebuilt from
+   * the starters still ends where the provider's does.
    */
-  starters: {
-    key: string; name?: string; team?: string; slot: string; points: number;
-  }[];
-  bench: { key: string; name?: string; points: number }[];
+  adjustment?: number;
+  /** each starter, in lineup order */
+  starters: (Played & { team?: string; slot: string })[];
+  bench: Played[];
 }
+
+/** to the hundredth, which is as far as any league keeps a score */
+export const toHundredth = (points: number) => Math.round(points * 100) / 100;
+
+/** a side's total, off its starters and whatever the provider adds */
+export const sideTotalOf = (
+  starters: { points: number }[], adjustment: number,
+) => toHundredth(
+  starters.reduce((sum, starter) => sum + starter.points, 0) + adjustment);
+
+/** the part of a provider's total its starters' own figures do not explain */
+const adjustmentOf = (total: number, starters: { booked?: number }[]) =>
+  toHundredth(
+    total - starters.reduce((sum, starter) => sum + (starter.booked ?? 0), 0));
 
 export interface DraftNow {
   draft: {
@@ -147,6 +183,21 @@ const ask = (path: string) => fetch(SLEEPER + path).then((r) => r.json());
 const askFresh = (path: string) =>
   fetch(SLEEPER + path + "?t=" + Date.now(), { cache: "no-store" })
     .then((r) => r.json());
+
+/**
+ * A read no older than the given window. Every page open in the same
+ * window asks for the same address, so Sleeper's edge serves all but the
+ * first of them, and the next window's address is one it has never seen.
+ */
+export const askWithin = (path: string, windowMs: number) =>
+  fetch(SLEEPER + path + "?t=" + Math.floor(Date.now() / windowMs))
+    .then((r) => {
+      if (!r.ok) {
+        throw new Error(`Sleeper answered ${r.status} for ${path}`);
+      }
+
+      return r.json();
+    });
 
 /**
  * What ESPN calls each thing it pays for. Its scoring comes back as
@@ -693,16 +744,83 @@ interface SleeperMatchup {
 const sleeperStartingSlots = (slots: string[] | null) =>
   (slots ?? []).filter((slot) => !["BN", "IR", "TAXI"].includes(slot));
 
+/**
+ * What one of Sleeper's weekly stats records is worth in a league: each
+ * count times what the league's settings pay for it. Sleeper spells both
+ * the same way, and this is how it arrives at its own matchup figures.
+ */
+export function sleeperPointsOf(record: StatRecord, pays: Pays): number {
+  let points = 0;
+
+  for (const [category, rate] of Object.entries(pays)) {
+    const n = record[category];
+
+    if (typeof n !== "number" || typeof rate !== "number") {
+      continue;
+    }
+
+    points += n * rate;
+  }
+
+  return toHundredth(points);
+}
+
+/**
+ * A player's points and stat line, both off his one record in the week's
+ * stats. No record means he has not done anything yet.
+ */
+export function sleeperPlayedOf(
+  record: StatRecord | undefined, position: string | undefined, pays: Pays,
+): { points: number; stats?: PlayerStats } {
+  if (!record) {
+    return { points: 0 };
+  }
+
+  return {
+    points: sleeperPointsOf(record, pays),
+    stats: sleeperStatsOf(record, position),
+  };
+}
+
+/**
+ * The week's stats for a live page, or null when they cannot be had. A
+ * league saved before its scoring was kept cannot price them, and then
+ * the matchup feed's own figures are all there is.
+ */
+async function liveStatsFor(
+  league: League, week: number,
+): Promise<WeekStats | null> {
+  if (!Object.keys(league.pays ?? {}).length) {
+    return null;
+  }
+
+  try {
+    return await sleeperWeekStats(league.season, week, LIVE_STATS_FOR);
+  } catch (e) {
+    console.warn("Sleeper's weekly stats did not come back, so this " +
+      "read uses its matchup figures with no stat lines.", e);
+
+    return null;
+  }
+}
+
 /** this week's games, both sides of each, as Sleeper has them now */
 async function sleeperMatchups(
   league: League,
   week: number,
 ): Promise<Matchup[]> {
-  const [raw, rosters] = await Promise.all([
+  const [raw, rosters, stats] = await Promise.all([
     askFresh("/league/" + league.leagueId + "/matchups/" + week),
     ask("/league/" + league.leagueId + "/rosters"),
+    liveStatsFor(league, week),
   ]);
   const players = await sleeperPlayers();
+  // one record gives a player both his points and his line, and the
+  // matchup feed's figure rides along as what settles a finished game
+  const playedOf = (id: string, position: string | undefined, booked: number) =>
+    stats
+      ? { ...sleeperPlayedOf(stats[id], position, league.pays), booked }
+      : { points: booked, booked };
   const ownerOf = new Map(
     (rosters as SleeperRoster[] ?? []).map((r) => [
       r.roster_id,
@@ -734,24 +852,30 @@ async function sleeperMatchups(
           name: player.name,
           ...(player.team ? { team: player.team } : {}),
           slot: slots[i] ?? player.pos ?? "FLEX",
-          points: side.starters_points?.[i] ?? scored[id] ?? 0,
+          ...playedOf(
+            id, player.pos, side.starters_points?.[i] ?? scored[id] ?? 0),
         });
       }
     }
+
+    const adjustment = adjustmentOf(side.points ?? 0, starters);
 
     return {
       owner: ownerOf.get(side.roster_id) ?? String(side.roster_id),
       ...(userOf.get(side.roster_id)
         ? { ownerId: userOf.get(side.roster_id)! }
         : {}),
-      points: side.points ?? 0,
+      points: sideTotalOf(starters, adjustment),
+      adjustment,
       starters,
       bench: (side.players ?? [])
         .filter((id) => !starting.includes(id))
-        .map((id) => ({ player: sleeperPlayerOf(players, id), points: scored[id] ?? 0 }))
-        .filter((b): b is { player: RosterPlayer; points: number } => Boolean(b.player))
-        .map(({ player, points }) => ({
-          key: player.key, name: player.name, points,
+        .map((id) => ({ id, player: sleeperPlayerOf(players, id) }))
+        .filter((b): b is { id: string; player: RosterPlayer } => Boolean(b.player))
+        .map(({ id, player }) => ({
+          key: player.key,
+          name: player.name,
+          ...playedOf(id, player.pos, scored[id] ?? 0),
         })),
     };
   };
@@ -788,24 +912,31 @@ export interface PlayerWeek {
   scoredBy: "league" | "ppr";
 }
 
-type WeekStats = Record<string, Record<string, number>>;
+type WeekStats = Record<string, StatRecord>;
 
 /** the last week of stats read, since a live week is read again and again */
 let statsRead: { key: string; at: number; stats: WeekStats } | null = null;
 
-/** long enough that a page polling for live points is not re-reading it */
+/** how old the week's review lets its stats get */
 const STATS_FOR = 5 * 60 * 1000;
 
+/**
+ * And a live card, which reads them on every poll. Sleeper's edge keeps
+ * the feed for thirty seconds, so asking more often gets nothing newer.
+ */
+const LIVE_STATS_FOR = 30 * 1000;
+
 async function sleeperWeekStats(
-  season: number, week: number,
+  season: number, week: number, goodFor = STATS_FOR,
 ): Promise<WeekStats> {
   const key = season + "/" + week;
 
-  if (statsRead?.key === key && Date.now() - statsRead.at < STATS_FOR) {
+  if (statsRead?.key === key && Date.now() - statsRead.at < goodFor) {
     return statsRead.stats;
   }
 
-  const raw = await askFresh("/stats/nfl/regular/" + season + "/" + week);
+  const raw = await askWithin(
+    "/stats/nfl/regular/" + season + "/" + week, LIVE_STATS_FOR);
   const stats = (raw ?? {}) as WeekStats;
 
   statsRead = { key, at: Date.now(), stats };
@@ -839,7 +970,8 @@ export async function sleeperWeekPoints(
     }
 
     const ppr = line["pts_ppr"] ?? line["pts_half_ppr"] ?? line["pts_std"] ?? 0;
-    const own = priced ? paidFor(line, pays) : 0;
+    // paidFor skips anything that is not a number, a null among them
+    const own = priced ? paidFor(line as Record<string, number>, pays) : 0;
     const took = priced && own !== 0;
     const his = sleeperOnBoard(player);
 
@@ -967,7 +1099,7 @@ function espnTrouble(status: number, leagueId: string, season: number): Error {
   return new Error(`ESPN sent back an error (${status}). Try again in a minute.`);
 }
 
-interface EspnEntry {
+export interface EspnEntry {
   playerId?: number;
   lineupSlotId?: number;
   playerPoolEntry?: {
@@ -980,7 +1112,56 @@ interface EspnEntry {
       proTeamId?: number;
       /** ESPN's own word for it, which is not Sleeper's word */
       injuryStatus?: string;
+      stats?: EspnStatRecord[];
     };
+  };
+}
+
+/**
+ * One of the stat records ESPN puts on a player. Source 0 is what he did
+ * and source 1 a projection, and split 1 is a single scoring period.
+ */
+export interface EspnStatRecord {
+  scoringPeriodId?: number;
+  statSourceId?: number;
+  statSplitTypeId?: number;
+  /** points in this league, by stat, and what they add up to */
+  appliedStats?: Record<string, number>;
+  appliedTotal?: number;
+  /** what he did, by ESPN's number for each stat */
+  stats?: Record<string, number>;
+}
+
+const ACTUAL = 0;
+
+const ONE_PERIOD = 1;
+
+/** what a roster entry says he actually did in the week asked for */
+const espnWeekRecordOf = (entry: EspnEntry, week: number) =>
+  entry.playerPoolEntry?.player?.stats?.find((record) =>
+    record.statSourceId === ACTUAL &&
+    record.statSplitTypeId === ONE_PERIOD &&
+    record.scoringPeriodId === week);
+
+/**
+ * A player's points and stat line, both off his one ESPN record for the
+ * week. ESPN adds up the points on the same record, so the total it puts
+ * on the roster entry is kept as what settles a finished game.
+ */
+export function espnPlayedOf(
+  entry: EspnEntry, position: string | undefined, week: number,
+): { points: number; stats?: PlayerStats; booked: number } {
+  const booked = entry.playerPoolEntry?.appliedStatTotal ?? 0;
+  const record = espnWeekRecordOf(entry, week);
+
+  if (!record) {
+    return { points: booked, booked };
+  }
+
+  return {
+    points: toHundredth(record.appliedTotal ?? booked),
+    ...(record.stats ? { stats: espnStatsOf(record.stats, position) } : {}),
+    booked,
   };
 }
 
@@ -1356,27 +1537,31 @@ async function espnMatchups(league: League, week: number): Promise<Matchup[]> {
       }
 
       const slot = entry.lineupSlotId ?? -1;
-      const points = entry.playerPoolEntry?.appliedStatTotal ?? 0;
+      const played = espnPlayedOf(entry, player.pos, week);
 
       if (ESPN_BENCH.has(slot)) {
-        bench.push({ key: player.key, name: player.name, points });
+        bench.push({ key: player.key, name: player.name, ...played });
       } else {
         starters.push({
           key: player.key,
           name: player.name,
           ...(player.team ? { team: player.team } : {}),
           slot: ESPN_SLOTS[slot] ?? player.pos ?? "FLEX",
-          points,
+          ...played,
         });
       }
     }
 
+    // the live total is only there once a game is under way, so before
+    // kickoff the settled total is the one to use
+    const adjustment = adjustmentOf(
+      side.totalPointsLive ?? side.totalPoints ?? 0, starters);
+
     return {
-      // the live total is only there once a game is under way, so before
-      // kickoff the settled total is the one to use
       owner: ownerOf.get(side.teamId) ?? String(side.teamId),
       ownerId: String(side.teamId),
-      points: side.totalPointsLive ?? side.totalPoints ?? 0,
+      points: sideTotalOf(starters, adjustment),
+      adjustment,
       starters,
       bench,
     };

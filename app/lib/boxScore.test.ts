@@ -1,20 +1,41 @@
+/**
+ * A player's stat line, read off the same record his league scores him
+ * from. The Sleeper fixture is the week 3 stats feed during Falcons at
+ * Packers on a Thursday night in 2026, and the ESPN one is roster entries
+ * from a public league at the same moment, plus a defence from week 2.
+ */
+
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  defenceLinesFrom, defenceLineSays, statLinesFrom, statLineSays,
-  type StatLine,
+  defenceLineSays, espnStatsOf, sleeperStatsOf, statLineSays, statsSay,
+  type StatLine, type StatRecord,
 } from "./boxScore.ts";
 
-const said = JSON.parse(readFileSync(
-  join(import.meta.dirname, "..", "fixtures", "espnSummaryBoxScore.json"),
-  "utf8",
-)) as Parameters<typeof statLinesFrom>[0];
+const fixture = <T>(name: string) => JSON.parse(readFileSync(
+  join(import.meta.dirname, "..", "fixtures", name), "utf8")) as T;
 
-const lines = statLinesFrom(said);
+const sleeper = fixture<Record<string, StatRecord>>("sleeperStatsWeek3.json");
 
-const lineFor = (key: string) => lines.get(key)!;
+interface Entry {
+  playerPoolEntry: {
+    player: {
+      fullName: string;
+      stats: { statSourceId: number; stats: StatRecord }[];
+    };
+  };
+}
+
+const espn = fixture<{ week3: Entry[]; week2: Entry[] }>(
+  "espnRosterEntries.json");
+
+/** what ESPN says a player actually did, which is stat source 0 */
+const espnDid = (entries: Entry[], name: string) => entries
+  .find((entry) => entry.playerPoolEntry.player.fullName === name)!
+  .playerPoolEntry.player.stats
+  .find((record) => record.statSourceId === 0)!.stats;
 
 const bare: StatLine = {
   passCmp: 0, passAtt: 0, passYds: 0, passTd: 0, interceptions: 0,
@@ -25,70 +46,92 @@ const bare: StatLine = {
 
 const line = (some: Partial<StatLine>): StatLine => ({ ...bare, ...some });
 
-describe("statLinesFrom", () => {
-  it("keys a player the way the slate keys him", () => {
-    expect([...lines.keys()]).toContain("derrickhenry");
+describe("sleeperStatsOf", () => {
+  it("reads a receiver's catches, targets and yards off his record", () => {
+    expect(sleeperStatsOf(sleeper["8112"]!, "WR")).toEqual({
+      kind: "player",
+      line: line({ receptions: 8, targets: 9, recYds: 154 }),
+    });
   });
 
-  it("folds a quarterback's passing, rushing and fumbles into one line", () => {
-    expect(lineFor("lamarjackson")).toEqual(line({
-      passCmp: 15, passAtt: 23, passYds: 301, passTd: 1,
-      carries: 4, rushYds: 43, rushTd: 1, fumblesLost: 1,
-    }));
+  it("reads a quarterback's passing", () => {
+    const said = sleeperStatsOf(sleeper["6804"]!, "QB");
+
+    expect(said.kind).toBe("player");
+    expect(said.line).toMatchObject({
+      passCmp: 22, passAtt: 41, passYds: 250, passTd: 2,
+    });
   });
 
-  it("reads a receiver's targets, which ESPN puts last", () => {
-    expect(lineFor("zayflowers")).toEqual(line({
-      receptions: 5, targets: 6, recYds: 150, recTd: 1,
-    }));
+  it("reads a kicker's makes and attempts", () => {
+    expect(sleeperStatsOf(sleeper["650"]!, "K")).toEqual({
+      kind: "player", line: line({ fgm: 2, fga: 2, xpm: 3, xpa: 3 }),
+    });
   });
 
-  it("splits a kicker's made and attempted pairs", () => {
-    expect(lineFor("spencershrader")).toEqual(line({
-      fgm: 1, fga: 1, xpm: 1, xpa: 2,
-    }));
+  it("reads a defence off the record under its team code", () => {
+    expect(sleeperStatsOf(sleeper["ATL"]!, "DEF")).toEqual({
+      kind: "defence",
+      line: { allowed: 13, sacks: 1, picks: 0, recovered: 0, defTd: 0 },
+    });
+    expect(sleeperStatsOf(sleeper["GB"]!, "DEF").line)
+      .toMatchObject({ allowed: 27, picks: 1 });
   });
 
-  it("takes an interception off the passer, not off a defender", () => {
-    expect(lineFor("danieljones").interceptions).toBe(1);
+  it("takes a lost fumble off fum_lost", () => {
+    expect(sleeperStatsOf({ rush_att: 12, rush_yd: 40, fum_lost: 1 }, "RB"))
+      .toEqual({
+        kind: "player",
+        line: line({ carries: 12, rushYds: 40, fumblesLost: 1 }),
+      });
   });
 
-  it("leaves out a player who has not touched the ball", () => {
-    expect(statLinesFrom({
-      boxscore: {
-        players: [{
-          statistics: [{
-            name: "rushing",
-            keys: ["rushingAttempts", "rushingYards", "rushingTouchdowns"],
-            athletes: [{
-              athlete: { displayName: "Nobody At All" },
-              stats: ["0", "0", "0"],
-            }],
-          }],
-        }],
-      },
-    }).size).toBe(0);
+  it("reads a null in the feed as none", () => {
+    expect(sleeperStatsOf({ rec: null, rec_yd: 12 }, "WR").line)
+      .toMatchObject({ receptions: 0, recYds: 12 });
+  });
+});
+
+describe("espnStatsOf", () => {
+  it("reads the same receiver the same way off ESPN's numbers", () => {
+    expect(espnStatsOf(espnDid(espn.week3, "Drake London"), "WR")).toEqual({
+      kind: "player",
+      line: line({ receptions: 8, targets: 9, recYds: 154 }),
+    });
   });
 
-  it("says nothing about a summary with no box score in it", () => {
-    expect(statLinesFrom({}).size).toBe(0);
+  it("reads a quarterback's passing and leaves a fumble he kept off", () => {
+    expect(espnStatsOf(espnDid(espn.week3, "Jordan Love"), "QB")).toEqual({
+      kind: "player",
+      line: line({ passCmp: 22, passAtt: 41, passYds: 249, passTd: 2 }),
+    });
+  });
+
+  it("reads a kicker who has missed his one field goal", () => {
+    expect(statsSay(espnStatsOf(espnDid(espn.week3, "Trey Smack"), "K"), "K"))
+      .toEqual(["0/1 FG, 2/2 XP"]);
+  });
+
+  it("reads a defence, a fumble return touchdown included", () => {
+    expect(espnStatsOf(espnDid(espn.week2, "Patriots D/ST"), "DEF")).toEqual({
+      kind: "defence",
+      line: { allowed: 3, sacks: 4, picks: 1, recovered: 1, defTd: 1 },
+    });
   });
 });
 
 describe("statLineSays", () => {
   it("gives a quarterback his passing and then his rushing, fumble included", () => {
-    expect(statLineSays(lineFor("lamarjackson"), "QB"))
-      .toEqual(["15/23, 301 yds, 1 TD", "4 car, 43 yds, 1 TD, 1 FUM"]);
+    expect(statLineSays(line({
+      passCmp: 15, passAtt: 23, passYds: 301, passTd: 1,
+      carries: 4, rushYds: 43, rushTd: 1, fumblesLost: 1,
+    }), "QB")).toEqual(["15/23, 301 yds, 1 TD", "4 car, 43 yds, 1 TD, 1 FUM"]);
   });
 
   it("counts a quarterback's interception and leaves out his carries", () => {
-    expect(statLineSays(lineFor("danieljones"), "QB"))
-      .toEqual(["14/24, 110 yds, 1 INT"]);
-  });
-
-  it("gives a running back his carries", () => {
-    expect(statLineSays(lineFor("derrickhenry"), "RB"))
-      .toEqual(["18 car, 117 yds, 3 TD"]);
+    expect(statLineSays(line({
+      passCmp: 14, passAtt: 24, passYds: 110, interceptions: 1, carries: 1,
+    }), "QB")).toEqual(["14/24, 110 yds, 1 INT"]);
   });
 
   it("adds what a running back caught after what he ran for", () => {
@@ -99,11 +142,6 @@ describe("statLineSays", () => {
       }),
       "RB",
     )).toEqual(["18 car, 117 yds, 3 TD", "5/7 rec, 20 yds"]);
-  });
-
-  it("gives a receiver his catches over his targets", () => {
-    expect(statLineSays(lineFor("zayflowers"), "WR"))
-      .toEqual(["5/6 rec, 150 yds, 1 TD"]);
   });
 
   it("adds a receiver's carries after what he caught", () => {
@@ -121,16 +159,12 @@ describe("statLineSays", () => {
   });
 
   it("reads a tight end the way it reads a receiver", () => {
-    expect(statLineSays(lineFor("markandrews"), "TE"))
+    expect(statLineSays(line({ receptions: 3, targets: 5, recYds: 36 }), "TE"))
       .toEqual(["3/5 rec, 36 yds"]);
   });
 
-  it("gives a kicker his field goals and his extra points", () => {
-    expect(statLineSays(lineFor("tylerloop"), "K")).toEqual(["1/1 FG, 5/5 XP"]);
-  });
-
   it("shows a kicker the attempts he missed", () => {
-    expect(statLineSays(lineFor("spencershrader"), "K"))
+    expect(statLineSays(line({ fgm: 1, fga: 1, xpm: 1, xpa: 2 }), "K"))
       .toEqual(["1/1 FG, 1/2 XP"]);
   });
 
@@ -143,10 +177,12 @@ describe("statLineSays", () => {
   });
 
   it("keeps a line inside the width a phone has for it", () => {
-    for (const [key, his] of lines) {
+    for (const [id, record] of Object.entries(sleeper)) {
       for (const position of ["QB", "RB", "WR", "TE", "K"]) {
-        for (const piece of statLineSays(his, position)) {
-          expect(piece.length, `${key} as a ${position}`)
+        const said = sleeperStatsOf(record, position);
+
+        for (const piece of statsSay(said, position)) {
+          expect(piece.length, `${id} as a ${position}`)
             .toBeLessThanOrEqual(28);
         }
       }
@@ -154,29 +190,10 @@ describe("statLineSays", () => {
   });
 });
 
-describe("defenceLinesFrom", () => {
-  const defences = defenceLinesFrom(said);
-
-  it("reads each defence off the team totals and the other side's score", () => {
-    expect(defences.get("bal")).toEqual({
-      allowed: 23, sacks: 2, picks: 1, recovered: 1, defTd: 0,
-    });
-    expect(defences.get("ind")).toEqual({
-      allowed: 41, sacks: 2, picks: 0, recovered: 1, defTd: 0,
-    });
-  });
-
-  it("does not count a runner falling on his own fumble as a takeaway", () => {
-    // Lamar Jackson's row says one fumble and no recovery, and Marlon
-    // Humphrey's says no fumble and one recovery: only the second counts
-    expect(defences.get("bal")?.recovered).toBe(1);
-  });
-
+describe("defenceLineSays", () => {
   it("says what it allowed and then what it took", () => {
-    expect(defenceLineSays(defences.get("bal")))
-      .toEqual(["23 allowed", "2 sacks, 1 INT, 1 FR"]);
-    expect(defenceLineSays(defences.get("ind")))
-      .toEqual(["41 allowed", "2 sacks, 1 FR"]);
+    expect(statsSay(sleeperStatsOf(sleeper["GB"]!, "DEF"), "DEF"))
+      .toEqual(["27 allowed", "1 INT"]);
     expect(defenceLineSays(undefined)).toEqual([]);
   });
 
@@ -184,5 +201,16 @@ describe("defenceLinesFrom", () => {
     expect(defenceLineSays({
       allowed: 0, sacks: 1, picks: 0, recovered: 0, defTd: 1,
     })).toEqual(["0 allowed", "1 sack, 1 TD"]);
+  });
+});
+
+describe("statsSay", () => {
+  it("says nothing before a player has a record", () => {
+    expect(statsSay(undefined, "WR")).toEqual([]);
+  });
+
+  it("reads a defence as a defence whatever position it is asked for", () => {
+    expect(statsSay(sleeperStatsOf(sleeper["ATL"]!, "DEF"), undefined))
+      .toEqual(["13 allowed", "1 sack"]);
   });
 });

@@ -331,7 +331,11 @@ function App() {
     return () => { stale = true; };
   }, [view, week]);
 
-  /** the league's own games, which only the provider knows */
+  /**
+   * The league's own games, which only the provider knows. The same read
+   * brings each player's stats, so his points and his line never come
+   * from two different moments.
+   */
   useEffect(() => {
     if (!WEEK_VIEWS.includes(view) || !active || !week) {
       return;

@@ -15,16 +15,19 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { statsSay, type StatRecord } from "./boxScore.ts";
 import {
-  espnPays, espnSlotsOf, listedPlayers, playerFileGoodFor, sleeperOnBoard,
-  type EspnScoringItem, type League,
+  espnPays, espnPlayedOf, espnSlotsOf, listedPlayers, playerFileGoodFor,
+  sleeperOnBoard, sleeperPlayedOf, sleeperPointsOf,
+  type EspnScoringItem, type EspnStatRecord, type League,
 } from "./providers.ts";
-import { knownSlot, slotTakes } from "./scoring.ts";
+import { knownSlot, slotTakes, type Pays } from "./scoring.ts";
 import { keep } from "./store.ts";
 
-const items = JSON.parse(readFileSync(
-  join(import.meta.dirname, "..", "fixtures", "espnScoringItems.json"), "utf8",
-)) as EspnScoringItem[];
+const fixture = <T>(name: string) => JSON.parse(readFileSync(
+  join(import.meta.dirname, "..", "fixtures", name), "utf8")) as T;
+
+const items = fixture<EspnScoringItem[]>("espnScoringItems.json");
 
 describe("a standard PPR league on ESPN", () => {
   const pays = espnPays(items);
@@ -98,11 +101,20 @@ const serve = (routes: Record<string, unknown>) => {
   }) as unknown as typeof fetch;
 };
 
+/**
+ * Sleeper's player file, which a session reads once and keeps, so every
+ * test in this file shares it and the players any of them need are here.
+ */
 const SLEEPER_MEN = {
   "100": { full_name: "Josh Allen", position: "QB", team: "BUF" },
   "200": { full_name: "Bijan Robinson", position: "RB", team: "ATL" },
   "300": { full_name: "Puka Nacua", position: "WR", team: "LA" },
   "400": { full_name: "Jahmyr Gibbs", position: "RB", team: "DET" },
+  "8112": { full_name: "Drake London", position: "WR", team: "ATL" },
+  "650": { full_name: "Nick Folk", position: "K", team: "ATL" },
+  "8168": { full_name: "Skyy Moore", position: "WR", team: "GB" },
+  // Sleeper gives a defence no name, only its team
+  "ATL": { position: "DEF", team: "ATL" },
 };
 
 describe("this week's matchups on Sleeper", () => {
@@ -180,20 +192,218 @@ describe("this week's matchups on Sleeper", () => {
 
     expect([home.owner, away.owner]).toEqual(["one", "two"]);
     expect([home.points, away.points]).toEqual([88.5, 71]);
+    // a league with no scoring kept cannot price the stats feed, so the
+    // matchup feed's figures are used as they are
     expect(home.starters).toEqual([
       {
         key: "joshallen", name: "Josh Allen", team: "BUF", slot: "QB",
-        points: 24.1,
+        points: 24.1, booked: 24.1,
       },
       {
         key: "bijanrobinson", name: "Bijan Robinson", team: "ATL", slot: "RB",
-        points: 64.4,
+        points: 64.4, booked: 64.4,
       },
     ]);
-    expect(home.bench)
-      .toEqual([{ key: "pukanacua", name: "Puka Nacua", points: 7.2 }]);
+    expect(home.bench).toEqual([
+      { key: "pukanacua", name: "Puka Nacua", points: 7.2, booked: 7.2 },
+    ]);
     expect(away.starters.map((s) => s.key)).toEqual(["pukanacua", "jahmyrgibbs"]);
     expect(away.bench).toEqual([]);
+  });
+});
+
+const stats = fixture<Record<string, StatRecord>>("sleeperStatsWeek3.json");
+
+/** the league that paid Drake London nothing a catch and a tenth a yard */
+const pays = fixture<Pays>("sleeperScoringSettings.json");
+
+describe("sleeperPointsOf", () => {
+  it("gives a receiver a tenth a yard and nothing a catch, as Sleeper did", () => {
+    // 8 catches for 154 yards, which Sleeper's matchups had at 15.4 too
+    expect(sleeperPointsOf(stats["8112"]!, pays)).toBe(15.4);
+  });
+
+  it("pays a kicker by field goal yardage where the league does", () => {
+    // 75 yards of field goals at a tenth, and three extra points
+    expect(sleeperPointsOf(stats["650"]!, pays)).toBe(10.5);
+  });
+
+  it("pays kick return yards on a receiver", () => {
+    // 31 receiving yards and 101 on returns at a hundredth
+    expect(sleeperPointsOf(stats["8168"]!, pays)).toBe(4.11);
+  });
+
+  it("scores a defence off its points allowed band and what it took", () => {
+    // a sack, a blocked kick, a fourth down stop, 7 to 13 allowed, and
+    // 68 return yards at a hundredth
+    expect(sleeperPointsOf(stats["ATL"]!, pays)).toBe(8.68);
+    // Sleeper's own matchups had the Packers at 3.52
+    expect(sleeperPointsOf(stats["GB"]!, pays)).toBe(3.52);
+  });
+
+  it("scores a two point catch, return yards and a lost fumble together", () => {
+    const record: StatRecord = {
+      rec: 5, rec_yd: 62, rec_td: 1, rec_2pt: 1,
+      kr_yd: 48, pr_yd: 12, fum_lost: 1,
+      // what Sleeper puts beside the counts, which no league prices
+      pts_std: 99, gp: 1, rec_tgt: 7,
+    };
+
+    // 6.2 + 6 + 2 + 0.48 + 0.12 - 2
+    expect(sleeperPointsOf(record, pays)).toBe(12.8);
+  });
+
+  it("pays a quarterback's two point pass at the league's own rate", () => {
+    expect(sleeperPointsOf({ pass_yd: 200, pass_2pt: 1 }, { ...pays, pass_2pt: 1 }))
+      .toBe(9);
+  });
+
+  it("gives nothing for a category the league has no rate for", () => {
+    expect(sleeperPointsOf({ rec: 10 }, { rec_yd: 0.1 })).toBe(0);
+  });
+});
+
+describe("sleeperPlayedOf", () => {
+  it("takes a player's points and his line off the one record", () => {
+    const played = sleeperPlayedOf(stats["8112"], "WR", pays);
+
+    expect(played.points).toBe(15.4);
+    expect(played.stats).toEqual({
+      kind: "player",
+      line: expect.objectContaining({ receptions: 8, targets: 9, recYds: 154 }),
+    });
+    // the line prices to the points beside it in this league
+    expect(played.stats?.kind === "player" && played.stats.line.recYds * 0.1)
+      .toBeCloseTo(played.points, 6);
+  });
+
+  it("gives a player with no record nothing and no line", () => {
+    expect(sleeperPlayedOf(undefined, "WR", pays)).toEqual({ points: 0 });
+  });
+});
+
+describe("this week's cards on Sleeper, off the stats feed", () => {
+  /**
+   * Sleeper's matchups had London at 10 for a spell while the stats had
+   * 154 yards, which is how a card came to say 10 points beside a line
+   * worth fifteen. Each test asks for its own week, since a session keeps
+   * the week's stats for thirty seconds.
+   */
+  const matchups = [
+    {
+      matchup_id: 1, roster_id: 1, points: 29.18,
+      starters: ["8112", "650", "ATL"], players: ["8112", "650", "ATL", "8168"],
+      starters_points: [10, 10.5, 8.68],
+      players_points: { "8112": 10, "650": 10.5, "ATL": 8.68, "8168": 4.11 },
+    },
+    {
+      matchup_id: 1, roster_id: 2, points: 7.2,
+      starters: ["300"], players: ["300"],
+      starters_points: [7.2], players_points: { "300": 7.2 },
+    },
+  ];
+  const rosters = [
+    { roster_id: 1, owner_id: "u1", players: ["8112", "650", "ATL", "8168"] },
+    { roster_id: 2, owner_id: "u2", players: ["300"] },
+  ];
+  const league = leagueLike({
+    season: 2026, pays, slots: ["WR", "K", "DEF", "BN"],
+    members: { u1: "one", u2: "two" },
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("puts the stats feed's points and line on the same card", async () => {
+    serve({
+      "/players/nfl": SLEEPER_MEN,
+      "/matchups/3": matchups,
+      "/rosters": rosters,
+      "/stats/nfl/regular/2026/3": stats,
+    });
+
+    const { PROVIDERS } = await import("./providers.ts");
+    const [game] = await PROVIDERS["sleeper"]!.matchupsFor!(league, 3);
+    const [home, away] = game!.sides;
+    const london = home.starters[0]!;
+
+    expect(london).toMatchObject({
+      key: "drakelondon", slot: "WR", points: 15.4, booked: 10,
+    });
+    expect(statsSay(london.stats, "WR")).toEqual(["8/9 rec, 154 yds"]);
+    expect(home.starters[2]).toMatchObject({ slot: "DEF", points: 8.68 });
+    expect(statsSay(home.starters[2]!.stats, "DEF"))
+      .toEqual(["13 allowed", "1 sack"]);
+    expect(home.bench[0]).toMatchObject({ name: "Skyy Moore", points: 4.11 });
+    // the side adds up its own starters, so the card's rows reach its total
+    expect(home.points).toBe(34.58);
+    expect(home.adjustment).toBe(0);
+    // Puka Nacua has no record for the week, since the Rams have not played
+    expect(away.starters[0]).toMatchObject({ points: 0, booked: 7.2 });
+    expect(away.starters[0]!.stats).toBeUndefined();
+  });
+
+  it("keeps a commissioner's correction on top of the starters", async () => {
+    serve({
+      "/players/nfl": SLEEPER_MEN,
+      "/matchups/4": [{ ...matchups[0], points: 31.18 }, matchups[1]],
+      "/rosters": rosters,
+      "/stats/nfl/regular/2026/4": stats,
+    });
+
+    const { PROVIDERS } = await import("./providers.ts");
+    const [game] = await PROVIDERS["sleeper"]!.matchupsFor!(league, 4);
+
+    expect(game!.sides[0].adjustment).toBe(2);
+    expect(game!.sides[0].points).toBe(36.58);
+  });
+
+  it("falls back to the matchup feed with no lines when the stats will not come", async () => {
+    serve({
+      "/players/nfl": SLEEPER_MEN,
+      "/matchups/5": matchups,
+      "/rosters": rosters,
+    });
+    // the stats route is left unserved, which throws the way a failed read does
+    const { PROVIDERS } = await import("./providers.ts");
+    const [game] = await PROVIDERS["sleeper"]!.matchupsFor!(league, 5);
+    const london = game!.sides[0].starters[0]!;
+
+    expect(london.points).toBe(10);
+    expect(london.stats).toBeUndefined();
+    expect(game!.sides[0].points).toBe(29.18);
+  });
+});
+
+/** a roster entry as ESPN sent it, trimmed to what a matchup reads */
+interface EspnFixtureEntry {
+  playerId: number;
+  lineupSlotId: number;
+  playerPoolEntry: {
+    appliedStatTotal: number;
+    player: { fullName: string; stats: EspnStatRecord[] };
+  };
+}
+
+describe("espnPlayedOf", () => {
+  const { week2 } = fixture<{ week2: EspnFixtureEntry[] }>(
+    "espnRosterEntries.json");
+
+  it("reads a defence's points and line off its record for the week", () => {
+    const played = espnPlayedOf(week2[0]!, "DEF", 2);
+
+    expect(played.points).toBe(20);
+    expect(played.booked).toBe(20);
+    expect(statsSay(played.stats, "DEF"))
+      .toEqual(["3 allowed", "4 sacks, 1 INT, 1 FR, 1 TD"]);
+  });
+
+  it("reads nothing off a record for another week", () => {
+    const played = espnPlayedOf(week2[0]!, "DEF", 3);
+
+    expect(played.stats).toBeUndefined();
+    expect(played.points).toBe(20);
   });
 });
 
@@ -336,16 +546,65 @@ describe("this week's matchups on ESPN", () => {
     expect(home.starters).toEqual([
       {
         key: "joshallen", name: "Josh Allen", team: "BUF", slot: "QB",
-        points: 24.1,
+        points: 24.1, booked: 24.1,
       },
       {
         key: "bijanrobinson", name: "Bijan Robinson", team: "ATL", slot: "RB",
-        points: 64.4,
+        points: 64.4, booked: 64.4,
       },
     ]);
-    expect(home.bench)
-      .toEqual([{ key: "pukanacua", name: "Puka Nacua", points: 7.2 }]);
+    expect(home.bench).toEqual([
+      { key: "pukanacua", name: "Puka Nacua", points: 7.2, booked: 7.2 },
+    ]);
     expect(away.starters.map((s) => s.slot)).toEqual(["RB", "WR"]);
+  });
+
+  it("takes points and a line off the same stats record ESPN sends", async () => {
+    const entries = fixture<{ week3: EspnFixtureEntry[] }>(
+      "espnRosterEntries.json").week3;
+    const byName = (name: string) => entries
+      .find((e) => e.playerPoolEntry.player.fullName === name)!;
+
+    serve({
+      "/players?": [],
+      "/leagues/77": {
+        teams: [{ id: 1, name: "Team One" }, { id: 2, name: "Team Two" }],
+        schedule: [{
+          matchupPeriodId: 3,
+          home: {
+            teamId: 1, totalPoints: 23.4, totalPointsLive: 24.4,
+            rosterForCurrentScoringPeriod: { entries: [
+              { ...byName("Drake London"), lineupSlotId: 4 },
+              { ...byName("Trey Smack"), lineupSlotId: 17 },
+            ] },
+          },
+          away: {
+            teamId: 2, totalPoints: 17.96,
+            rosterForCurrentScoringPeriod: { entries: [
+              { ...byName("Jordan Love"), lineupSlotId: 0 },
+              { ...byName("Josh Allen"), lineupSlotId: 7 },
+            ] },
+          },
+        }],
+      },
+    });
+
+    const { PROVIDERS } = await import("./providers.ts");
+    const league = leagueLike({ provider: "espn", leagueId: "77", season: 2026 });
+    const [game] = await PROVIDERS["espn"]!.matchupsFor!(league, 3);
+    const [home, away] = game!.sides;
+    const london = home.starters[0]!;
+
+    // this league pays a point a catch, so 8 catches and 154 yards is 23.4
+    expect(london.points).toBe(23.4);
+    expect(statsSay(london.stats, "WR")).toEqual(["8/9 rec, 154 yds"]);
+    expect(statsSay(home.starters[1]!.stats, "K")).toEqual(["0/1 FG, 2/2 XP"]);
+    expect(home.points).toBe(24.4);
+    expect(statsSay(away.starters[0]!.stats, "QB"))
+      .toEqual(["22/41, 249 yds, 2 TD"]);
+    // Josh Allen has only a projection for the week, which is not a line
+    expect(away.starters[1]).toMatchObject({ points: 0 });
+    expect(away.starters[1]!.stats).toBeUndefined();
   });
 
   it("reads OP as a superflex and the two narrow flexes by their own names", async () => {
