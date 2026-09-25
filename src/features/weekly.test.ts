@@ -5,6 +5,7 @@ import {
 } from "../data/nflverse.js";
 import { emptyStatLine, presets } from "../scoring/fantasyPoints.js";
 import type { WeeklyAvailability, WeekStatus } from "../data/weeklyStatus.js";
+import type { RosterAppearance } from "../graph/build.js";
 import { buildWeeklyExamples } from "./weekly.js";
 
 function statWeek(week: number, recYds: number): PlayerWeekStats {
@@ -251,6 +252,41 @@ describe("absence share", () => {
     expect(examples[0]!.playerId).toBe("qb2");
     expect(examples[0]!.absenceShare).toBeCloseTo(0.75);
     expect(examples[0]!.qbAbsenceShare).toBe(0);
+  });
+
+  const withPasser = [...group, ...[1, 2, 3, 4, 5].map((w) => passWeek("qb", w, 30))];
+  const listedAs = (status: string, teamId = "DET"): RosterAppearance[] => [{
+    playerId: "qb", name: "qb", rawPosition: "QB", teamId, season: 2023, week: 5, status,
+  }];
+  const qbShareWith = (rosters: RosterAppearance[]) =>
+    buildWeeklyExamples(
+      2023, withPasser, new Map(), games, [], presets.ppr, undefined, undefined,
+      ruledOut([], 5), rosters,
+    ).find((e) => e.playerId === "starter")!.qbAbsenceShare;
+
+  it("counts a quarterback on a reserve list, whom the report never lists", () => {
+    expect(qbShareWith(listedAs("RES"))).toBeCloseTo(1);
+  });
+
+  it("counts a quarterback who is now with another club", () => {
+    expect(qbShareWith(listedAs("ACT", "KC"))).toBeCloseTo(1);
+  });
+
+  it("leaves a game-day inactive alone, since that is settled at kickoff", () => {
+    expect(qbShareWith(listedAs("INA"))).toBe(0);
+  });
+
+  it("reads the reserve list for quarterbacks only", () => {
+    const rosters: RosterAppearance[] = [{
+      playerId: "starter", name: "starter", rawPosition: "RB", teamId: "DET",
+      season: 2023, week: 5, status: "RES",
+    }];
+    const examples = buildWeeklyExamples(
+      2023, group, new Map(), games, [], presets.ppr, undefined, undefined,
+      ruledOut([], 5), rosters,
+    );
+
+    expect(examples.find((e) => e.playerId === "backup")!.absenceShare).toBe(0);
   });
 });
 

@@ -123,7 +123,11 @@ export interface WeeklyExample {
    * backup of an injured starter sees a number near one.
    */
   absenceShare: number;
-  /** the same measure for his club's quarterbacks, 0 for a quarterback */
+  /**
+   * the cut of his club's pass attempts over its last four game weeks thrown
+   * by quarterbacks who will not play this week, ruled out or on a reserve
+   * list. Near one when the usual starter misses the game. 0 for a quarterback.
+   */
   qbAbsenceShare: number;
   /** where his club listed him this week, 1 for a starter, 0 unknown */
   depthRank: number;
@@ -215,7 +219,7 @@ interface PositionGroups {
  */
 function buildPositionGroups(
   byPlayer: Map<string, PlayerWeekStats[]>,
-  availability: WeeklyAvailability | undefined,
+  isOut: (playerId: string, week: number, last: PlayerWeekStats) => boolean,
   calendar: ClubCalendar,
 ): PositionGroups {
   const total = new Map<string, number>();
@@ -248,7 +252,7 @@ function buildPositionGroups(
       const key = groupKey(last.teamId, last.position, week);
       total.set(key, (total.get(key) ?? 0) + volume);
 
-      if (availability?.status.get(`${playerId}|${week}`)?.out) {
+      if (isOut(playerId, week, last)) {
         missing.set(key, (missing.get(key) ?? 0) + volume);
       }
     }
@@ -265,6 +269,58 @@ function buildPositionGroups(
 
       return (missing.get(key) ?? 0) / group;
     },
+  };
+}
+
+/** a game-day inactive is decided at kickoff, so it still counts as available */
+const AVAILABLE_BEFORE_KICKOFF = ["ACT", "INA"];
+
+/**
+ * Whether the week's roster had him off the active list for a reason settled
+ * before kickoff: a reserve list, a release, or another club. A club never
+ * lists a player on a reserve list on its injury report, so without this a
+ * training row missed every starter on injured reserve, while the slate saw
+ * him through Sleeper's IR status. A week the roster file does not cover
+ * says nothing, and the slate falls back on Sleeper alone.
+ */
+function offRosterBeforeKickoff(
+  rosters: RosterAppearance[] | undefined,
+): (playerId: string, week: number, teamId: string) => boolean {
+  const listed = new Map<string, RosterAppearance>();
+
+  for (const row of rosters ?? []) {
+    listed.set(`${row.playerId}|${row.week}`, row);
+  }
+
+  return (playerId, week, teamId) => {
+    const row = listed.get(`${playerId}|${week}`);
+
+    if (!row) {
+      return false;
+    }
+
+    return !AVAILABLE_BEFORE_KICKOFF.includes(row.status ?? "") ||
+      row.teamId !== teamId;
+  };
+}
+
+/**
+ * Who a position group counts as gone this week. The quarterbacks also count
+ * the reserve list; the other groups' share was measured on the report
+ * alone and ships that way.
+ */
+function outOfGroup(
+  availability: WeeklyAvailability | undefined,
+  rosters: RosterAppearance[] | undefined,
+): (playerId: string, week: number, last: PlayerWeekStats) => boolean {
+  const offRoster = offRosterBeforeKickoff(rosters);
+
+  return (playerId, week, last) => {
+    if (availability?.status.get(`${playerId}|${week}`)?.out) {
+      return true;
+    }
+
+    return last.position === "QB" && offRoster(playerId, week, last.teamId);
   };
 }
 
@@ -351,7 +407,8 @@ export function buildWeeklyExamples(
   }
 
   const calendar = clubCalendar([...byPlayer.values()].flat());
-  const groups = buildPositionGroups(byPlayer, availability, calendar);
+  const groups = buildPositionGroups(
+    byPlayer, outOfGroup(availability, rosters), calendar);
   const volume = buildWeeklyVolume(byPlayer, availability, rosters);
 
   // points allowed by each defense to each position, accumulated by week
