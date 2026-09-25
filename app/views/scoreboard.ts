@@ -5,17 +5,19 @@
  * Nothing is asked for until both the season and the week are known, and a
  * read that fails leaves the states empty with a line a page can show. The
  * scoreboard is read every minute while a game is on, and before the first
- * kickoff it waits for that kickoff, so a page opened on Sunday morning
- * notices the games starting. It reads again whenever the tab comes back
- * into view.
+ * kickoff it waits for that kickoff. It reads again whenever the tab comes
+ * back into view.
  *
- * Several tabs price the same week and only one is ever on screen, so each
- * reads the scoreboard through the same hook rather than sharing one read.
+ * The page polls once, at the top, and hands the reading down. Its count
+ * of reads is the clock the league's points are read on as well, so a
+ * card's points and its game clock come from the same minute.
  */
 
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 
-import { gameStates, type GameState, type LiveSituation } from "../lib/matchups.ts";
+import {
+  gameStates, type GameState, type LiveSituation,
+} from "../lib/matchups.ts";
 import type { League } from "../lib/providers.ts";
 import {
   gamesToPlay, REMAINDER_DRAWS, remainderInWorker, simTablesFor,
@@ -75,10 +77,28 @@ interface PolledWeek {
   trouble: string;
 }
 
-function usePolledScoreboard(
+export interface WeekPoll extends PolledWeek {
+  /** the week the poll is for, so a tab can tell the reading is its own */
+  season: number | undefined;
+  week: number | undefined;
+  /**
+   * How many reads have been asked for. Anything that has to move with the
+   * scoreboard reads again when this changes, on the same tick.
+   */
+  tick: number;
+}
+
+/** what reads the scoreboard, which a test can stand in for */
+export type ReadGames = typeof gameStates;
+
+/**
+ * Reads the week's scoreboard, and again on the rules `nextReadIn` sets,
+ * until every game is over.
+ */
+export function useWeekPoll(
   season: number | undefined, week: number | undefined,
-  provider: Provider = "espn",
-): PolledWeek {
+  provider: Provider = "espn", readGames: ReadGames = gameStates,
+): WeekPoll {
   const [reading, setReading] = useState<Reading | null>(null);
   const [trouble, setTrouble] = useState("");
   /** bumped to ask for another read */
@@ -94,7 +114,7 @@ function usePolledScoreboard(
 
     let stale = false;
 
-    gameStates(season, week, provider)
+    readGames(season, week, provider)
       .then((got) => {
         if (!stale) {
           setReading({ of, ...got, read: new Date() });
@@ -148,18 +168,44 @@ function usePolledScoreboard(
     return () => document.removeEventListener("visibilitychange", back);
   }, []);
 
-  return {
+  return useMemo(() => ({
+    season,
+    week,
+    tick: asks,
     states: current?.states ?? null,
     situations: current?.situations ?? null,
     read: current?.read ?? null,
     trouble,
-  };
+  }), [season, week, asks, current, trouble]);
+}
+
+const NOT_READ: PolledWeek = {
+  states: null, situations: null, read: null, trouble: "",
+};
+
+/**
+ * The page's poll where the page hands one down, and a poll of the tab's
+ * own where it does not. A tab asking about another week gets no reading.
+ */
+function useWeekRead(
+  season: number | undefined, week: number | undefined,
+  provider: Provider | undefined, shared: WeekPoll | null | undefined,
+): PolledWeek {
+  const own = useWeekPoll(
+    shared ? undefined : season, shared ? undefined : week, provider);
+
+  if (!shared) {
+    return own;
+  }
+
+  return shared.season === season && shared.week === week ? shared : NOT_READ;
 }
 
 export function useScoreboard(
   season: number | undefined, week: number | undefined,
+  shared?: WeekPoll | null,
 ): { states: Map<string, GameState> | null; trouble: string } {
-  const { states, trouble } = usePolledScoreboard(season, week);
+  const { states, trouble } = useWeekRead(season, week, undefined, shared);
 
   return { states, trouble };
 }
@@ -183,10 +229,10 @@ export interface LiveWeek {
  */
 export function useLiveWeek(
   season: number | undefined, week: number | undefined, pays: Pays,
-  provider?: Provider,
+  provider?: Provider, shared?: WeekPoll | null,
 ): LiveWeek {
   const { states, situations, read, trouble } =
-    usePolledScoreboard(season, week, provider);
+    useWeekRead(season, week, provider, shared);
   const [remainder, setRemainder] =
     useState<Map<string, number[]> | null>(null);
 

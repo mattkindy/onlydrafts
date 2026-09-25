@@ -31,7 +31,7 @@ import { injuryBadge } from "./Draft.tsx";
 import { PlayerName } from "./PlayerName.tsx";
 import { Game } from "./Matchups.tsx";
 import { Reading } from "./Reading.tsx";
-import { useLiveWeek } from "./scoreboard.ts";
+import { useLiveWeek, type WeekPoll } from "./scoreboard.ts";
 
 interface Props {
   weeks: WeekRef[];
@@ -58,6 +58,8 @@ interface Props {
   boardPerCatch?: number | undefined;
   /** whose scoreboard says where each game is, which is the league's own */
   provider?: League["provider"] | undefined;
+  /** the page's scoreboard poll, which the league's points are read on too */
+  scoreboard?: WeekPoll | null;
   status?: string;
   /** opens a player's sheet, since every name on the page opens one */
   onMore?: (key: string) => void;
@@ -299,7 +301,7 @@ export function MyMatchup(props: Props) {
   const { mine, mineId, rows, slots, slate, onMore } = props;
   const { states, remainder, trouble } = useLiveWeek(
     props.picked?.season, props.picked?.week, props.pays ?? {},
-    props.provider);
+    props.provider, props.scoreboard);
 
   const lines = useMemo(
     () => linesFor(

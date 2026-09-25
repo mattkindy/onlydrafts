@@ -33,7 +33,7 @@ import {
 import { nameOf } from "./Advice.tsx";
 import { Reading } from "./Reading.tsx";
 import { PRICED, useWaiverPrices } from "./waiverPrices.ts";
-import { useScoreboard } from "./scoreboard.ts";
+import { useScoreboard, type WeekPoll } from "./scoreboard.ts";
 import { WeekRanks } from "./WeekRanks.tsx";
 
 /** which of the three questions the reader is asking */
@@ -64,6 +64,8 @@ interface Props {
   slate: Slate | null;
   /** what the board paid a catch, so its week lines move to this league's */
   boardPerCatch?: number | undefined;
+  /** the page's scoreboard poll, which the league's points are read on too */
+  scoreboard?: WeekPoll | null;
   /** the players on your team, so the rankings can mark them */
   roster: Set<string> | null;
   /** who the injury report has listed, for the rankings table's badges */
@@ -483,7 +485,7 @@ export function Waivers(props: Props) {
   const [span, setSpan] = useState<Span>(
     () => props.week === null ? "season" : "week");
   const { states, trouble } = useScoreboard(
-    props.season ?? undefined, props.week ?? undefined);
+    props.season ?? undefined, props.week ?? undefined, props.scoreboard);
 
   const { drops, listed, priced, wire, working } = useWaiverPrices(
     players, league, props.schedule, posFilter, props.listed, props.week);

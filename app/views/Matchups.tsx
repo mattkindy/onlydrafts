@@ -31,7 +31,7 @@ import { pregameOf, reportFor } from "../lib/weekReport.ts";
 import { Advice, nameOf, pct, pctPair } from "./Advice.tsx";
 import { PlayerName } from "./PlayerName.tsx";
 import { Reading } from "./Reading.tsx";
-import { useLiveWeek } from "./scoreboard.ts";
+import { useLiveWeek, type WeekPoll } from "./scoreboard.ts";
 import { ShareButton } from "./ShareButton.tsx";
 import { WeekReport } from "./WeekReport.tsx";
 
@@ -50,6 +50,8 @@ interface Props {
   boardPerCatch?: number | undefined;
   /** whose scoreboard says where each game is, which is the league's own */
   provider?: League["provider"] | undefined;
+  /** the page's scoreboard poll, which the league's points are read on too */
+  scoreboard?: WeekPoll | null;
   season: number;
   week: number;
   /** the league's own name, which the shared picture is headed with */
@@ -301,14 +303,14 @@ export function Game(
 export function Matchups(
   {
     games: asRead, rows, players, mine, slots, pays, boardPerCatch, provider,
-    season, week, league, status, rosters, weekPointsFor, onMore,
+    scoreboard, season, week, league, status, rosters, weekPointsFor, onMore,
   }: Props,
 ) {
   const lines = useMemo(
     () => linesFor(players, week, catchShiftOf(pays, boardPerCatch)),
     [players, week, pays, boardPerCatch]);
   const { states, remainder, read, trouble } =
-    useLiveWeek(season, week, pays, provider);
+    useLiveWeek(season, week, pays, provider, scoreboard);
   const games = useMemo(
     () => settledGames(asRead, rows, states, lines),
     [asRead, rows, states, lines],

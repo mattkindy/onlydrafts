@@ -34,6 +34,7 @@ import { MyMatchup } from "./views/Matchup.tsx";
 import { Matchups } from "./views/Matchups.tsx";
 import { Standings } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
+import { useWeekPoll } from "./views/scoreboard.ts";
 import {
   hasGameIn, loadSlate, onTheBooks, rosterKeys, slateUnder, weekRefs,
   withByesZeroed, withOutPlayersZeroed, type Slate, type WeekRef,
@@ -170,9 +171,6 @@ const WEEK_VIEWS: View[] = ["matchup", "league", "players"];
 /** how old a read can be before one of those views asks the provider again */
 const STALE_AFTER = 2 * 60 * 1000;
 
-/** how often the league is asked for its scores again while a week tab is open */
-const GAMES_EVERY = 60_000;
-
 /**
  * Light, dark, or the phone's own setting, as one glyph. The word used to
  * sit in the nav and take a pill's worth of a 390px row to say something
@@ -250,8 +248,11 @@ function App() {
   const [weekStatus, setWeekStatus] = useState("");
   const [games, setGames] = useState<Matchup[]>([]);
   const [gamesStatus, setGamesStatus] = useState("");
-  /** bumped once a minute while a week tab is open, so the points move with the games */
-  const [gameReads, setGameReads] = useState(0);
+  // one poll for the whole page: each scoreboard read moves `tick`, and
+  // the league's points are read again on it, so the two never drift apart
+  const openWeek = week && WEEK_VIEWS.includes(view) ? week : null;
+  const scoreboard = useWeekPoll(
+    openWeek?.season, openWeek?.week, active?.provider);
   const gamesKey = useRef("");
   const [rereading, setRereading] = useState(false);
   /** who the injury report has listed, for the week's pages as well as the draft */
@@ -308,7 +309,7 @@ function App() {
       .catch(() => undefined);
 
     return () => { stale = true; };
-  }, [gameReads]);
+  }, [scoreboard.tick]);
 
   /** the week itself is only fetched once you ask for a tab that prices one */
   useEffect(() => {
@@ -334,10 +335,11 @@ function App() {
   /**
    * The league's own games, which only the provider knows. The same read
    * brings each player's stats, so his points and his line never come
-   * from two different moments.
+   * from two different moments. It is read again on every scoreboard
+   * read, so the points and the game clock come from the same minute.
    */
   useEffect(() => {
-    if (!WEEK_VIEWS.includes(view) || !active || !week) {
+    if (!active || !openWeek) {
       return;
     }
 
@@ -352,7 +354,7 @@ function App() {
     let stale = false;
 
     // a re-read of the same week keeps the cards up rather than blanking them
-    const key = [active.provider, active.leagueId, active.userId, week.week]
+    const key = [active.provider, active.leagueId, active.userId, openWeek.week]
       .join("/");
 
     if (gamesKey.current !== key) {
@@ -361,7 +363,7 @@ function App() {
       setGamesStatus("");
     }
 
-    asks(active, week.week)
+    asks(active, openWeek.week)
       .then((got) => {
         if (stale) {
           return;
@@ -371,7 +373,7 @@ function App() {
         // an empty answer looks the same as one still loading, and the
         // two want different things from whoever is reading it
         setGamesStatus(got.length === 0
-          ? `${active.provider} has no week ${week.week} games for this ` +
+          ? `${active.provider} has no week ${openWeek.week} games for this ` +
             "league yet. If your league has them, tell me and I will look."
           : "");
       })
@@ -381,10 +383,8 @@ function App() {
         }
       });
 
-    const timer = setTimeout(() => setGameReads((n) => n + 1), GAMES_EVERY);
-
-    return () => { stale = true; clearTimeout(timer); };
-  }, [view, week, active, gameReads]);
+    return () => { stale = true; };
+  }, [openWeek, active, scoreboard.tick]);
 
   /**
    * The week in this league's scoring. The build scored it once, and
@@ -1040,6 +1040,7 @@ function App() {
             pays={active?.pays ?? {}}
             boardPerCatch={board?.perCatch}
             provider={active?.provider}
+            scoreboard={scoreboard}
             status={gamesStatus || weekStatus}
             onMore={openKey}
           />
@@ -1061,6 +1062,7 @@ function App() {
                   pays={active.pays ?? {}}
                   boardPerCatch={board.perCatch}
                   provider={active.provider}
+                  scoreboard={scoreboard}
                   season={week.season}
                   week={week.week}
                   league={active.name}
@@ -1097,6 +1099,7 @@ function App() {
             week={week?.week ?? null}
             slate={slate}
             boardPerCatch={board.perCatch}
+            scoreboard={scoreboard}
             roster={rosterKeys(active.myRoster)}
             listed={listed}
             gamesStatus={gamesStatus}
