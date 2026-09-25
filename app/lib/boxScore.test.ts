@@ -103,7 +103,7 @@ describe("espnStatsOf", () => {
   it("reads a quarterback's passing and leaves a fumble he kept off", () => {
     expect(espnStatsOf(espnDid(espn.week3, "Jordan Love"), "QB")).toEqual({
       kind: "player",
-      line: line({ passCmp: 22, passAtt: 41, passYds: 249, passTd: 2 }),
+      line: line({ passCmp: 22, passAtt: 41, passYds: 249, passTd: 2, carries: 1 }),
     });
   });
 
