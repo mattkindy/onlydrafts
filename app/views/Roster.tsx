@@ -91,7 +91,7 @@ export function Roster(props: Props) {
                     <div class="sub">
                       {/* he is on last season's roster and nobody has
                           signed him for this one */}
-                      <span>no NFL team for {props.season}, so no projection</span>
+                      <span>no NFL team in {props.season}, so no projection</span>
                     </div>
                   </div>
                 );
@@ -135,19 +135,19 @@ export function Roster(props: Props) {
 /** how fresh the roster is, in the words somebody checking would use */
 export function rosterRead(readAt: number): string {
   if (!readAt) {
-    return "read, but the page did not note when";
+    return "roster updated, time unknown";
   }
 
   const mins = Math.floor((Date.now() - readAt) / 60000);
 
   if (mins < 1) {
-    return "roster read just now";
+    return "roster updated a moment ago";
   }
 
   if (mins < 60) {
-    return `roster read ${mins} min ago`;
+    return `roster updated ${mins} min ago`;
   }
 
-  return "roster read at " + new Date(readAt)
+  return "roster updated at " + new Date(readAt)
     .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

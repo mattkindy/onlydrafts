@@ -45,9 +45,9 @@ export function EspnSheet(
       <div class="sheet" onClick={(e) => e.stopPropagation()}>
         <h3>Opening a private ESPN league</h3>
         <div class="sub">
-          ESPN only lets its own pages read the two cookies that identify
-          you, so they have to be fetched by hand. This is once a season,
-          until they expire.
+          ESPN only shares the two cookies that sign you in with its own
+          pages, so you have to copy them over yourself. You need to do
+          this about once a season, when they expire.
         </div>
         {STEPS.map((what, i) => (
           <div class="step" key={i}><span>{i + 1}</span><span>{what}</span></div>
@@ -58,13 +58,13 @@ export function EspnSheet(
             rows={3}
             value={pasted}
             placeholder={missed
-              ? "that did not have both in it"
+              ? "paste both SWID and espn_s2"
               : "SWID={...}; espn_s2=..."}
             onInput={(e) => setPasted(e.currentTarget.value)}
           />
         </label>
         <div class="row">
-          <button class="act" onClick={take}>keep them</button>
+          <button class="act" onClick={take}>save</button>
           <button
             class="act"
             style={{ background: "var(--chip)", color: "var(--ink)" }}

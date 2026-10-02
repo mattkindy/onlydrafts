@@ -186,8 +186,8 @@ export function DraftRating(props: Props) {
   if (rated.length === 0) {
     return (
       <div class="empty">
-        No rosters came back from {league.name}, so there is nothing to rate
-        yet. Open the league again once the draft has been saved.
+        {league.name} has no rosters yet, so there is nothing to grade.
+        Open the league again after the draft.
       </div>
     );
   }
@@ -225,9 +225,9 @@ export function DraftRating(props: Props) {
       {unmatched.length > 0 && (
         <div class="empty">
           <b>{unmatched.length} {unmatched.length === 1 ? "pick" : "picks"}</b>
-          {" "}our board has no player for, so {unmatched.length === 1
-            ? "that team is"
-            : "those teams are"} rated on the rest:{" "}
+          {" "}{unmatched.length === 1 ? "is" : "are"} not on our board, so{" "}
+          {unmatched.length === 1 ? "that team is" : "those teams are"} graded
+          on their other picks:{" "}
           {unmatched.map((pick) =>
             `${pick.name} (${pick.position}, ${pick.who}, ${asRound(pick.overall, league.size)})`)
             .join(", ")}.
@@ -304,8 +304,8 @@ export function MyDraftPicks(props: Props) {
   if (picks.length === 0) {
     return (
       <div class="empty">
-        This league cannot say what happened pick by pick, so there is
-        nothing to replay.
+        This league has no pick by pick record, so there is nothing to
+        replay.
       </div>
     );
   }
@@ -329,7 +329,7 @@ export function MyDraftPicks(props: Props) {
                   <td>{pick.p.name} <i>{pick.p.position}</i></td>
                   <td>
                     {pick.p.adp == null
-                      ? "unpriced"
+                      ? "none"
                       : asRound(Math.round(pick.p.adp), league.size)}
                   </td>
                   <td>
@@ -343,7 +343,7 @@ export function MyDraftPicks(props: Props) {
                   <td>
                     {pick.best
                       ? `${pick.best.p.name} ${signed(pick.best.share.added, 2)}`
-                      : "him"}
+                      : "same pick"}
                   </td>
                 </tr>
               ))}

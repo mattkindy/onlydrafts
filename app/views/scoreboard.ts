@@ -123,7 +123,7 @@ export function useWeekPoll(
       })
       .catch((e: Error) => {
         if (!stale) {
-          setTrouble("could not read the scoreboard: " + e.message);
+          setTrouble("could not load the scoreboard: " + e.message);
         }
       })
       .finally(() => {

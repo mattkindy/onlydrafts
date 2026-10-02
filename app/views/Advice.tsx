@@ -139,7 +139,7 @@ export function Advice(
   if (!hasLineup(side)) {
     return (
       <div class="advice">
-        <b>no lineup set.</b> nothing to advise until you start somebody.
+        <b>No lineup set.</b> Set your starters to see advice.
       </div>
     );
   }
@@ -163,8 +163,7 @@ export function Advice(
   if (!best.swaps.length) {
     return (
       <div class="advice">
-        <b>Your lineup wins {pct(standing)}.</b> It is already the optimal
-        lineup.
+        <b>Your lineup wins {pct(standing)}.</b> No swap would raise it.
         {byes}
       </div>
     );
@@ -172,7 +171,7 @@ export function Advice(
 
   return (
     <div class="advice">
-      <b>Your lineup wins {pct(standing)}.</b> Optimal lineup{" "}
+      <b>Your lineup wins {pct(standing)}.</b> With these swaps,{" "}
       {pct(best.odds)}.
       {byes}
       <ul>

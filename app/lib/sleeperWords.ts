@@ -11,17 +11,17 @@ import type { Sleeper, SleeperReason } from "./scoring.ts";
 
 const PHRASES: Record<string, string> = {
   "work share": "work share",
-  "leverage lift": "work when it mattered",
+  "leverage lift": "high-value touches",
   "trend": "trend",
   "points a game so far": "scoring so far",
   "games played": "games played",
-  "pick spread": "the room disagreed",
+  "pick spread": "drafters disagreed on him",
   "in-season level": "his level so far",
   "role level": "his role",
-  "the benching chance": "the job may come free",
-  "the backup's draft capital": "his club paid for him",
+  "the benching chance": "the starter may be benched",
+  "the backup's draft capital": "his team drafted him high",
   "his snaps over three weeks": "his snaps are rising",
-  "the starter against his price": "the starter is scoring below his price",
+  "the starter against his price": "the starter is scoring below his draft spot",
 };
 
 /** how many reasons a row has room for on a phone */
@@ -45,11 +45,14 @@ export function reasonWords(said: Sleeper, most = REASONS_SHOWN): string {
     .join(", ");
 }
 
-/** the claim itself, as "+2.1 a game over his price" */
+/**
+ * The claim itself, as "+2.1 a game vs his draft spot": what he should
+ * score against what a player taken where he went usually scores.
+ */
 export function claimWords(said: Sleeper): string {
   const sign = said.score > 0 ? "+" : "";
 
-  return `${sign}${said.score.toFixed(1)} a game over his price`;
+  return `${sign}${said.score.toFixed(1)} a game vs his draft spot`;
 }
 
 /**
@@ -60,9 +63,9 @@ export function claimWords(said: Sleeper): string {
 const WORTH_SAYING = 0.2;
 
 /**
- * The other claim, as "would average 14.2 with the job, about a 35%
- * chance it opens". Nothing comes back when the board has no contingent
- * parts for him or when the job is too far off to be worth the room.
+ * The other claim, as "14.2 a game, about a 35% chance he gets the job".
+ * Nothing comes back when the board has no contingent parts for him or
+ * when the job is too far off to be worth the room.
  */
 export function roleWords(said: Sleeper): string {
   const would = said.wouldAverage;
@@ -72,6 +75,6 @@ export function roleWords(said: Sleeper): string {
     return "";
   }
 
-  return `would average ${would.toFixed(1)} with the job, about a ` +
-    `${Math.round(chance * 100)}% chance it opens`;
+  return `${would.toFixed(1)} a game, about a ` +
+    `${Math.round(chance * 100)}% chance he gets the job`;
 }

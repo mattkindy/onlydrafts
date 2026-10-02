@@ -406,8 +406,8 @@ export function MyMatchup(props: Props) {
     return (
       <div class="empty">
         <b>No week has been built yet.</b> Weekly projections need a few
-        games of this year's snaps and targets, so they turn on about a
-        month in. Until then use <b>draft</b> and <b>team</b>.
+        games of this season's snaps and targets, so they start about a
+        month in. Until then, use <b>draft</b> and <b>team</b>.
       </div>
     );
   }
@@ -493,7 +493,7 @@ export function MyMatchup(props: Props) {
         </>
       )}
 
-      {ours && !states && <Reading>reading the scoreboard...</Reading>}
+      {ours && !states && <Reading>loading the scoreboard...</Reading>}
 
       {!ours && (
         <p class="hint">

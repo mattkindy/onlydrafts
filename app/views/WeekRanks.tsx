@@ -45,8 +45,8 @@ function Chips({ row, his }: { row: SlateRow; his: Listed | undefined }) {
   const marked = chance !== undefined && chance > 0 && chance < 1;
   const odds = marked ? `, ${Math.round(chance! * 100)}%` : "";
   const why = marked
-    ? `. About ${Math.round(chance! * 100)}% of the players listed this way ` +
-      "have played, and his projection is marked down to match"
+    ? `. About ${Math.round(chance! * 100)}% of players with this status ` +
+      "end up playing, and his projection is lowered to match"
     : "";
 
   return (
@@ -73,8 +73,8 @@ function Chips({ row, his }: { row: SlateRow; his: Listed | undefined }) {
       {row.absenceShare >= STARTER_OUT_AT && (
         <span
           class="badge even"
-          title={`about ${Math.round(row.absenceShare * 100)}% of his side's ` +
-            "usual work is missing, so there is more of it for him"}
+          title={`about ${Math.round(row.absenceShare * 100)}% of his team's ` +
+            "usual touches are out this week, so more may go to him"}
         >
           starter out
         </span>
@@ -221,12 +221,12 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
 
         {picks.length > 0 && (
           <button class="quiet" onClick={() => setPicks([])}>
-            clear the comparison
+            clear comparison
           </button>
         )}
       </div>
 
-      {!slate && <Reading>reading the week...</Reading>}
+      {!slate && <Reading>loading the week...</Reading>}
 
       {pair && <Compare pair={pair} />}
 

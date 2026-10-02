@@ -430,7 +430,7 @@ function FullRankings(
                   <td class="n">{(p.game?.["ev"] ?? p.ppg)?.toFixed(1) ?? ""}</td>
                   <td class="n">{p.games?.toFixed(1) ?? ""}</td>
                   <td class="n">{p.vor ?? ""}</td>
-                  <td class="n">{p.adp ? asRound(p.adp, teams) : "—"}</td>
+                  <td class="n">{p.adp ? asRound(p.adp, teams) : ""}</td>
                   <td class="n">{p.bye ?? ""}</td>
                   <td class="mark">
                     {isMine
@@ -643,8 +643,8 @@ export function DraftView(props: Props) {
       {drafted.length === 0
         ? (
           <div class="empty">
-            Nothing yet. Mark keepers from <b>team</b> or from the cards
-            here, and your picks land here as the draft runs.
+            Nothing yet. Mark keepers on the <b>team</b> tab or on the cards
+            here. Your picks show up here as the draft goes.
           </div>
         )
         : (

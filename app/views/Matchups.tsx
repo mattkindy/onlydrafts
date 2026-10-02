@@ -397,7 +397,7 @@ export function Matchups(
               Week {week}, scores as of {read.toLocaleTimeString()}
             </p>
           )
-          : <Reading>reading week {week}'s scoreboard...</Reading>}
+          : <Reading>loading week {week}'s scoreboard...</Reading>}
 
         {league && states && ordered.length > 0 && (
           <ShareButton label="share week" onShare={shareWeek} />

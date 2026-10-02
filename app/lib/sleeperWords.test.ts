@@ -18,12 +18,12 @@ const aSleeper = (over: Partial<Sleeper> = {}): Sleeper => ({
 
 describe("claimWords", () => {
   it("signs a claim the board is making for a player", () => {
-    expect(claimWords(aSleeper())).toBe("+2.1 a game over his price");
+    expect(claimWords(aSleeper())).toBe("+2.1 a game vs his draft spot");
   });
 
   it("leaves a claim against him unsigned", () => {
     expect(claimWords(aSleeper({ score: -1.4 })))
-      .toBe("-1.4 a game over his price");
+      .toBe("-1.4 a game vs his draft spot");
   });
 });
 
@@ -43,8 +43,8 @@ describe("reasonWords", () => {
     });
 
     expect(reasonWords(said, 4)).toBe(
-      "the starter is scoring below his price, his snaps are rising, " +
-      "the job may come free, his club paid for him",
+      "the starter is scoring below his draft spot, his snaps are rising, " +
+      "the starter may be benched, his team drafted him high",
     );
   });
 });
@@ -52,7 +52,7 @@ describe("reasonWords", () => {
 describe("roleWords", () => {
   it("says what the job is worth and how likely it is to open", () => {
     expect(roleWords(aSleeper({ wouldAverage: 14.2, roleChance: 0.35 })))
-      .toBe("would average 14.2 with the job, about a 35% chance it opens");
+      .toBe("14.2 a game, about a 35% chance he gets the job");
   });
 
   it("says nothing when the board has no contingent parts for him", () => {

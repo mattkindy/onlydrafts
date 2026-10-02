@@ -225,14 +225,14 @@ export function PlayerSheet(props: Props) {
 
         {said && (
           <div class="fact">
-            against his price: <b>{claimWords(said)}</b> as of week{" "}
+            sleeper score: <b>{claimWords(said)}</b> as of week{" "}
             {said.week}
-            {why && `, on ${why}`}
+            {why && `, from ${why}`}
           </div>
         )}
 
         {ifTheJobOpens && (
-          <div class="fact">if the job opens: {ifTheJobOpens}</div>
+          <div class="fact">as the starter: {ifTheJobOpens}</div>
         )}
 
         {p.games !== undefined && (

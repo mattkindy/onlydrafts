@@ -287,7 +287,7 @@ function App() {
         return loadBoard(meta.boardSeason);
       })
       .then(setBoard)
-      .catch((e: Error) => setStatus("could not read the board: " + e.message));
+      .catch((e: Error) => setStatus("could not load the board: " + e.message));
   }, []);
 
   /**
@@ -325,7 +325,7 @@ function App() {
       .then((got) => { if (!stale) { setSlate(got); } })
       .catch((e: Error) => {
         if (!stale) {
-          setWeekStatus("could not read week " + week.week + ": " + e.message);
+          setWeekStatus("could not load week " + week.week + ": " + e.message);
         }
       });
 
@@ -346,7 +346,7 @@ function App() {
     const asks = PROVIDERS[active.provider]!.matchupsFor;
 
     if (!asks) {
-      setGamesStatus(active.provider + " will not say what this week's games are.");
+      setGamesStatus(active.provider + " does not share this week's games.");
 
       return;
     }
@@ -379,7 +379,7 @@ function App() {
       })
       .catch((e: Error) => {
         if (!stale) {
-          setGamesStatus("could not read this week's games: " + e.message);
+          setGamesStatus("could not load this week's games: " + e.message);
         }
       });
 
@@ -527,7 +527,7 @@ function App() {
         keep("active", again);
       }
 
-      setStatus(found.length ? "" : "no leagues there");
+      setStatus(found.length ? "" : "no leagues found for that name");
     } catch (e) {
       if (e instanceof NeedsEspnCookies) {
         setEspnHelp(true);
@@ -879,11 +879,11 @@ function App() {
       )}
 
       {active && rereading && ROSTER_VIEWS.includes(view) && (
-        <Reading>reading your roster again...</Reading>
+        <Reading>updating your roster...</Reading>
       )}
 
       <div id="out">
-        {!board && <Reading>reading the board...</Reading>}
+        {!board && <Reading>loading the board...</Reading>}
 
         {board && view === "leagues" && (
           leagues.length === 0
@@ -904,7 +904,7 @@ function App() {
                   </p>
                 )}
                 {opening && (
-                  <Reading>scoring the board for {opening}</Reading>
+                  <Reading>scoring players for {opening}</Reading>
                 )}
                 <div class="cards">
                   {shown.map((lg) => (
@@ -1075,7 +1075,7 @@ function App() {
               : <p class="hint">No week has been built yet.</p>}
 
             <h2>draft grades</h2>
-            <AfterPaint saying="rating every team's draft">
+            <AfterPaint saying="grading every team's draft">
               <DraftRating
                 board={players}
                 byKey={byKey}
@@ -1128,7 +1128,7 @@ function App() {
           onClose={() => setEspnHelp(false)}
           onKept={() => {
             setEspnHelp(false);
-            setStatus("kept. Try the league again.");
+            setStatus("Saved. Try the league again.");
           }}
         />
       )}
@@ -1161,13 +1161,13 @@ class Caught extends Component<
 
     return (
       <div class="wrap">
-        <h1>The page stopped</h1>
+        <h1>Something went wrong</h1>
         <div class="empty">
           <b>{this.state.blew.message}</b>
           <br />
-          Something the browser remembered may be from an older version
-          of this page. Forgetting it and looking your leagues up again
-          usually clears it.
+          Your browser may have saved data from an older version of this
+          page. Clearing it and finding your leagues again usually fixes
+          this.
           <div class="row">
             <button
               class="act"
@@ -1176,7 +1176,7 @@ class Caught extends Component<
                 location.reload();
               }}
             >
-              forget and start over
+              clear saved data and start over
             </button>
           </div>
         </div>

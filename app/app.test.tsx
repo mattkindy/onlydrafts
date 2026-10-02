@@ -177,7 +177,7 @@ describe("the views", () => {
     // by heading rather than by count, since a board with sleeper
     // claims on it draws a third table between these two
     expect(headings(where)).toContain("waiver wire adds");
-    expect(headings(where)).toContain("what dropping each of yours costs");
+    expect(headings(where)).toContain("what each drop costs");
     expect(where.querySelectorAll("table.line tbody tr").length)
       .toBeGreaterThan(5);
   });
@@ -248,7 +248,7 @@ describe("the views", () => {
 
     expect(headings(where)).toContain("sleepers");
     expect(where.textContent).toContain(free.name);
-    expect(where.textContent).toContain("+2.1 a game over his price");
+    expect(where.textContent).toContain("+2.1 a game vs his draft spot");
     expect(where.textContent).toContain("work share, scoring so far");
     // the term dragging his claim down is not a reason to add him
     expect(where.textContent).not.toContain("games played");
@@ -283,10 +283,10 @@ describe("the views", () => {
     );
     expect(where.textContent).toContain(players[0]!.name);
     expect(where.querySelectorAll(".wk").length).toBeGreaterThan(5);
-    expect(where.textContent).not.toContain("against his price");
+    expect(where.textContent).not.toContain("sleeper score");
   });
 
-  it("says what a card's player is worth against his price", () => {
+  it("says what a card's player is worth against his draft spot", () => {
     render(
       <PlayerSheet
         p={{ ...players[0]!, sleeper: A_CLAIM }} plus={[]} minus={[]}
@@ -295,8 +295,8 @@ describe("the views", () => {
       where,
     );
     expect(where.textContent).toContain(
-      "against his price: +2.1 a game over his price as of week 1, " +
-        "on work share, scoring so far",
+      "sleeper score: +2.1 a game vs his draft spot as of week 1, " +
+        "from work share, scoring so far",
     );
   });
 });
@@ -802,7 +802,7 @@ describe("a render that throws", () => {
     // which is what turns a throw into a message rather than a freeze
     const main = readFileSync(join(import.meta.dirname, "main.tsx"), "utf8");
     expect(main).toContain("getDerivedStateFromError");
-    expect(main).toContain("forget and start over");
+    expect(main).toContain("clear saved data and start over");
     expect(Component).toBeTruthy();
   });
 });
@@ -924,7 +924,7 @@ describe("a card shows both values when they disagree", () => {
       where,
     );
 
-    expect(where.textContent).toContain("ours alone");
+    expect(where.textContent).toContain("proj only");
   });
 });
 
@@ -1230,7 +1230,7 @@ describe("the whole board as cards", () => {
  * You have to start a kicker and a defence, so what a pick at their
  * place on the board is worth answers a question nobody is asking:
  * there is no lineup without one. Every kicker read a negative value
- * next to a positive one labelled ours alone, twenty one points apart.
+ * next to a positive one labelled proj only, twenty one points apart.
  */
 describe("a slot you cannot leave empty", () => {
   const league = aLeague();
@@ -1261,7 +1261,7 @@ describe("a slot you cannot leave empty", () => {
   it("says it once, not twice", () => {
     for (const position of ["K", "DEF"]) {
       expect(cardFor(position).textContent, position)
-        .not.toContain("ours alone");
+        .not.toContain("proj only");
     }
   });
 

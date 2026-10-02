@@ -115,7 +115,7 @@ function OnTheBoard(
 /** how he could finish at his own position, which is how people think */
 function Finishes({ finish }: { finish: Finish }) {
   return (
-    <div class="finish" title="where his season would place him at his position, holding everyone else at their expected season">
+    <div class="finish" title="where he could finish at his position if everyone else has an average season">
       <span class="over">could finish</span>
       <span class="s">{finish.best}</span>
       <span class="to">to</span>
@@ -287,7 +287,7 @@ function Facts({ p, teams, costs, aside, slim }: {
       {p.par && (
         <span
           class="f"
-          title="what he beats a replacement-level player by over a season, from the tenth to the ninetieth of the seasons simulated for him. The middle figure is the median, which he beats half the time."
+          title="points over a replacement-level player across a season. The range covers the middle 80% of his simulated seasons, and the small figure is the median."
         >
           <i>over a season</i>
           {p.par.low.toFixed(0)} to {p.par.high.toFixed(0)}
@@ -321,9 +321,9 @@ function Facts({ p, teams, costs, aside, slim }: {
         Math.abs(p.ownVor - p.vor) >= 10 && (
         <span
           class="f"
-          title="what his own projection says he is worth over a season, before ADP and the touches and the simulation are mixed in. The bigger number is what a pick at his place in our ranking is worth."
+          title="his value over a season from his projection alone, before draft position and the simulation are mixed in. The big number is the value of a pick where we rank him."
         >
-          <i>ours alone</i>{p.ownVor.toFixed(0)}
+          <i>proj only</i>{p.ownVor.toFixed(0)}
         </span>
       )}
       {p.bye ? <span class="f"><i>bye</i>{p.bye}</span> : null}

@@ -139,7 +139,7 @@ interface Figures {
  */
 function seasonSlot(row: Drop): string {
   if (row.starts < RARELY_STARTS) {
-    return "he rarely starts, so nobody";
+    return "nobody, he rarely starts";
   }
 
   const slot = row.slot ? slotName(row.slot) : "the lineup";
@@ -342,17 +342,17 @@ function missingWeek(
 ): { says: string; reading: boolean } | null {
   if (week === null) {
     return {
-      says: "No week has been built yet, so only the season figures are here.",
+      says: "No week has been built yet, so only rest of season figures are shown.",
       reading: false,
     };
   }
 
   if (!rows.size) {
-    return { says: "reading this week's projections...", reading: true };
+    return { says: "loading this week's projections...", reading: true };
   }
 
   if (!states) {
-    return { says: "reading the scoreboard...", reading: true };
+    return { says: "loading the scoreboard...", reading: true };
   }
 
   // a league whose games could not be read looks the same as one with no
@@ -363,8 +363,8 @@ function missingWeek(
 
   if (!ours) {
     return {
-      says: "You have no game this week, so there is no lineup to price a " +
-        "move against.",
+      says: "You have no game this week, so there is nothing to compare " +
+        "moves against.",
       reading: false,
     };
   }
@@ -448,15 +448,15 @@ function Sleepers(
     <>
       <h2>sleepers</h2>
       <p class="hint">
-        What the model makes of each free agent against what he cost on
-        draft day, as of week {ranked[0]!.p.sleeper!.week}.
+        Free agents projected to score more than their draft spot
+        suggests, as of week {ranked[0]!.p.sleeper!.week}.
       </p>
       <table class="line pairs sleepers">
         <thead>
           <tr>
             <th>player</th>
             <th>pos</th>
-            <th>over his price</th>
+            <th>vs draft spot</th>
             <th>why</th>
           </tr>
         </thead>
@@ -470,7 +470,7 @@ function Sleepers(
                   <span class="who link">{row.p.name}</span>
                 </td>
                 <td data-label="pos">{row.p.position}</td>
-                <td data-label="over his price">{claimWords(said)}</td>
+                <td data-label="vs draft spot">{claimWords(said)}</td>
                 <td data-label="why">{reasonWords(said)}</td>
               </tr>
             );
@@ -665,10 +665,10 @@ export function Waivers(props: Props) {
           />
           <span class="says">
             {span === "season"
-              ? "a full season of simulated weeks against an average opponent"
+              ? "the rest of the season, simulated against an average opponent"
               : week
-                ? "the lineup you would set against " + week.opponent +
-                  ", and your win probability either way"
+                ? "your best lineup against " + week.opponent +
+                  ", and your win % with and without each move"
                 : "this week's game, once the week has loaded"}
           </span>
         </>
@@ -694,7 +694,7 @@ export function Waivers(props: Props) {
     return (
       <>
         {controls}
-        <Reading>pricing the waiver wire against your season</Reading>
+        <Reading>working out what each free agent adds to your team</Reading>
       </>
     );
   }
@@ -704,8 +704,8 @@ export function Waivers(props: Props) {
       <>
         {controls}
         <div class="empty">
-          <b>Nobody on your roster yet.</b> Once your league has a team for
-          you, this says what each free agent would add.
+          <b>Your roster is empty.</b> Once your league gives you a team,
+          this page shows what each free agent would add.
         </div>
       </>
     );
@@ -759,17 +759,17 @@ export function Waivers(props: Props) {
 
       {hidden > 0 && (
         <p class="hint" title={span === "week"
-          ? "they add under half a point of win probability this week, or " +
-            "sit too far down the list to be priced for it"
-          : "they came out under half a point of win probability a week, " +
-            "which is inside the noise"}>
+          ? "they add less than 1% to your win chance this week, or are " +
+            "too far down the list to be priced"
+          : "they add less than 1% to your win chance, which is within " +
+            "the noise of the simulation"}>
           {hidden} hidden
         </p>
       )}
 
       <Sleepers rows={wire.filter(matching)} onMore={props.onMore} />
 
-      <h2>what dropping each of yours costs</h2>
+      <h2>what each drop costs</h2>
       <table class="line pairs">
         <thead>
           <tr>

@@ -68,7 +68,7 @@ describe("Advice", () => {
       container,
     );
 
-    expect(container.textContent).toContain("no lineup set");
+    expect(container.textContent).toContain("No lineup set");
     expect(container.textContent).not.toContain("wins");
   });
 

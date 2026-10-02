@@ -168,7 +168,7 @@ describe("who to start", () => {
     const badge = rowFor("Ja'Marr Chase").querySelector(".badge")!;
 
     expect(badge.textContent).toBe("questionable, 64%");
-    expect(badge.getAttribute("title")).toContain("64% of the players");
+    expect(badge.getAttribute("title")).toContain("64% of players with this status");
   });
 
   it("ranks a player the injury report has ruled out at zero, and says why", () => {
