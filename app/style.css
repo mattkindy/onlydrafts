@@ -893,6 +893,14 @@
     table.pairs td[data-label="team"], table.pairs td[data-label="drop"],
     table.pairs td[data-label="ppg"], table.pairs td[data-label="starts"] {
       display: none; }
+    /* a sleeper card has no move to lead with, so his name leads it */
+    table.pairs.sleepers td[data-label="player"],
+    table.pairs.sleepers td[data-label="pos"] {
+      display: inline-block; font-size: var(--t4); font-weight: 700;
+      margin-right: var(--s2); }
+    table.pairs.sleepers td[data-label="pos"] { color: var(--muted); }
+    table.pairs.sleepers td[data-label="player"]::before,
+    table.pairs.sleepers td[data-label="pos"]::before { display: none; }
     /* the one big number: what the move does to your week, and where the
        move drops somebody, what the pair does rather than the add alone */
     table.pairs td[data-label="win %"], table.pairs tr.paired td.net {

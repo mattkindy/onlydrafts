@@ -447,7 +447,7 @@ function Sleepers(
         What the model makes of each free agent against what he cost on
         draft day, as of week {ranked[0]!.p.sleeper!.week}.
       </p>
-      <table class="line pairs">
+      <table class="line pairs sleepers">
         <thead>
           <tr>
             <th>player</th>
