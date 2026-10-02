@@ -26,7 +26,7 @@ import type {
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import { layoutGame, layoutWeek, shareLayout } from "../lib/shareImage.ts";
 import type { ShareGame } from "../lib/shareImage.ts";
-import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
+import { catchShiftOf, type SlateRow, type WeekRef } from "../lib/slate.ts";
 import type { RecapWeek } from "../lib/recapWeek.ts";
 import { pregameOf, reportFor } from "../lib/weekReport.ts";
 import { Advice, nameOf, pct, pctPair } from "./Advice.tsx";
@@ -35,6 +35,7 @@ import { PlayerName } from "./PlayerName.tsx";
 import { Reading } from "./Reading.tsx";
 import { useLiveWeek, type WeekPoll } from "./scoreboard.ts";
 import { ShareButton } from "./ShareButton.tsx";
+import { WeekPicker } from "./WeekPicker.tsx";
 import { WeekReport } from "./WeekReport.tsx";
 
 interface Props {
@@ -65,6 +66,10 @@ interface Props {
   weekPointsFor?: (() => Promise<PlayerWeek[]>) | undefined;
   /** reads the week before, recapped while no game this week is over */
   lastWeek?: (() => Promise<RecapWeek>) | undefined;
+  /** the week dropdown, so a past week's games and recap are a tap away */
+  picker?: {
+    weeks: WeekRef[]; picked: WeekRef | null; onWeek: (w: WeekRef) => void;
+  } | undefined;
   /** opens a player's sheet, since every name on the page opens one */
   onMore?: (key: string) => void;
 }
@@ -308,7 +313,7 @@ export function Matchups(
   {
     games: asRead, rows, players, mine, slots, pays, boardPerCatch, provider,
     scoreboard, season, week, league, status, rosters, weekPointsFor, lastWeek,
-    onMore,
+    picker, onMore,
   }: Props,
 ) {
   const shift = catchShiftOf(pays, boardPerCatch);
@@ -404,6 +409,14 @@ export function Matchups(
 
   return (
     <>
+      {picker && picker.weeks.length > 1 && (
+        <div class="controls">
+          <WeekPicker
+            weeks={picker.weeks} picked={picker.picked} onWeek={picker.onWeek}
+          />
+        </div>
+      )}
+
       <div class="sharebar">
         {read
           ? (

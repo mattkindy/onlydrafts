@@ -441,9 +441,12 @@ function App() {
     [board, active],
   );
 
+  // today's injury list is about the coming week; a week already played
+  // keeps the lines it had, or a player hurt since reads as a zero then
+  const comingWeek = weeks.length > 0 && week?.week === weeks[weeks.length - 1]!.week;
   const slateRows = useMemo(
-    () => weekRowsOf(slate, books, board?.schedule, listed),
-    [slate, books, board, listed],
+    () => weekRowsOf(slate, books, board?.schedule, comingWeek ? listed : undefined),
+    [slate, books, board, listed, comingWeek],
   );
 
   /**
@@ -1099,6 +1102,7 @@ function App() {
                   rosters={active.allRosters}
                   weekPointsFor={weekPointsFor}
                   lastWeek={lastWeek}
+                  picker={{ weeks, picked: week, onWeek: setWeek }}
                   onMore={openKey}
                 />
               )

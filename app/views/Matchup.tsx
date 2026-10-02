@@ -26,6 +26,7 @@ import {
   catchShiftOf, hurtWord, type Slate, type SlateRow, type WeekRef,
 } from "../lib/slate.ts";
 import { WeatherMark } from "./WeatherMark.tsx";
+import { WeekPicker } from "./WeekPicker.tsx";
 import { Advice, gainPct, nameOf, pct } from "./Advice.tsx";
 import { injuryBadge } from "./Draft.tsx";
 import { PlayerName } from "./PlayerName.tsx";
@@ -415,26 +416,9 @@ export function MyMatchup(props: Props) {
   return (
     <>
       <div class="controls">
-        <label>
-          week{" "}
-          <select
-            value={props.picked ? String(props.picked.week) : ""}
-            onChange={(e) => {
-              const want = Number(e.currentTarget.value);
-              const found = props.weeks.find((w) => w.week === want);
-
-              if (found) {
-                props.onWeek(found);
-              }
-            }}
-          >
-            {props.weeks.map((w) => (
-              <option key={w.file} value={String(w.week)}>
-                week {w.week}
-              </option>
-            ))}
-          </select>
-        </label>
+        <WeekPicker
+          weeks={props.weeks} picked={props.picked} onWeek={props.onWeek}
+        />
 
         <span id="status">{props.status ?? ""}</span>
       </div>
