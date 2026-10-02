@@ -18,7 +18,7 @@ import type { Listed } from "../lib/availability.ts";
 import { leadFor, type Explanation } from "../lib/explain.ts";
 import {
   alternativesFor, lineFor, linesFor, myGameIn, settledGames, standingFor,
-  starterState, type GameState, type Lines, type SlotChoice,
+  starterState, type Alternative, type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
 import type { League, Matchup, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
@@ -177,6 +177,83 @@ function Why({ why }: { why: Explanation }) {
   );
 }
 
+/** a player's line for the week and how much of his game is left to play */
+function lineAndLeft(
+  key: string, slot: string | undefined, rows: Map<string, SlateRow>,
+  states: Map<string, GameState>, lines: Lines,
+) {
+  const line = lineFor({ key, slot }, rows, lines);
+  const state = starterState({ key, slot }, rows, states, lines);
+
+  return { line, left: state?.left ?? 1 };
+}
+
+/** each bench player's best swap, so the whole bench shows whether or not it helps */
+function bestSwaps(choices: SlotChoice[]) {
+  const best = new Map<string, { option: Alternative; choice: SlotChoice }>();
+
+  for (const choice of choices) {
+    for (const option of choice.options) {
+      const had = best.get(option.key);
+
+      if (!had || option.gains > had.option.gains) {
+        best.set(option.key, { option, choice });
+      }
+    }
+  }
+
+  return [...best.values()].sort((a, b) => b.option.gains - a.option.gains);
+}
+
+function Bench(
+  { choices, rows, states, lines, listed, onMore }: {
+    choices: SlotChoice[];
+    rows: Map<string, SlateRow>;
+    states: Map<string, GameState>;
+    lines: Lines;
+    listed: Map<string, Listed>;
+    onMore?: ((key: string) => void) | undefined;
+  },
+) {
+  const swaps = bestSwaps(choices);
+
+  if (swaps.length === 0) {
+    return null;
+  }
+
+  return (
+    <section class="slot-card">
+      <h3>bench</h3>
+      <ul class="options">
+        {swaps.map(({ option, choice }) => {
+          const his = lineAndLeft(option.key, undefined, rows, states, lines);
+
+          return (
+            <li key={option.key} class={option.locked ? "shut" : ""}>
+              <PlayerName
+                name={nameOf(option.key, rows, lines, option.name)}
+                team={his.line?.team}
+                onOpen={onMore ? () => onMore(option.key) : undefined}
+              />
+              <Numbers line={his.line} left={his.left} />
+              <Marks his={listed.get(option.key)} row={rows.get(option.key)} />
+              <span class={option.gains > 0 ? "fig delta up" : "fig delta"}>
+                <i>win %</i>{signed(option.gains)}
+              </span>
+              <Fig label={`instead of ${nameOf(
+                choice.starter.key, rows, lines, choice.starter.name)}`}>
+                {choice.slot}
+              </Fig>
+              <Fig label="outscores him">{pct(option.outscores)}</Fig>
+              {option.locked && <span class="badge even">locked</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function Slot(
   { choice, rows, states, lines, listed, onMore }: {
     choice: SlotChoice;
@@ -187,12 +264,8 @@ function Slot(
     onMore?: ((key: string) => void) | undefined;
   },
 ) {
-  const at = (key: string, slot?: string) => {
-    const line = lineFor({ key, slot }, rows, lines);
-    const state = starterState({ key, slot }, rows, states, lines);
-
-    return { line, left: state?.left ?? 1 };
-  };
+  const at = (key: string, slot?: string) =>
+    lineAndLeft(key, slot, rows, states, lines);
   const his = at(choice.starter.key, choice.slot);
   /**
    * Only the swaps that gain you something. Listing the losing ones put
@@ -293,6 +366,14 @@ function Lineup(
           onMore={onMore}
         />
       ))}
+      <Bench
+        choices={choices}
+        rows={rows}
+        states={states}
+        lines={lines}
+        listed={listed}
+        onMore={onMore}
+      />
     </>
   );
 }
