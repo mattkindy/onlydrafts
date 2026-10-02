@@ -212,6 +212,14 @@ describe("the views", () => {
 
       expect(big).toBe(drop);
     }
+
+    // every add on the season list says why he is worth it
+    const reasons = Array.from(where.querySelectorAll("td.reason"))
+      .map((td) => td.textContent ?? "");
+
+    expect(reasons.length).toBeGreaterThan(0);
+    expect(reasons.filter((said) => said.length > 0).length)
+      .toBeGreaterThan(0);
   }, 30_000);
 
   it("lists the free agents the board underpriced", async () => {

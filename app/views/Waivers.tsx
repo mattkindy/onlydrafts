@@ -27,6 +27,7 @@ import {
   RARELY_STARTS, WORTH_ADDING, type Add, type Drop, type Net,
 } from "../lib/waivers.ts";
 import type { Schedule } from "../lib/waiversSeason.ts";
+import { whyWords } from "../lib/waiverWhy.ts";
 import {
   weekPricesFor, type WeekAdd, type WeekDrop, type WeekPrices,
 } from "../lib/waiversWeek.ts";
@@ -295,6 +296,9 @@ function AddRow(
       <td data-label="drop">
         {paid ? <>{paid.drop} <b>{signed(paid.net)}</b></> : ""}
       </td>
+      {span === "season" && (
+        <td data-label="why" class="reason">{whyWords(row.why)}</td>
+      )}
     </tr>
   );
 }
@@ -728,6 +732,7 @@ export function Waivers(props: Props) {
             <th>{span === "week" ? "pts" : "pts a week"}</th>
             <th>instead of</th>
             <th>drop</th>
+            {span === "season" && <th>why</th>}
           </tr>
         </thead>
         <tbody>

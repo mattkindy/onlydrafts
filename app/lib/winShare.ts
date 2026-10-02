@@ -961,14 +961,23 @@ export function barsOf(baseline: Baseline): Record<string, number> {
   return bars;
 }
 
+/**
+ * Told about each drawn week a newcomer starts: which draw, who he pushed
+ * out, what he scored, and what the week did to your result, from -1 to 1.
+ * Win chance is the mean of those weeks, so the swings add up to what he adds.
+ */
+export type StartWatch = (
+  i: number, out: Held, score: number, swing: number,
+) => void;
+
 export function winShareFor(
   baseline: Baseline, opponent: number[], draws = DRAWS,
-): (p: Player) => Priced {
+): (p: Player, watch?: StartWatch) => Priced {
   const without = winChance(baseline.total, opponent);
   const now = meanOf(baseline.total);
   const bars = barsOf(baseline);
 
-  return (p: Player) => {
+  return (p: Player, watch?: StartWatch) => {
     const beats = baseline.displaced[p.position];
     const nothing = {
       added: 0, starts: 0, brings: 0, displaces: null,
@@ -1009,7 +1018,16 @@ export function winShareFor(
         }
       }
 
-      withHim.push(baseline.total[i]! + (starts ? his[i]! - out.score : 0));
+      const week = baseline.total[i]! + (starts ? his[i]! - out.score : 0);
+      withHim.push(week);
+
+      if (starts && watch && i < opponent.length) {
+        const theirs = opponent[i]!;
+        watch(
+          i, out, his[i]!,
+          weekResult(week, theirs) - weekResult(baseline.total[i]!, theirs),
+        );
+      }
     }
 
     const after = winChance(withHim, opponent);

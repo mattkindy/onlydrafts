@@ -130,7 +130,7 @@ export function priceSeason(
   const mine = ours(ask.mine);
   const room = roomFor(
     players, ask.slots, ask.teams, ask.draws, ask.rosters);
-  const adds = addsFor(mine, ours(ask.pool), ask.slots, room);
+  const adds = addsFor(mine, ours(ask.pool), ask.slots, room, ask.hurt);
 
   return {
     answer: {

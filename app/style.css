@@ -566,6 +566,9 @@
   /* how often you win either side of a move. The two figures and the
      arrow between them are one reading, so they never break apart */
   .swing { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* a sentence, so it reads left to right and wraps instead of widening */
+  table.pairs td.reason { text-align: left; min-width: 14rem;
+    max-width: 22rem; color: var(--muted); font-size: var(--t1); }
   .starting { display: block; }
   .starting i, .outscores { display: block; font-style: normal;
     color: var(--faint); font-size: var(--t1); }
@@ -926,6 +929,9 @@
     table.pairs td[data-label="instead of"]::before,
     table.pairs td[data-label="who takes his slot"]::before {
       display: inline; margin-right: var(--s1); }
+    table.pairs td.reason { max-width: none; min-width: 0;
+      margin-top: var(--s2); font-size: var(--t2); font-weight: 500; }
+    table.pairs td.reason::before { display: none; }
 
     table.rating { font-size: var(--t1); }
     .slot { font-size: var(--t1); gap: 2px; }

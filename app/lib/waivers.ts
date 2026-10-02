@@ -19,6 +19,7 @@ import {
   baselineFor, seasonLineupFor, slotOf, winChance, winShareFor, withoutFor,
   type Priced, type SeasonLineup,
 } from "./winShare.ts";
+import { whyFor, type Why } from "./waiverWhy.ts";
 
 /**
  * Under a point of win chance is inside the noise of a few thousand drawn
@@ -38,6 +39,8 @@ export interface Add extends Omit<Priced, "displaces"> {
   p: Player;
   /** the player he takes the slot from, or nobody when it was a wire slot */
   displaced: Player | null;
+  /** what his value is made of, nothing when he never starts */
+  why: Why | null;
 }
 
 export interface Drop {
@@ -73,19 +76,22 @@ export interface Net {
  */
 export function addsFor(
   mine: Player[], pool: Player[], slots: string[] | null | undefined,
-  room: Room,
+  room: Room, hurt: Record<string, string> = {},
 ): Add[] {
   const base = baselineFor(mine, slots, room.draws, room.wire);
   const worth = winShareFor(base, room.opponent, room.draws);
+  const explain = whyFor(mine, slots, base, room.draws, hurt);
   const byKey = new Map(mine.map((p) => [p.key, p]));
 
   return pool
     .map((p) => {
-      const { displaces, ...his } = worth(p);
+      const seen = explain(p);
+      const { displaces, ...his } = worth(p, seen.watch);
 
       return {
         p, ...his,
         displaced: displaces ? byKey.get(displaces) ?? null : null,
+        why: seen.done(),
       };
     })
     .sort((a, b) => b.added - a.added);
