@@ -42,7 +42,24 @@ export interface SleeperScoreGame {
     down_and_distance?: string | null;
     home_used_timeouts?: Said;
     away_used_timeouts?: Said;
+    /** kickoff again, as an ISO time with its offset */
+    date_time?: string | null;
   };
+}
+
+/**
+ * Kickoff off the epoch time where the feed sent one, and off the ISO
+ * time in the metadata where it did not. The feed's bare date has no
+ * time of day, so it cannot tell a 1 pm game from a night game.
+ */
+function kickoffOf(game: SleeperScoreGame): number | undefined {
+  if (typeof game.start_time === "number" && Number.isFinite(game.start_time)) {
+    return game.start_time;
+  }
+
+  const said = Date.parse(game.metadata?.date_time ?? "");
+
+  return Number.isFinite(said) ? said : undefined;
 }
 
 const WHERE: Record<string, Where> = {
@@ -157,6 +174,7 @@ export function sleeperGameOf(game: SleeperScoreGame): GameRead | null {
 
   const home = boardTeamOf(meta.home_team);
   const away = boardTeamOf(meta.away_team);
+  const kickoff = kickoffOf(game);
   const bare: GameRead = {
     where,
     home,
@@ -165,9 +183,7 @@ export function sleeperGameOf(game: SleeperScoreGame): GameRead | null {
       [home]: numberIn(meta.home_score) ?? 0,
       [away]: numberIn(meta.away_score) ?? 0,
     },
-    ...(typeof game.start_time === "number"
-      ? { kickoff: game.start_time }
-      : {}),
+    ...(kickoff !== undefined ? { kickoff } : {}),
     period: 1,
     clock: 0,
     timeouts: {

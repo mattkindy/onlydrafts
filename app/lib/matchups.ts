@@ -69,6 +69,8 @@ export interface GameState {
   left: number;
   /** who has gone off, by the key the slate gives a player */
   hurt?: Map<string, InGameStatus>;
+  /** kickoff, in epoch ms, where the scoreboard gave one */
+  kickoff?: number;
 }
 
 /**
@@ -254,6 +256,7 @@ export function statesOf(
       where: game.where,
       left: LEFT[game.where](game),
       ...(its?.size ? { hurt: its } : {}),
+      ...(game.kickoff !== undefined ? { kickoff: game.kickoff } : {}),
     };
 
     out.set(game.home, state);

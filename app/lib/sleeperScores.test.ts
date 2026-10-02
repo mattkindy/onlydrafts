@@ -56,6 +56,22 @@ describe("sleeperGameOf", () => {
     });
   });
 
+  it("reads the kickoff off the metadata's time when the epoch one is missing", () => {
+    const { start_time: _, ...bare } = final[0]!;
+
+    expect(sleeperGameOf(bare)?.kickoff)
+      .toBe(Date.parse("2026-09-20T20:25:00+00:00"));
+  });
+
+  it("leaves the kickoff out when the feed gives only a date", () => {
+    const { start_time: _, ...bare } = final[0]!;
+    const dated = {
+      ...bare, metadata: { ...bare.metadata, date_time: null },
+    };
+
+    expect(sleeperGameOf(dated)?.kickoff).toBe(undefined);
+  });
+
   it("puts the ball in the other side's half when that is whose half it is", () => {
     const deep = {
       ...onNow,

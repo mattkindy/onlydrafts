@@ -1043,7 +1043,9 @@ describe("gameStates", () => {
     expect(live.secondsLeft).toBe(352);
     expect(live.yardline).toBe(53);
     expect(live.timeouts).toEqual({ GB: 3, ATL: 3 });
-    expect(got.states.get("BUF")).toEqual({ where: "pre", left: 1 });
+    expect(got.states.get("BUF")).toEqual({
+      where: "pre", left: 1, kickoff: 1790528400000,
+    });
     expect(got.nextKickoff).toBe(1790528400000);
   });
 
@@ -1069,7 +1071,9 @@ describe("gameStates", () => {
 
     expect(got.situations.get("GB")!.secondsLeft).toBe(317);
     // the game Sleeper could read is still Sleeper's
-    expect(got.states.get("BUF")).toEqual({ where: "pre", left: 1 });
+    expect(got.states.get("BUF")).toEqual({
+      where: "pre", left: 1, kickoff: 1790528400000,
+    });
   });
 
   it("leaves an ESPN league on ESPN's scoreboard", async () => {
@@ -1085,5 +1089,14 @@ describe("gameStates", () => {
 
     expect(askedSleeper).toBe(false);
     expect(got.situations.get("GB")!.secondsLeft).toBe(317);
+  });
+
+  it("keeps each game's kickoff off ESPN's event date", async () => {
+    serveScores(answered([]));
+
+    const got = await gameStates(2026, 3, "espn");
+
+    expect(got.states.get("GB")?.kickoff).toBe(Date.parse("2026-09-25T00:15Z"));
+    expect(got.states.get("ATL")?.kickoff).toBe(Date.parse("2026-09-25T00:15Z"));
   });
 });
