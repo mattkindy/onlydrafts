@@ -185,4 +185,50 @@ describe("the league tab's recap", () => {
     expect(layout.subtitle).toBe("week 3 recap");
     expect(layout.blocks.length).toBeGreaterThan(0);
   });
+
+  it("measures last week's steal from the chance going into Monday night", async () => {
+    const sunday = Date.parse("2026-09-27T17:00Z");
+    const monday = Date.parse("2026-09-29T00:15Z");
+    const kicked = new Map(slate.rows.map((row) => [row.team, {
+      where: "post", left: 0,
+      kickoff: ["PHI", "CHI"].includes(row.team) ? monday : sunday,
+    } as GameState]));
+    const scored = (of: Side, points: number[]): Side => {
+      const starters = of.starters.map((s, at) => ({ ...s, points: points[at]! }));
+
+      return {
+        ...of, starters, points: starters.reduce((sum, s) => sum + s.points, 0),
+      };
+    };
+    // Hurts plays Monday night for Alpha and Williams for Bravo, with
+    // Alpha behind going in and Hurts having the bigger night
+    const games: Matchup[] = [{
+      sides: [
+        scored(side("Alpha", 0, 0), [15, 40, 15, 15]),
+        scored(side("Bravo", 4, 0), [20, 20, 20, 5]),
+      ],
+    }];
+    const reads: RecapReads = {
+      ...readsOf(),
+      matchupsFor: () => Promise.resolve(games),
+      readGames: () => Promise.resolve({ states: kicked }),
+    };
+    const got = await readRecapWeek(WEEKS[0]!, reads);
+    const report = recapOf(got, "Test League", {
+      league: "Test League",
+      season: 2026,
+      week: 4,
+      players: [],
+      catchShift: 0,
+      slots: ["QB", "RB", "WR", "TE"],
+      rostered: new Set(),
+    });
+    const steal = report.awards.find((given) => given.award === "stolen");
+    const choke = report.awards.find((given) => given.award === "choke");
+
+    expect(steal?.owner).toBe("Alpha");
+    expect(steal?.note).toMatch(/^won from \d+% going into Monday night/);
+    expect(choke?.owner).toBe("Bravo");
+    expect(choke?.note).toMatch(/going into Monday night$/);
+  });
 });

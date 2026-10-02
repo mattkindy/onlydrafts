@@ -4,8 +4,8 @@ import type { GameState } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
 import type { SlateRow } from "./slate.ts";
 import {
-  AWARD_SAYS, bestPointsFor, pregameOf, quantileSays, reportFor, type Award,
-  type ReportInput,
+  AWARD_SAYS, bestPointsFor, pregameOf, quantileSays, reportFor, turnOf,
+  windowSays, type Award, type ReportInput,
 } from "./weekReport.ts";
 
 const row = (
@@ -378,6 +378,123 @@ describe("pregameOf", () => {
     expect(before!.odds[0]).toBeLessThan(0.65);
     expect(before!.projected[0]).toBeCloseTo(before!.projected[1], 0);
     expect(up.starters[0]!.points).toBe(40);
+  });
+});
+
+/** Sunday 20 September 2026 at 1 pm Eastern, and the games after it */
+const EARLY = Date.parse("2026-09-20T17:00Z");
+const LATE = Date.parse("2026-09-20T20:25Z");
+const SUNDAY_NIGHT = Date.parse("2026-09-21T00:20Z");
+const MONDAY_NIGHT = Date.parse("2026-09-22T00:15Z");
+
+const overAt = (kickoff: number): GameState => ({ ...OVER, kickoff });
+
+/**
+ * Gus trails Hal 30 to 55 after the Bills' game on Sunday, and his three
+ * Dolphins outscore Hal's by 45 on Monday night to win 100 to 80.
+ */
+const COMEBACK: Matchup = {
+  sides: [
+    side("Gus", [10, 25, 25, 5, 5, 20, 10]),
+    side("Hal", [15, 10, 10, 15, 15, 5, 10]),
+  ],
+};
+
+const EVEN_PREGAME = [
+  { odds: [0.5, 0.5] as [number, number], projected: [84, 84] as [number, number] },
+];
+
+describe("reportFor, on steals and chokes", () => {
+  const mondayFinish = states({
+    BUF: overAt(EARLY), MIA: overAt(MONDAY_NIGHT),
+  });
+
+  it("measures a steal from the chance going into Monday night", () => {
+    const report = reportFor(input({
+      games: [COMEBACK], states: mondayFinish, pregame: EVEN_PREGAME,
+    }));
+    const steal = awardIn(report, "stolen");
+
+    expect(steal?.owner).toBe("Gus");
+    expect(steal?.fill).toBeLessThan(0.35);
+    expect(steal?.note).toMatch(/^won from \d+% going into Monday night, beat Hal/);
+  });
+
+  it("gives the choke to the side up big going into the last game", () => {
+    const report = reportFor(input({
+      games: [COMEBACK], states: mondayFinish, pregame: EVEN_PREGAME,
+    }));
+    const choke = awardIn(report, "choke");
+
+    expect(choke?.owner).toBe("Hal");
+    expect(choke?.fill).toBeGreaterThan(0.65);
+    expect(choke?.note).toMatch(/^lost to Gus from \d+% going into Monday night$/);
+  });
+
+  it("names the late games when that is where the week ended", () => {
+    const report = reportFor(input({
+      games: [COMEBACK], states: states({
+        BUF: overAt(EARLY), MIA: overAt(LATE),
+      }),
+    }));
+
+    expect(awardIn(report, "choke")?.note).toContain("going into the late games");
+  });
+
+  it("uses the pregame chance when every starter played Sunday at 1 pm", () => {
+    const pregame = [
+      { odds: [0.5, 0.5] as [number, number], projected: [84, 84] as [number, number] },
+      { odds: [0.2, 0.8] as [number, number], projected: [84, 84] as [number, number] },
+      { odds: [0.5, 0.5] as [number, number], projected: [84, 84] as [number, number] },
+    ];
+    const report = reportFor(input({
+      pregame, states: states({ BUF: overAt(EARLY), MIA: overAt(EARLY) }),
+    }));
+    const steal = awardIn(report, "stolen");
+
+    expect(steal?.owner).toBe("Cy");
+    expect(steal?.figure).toBe("20%");
+    expect(steal?.note).toBe("won from 20% before kickoff, beat Dot by 0.50");
+  });
+
+  it("falls back to the pregame chance when a kickoff is missing", () => {
+    const report = reportFor(input({
+      games: [COMEBACK], pregame: EVEN_PREGAME,
+      states: states({ BUF: OVER, MIA: overAt(MONDAY_NIGHT) }),
+    }));
+
+    // an even game going in has nobody to steal it or choke it
+    expect(awardIn(report, "stolen")).toBe(undefined);
+    expect(awardIn(report, "choke")).toBe(undefined);
+  });
+});
+
+describe("turnOf", () => {
+  it("counts the 4:05 and 4:25 kickoffs as one group", () => {
+    const at405 = Date.parse("2026-09-20T20:05Z");
+    const split = states({ BUF: overAt(at405), MIA: overAt(LATE) });
+
+    expect(turnOf(COMEBACK, rows, split)).toBe(null);
+  });
+
+  it("prices the matchup from where it stood before the last group", () => {
+    const split = states({ BUF: overAt(EARLY), MIA: overAt(MONDAY_NIGHT) });
+    const turn = turnOf(COMEBACK, rows, split, undefined, 2000);
+
+    expect(turn?.kickoff).toBe(MONDAY_NIGHT);
+    expect(turn!.odds[0]).toBeLessThan(0.35);
+    expect(turn!.odds[0] + turn!.odds[1]).toBeCloseTo(1);
+  });
+});
+
+describe("windowSays", () => {
+  it("names each window the way a fan would", () => {
+    expect(windowSays(EARLY)).toBe("the early games");
+    expect(windowSays(LATE)).toBe("the late games");
+    expect(windowSays(SUNDAY_NIGHT)).toBe("Sunday night");
+    expect(windowSays(MONDAY_NIGHT)).toBe("Monday night");
+    expect(windowSays(Date.parse("2026-09-25T00:15Z"))).toBe("Thursday night");
+    expect(windowSays(Date.parse("2026-12-19T21:30Z"))).toBe("Saturday's games");
   });
 });
 

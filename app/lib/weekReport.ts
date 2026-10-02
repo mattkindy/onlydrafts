@@ -255,6 +255,155 @@ const beforeKickoff = (game: Matchup): Matchup => ({
   sides: [scoreless(game.sides[0]), scoreless(game.sides[1])],
 });
 
+/** where a matchup stood going into the last group of games it had to play */
+export interface Turn {
+  odds: [number, number];
+  /** the first kickoff in that last group, in epoch ms */
+  kickoff: number;
+}
+
+/**
+ * Kickoffs this close to the last one count as the same group, so the 4:05
+ * and 4:25 games, or a Monday doubleheader, are one window. The early and
+ * late Sunday games are three hours apart.
+ */
+const GROUP_SPAN = 2 * 60 * 60 * 1000;
+
+/**
+ * The kickoff of every NFL team a starter in this matchup plays for, or
+ * null when a team that played has no kickoff to go on. A team with no
+ * game at all is on a bye and is left out.
+ */
+function kickoffsOf(
+  game: Matchup, rows: Map<string, SlateRow>,
+  states: Map<string, GameState>, lines?: Lines,
+): Map<string, number> | null {
+  const out = new Map<string, number>();
+
+  for (const side of game.sides) {
+    for (const starter of side.starters) {
+      const team = lineFor(starter, rows, lines)?.team;
+      const state = team ? states.get(team) : undefined;
+
+      if (!team || !state) {
+        continue;
+      }
+
+      if (state.kickoff === undefined) {
+        return null;
+      }
+
+      out.set(team, state.kickoff);
+    }
+  }
+
+  return out;
+}
+
+/** a side with its starters in the last group of games put back to no points */
+function beforeGroup(side: Side, inGroup: (starter: Starter) => boolean): Side {
+  const starters = side.starters.map(
+    (starter) => inGroup(starter) ? { ...starter, points: 0 } : starter);
+
+  return {
+    ...side,
+    starters,
+    points: starters.reduce((sum, starter) => sum + starter.points, 0),
+  };
+}
+
+/**
+ * The matchup priced right before its last group of games kicked off: the
+ * starters already done keep what they scored, and the rest have a whole
+ * week to come. Null when every starter played in that one group, since
+ * the pregame chance is the same thing, or when a kickoff is missing.
+ */
+export function turnOf(
+  game: Matchup, rows: Map<string, SlateRow>,
+  states: Map<string, GameState>, lines?: Lines, draws = PREGAME_DRAWS,
+): Turn | null {
+  const kickoffs = kickoffsOf(game, rows, states, lines);
+
+  if (!kickoffs?.size) {
+    return null;
+  }
+
+  const times = [...kickoffs.values()];
+  const last = Math.max(...times);
+  const from = Math.min(...times.filter((at) => at >= last - GROUP_SPAN));
+
+  if (times.every((at) => at >= from)) {
+    return null;
+  }
+
+  const inGroup = (starter: Starter) => {
+    const team = lineFor(starter, rows, lines)?.team;
+    const at = team ? kickoffs.get(team) : undefined;
+
+    return at !== undefined && at >= from;
+  };
+  const before = new Map<string, GameState>();
+
+  for (const side of game.sides) {
+    for (const starter of side.starters) {
+      const team = lineFor(starter, rows, lines)?.team;
+
+      if (team) {
+        before.set(team, inGroup(starter)
+          ? { where: "pre", left: 1 }
+          : { where: "post", left: 0 });
+      }
+    }
+  }
+
+  const goingIn: Matchup = {
+    ...game,
+    sides: [
+      beforeGroup(game.sides[0], inGroup), beforeGroup(game.sides[1], inGroup),
+    ],
+  };
+  const { odds } = standingFor(goingIn, { rows, states: before, lines, draws });
+
+  return { odds, kickoff: from };
+}
+
+const EASTERN = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York", weekday: "long", hour: "numeric",
+  hourCycle: "h23",
+});
+
+function sundayWindow(hour: number): string {
+  if (hour >= 19) {
+    return "Sunday night";
+  }
+
+  if (hour >= 15) {
+    return "the late games";
+  }
+
+  if (hour >= 12) {
+    return "the early games";
+  }
+
+  return "the morning game";
+}
+
+const WINDOW_BY_DAY: Record<string, (hour: number) => string> = {
+  Sunday: sundayWindow,
+  Monday: () => "Monday night",
+  Thursday: () => "Thursday night",
+};
+
+/** which games a kickoff starts, as a fan would say it, on Eastern time */
+export function windowSays(kickoff: number): string {
+  const parts = EASTERN.formatToParts(kickoff);
+  const day = parts.find((part) => part.type === "weekday")?.value ?? "";
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const says = WINDOW_BY_DAY[day];
+
+  return says ? says(hour) : `${day}'s games`;
+}
+
 /** a player in the pool a best lineup is picked from */
 interface Scored {
   key: string;
@@ -372,12 +521,35 @@ interface SideLine {
   /** the most he could have started, and how much of it he left out */
   best: number;
   left: number;
-  /** how often he was winning this before kickoff, where that is known */
-  chance: number | null;
+  /** how often he was winning this going into his last games, where known */
+  chance: Chance | null;
   /** what he was projected to score, and what he beat it by */
   expected: number | null;
   over: number | null;
   swap: Swap | null;
+}
+
+/** a win chance, and the point in the week it was read at */
+interface Chance {
+  share: number;
+  /** "going into Monday night", or "before kickoff" */
+  when: string;
+}
+
+function chanceOf(
+  turn: Turn | null, pregame: Pregame | null, which: 0 | 1,
+): Chance | null {
+  if (turn) {
+    return {
+      share: turn.odds[which], when: "going into " + windowSays(turn.kickoff),
+    };
+  }
+
+  if (pregame) {
+    return { share: pregame.odds[which], when: "before kickoff" };
+  }
+
+  return null;
 }
 
 function sideLinesOf(input: ReportInput): SideLine[] {
@@ -389,6 +561,7 @@ function sideLinesOf(input: ReportInput): SideLine[] {
     }
 
     const pregame = input.pregame?.[at] ?? null;
+    const turn = turnOf(game, input.rows, input.states, input.lines);
 
     for (const which of [0, 1] as const) {
       const side = game.sides[which];
@@ -404,7 +577,7 @@ function sideLinesOf(input: ReportInput): SideLine[] {
         margin,
         best,
         left: Math.max(0, best - side.points),
-        chance: pregame?.odds[which] ?? null,
+        chance: chanceOf(turn, pregame, which),
         expected,
         over: expected === null ? null : side.points - expected,
         swap: margin < 0
@@ -444,10 +617,12 @@ const beat = (side: SideLine) =>
 
 const asPct = (share: number) => Math.round(share * 100) + "%";
 
-/** the sides whose pregame chance is known, which the two upsets need */
+/** the sides whose chance is known, which the two upsets need */
 const withChance = (sides: SideLine[]) =>
-  sides.filter((side): side is SideLine & { chance: number } =>
+  sides.filter((side): side is SideLine & { chance: Chance } =>
     side.chance !== null);
+
+const fromSays = (chance: Chance) => `from ${asPct(chance.share)} ${chance.when}`;
 
 const withProjection = (sides: SideLine[]) =>
   sides.filter((side): side is SideLine & { over: number; expected: number } =>
@@ -507,31 +682,33 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
     };
   },
   stolen: (sides) => {
-    const thief = pickBy(withChance(sides).filter(won), (s) => -s.chance);
+    const thief = pickBy(
+      withChance(sides).filter(won), (s) => -s.chance.share);
 
     // a favourite winning has stolen nothing
-    if (!thief || thief.chance >= 0.5) {
+    if (!thief || thief.chance.share >= 0.5) {
       return null;
     }
 
     return {
-      award: "stolen", owner: thief.owner, figure: asPct(thief.chance),
-      note: `${asPct(thief.chance)} to win, ${beat(thief)}`,
-      fill: thief.chance,
+      award: "stolen", owner: thief.owner, figure: asPct(thief.chance.share),
+      note: `won ${fromSays(thief.chance)}, ${beat(thief)}`,
+      fill: thief.chance.share,
       won: true,
     };
   },
   choke: (sides) => {
-    const gone = pickBy(withChance(sides).filter(lost), (s) => s.chance);
+    const gone = pickBy(
+      withChance(sides).filter(lost), (s) => s.chance.share);
 
-    if (!gone || gone.chance <= 0.5) {
+    if (!gone || gone.chance.share <= 0.5) {
       return null;
     }
 
     return {
-      award: "choke", owner: gone.owner, figure: asPct(gone.chance),
-      note: `${asPct(gone.chance)} to win, lost to ${gone.against}`,
-      fill: gone.chance,
+      award: "choke", owner: gone.owner, figure: asPct(gone.chance.share),
+      note: `lost to ${gone.against} ${fromSays(gone.chance)}`,
+      fill: gone.chance.share,
       won: false,
     };
   },
