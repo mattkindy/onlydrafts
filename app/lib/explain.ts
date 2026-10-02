@@ -231,22 +231,22 @@ type Cause = "opponent" | "spread" | "ownLineup";
 
 const LEADS: Record<Cause, (good: boolean, underdog: boolean) => string> = {
   opponent: (good) => good
-    ? "his week runs against the opponent's lineup, so his good afternoon is less likely to come with theirs."
-    : "his week moves with the opponent's lineup, so his good afternoon tends to come with theirs.",
+    ? "his scoring tends to go the other way from your opponent's starters, so his big weeks are less likely to come when theirs do."
+    : "his scoring tends to rise and fall with your opponent's starters, so his big weeks often come when theirs do.",
   spread: (good, underdog) => good
     ? (underdog
-      ? "his is the wider week, and you need the top end of it to win from behind."
-      : "his is the wider week, and the ceiling it adds is worth more here than the floor it costs.")
+      ? "his range is wider, and you need a big week to win from behind."
+      : "his range is wider, and here the higher ceiling is worth more than the lower floor costs.")
     : (underdog
-      ? "his is the narrower week, which leaves you short of the big afternoon you need from behind."
-      : "his is the narrower week, and you are ahead, so the steadier player keeps more of the lead."),
+      ? "his range is narrower, so he is less likely to give you the big week you need from behind."
+      : "his range is narrower, and you are ahead, so a steadier player keeps more of the lead."),
   ownLineup: (good, underdog) => good
     ? (underdog
-      ? "his week moves with your other starters, which widens your whole week, and that helps from behind."
-      : "his week runs against your other starters, which steadies your whole week, and you are ahead.")
+      ? "his scoring rises and falls with your other starters, which makes your week less predictable, and that helps from behind."
+      : "his scoring tends to go the other way from your other starters, which steadies your week while you are ahead.")
     : (underdog
-      ? "his week runs against your other starters, which steadies your whole week when you want the wild one."
-      : "his week moves with your other starters, which widens your whole week, and you are the favourite."),
+      ? "his scoring tends to go the other way from your other starters, which steadies your week when you need a big one."
+      : "his scoring rises and falls with your other starters, which makes your week less predictable while you are the favourite."),
 };
 
 const biggestCause = (x: Explanation): [Cause, number] =>
@@ -265,7 +265,7 @@ export function leadFor(x: Explanation): string {
   if (Math.abs(worth) < WORTH_SAYING) {
     return x.gains > 0
       ? "he wins more often because he is projected for more."
-      : "the projection is the whole of it.";
+      : "the difference comes from the projections alone.";
   }
 
   return LEADS[named](worth > 0, x.odds < 0.5);

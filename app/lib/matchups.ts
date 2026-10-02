@@ -527,7 +527,7 @@ async function espnWeek(
     `${SCOREBOARD}?seasontype=2&week=${week}&dates=${season}`);
 
   if (!answered.ok) {
-    throw new Error("ESPN would not hand over the scoreboard.");
+    throw new Error("Could not load ESPN's scoreboard.");
   }
 
   const games = espnGamesFrom(await answered.json() as Scoreboard);

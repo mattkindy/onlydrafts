@@ -87,7 +87,7 @@ describe("a swap pulled apart", () => {
     expect(x.points).toBeLessThan(0);
     expect(x.opponent).toBeGreaterThan(0);
     expect(x.opponent).toBeGreaterThan(Math.abs(x.points));
-    expect(leadFor(x)).toContain("runs against the opponent's lineup");
+    expect(leadFor(x)).toContain("go the other way from your opponent's starters");
   });
 
   /** you want the wider week when only a big afternoon gets you there */
@@ -107,8 +107,8 @@ describe("a swap pulled apart", () => {
     expect(asFavourite.spread).toBeLessThan(-0.02);
     expect(asUnderdog.gains).toBeGreaterThan(0);
     expect(asFavourite.gains).toBeLessThan(0);
-    expect(leadFor(asUnderdog)).toContain("wider week");
-    expect(leadFor(asFavourite)).toContain("narrower week");
+    expect(leadFor(asUnderdog)).toContain("range is wider");
+    expect(leadFor(asFavourite)).toContain("range is narrower");
   });
 
   it("gives back pieces that add up to the whole change", () => {

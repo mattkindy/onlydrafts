@@ -587,7 +587,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
 
     return worst && {
       award: "swap", owner: worst.owner, figure: scoredSays(worst.swap.by),
-      note: `${worst.swap.starts} over ${worst.swap.benches} wins it`,
+      note: `starting ${worst.swap.starts} over ${worst.swap.benches} wins it`,
     };
   },
 };

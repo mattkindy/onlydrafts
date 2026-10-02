@@ -518,7 +518,7 @@ async function readEspnFile(season: number): Promise<EspnPlayers> {
   );
 
   if (!answered.ok) {
-    throw new Error("ESPN would not hand over its player list.");
+    throw new Error("Could not load ESPN's player list.");
   }
 
   const raw = await answered.json() as {
@@ -1003,7 +1003,7 @@ async function throughTheWorker(leagueId: string, season: number, query: string)
 
   if (!swid || !s2) {
     throw new NeedsEspnCookies(
-      "That ESPN league is private, so it needs your own two espn cookies.",
+      "That ESPN league is private, so it needs your two ESPN cookies.",
     );
   }
 
@@ -1022,7 +1022,7 @@ async function throughTheWorker(leagueId: string, season: number, query: string)
 
   const said = await answered.json().catch(() => {
     throw new NeedsEspnCookies(
-      `the relay answered ${answered.status} with something other than json`);
+      `the relay returned ${answered.status}, and the response was not JSON`);
   });
 
   if (said.error) {

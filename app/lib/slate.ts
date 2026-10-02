@@ -569,7 +569,7 @@ export function splitNote(row: SlateRow): string {
     ? `we have him ${by.toFixed(1)} points above Sleeper`
     : `Sleeper has him ${(-by).toFixed(1)} points above us`;
 
-  return `${side}. When the two split by ${SPLIT_AT} points or more, ` +
+  return `${side}. When the two differ by ${SPLIT_AT} points or more, ` +
     `Sleeper is right about ${SLEEPER_WINS_SPLITS}% of the time.`;
 }
 
