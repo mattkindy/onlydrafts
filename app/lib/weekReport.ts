@@ -656,6 +656,12 @@ function notesOf(input: ReportInput): PlayerNote[] {
           continue;
         }
 
+        // with no line to beat, any points at all read as a one in a
+        // million week, so a player nobody expected to play is left out
+        if (line.blend <= 0) {
+          continue;
+        }
+
         out.push(noteOf(starter, side.owner, line, input));
       }
     }

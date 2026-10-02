@@ -114,6 +114,17 @@ const awardIn = (report: ReturnType<typeof reportFor>, award: Award) =>
   report.awards.find((given) => given.award === award);
 
 describe("reportFor", () => {
+  it("leaves a starter with no line out of player of the week", () => {
+    const zeroed = new Map(rows);
+    const any = GAMES[0]!.sides[0].starters[0]!;
+
+    zeroed.set(any.key, { ...rows.get(any.key)!, blend: 0, ours: 0, sleeper: 0 });
+
+    const report = reportFor(input({ rows: zeroed }));
+
+    expect(report.player?.key).not.toBe(any.key);
+  });
+
   it("gives the awards out over the finished games", () => {
     const report = reportFor(input());
 
