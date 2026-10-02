@@ -36,9 +36,11 @@ import { Standings } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import { useWeekPoll } from "./views/scoreboard.ts";
 import {
-  hasGameIn, loadSlate, onTheBooks, rosterKeys, slateUnder, weekRefs,
-  withByesZeroed, withOutPlayersZeroed, type Slate, type WeekRef,
+  loadSlate, onTheBooks, rosterKeys, slateUnder, weekRefs, weekRowsOf,
+  type Slate, type WeekRef,
 } from "./lib/slate.ts";
+import { gameStates } from "./lib/matchups.ts";
+import { readRecapWeek, weekBefore } from "./lib/recapWeek.ts";
 
 export type Order = "war" | "rank" | "adp";
 
@@ -431,20 +433,47 @@ function App() {
    * prices a week reads this map, so the ruling is applied once here
    * rather than in each of them.
    */
-  const slateRows = useMemo(
-    () => withByesZeroed(
-      withOutPlayersZeroed(
-        new Map((slate?.rows ?? []).map((r) => [normalizeName(r.name), r])),
-        listed,
-      ),
-      onTheBooks(
-        board?.players ?? [],
-        active ? [active.myRoster, ...active.allRosters.map((r) => r.keys)] : [],
-      ),
-      (team) => hasGameIn(board?.schedule, team, slate?.week),
+  const books = useMemo(
+    () => onTheBooks(
+      board?.players ?? [],
+      active ? [active.myRoster, ...active.allRosters.map((r) => r.keys)] : [],
     ),
-    [slate, listed, board, active],
+    [board, active],
   );
+
+  const slateRows = useMemo(
+    () => weekRowsOf(slate, books, board?.schedule, listed),
+    [slate, books, board, listed],
+  );
+
+  /**
+   * The week before the one on screen, read in full for the league tab's
+   * recap while the week on screen has no finished games yet. Today's
+   * injury list is left off its rows, since it is about the coming week.
+   */
+  const lastWeek = useMemo(() => {
+    const before = week && weekBefore(weeks, week);
+    const asks = active && PROVIDERS[active.provider];
+
+    if (!before || !active || !asks?.matchupsFor) {
+      return undefined;
+    }
+
+    const matchupsFor = asks.matchupsFor;
+    const pointsFor = asks.weekPointsFor;
+
+    return () => readRecapWeek(before, {
+      matchupsFor: (at) => matchupsFor(active, at),
+      readGames: (season, at) => gameStates(season, at, active.provider),
+      loadSlate: async (file) => {
+        const got = await loadSlate(file);
+
+        return active.pays ? slateUnder(got, active.pays["rec"] ?? 0) : got;
+      },
+      rowsOf: (got) => weekRowsOf(got, books, board?.schedule),
+      weekPointsFor: pointsFor && ((at) => pointsFor(active, at)),
+    });
+  }, [week, weeks, active, books, board]);
 
   /**
    * The board in this league's terms. Nothing here needs the model to
@@ -1069,6 +1098,7 @@ function App() {
                   status={gamesStatus || weekStatus}
                   rosters={active.allRosters}
                   weekPointsFor={weekPointsFor}
+                  lastWeek={lastWeek}
                   onMore={openKey}
                 />
               )

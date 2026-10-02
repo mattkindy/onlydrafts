@@ -27,8 +27,10 @@ import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import { layoutGame, layoutWeek, shareLayout } from "../lib/shareImage.ts";
 import type { ShareGame } from "../lib/shareImage.ts";
 import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
+import type { RecapWeek } from "../lib/recapWeek.ts";
 import { pregameOf, reportFor } from "../lib/weekReport.ts";
 import { Advice, nameOf, pct, pctPair } from "./Advice.tsx";
+import { useLastWeekReport } from "./lastWeekReport.ts";
 import { PlayerName } from "./PlayerName.tsx";
 import { Reading } from "./Reading.tsx";
 import { useLiveWeek, type WeekPoll } from "./scoreboard.ts";
@@ -61,6 +63,8 @@ interface Props {
   rosters?: Roster[];
   /** every player's week, where the provider will say */
   weekPointsFor?: (() => Promise<PlayerWeek[]>) | undefined;
+  /** reads the week before, recapped while no game this week is over */
+  lastWeek?: (() => Promise<RecapWeek>) | undefined;
   /** opens a player's sheet, since every name on the page opens one */
   onMore?: (key: string) => void;
 }
@@ -303,7 +307,8 @@ export function Game(
 export function Matchups(
   {
     games: asRead, rows, players, mine, slots, pays, boardPerCatch, provider,
-    scoreboard, season, week, league, status, rosters, weekPointsFor, onMore,
+    scoreboard, season, week, league, status, rosters, weekPointsFor, lastWeek,
+    onMore,
   }: Props,
 ) {
   const shift = catchShiftOf(pays, boardPerCatch);
@@ -371,6 +376,15 @@ export function Matchups(
     [states, league, games, rows, lines, slots, week, pregame, weeks, rostered],
   );
 
+  // the newest week is the coming one from Tuesday on, so without this the
+  // recap would only ever be up for a few hours on Monday night
+  const thisWeekDone = Boolean(report && report.finished > 0);
+  const before = useLastWeekReport(
+    Boolean(report) && !thisWeekDone, lastWeek,
+    { league, season, week, players, catchShift: shift, slots, rostered },
+  );
+  const recap = thisWeekDone ? report : before;
+
   const shareWeek = () => {
     if (!states || !league) {
       return;
@@ -425,7 +439,7 @@ export function Matchups(
         ))}
       </div>
 
-      {report && <WeekReport report={report} />}
+      {recap && <WeekReport report={recap} />}
     </>
   );
 }

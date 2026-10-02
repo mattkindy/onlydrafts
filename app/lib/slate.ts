@@ -523,6 +523,27 @@ export function withByesZeroed(
 }
 
 /**
+ * A week's rows under the key a lineup uses for a player, with a zero for
+ * anybody on bye that week. With the injury report's list, a player it
+ * says is not playing is zeroed as well.
+ */
+export function weekRowsOf(
+  slate: Slate | null,
+  books: Iterable<OnTheBooks>,
+  schedule: Record<string, (string | null)[]> | null | undefined,
+  listed?: Map<string, Listed>,
+): Map<string, SlateRow> {
+  const rows = new Map(
+    (slate?.rows ?? []).map((r) => [normalizeName(r.name), r]));
+
+  return withByesZeroed(
+    listed ? withOutPlayersZeroed(rows, listed) : rows,
+    books,
+    (team) => hasGameIn(schedule, team, slate?.week),
+  );
+}
+
+/**
  * The word on what is wrong with him: the league's own, and failing that
  * the one the build wrote down. The league's player file can sit a day
  * behind a designation that landed on Friday or Saturday.
