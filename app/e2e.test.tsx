@@ -167,8 +167,10 @@ it("puts a defence in the slate the views can find", async () => {
 
   expect(defences.length).toBeGreaterThan(20);
 
+  // a big road underdog against 32 implied points has projected under a
+  // point three times since 2022, and no week pays less than -4
   for (const d of defences) {
-    expect(d.blend, `${d.name} blend ${d.blend}`).toBeGreaterThan(1);
+    expect(d.blend, `${d.name} blend ${d.blend}`).toBeGreaterThan(-4);
     expect(d.blend, `${d.name} blend ${d.blend}`).toBeLessThan(16);
     expect(d.floor).toBeLessThan(d.blend);
     expect(d.ceiling).toBeGreaterThan(d.blend);
@@ -183,6 +185,22 @@ it("puts a defence in the slate the views can find", async () => {
   expect(found?.position).toBe("DEF");
   expect(found?.team).toBe(team);
   expect(found?.blend).toBeGreaterThan(1);
+});
+
+// every week from 5 on since 2022 has had its middle defence between 5.1
+// and 6.8, so a slate of zeros or of season totals fails here
+it("puts the week's middle defence at a defence's usual week", () => {
+  const file = JSON.parse(readFileSync(join(DATA, latestSlate()), "utf8")) as {
+    players: { position: string; average: number }[];
+  };
+  const blends = file.players
+    .filter((r) => r.position === "DEF")
+    .map((r) => r.average)
+    .sort((a, b) => a - b);
+  const middle = blends[Math.floor(blends.length / 2)]!;
+
+  expect(middle).toBeGreaterThan(3);
+  expect(middle).toBeLessThan(10);
 });
 
 /**
