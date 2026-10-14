@@ -77,8 +77,9 @@ it("the shipped files load and score end to end", async () => {
   const worthReading = withWeeks.filter((p) => (p.ownPpg ?? 0) >= 4);
   expect(worthReading.length).toBeGreaterThan(200);
 
-  // a week at exactly zero is a player his club ruled out, which the
-  // build writes on purpose so the app does not start him
+  // a week at exactly zero is a player the slate has not playing, ruled
+  // out or a backup Sleeper gives no number, which the build writes on
+  // purpose so the app does not start them
   for (const p of worthReading) {
     for (const w of p.weeks!) {
       expect(

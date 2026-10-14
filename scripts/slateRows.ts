@@ -126,6 +126,18 @@ export function slateRow(
 
 export type SlateRowShape = ReturnType<typeof slateRow>;
 
+/**
+ * The week the board's card shows for a player the slate covers. It is
+ * our line, except where the slate has the player at zero, ruled out or
+ * listed by Sleeper with no number. The weekly model reads a player's
+ * own last games, so for a starter sent back to the bench it still counts
+ * those starts, and the card read three times their average for a week
+ * the slate knows they will not play.
+ */
+export function cardWeekOf(row: SlateRowShape, line: number): number {
+  return row.average === 0 ? 0 : line;
+}
+
 /** a board player as a slate row for one week needs him */
 export interface BoardPlayer {
   playerId: string;

@@ -4,7 +4,7 @@ import { buildResidualModel } from "../src/backtest/intervals.js";
 import { projectionKey } from "../src/data/sleeperProjections.js";
 import type { WeekStatus } from "../src/data/weeklyStatus.js";
 import {
-  boardSlateRows, fixturesIn, type BoardPlayer, type BoardWeek,
+  boardSlateRows, cardWeekOf, fixturesIn, type BoardPlayer, type BoardWeek,
 } from "./slateRows.js";
 
 const residuals = buildResidualModel(
@@ -142,5 +142,36 @@ describe("a board player the weekly model has no row for", () => {
     expect(boardSlateRows([bowers], weekOf({
       written: [{ key: "brockbowers" }],
     }))).toEqual([]);
+  });
+});
+
+describe("the week a board card shows", () => {
+  it("is zero where Sleeper lists the player with no number", () => {
+    const [row] = boardSlateRows([bowers], weekOf({
+      projections: new Map(),
+      quiet: new Set([projectionKey(2026, 3, bowers.playerId)]),
+    }));
+
+    expect(cardWeekOf(row!, 14.3)).toBe(0);
+  });
+
+  it("is zero where the club has ruled the player out", () => {
+    const [row] = boardSlateRows([bowers], weekOf({
+      statusOf: statusOf({
+        [bowers.playerId]: {
+          out: true, report: "Out", questionable: false,
+          limitedPractice: false, team: "LV", position: "TE",
+        },
+      }),
+    }));
+
+    expect(cardWeekOf(row!, 14.3)).toBe(0);
+  });
+
+  it("is our own line, before Sleeper, for a player who is playing", () => {
+    const [row] = boardSlateRows([bowers], weekOf());
+
+    expect(row!.average).toBe(13.9);
+    expect(cardWeekOf(row!, 14.3)).toBe(14.3);
   });
 });

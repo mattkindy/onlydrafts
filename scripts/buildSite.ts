@@ -138,7 +138,8 @@ import {
   clubCalendar, recentClubWeeks,
 } from "../src/features/recentWindow.js";
 import {
-  boardSlateRows, fixturesIn, slateRow, type BoardPlayer, type SlateRowShape,
+  boardSlateRows, cardWeekOf, fixturesIn, slateRow,
+  type BoardPlayer, type SlateRowShape,
 } from "./slateRows.js";
 
 /**
@@ -1139,11 +1140,7 @@ async function main(): Promise<void> {
         );
         const sky = skyFor(e.teamId, week, e.position, catchShareOf(e));
         const line = said * sky.lift;
-
-        // his card says what the slate says, and the slate has him at zero
-        ours.set(e.playerId, e.ruledOut ? 0 : line);
-
-        return slateRow(
+        const row = slateRow(
           residuals,
           e,
           line,
@@ -1151,6 +1148,10 @@ async function main(): Promise<void> {
           quiet.has(projectionKey(season, week, e.playerId)),
           sky,
         );
+
+        ours.set(e.playerId, cardWeekOf(row, line));
+
+        return row;
       });
 
     slateLine.set(week, ours);
