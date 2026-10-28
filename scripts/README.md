@@ -3113,3 +3113,38 @@ Take the walk's line into the slate for the pass catchers on these
 weeks. The walk plays the game with the quarterback who is going to
 play, so his accuracy and his depth of target reach the receivers,
 which one share across the whole room cannot do.
+
+## What injured reserve costs, and the games after it
+
+`injuredReserveEval.ts`. The waiver page took six games off anybody on
+reserve and then handed him back at full value, which listed De'Von
+Achane second on the wire in week 8 of 2026 while he sat on it. Over
+2016 to 2025, 311 players averaging seven half PPR points went from
+active to reserve with two or more games behind them:
+
+| went on in | n | back that season | games missed, mean of left |
+| --- | --- | --- | --- |
+| weeks 1-5 | 51 | 55% | 8.6 of 13.4 |
+| weeks 6-9 | 67 | 51% | 6.9 of 10.1 |
+| weeks 10-18 | 193 | 27% | 3.0 of 3.9 |
+
+Of the 64 with twelve or more games left, 45% were back within six
+games, 50% within seven, 55% within eight, 59% within nine, and nobody more after that. Having already sat some of it changes little: with six or
+more games still left, about half never come back whether he has sat
+none, two or four.
+
+Back from four to seven games out, a player scored 76% of his old level
+in his first two games and 86% after that, where players at the same
+level who never went on the list scored 94% of theirs over the same
+stretch, the fall a seven point cut builds in. Net of that, 82% and 91%.
+Back from one to three he scored above his old level, which is the
+usual short stint for a man who was never badly hurt.
+
+The page now holds six games as the floor, has 50%, 55% and then 60% of
+players back in the games after it, marks the first two games back down
+to 83% and the next two to 92%, and ends the season outright for an
+ACL, an Achilles or a patellar tendon. Achane on reserve goes from 3.6%
+of win chance to 1.4%, sixth on that wire rather than second. The body
+part in the nflverse injury file is a word like Knee, so how often a
+named injury ends a season could not be measured here; that list is a
+reading of what those injuries are, not a fit.

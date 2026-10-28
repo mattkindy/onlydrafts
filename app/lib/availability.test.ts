@@ -6,13 +6,25 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  gamesLeft, outThisWeek, playChance, playsByWeek, pricedDown, WEEKS_OUT,
+  BACK_BY, gamesLeft, outThisWeek, playChance, playsByWeek, pricedDown, RAMP,
+  SEASON_OVER, seasonEnding, statusOf, WEEKS_OUT,
 } from "./availability.ts";
 
 describe("what a player on a list is expected to play", () => {
   it("takes six games off him", () => {
-    expect(gamesLeft(16.4, "IR")).toBe(17 - WEEKS_OUT);
     expect(gamesLeft(12.2, "PUP")).toBe(17 - WEEKS_OUT);
+  });
+
+  /**
+   * De'Von Achane sat on reserve in week 8 and the wire still listed him
+   * second, at eleven games of a full season. Half the players who go on
+   * reserve never come back that season.
+   */
+  it("takes six games and then half of the rest off a man on reserve", () => {
+    const left = gamesLeft(17, "IR");
+
+    expect(left).toBeLessThan((17 - WEEKS_OUT) * 0.65);
+    expect(left).toBeGreaterThan((17 - WEEKS_OUT) * 0.5);
   });
 
   it("leaves a player who is merely questionable alone", () => {
@@ -25,7 +37,8 @@ describe("what a player on a list is expected to play", () => {
    * the word on the list does not say, so the lower number wins.
    */
   it("keeps a harsher number when the board has one", () => {
-    expect(gamesLeft(4, "IR")).toBe(4);
+    expect(gamesLeft(4, "PUP")).toBe(4);
+    expect(gamesLeft(8.5, "IR")).toBeCloseTo(gamesLeft(17, "IR") / 2, 10);
   });
 
   it("takes a player with nothing said about him as playing them all", () => {
@@ -49,8 +62,8 @@ describe("the games left from a week in the season", () => {
     expect(gamesLeft(17, null, 4, 2)).toBeCloseTo(15, 10);
   });
 
-  it("takes six games off a man on reserve", () => {
-    expect(gamesLeft(17, "IR", 4, 10)).toBe(14 - WEEKS_OUT);
+  it("takes at least six games off a man on reserve", () => {
+    expect(gamesLeft(17, "IR", 4, 10)).toBeLessThan(14 - WEEKS_OUT);
   });
 
   it("takes one game off a man ruled out of the coming one", () => {
@@ -68,7 +81,16 @@ describe("his chance of playing each week that is left", () => {
 
     // weeks 4 to 9 are the six games; week 10 is the bye
     expect(plays.slice(0, 7)).toEqual([0, 0, 0, 0, 0, 0, 0]);
-    expect(plays.slice(7)).toEqual([1, 1, 1, 1, 1, 1, 1, 1]);
+  });
+
+  it("comes back as the measured share of men do, rusty at first", () => {
+    const plays = playsByWeek(17, "IR", 4, 10);
+
+    // week 11 is the first game past the six: half are back, at the ramp
+    expect(plays[7]).toBeCloseTo(BACK_BY[0]! * RAMP[0]!, 10);
+    // and by the end of the season the most that came back, at full speed
+    expect(plays[14]).toBeCloseTo(BACK_BY[BACK_BY.length - 1]!, 10);
+    expect(Math.max(...plays)).toBeLessThanOrEqual(0.6);
   });
 
   it("is nothing for the coming week only when he is ruled out of it", () => {
@@ -85,6 +107,12 @@ describe("his chance of playing each week that is left", () => {
     expect(total).toBeCloseTo(gamesLeft(6.1, "IR", 3, 9), 10);
     expect(plays[0]).toBe(0);
     expect(Math.max(...plays)).toBeLessThan(1);
+  });
+
+  it("is nothing at all for a season-ending injury", () => {
+    expect(playsByWeek(17, SEASON_OVER, 4, 10).every((p) => p === 0)).toBe(true);
+    expect(gamesLeft(17, SEASON_OVER, 4, 10)).toBe(0);
+    expect(playChance(SEASON_OVER)).toBe(0);
   });
 
   it("covers the coming week and every one after it, and nothing before", () => {
@@ -176,5 +204,22 @@ describe("the chance a listed player plays", () => {
     expect(pricedDown("Doubtful")).toBe(true);
     expect(pricedDown("Out")).toBe(true);
     expect(pricedDown(null)).toBe(false);
+  });
+});
+
+describe("an injury that ends seasons", () => {
+  it("is read off the part or the note", () => {
+    expect(seasonEnding({ part: "Achilles" })).toBe(true);
+    expect(seasonEnding({ part: "Knee", note: "Torn ACL" })).toBe(true);
+    expect(seasonEnding({ part: "Knee" })).toBe(false);
+    expect(seasonEnding({ part: "Hamstring", note: "out for season" })).toBe(true);
+  });
+
+  it("turns a list into the season over, and nothing else", () => {
+    expect(statusOf({ status: "IR", part: "Knee", note: "torn ACL" }))
+      .toBe(SEASON_OVER);
+    expect(statusOf({ status: "IR", part: "Ankle" })).toBe("IR");
+    // a questionable man with an old ACL in his file is still questionable
+    expect(statusOf({ status: "Questionable", part: "ACL" })).toBe("Questionable");
   });
 });

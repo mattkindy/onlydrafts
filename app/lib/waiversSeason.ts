@@ -13,7 +13,9 @@
  * quick however often the filter changes.
  */
 
-import { listingFits, playsByWeek, type Listed } from "./availability.ts";
+import {
+  listingFits, playsByWeek, statusOf, type Listed,
+} from "./availability.ts";
 import type { Room } from "./draftShare.ts";
 import { roomFor } from "./draftShare.ts";
 import type { Roster } from "./providers.ts";
@@ -65,7 +67,7 @@ export function statusesOn(
     const his = listed.get(p.key);
 
     if (his?.status && listingFits(his, p.position)) {
-      said[p.key] = his.status;
+      said[p.key] = statusOf(his);
     }
   }
 

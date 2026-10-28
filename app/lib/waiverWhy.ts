@@ -291,6 +291,7 @@ const pctOf = (share: number) => `${Math.round(100 * share)}%`;
 /** the injury report's words as a sentence would say them */
 const LISTED: Record<string, string> = {
   IR: "on injured reserve",
+  Season: "out for the season",
   PUP: "on the PUP list",
   Sus: "suspended",
   Out: "out",
