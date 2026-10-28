@@ -20,7 +20,9 @@ import type { Player } from "../lib/scoring.ts";
 import { claimWords, reasonWords } from "../lib/sleeperWords.ts";
 import type { League, Matchup } from "../lib/providers.ts";
 import { linesFor, myGameIn, type Lines } from "../lib/matchups.ts";
-import { catchShiftOf, type Slate, type SlateRow } from "../lib/slate.ts";
+import {
+  catchShiftOf, hurtWord, type Slate, type SlateRow,
+} from "../lib/slate.ts";
 import { WeatherMark } from "./WeatherMark.tsx";
 import type { Listed } from "../lib/availability.ts";
 import {
@@ -32,6 +34,7 @@ import {
   weekPricesFor, type WeekAdd, type WeekDrop, type WeekPrices,
 } from "../lib/waiversWeek.ts";
 import { nameOf } from "./Advice.tsx";
+import { injuryBadge, matchesFilter } from "./Draft.tsx";
 import { Reading } from "./Reading.tsx";
 import { PRICED, useWaiverPrices } from "./waiverPrices.ts";
 import { useScoreboard, type WeekPoll } from "./scoreboard.ts";
@@ -253,7 +256,7 @@ interface Paid {
 }
 
 function AddRow(
-  { row, at, figures, absent, paid, span, sky, onMore }: {
+  { row, at, figures, absent, paid, span, sky, hurt, onMore }: {
     row: Add;
     /** where he is in this week's lineup, when the week is loaded */
     at: { slot: string | null } | null;
@@ -264,9 +267,13 @@ function AddRow(
     span: Span;
     /** his row on this week's slate, which is where the forecast is */
     sky?: SlateRow;
+    /** what the injury report says of him, so a man on a list says so */
+    hurt?: { status: string; part?: string } | undefined;
     onMore: () => void;
   },
 ) {
+  const badge = injuryBadge(hurt);
+
   return (
     <tr onClick={onMore} class={paid ? "paired" : ""}>
       {/* the move as you would say it, which a phone leads the card with
@@ -281,6 +288,11 @@ function AddRow(
       </td>
       <td data-label="player">
         <span class="who link">{row.p.name}</span>
+        {badge && (
+          <span class={"badge " + badge.badgeHow} title={badge.badgeTitle}>
+            {badge.badge}
+          </span>
+        )}
         {sky && <WeatherMark row={sky} />}
       </td>
       <td data-label="pos">{row.p.position}</td>
@@ -370,6 +382,40 @@ function missingWeek(
   }
 
   return null;
+}
+
+/**
+ * Why a name typed into the search is not on the wire, since "no matches"
+ * reads as the page not knowing him when he is on somebody's team.
+ */
+export function notOnTheWire(
+  query: string, league: League, players: Player[], posFilter: string,
+): string {
+  const wanted = normalizeName(query);
+  const named = (name: string) => normalizeName(name).includes(wanted);
+  const held = league.allRosters
+    .flatMap((r) => r.keys.map((m) => ({ m, owner: r.owner })))
+    .filter(({ m }) => named(m.name));
+  const mine = new Set(league.myRoster.map((m) => m.key));
+
+  if (held.length > 0) {
+    return held
+      .slice(0, 3)
+      .map(({ m, owner }) => mine.has(m.key)
+        ? `${m.name} is on your roster.`
+        : `${m.name} is on ${owner}'s roster.`)
+      .join(" ");
+  }
+
+  const known = players.find((p) => named(p.name));
+
+  if (known && !matchesFilter(known, posFilter)) {
+    return `${known.name} is a ${known.position}; switch the filter to see him.`;
+  }
+
+  return known
+    ? `${known.name} is not on the wire.`
+    : `Nobody called "${query}" is on the board.`;
 }
 
 /** the move the page leads with: who to add, who goes, and the win % either side */
@@ -543,8 +589,12 @@ export function Waivers(props: Props) {
    * worth zero is a list nobody reads.
    */
   const adds = useMemo(() => {
-    const every = [...worth.map(({ row }) => row), ...rest]
-      .filter(matching)
+    // a name typed in is somebody the reader wants to see, so a search
+    // looks through the whole wire, not only the rows over the bar: a
+    // back on bye adds nothing this week and was unfindable
+    const every = (wanted
+      ? wire.filter(matching)
+      : [...worth.map(({ row }) => row), ...rest])
       .map((row) => ({ row, paid: paidFor.get(row.p.key) ?? null }));
 
     if (span === "season") {
@@ -555,9 +605,9 @@ export function Waivers(props: Props) {
       .map((one) => ({
         ...one, by: week?.adds.get(one.row.p.key)?.added ?? 0,
       }))
-      .filter((one) => one.by >= WORTH_ADDING)
+      .filter((one) => wanted || one.by >= WORTH_ADDING)
       .sort((a, b) => b.by - a.by);
-  }, [worth, rest, wanted, span, week]);
+  }, [wire, worth, rest, wanted, span, week]);
 
   /**
    * How many of the listed players the span on screen leaves out. This
@@ -566,7 +616,7 @@ export function Waivers(props: Props) {
   const shownThisWeek = [...worth.map(({ row }) => row), ...rest]
     .filter((row) => (week?.adds.get(row.p.key)?.added ?? 0) >= WORTH_ADDING)
     .length;
-  const hidden = span === "week"
+  const hidden = wanted ? 0 : span === "week"
     ? listed.length - shownThisWeek
     : listed.length - worth.length - rest.length;
   const best = span === "week"
@@ -602,7 +652,7 @@ export function Waivers(props: Props) {
 
     return {
       at: his,
-      absent,
+      absent: row.p.bye != null && row.p.bye === props.week ? "on bye" : absent,
       figures: his ? weekAdd(his, nameFor) : null,
       paid: net
         ? { ...net, drop: net.drop ? nameFor(net.drop) : OPEN_SPOT }
@@ -742,6 +792,7 @@ export function Waivers(props: Props) {
               row={row}
               span={span}
               sky={span === "week" ? props.rows.get(row.p.key) : undefined}
+              hurt={hurtWord(props.listed.get(row.p.key), props.rows.get(row.p.key))}
               {...addSeen(row, paid)}
               onMore={() => props.onMore(row.p)}
             />
@@ -751,9 +802,11 @@ export function Waivers(props: Props) {
 
       {adds.length === 0 && (
         <p class="hint">
-          {span === "week"
-            ? "No add moves your win % this week."
-            : "No matches."}
+          {wanted
+            ? notOnTheWire(query.trim(), league, players, posFilter)
+            : span === "week"
+              ? "No add moves your win % this week."
+              : "No matches."}
         </p>
       )}
 
