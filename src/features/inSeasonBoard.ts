@@ -29,6 +29,7 @@ import {
   type DressedWeek,
 } from "./dressedWeeks.js";
 import { fantasyPoints } from "../scoring/fantasyPoints.js";
+import { loadLeverage } from "./leverageUsage.js";
 import { scoring } from "../scoring/active.js";
 import { pointsOfLine, updateParts } from "./inSeasonParts.js";
 import type { StatParts } from "./seasonSummary.js";
@@ -82,6 +83,8 @@ export function weeksFrom(
   stats: PlayerWeekStats[],
   snaps: SnapCountWeek[],
   dressed: DressedWeek[],
+  /** each player's looks inside the 20, by `${playerId}|${week}` */
+  redLooks: Map<string, number> = new Map(),
 ): SeasonWeeks {
   const share = new Map<string, number>();
 
@@ -115,6 +118,7 @@ export function weeksFrom(
       carries: row.carries,
       airYards: row.airYards,
       passAttempts: row.passing.attempts,
+      redLooks: redLooks.get(`${row.playerId}|${row.week}`) ?? 0,
     });
     weeks.set(row.playerId, his);
   }
@@ -140,6 +144,7 @@ export function weeksFrom(
       carries: 0,
       airYards: 0,
       passAttempts: 0,
+      redLooks: 0,
     });
     weeks.set(week.playerId, his);
   }
@@ -153,12 +158,16 @@ export function weeksFrom(
 
 /** a season's games as the update reads them */
 export async function readPlayedWeeks(season: number): Promise<SeasonWeeks> {
-  const [stats, snaps] = await Promise.all([
+  const [stats, snaps, counted] = await Promise.all([
     loadPlayerStats(season).catch(() => []),
     loadSnapCounts(season).catch(() => []),
+    loadLeverage([season], undefined, () => {}),
   ]);
+  const redLooks = new Map((counted.get(season) ?? [])
+    .map((row) => [`${row.player}|${row.week}`, row.raw.redLooks]));
 
-  return weeksFrom(stats, snaps, await loadDressedWeeks(season, stats));
+  return weeksFrom(
+    stats, snaps, await loadDressedWeeks(season, stats), redLooks);
 }
 
 /**

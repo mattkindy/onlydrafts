@@ -29,6 +29,7 @@ import {
   RARELY_STARTS, WORTH_ADDING, type Add, type Drop, type Net,
 } from "../lib/waivers.ts";
 import type { Schedule } from "../lib/waiversSeason.ts";
+import { workWords } from "../lib/usage.ts";
 import { whyWords } from "../lib/waiverWhy.ts";
 import {
   weekPricesFor, type WeekAdd, type WeekDrop, type WeekPrices,
@@ -294,6 +295,9 @@ function AddRow(
           </span>
         )}
         {sky && <WeatherMark row={sky} />}
+        {/* his work beside his points, which is how a role reads apart
+            from a fluke */}
+        {workWords(row.p) && <i class="work">{workWords(row.p)}</i>}
       </td>
       <td data-label="pos">{row.p.position}</td>
       {/* a season of him says nothing about one week, and the week's own

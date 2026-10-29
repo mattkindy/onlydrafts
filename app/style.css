@@ -570,7 +570,7 @@
   table.pairs td.reason { text-align: left; min-width: 14rem;
     max-width: 22rem; color: var(--muted); font-size: var(--t1); }
   .starting { display: block; }
-  .starting i, .outscores { display: block; font-style: normal;
+  .starting i, .outscores, td .work { display: block; font-style: normal;
     color: var(--faint); font-size: var(--t1); }
 
   /* the slots you have left, and what the room has taken, so neither

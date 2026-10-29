@@ -56,7 +56,16 @@ describe("weeksFrom", () => {
       carries: 0,
       airYards: 0,
       passAttempts: 0,
+      redLooks: 0,
     }]);
+  });
+
+  it("puts each week's looks inside the 20 on that week", () => {
+    const row = statRow();
+    const read = weeksFrom(
+      [row], [], [], new Map([[`${row.playerId}|${row.week}`, 3]]));
+
+    expect(read.weeks.get(row.playerId)![0]!.redLooks).toBe(3);
   });
 
   it("gives him no snap share where the snap counts skip him", () => {

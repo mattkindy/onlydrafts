@@ -341,6 +341,28 @@ describe("the views", () => {
     expect(where.textContent).not.toContain("sleeper score");
   });
 
+  it("puts a player's work beside his points", () => {
+    const p = players[0]!;
+    const weeks = [1, 2, 3, 4, 5].map((w) => ({
+      w, opp: "v NE", of: 1, played: { rushYds: 50 },
+      use: (w <= 2 ? [40, 6, 1, 0] : [72, 16, 3, 2]) as [number, number, number, number],
+    }));
+
+    render(
+      <PlayerSheet
+        p={{ ...p, sleeper: null, weeks }} plus={[]} minus={[]}
+        teams={12} onClose={() => {}}
+      />,
+      where,
+    );
+    expect(headings(where)).toContain("his work");
+    expect(where.textContent).toContain(
+      "last 3 games: 72% of the snaps, 16.0 carries, 3.0 targets, " +
+        "2.0 inside the 20");
+    expect(where.textContent).toContain("the 2 games before: 40% of the snaps");
+    expect(where.textContent).toContain("72% snaps, 16 car, 3 tgt, 2 in the 20");
+  });
+
   it("says what a card's player is worth against his draft spot", () => {
     render(
       <PlayerSheet

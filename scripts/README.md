@@ -3148,3 +3148,84 @@ of win chance to 1.4%, sixth on that wire rather than second. The body
 part in the nflverse injury file is a word like Knee, so how often a
 named injury ends a season could not be measured here; that list is a
 reading of what those injuries are, not a fit.
+
+## Red zone looks in the role level
+
+The role level reads snap share, targets, carries, air yards and pass
+attempts, and nothing about where on the field the touches came. A back's
+touchdowns come from carries inside the 20, so the two counts in
+`data/curated/leverage.csv`, looks inside the 20 and inside the 10, were
+added to its ridge and `inSeasonLevelEval.ts` was run with and without
+them:
+
+```
+the update, MAE then correlation, all players
+              without         with looks
+after week 2  2.490 0.840     2.500 0.839
+after week 4  2.516 0.832     2.531 0.830
+after week 6  2.484 0.829     2.491 0.829
+after week 8  2.505 0.827     2.518 0.827
+after week 10 2.553 0.823     2.557 0.825
+```
+
+Worse at every cut, and worse again on the players whose role changed
+(2.564 against 2.452 after week 2). A few games of red zone work are the
+lumps the points term already struggles with, and a role read off them
+moves on noise. They do not go into the fit. The counts are kept on each
+played week, since the player card now shows a player's work beside his
+points and the looks are part of reading it by eye.
+
+## The game a player left hurt
+
+De'Von Achane's third game of 2026 was 5% of the snaps and 1.7 points,
+the game he was hurt in, and the update reads it as a game like any other.
+So a game under half a player's usual snap share was dropped from his
+window, for players with three or more games and a usual share of 40% or
+more, with a share of zero left alone as a missing count:
+
+```
+the update, MAE, all players then role changed
+              as shipped       low snap games dropped
+after week 2  2.490  2.452     2.477  2.454
+after week 4  2.516  2.508     2.520  2.537
+after week 6  2.484  2.458     2.499  2.543
+after week 8  2.505  2.340     2.529  2.519
+after week 10 2.553  2.389     2.580  2.532
+```
+
+A little better after two games and worse from four on, and much worse on
+the players whose role changed. A low snap game is as often the first game
+of a smaller role as it is an injury, and that is the game the update most
+needs to see. It does not ship, and other cut-offs were not tried on the
+same seasons.
+
+## Sleeper's next week beside the update
+
+Sleeper hears about a depth chart or a teammate's injury before a box
+score shows it, so its projection for the week after a cut might carry
+the short term part of a role that usage only reads once it has been
+played. `inSeasonLevelEval.ts` now blends the update with that one week
+at a range of weights, over 2024 and 2025, the two finished seasons
+`data/curated/sleeperWeekly.csv` covers, for the players Sleeper has
+playing that week. Only the next week is read: Sleeper revises a week up
+to its kickoff, so a week further out would carry news the cut never had.
+
+```
+MAE on the rest of the season, by the weight on Sleeper's next week
+weight   2024 (1425)   2025 (1443)
+0.0      2.691         2.503
+0.1      2.640         2.484
+0.2      2.599         2.475
+0.3      2.567         2.480
+0.4      2.545         2.497
+0.5      2.528         2.525
+0.6      2.516         2.563
+```
+
+Every weight from 0.1 to 0.4 is better than none in both seasons. Picked
+the honest way it splits: picked on 2025 the weight is 0.2 and it takes
+2024 from 2.691 to 2.599, but picked on 2024 it is 0.6, the edge of the
+grid, and that makes 2025 worse, 2.563 against 2.503. Choosing 0.2 after
+seeing both would be choosing on the seasons it is scored on, so it does
+not ship. It is the strongest lead in this round: run it again once 2026
+is played out, with the weight picked on 2024 and 2025 and scored on 2026.

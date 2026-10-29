@@ -12,6 +12,10 @@
 
 import { loadGames } from "../src/data/nflverse.js";
 import {
+  loadSleeperWeekly, projectionKey, sleeperPointsUnder,
+} from "../src/data/sleeperProjections.js";
+import { scoring } from "../src/scoring/active.js";
+import {
   readPlayedWeeks,
   roleRowsFrom,
   SHIPPED_SHAPE,
@@ -383,6 +387,8 @@ async function main(): Promise<void> {
     report(marked.get(cut)!);
   }
 
+  await withSleeperNext(built, fits);
+
   showMovers(built, fits);
 
   for (const [year, who] of TRACED) {
@@ -390,6 +396,86 @@ async function main(): Promise<void> {
   }
 
   showLive(built, fits.get(LIVE)!);
+}
+
+/** the weights Sleeper's next week is tried at beside the update */
+const SLEEPER_WEIGHTS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+
+/**
+ * Whether Sleeper's projection for the week after the cut says something
+ * about the rest of the season the update does not. Sleeper hears about a
+ * depth chart or a teammate's injury before the box score shows it, which
+ * is the short term part of a role that usage reads only once it has
+ * been played.
+ *
+ * Only the next week is read, since Sleeper revises a week right up to
+ * its kickoff and a week further out would carry news the cut could not
+ * have had. Only the players Sleeper has playing that week are marked, as
+ * a projection of nothing is about his availability rather than his level.
+ * Its seasons are 2024 and 2025, so the weight is picked on one and
+ * scored on the other.
+ */
+async function withSleeperNext(
+  built: Map<number, Season>, fits: Map<number, InSeasonFit>,
+): Promise<void> {
+  const projections = await loadSleeperWeekly();
+  const years = [2024, 2025];
+  const errors = new Map<number, number[][]>(years.map((y) => [y, []]));
+
+  for (const year of years) {
+    const fit = fits.get(year);
+    const season = built.get(year);
+
+    if (!fit || !season) {
+      return;
+    }
+
+    for (const cut of CUTS) {
+      for (const row of rowsAt(season, year, cut)) {
+        const said = projections.get(projectionKey(year, cut + 1, row.playerId));
+
+        if (!said) {
+          continue;
+        }
+
+        const next = sleeperPointsUnder(said, scoring().receptions);
+
+        if (next <= 0) {
+          continue;
+        }
+
+        const update = updateLevel(fit, row).ppg;
+
+        errors.get(year)!.push(SLEEPER_WEIGHTS.map((w) =>
+          Math.abs((1 - w) * update + w * next - row.restPpg)));
+      }
+    }
+  }
+
+  const meanAt = (rows: number[][], i: number) =>
+    rows.reduce((sum, r) => sum + r[i]!, 0) / Math.max(1, rows.length);
+
+  console.log("\nthe update beside Sleeper's next week, MAE");
+  console.log("weight  " + years.map((y) => `${y} (${errors.get(y)!.length})`)
+    .join("  "));
+
+  SLEEPER_WEIGHTS.forEach((w, i) => {
+    console.log(`${w.toFixed(1).padEnd(8)}` + years
+      .map((y) => meanAt(errors.get(y)!, i).toFixed(3).padEnd(12)).join(""));
+  });
+
+  for (const [fitOn, markOn] of [[2024, 2025], [2025, 2024]] as const) {
+    const on = errors.get(fitOn)!;
+    const best = SLEEPER_WEIGHTS
+      .map((_, i) => i)
+      .reduce((a, b) => meanAt(on, b) < meanAt(on, a) ? b : a);
+    const marked = errors.get(markOn)!;
+
+    console.log(
+      `picked on ${fitOn}: ${SLEEPER_WEIGHTS[best]}, marked on ${markOn} ` +
+        `${meanAt(marked, best).toFixed(3)} against ` +
+        `${meanAt(marked, 0).toFixed(3)} for the update alone`);
+  }
 }
 
 /** players worth following cut by cut, by season and by name */

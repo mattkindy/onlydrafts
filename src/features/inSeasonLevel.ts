@@ -26,6 +26,13 @@ export interface PlayedWeek {
   airYards: number;
   /** his own pass attempts, which is what a quarterback's role comes down to */
   passAttempts: number;
+  /**
+   * Targets and carries inside the 20. The role level does not read them:
+   * added to its fit they made the update worse at every cut, since a few
+   * games of red zone work are mostly noise. They are here for the card,
+   * which shows a player's work beside his points.
+   */
+  redLooks?: number;
 }
 
 /** a player's workload for an average game of some window */

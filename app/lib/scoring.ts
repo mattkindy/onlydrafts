@@ -74,6 +74,11 @@ export interface Player {
     opp: string;
     of: number;
     played?: Parts | null;
+    /**
+     * His work in a week already played: percent of the snaps, carries,
+     * targets, and targets and carries inside the 20.
+     */
+    use?: [snaps: number, carries: number, targets: number, redZone: number];
     blend?: number;
     catches?: number;
   }[];
