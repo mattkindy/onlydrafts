@@ -277,6 +277,45 @@ describe("the views", () => {
     expect(row.querySelector(".badge")?.textContent).toBe("ir");
   });
 
+  it("groups the wire, and gets out of the way of a search", async () => {
+    const taken = new Set(
+      league.allRosters.flatMap((r) => r.keys.map((m) => m.key)));
+    const te = players.find((p) => !taken.has(p.key) && p.position === "TE")!;
+    const rows = new Map([[te.key, {
+      playerId: te.key, name: te.name, position: "TE", team: te.team ?? "",
+      opponent: "CAR", home: true, ours: 9, sleeper: 9, blend: 9.4,
+      floor: 3, ceiling: 18, catches: 4, questionable: false, ruledOut: false,
+      gamesMissedRecent: 0, absenceShare: 0,
+    }]]);
+
+    render(
+      <Waivers
+        players={players} league={league} posFilter="ALL" rows={rows}
+        games={[]} schedule={null} season={2026} week={8}
+        slate={null} roster={null} listed={new Map()}
+        onMore={() => {}}
+      />,
+      where,
+    );
+
+    for (let i = 0; i < 40 && !where.querySelector("h2"); i++) {
+      await new Promise((settle) => setTimeout(settle, 25));
+    }
+
+    const stream = Array.from(where.querySelectorAll(".group"))
+      .find((g) => g.querySelector("h3")?.textContent === "stream this week")!;
+
+    expect(stream.textContent).toContain(te.name);
+    expect(stream.textContent).toContain("9.4 vs CAR this week");
+
+    const find = where.querySelector("input.find") as HTMLInputElement;
+    find.value = te.name;
+    find.dispatchEvent(new Event("input"));
+    await new Promise((settle) => setTimeout(settle, 0));
+
+    expect(where.querySelector(".groups")).toBeNull();
+  });
+
   it("lists the free agents the board underpriced", async () => {
     const taken = new Set(
       league.allRosters.flatMap((r) => r.keys.map((m) => m.key)));
