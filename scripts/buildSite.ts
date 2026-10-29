@@ -57,6 +57,9 @@ import {
 import {
   readPlayedWeeks, updateBoardLevels,
 } from "../src/features/inSeasonBoard.js";
+import {
+  defenceLevel, leagueParts, type DefenceParts,
+} from "../src/features/defenceSeason.js";
 import { loadDressedWeeks } from "../src/features/dressedWeeks.js";
 import { sleepersNow, type SleepersNow } from "../src/features/sleepersNow.js";
 import { takePasserLines } from "../src/features/passerLine.js";
@@ -1993,6 +1996,9 @@ async function main(): Promise<void> {
       : points <= 27 ? "pts_allow_21_27" : points <= 34 ? "pts_allow_28_34"
       : "pts_allow_35p";
 
+  /** last season's work a game, by each club, from the players there now */
+  const lastMade = new Map<string, DefenceParts>();
+
   for (const [team, its] of defended) {
     // a season's work from the players who play there now, over a season
     const games = 17;
@@ -2005,13 +2011,62 @@ async function main(): Promise<void> {
       made[bracketOf(got)] = (made[bracketOf(got)] ?? 0) + 1 / gave.length;
     }
 
+    lastMade.set(team, made);
+  }
+
+  /**
+   * This season's games so far, a game, with the points each side scored
+   * against it read into brackets. A week with no final score is not
+   * played yet and counts for nothing.
+   */
+  const thisMade = new Map<string, { parts: DefenceParts; games: number }>();
+  const gaveNow = new Map<string, number>();
+
+  for (const g of world.games) {
+    if (g.season === season && g.homeScore !== undefined &&
+        g.awayScore !== undefined) {
+      gaveNow.set(`${g.week}|${g.homeTeamId}`, g.awayScore);
+      gaveNow.set(`${g.week}|${g.awayTeamId}`, g.homeScore);
+    }
+  }
+
+  for (const w of await loadTeamDefenceWeeks(season).catch(() => [])) {
+    const gave = gaveNow.get(`${w.week}|${w.teamId}`);
+
+    if (gave === undefined) {
+      continue;
+    }
+
+    const its = thisMade.get(w.teamId) ?? { parts: {}, games: 0 };
+
+    for (const [part, n] of Object.entries(w.parts)) {
+      its.parts[part] = (its.parts[part] ?? 0) + n;
+    }
+
+    its.parts[bracketOf(gave)] = (its.parts[bracketOf(gave)] ?? 0) + 1;
+    its.games++;
+    thisMade.set(w.teamId, its);
+  }
+
+  // last season pulled toward the middle, then moved by this one
+  const league = leagueParts([...lastMade.values()]);
+
+  for (const [team, made] of lastMade) {
+    const now = thisMade.get(team);
+    const perGame: DefenceParts = now
+      ? Object.fromEntries(Object.entries(now.parts)
+        .map(([part, n]) => [part, n / now.games]))
+      : {};
+
     others.push({
       name: team, key: normalizeName(team), position: "DEF", team,
-      simulated: made,
+      simulated: defenceLevel(made, league, perGame, now?.games ?? 0),
       adpBy: byTeamCode.get(team) ?? null,
       bye: world.byeWeek.get(team) ?? null,
     });
   }
+
+  console.log(`defences moved by this season: ${thisMade.size}`);
 
   console.log(
     `and ${others.filter((o) => o["position"] === "K").length} kickers, ` +
