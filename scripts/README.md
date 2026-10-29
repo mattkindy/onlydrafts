@@ -3198,3 +3198,34 @@ the players whose role changed. A low snap game is as often the first game
 of a smaller role as it is an injury, and that is the game the update most
 needs to see. It does not ship, and other cut-offs were not tried on the
 same seasons.
+
+## Sleeper's next week beside the update
+
+Sleeper hears about a depth chart or a teammate's injury before a box
+score shows it, so its projection for the week after a cut might carry
+the short term part of a role that usage only reads once it has been
+played. `inSeasonLevelEval.ts` now blends the update with that one week
+at a range of weights, over 2024 and 2025, the two finished seasons
+`data/curated/sleeperWeekly.csv` covers, for the players Sleeper has
+playing that week. Only the next week is read: Sleeper revises a week up
+to its kickoff, so a week further out would carry news the cut never had.
+
+```
+MAE on the rest of the season, by the weight on Sleeper's next week
+weight   2024 (1425)   2025 (1443)
+0.0      2.691         2.503
+0.1      2.640         2.484
+0.2      2.599         2.475
+0.3      2.567         2.480
+0.4      2.545         2.497
+0.5      2.528         2.525
+0.6      2.516         2.563
+```
+
+Every weight from 0.1 to 0.4 is better than none in both seasons. Picked
+the honest way it splits: picked on 2025 the weight is 0.2 and it takes
+2024 from 2.691 to 2.599, but picked on 2024 it is 0.6, the edge of the
+grid, and that makes 2025 worse, 2.563 against 2.503. Choosing 0.2 after
+seeing both would be choosing on the seasons it is scored on, so it does
+not ship. It is the strongest lead in this round: run it again once 2026
+is played out, with the weight picked on 2024 and 2025 and scored on 2026.
