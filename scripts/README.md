@@ -3148,3 +3148,53 @@ of win chance to 1.4%, sixth on that wire rather than second. The body
 part in the nflverse injury file is a word like Knee, so how often a
 named injury ends a season could not be measured here; that list is a
 reading of what those injuries are, not a fit.
+
+## Red zone looks in the role level
+
+The role level reads snap share, targets, carries, air yards and pass
+attempts, and nothing about where on the field the touches came. A back's
+touchdowns come from carries inside the 20, so the two counts in
+`data/curated/leverage.csv`, looks inside the 20 and inside the 10, were
+added to its ridge and `inSeasonLevelEval.ts` was run with and without
+them:
+
+```
+the update, MAE then correlation, all players
+              without         with looks
+after week 2  2.490 0.840     2.500 0.839
+after week 4  2.516 0.832     2.531 0.830
+after week 6  2.484 0.829     2.491 0.829
+after week 8  2.505 0.827     2.518 0.827
+after week 10 2.553 0.823     2.557 0.825
+```
+
+Worse at every cut, and worse again on the players whose role changed
+(2.564 against 2.452 after week 2). A few games of red zone work are the
+lumps the points term already struggles with, and a role read off them
+moves on noise. They do not go into the fit. The counts are kept on each
+played week, since the player card now shows a player's work beside his
+points and the looks are part of reading it by eye.
+
+## The game a player left hurt
+
+De'Von Achane's third game of 2026 was 5% of the snaps and 1.7 points,
+the game he was hurt in, and the update reads it as a game like any other.
+So a game under half a player's usual snap share was dropped from his
+window, for players with three or more games and a usual share of 40% or
+more, with a share of zero left alone as a missing count:
+
+```
+the update, MAE, all players then role changed
+              as shipped       low snap games dropped
+after week 2  2.490  2.452     2.477  2.454
+after week 4  2.516  2.508     2.520  2.537
+after week 6  2.484  2.458     2.499  2.543
+after week 8  2.505  2.340     2.529  2.519
+after week 10 2.553  2.389     2.580  2.532
+```
+
+A little better after two games and worse from four on, and much worse on
+the players whose role changed. A low snap game is as often the first game
+of a smaller role as it is an injury, and that is the game the update most
+needs to see. It does not ship, and other cut-offs were not tried on the
+same seasons.

@@ -11,6 +11,7 @@ import {
 } from "../lib/slate.ts";
 import { WeatherMark, weatherWords } from "./WeatherMark.tsx";
 import { lineOver, movedBy } from "../lib/statLine.ts";
+import { workOf, type Work } from "../lib/usage.ts";
 
 /** the week the slate covers, and his row on it if he has one */
 export interface ThisWeek {
@@ -159,6 +160,7 @@ function WeekByWeek(
               <span class="wkline">
                 <b class={beat ? "up" : "down"}>{got.toFixed(1)}</b>
                 <i>{beat ? "+" : ""}{(got - pts).toFixed(1)} vs projection</i>
+                {w.use && <i>{useWords(w.use)}</i>}
               </span>
             )}
           </div>
@@ -173,6 +175,45 @@ function WeekByWeek(
       </div>
       {weather && (
         <div class="hint">Week {thisWeek!.week}: {weather}.</div>
+      )}
+    </>
+  );
+}
+
+/** one week's work, short enough to sit under his points */
+const useWords = (use: NonNullable<Week["use"]>) =>
+  `${use[0]}% snaps, ${use[1]} car, ${use[2]} tgt` +
+  (use[3] > 0 ? `, ${use[3]} in the 20` : "");
+
+/** a stretch of his work as a sentence */
+const workLine = (work: Work) =>
+  `${Math.round(work.snaps)}% of the snaps, ${work.carries.toFixed(1)} ` +
+  `carries, ${work.targets.toFixed(1)} targets, ${work.redZone.toFixed(1)} ` +
+  "inside the 20";
+
+/**
+ * His work, the last few games against the ones before. Points say what
+ * happened and this says whether it is likely to keep happening.
+ */
+function HisWork({ p }: { p: Player }) {
+  const work = workOf(p);
+
+  if (!work) {
+    return null;
+  }
+
+  return (
+    <>
+      <h2>his work</h2>
+      <div class="fact">
+        last {work.recent.games === 1 ? "game" : `${work.recent.games} games`}:{" "}
+        {workLine(work.recent)}
+      </div>
+      {work.before && (
+        <div class="fact">
+          {work.before.games === 1 ? "the game" : `the ${work.before.games} games`}
+          {" "}before: {workLine(work.before)}
+        </div>
       )}
     </>
   );
@@ -266,6 +307,8 @@ export function PlayerSheet(props: Props) {
             {props.minus.map((f) => <div class="fact m" key={f}>{f}</div>)}
           </>
         )}
+
+        <HisWork p={p} />
 
         <WeekByWeek
           p={p}

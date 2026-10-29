@@ -54,7 +54,9 @@ import {
   type History,
   type Rates,
 } from "../src/features/componentWeek.js";
-import { updateBoardLevels } from "../src/features/inSeasonBoard.js";
+import {
+  readPlayedWeeks, updateBoardLevels,
+} from "../src/features/inSeasonBoard.js";
 import { loadDressedWeeks } from "../src/features/dressedWeeks.js";
 import { sleepersNow, type SleepersNow } from "../src/features/sleepersNow.js";
 import { takePasserLines } from "../src/features/passerLine.js";
@@ -954,6 +956,19 @@ async function main(): Promise<void> {
   // slate below is one of the readers
   await updateBoardLevels(world.players, season);
 
+  /**
+   * How much of the work he had in each week already played: his share of
+   * the snaps, his carries and targets, and his looks inside the 20. Points
+   * alone cannot tell a fluke from a role, and these are what can.
+   */
+  const usedByPlayer = new Map<string, Map<number, number[]>>();
+
+  for (const [playerId, his] of (await readPlayedWeeks(season)).weeks) {
+    usedByPlayer.set(playerId, new Map(his.map((w) => [w.week, [
+      Math.round(w.snapShare * 100), w.carries, w.targets, w.redLooks ?? 0,
+    ]])));
+  }
+
   const { projectDraftExamples } = await import("../src/features/seasonModel.js");
   const draftExamples = await projectDraftExamples(season, world.data);
   const exampleById = new Map(draftExamples.map((e) => [e.playerId, e]));
@@ -1740,6 +1755,9 @@ async function main(): Promise<void> {
               opp: (w.home ? "v " : "@ ") + w.opponent,
               of,
               played: playedByPlayer.get(p.playerId)?.get(w.week) ?? null,
+              ...(usedByPlayer.get(p.playerId)?.has(w.week)
+                ? { use: usedByPlayer.get(p.playerId)!.get(w.week)! }
+                : {}),
               ...blendAhead(p, w.week, of * p.projectedPpg),
             };
           }),
