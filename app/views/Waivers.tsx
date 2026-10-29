@@ -30,6 +30,7 @@ import {
 } from "../lib/waivers.ts";
 import type { Schedule } from "../lib/waiversSeason.ts";
 import { workWords } from "../lib/usage.ts";
+import { groupsFor, type WaiverGroups } from "../lib/waiverGroups.ts";
 import { whyWords } from "../lib/waiverWhy.ts";
 import {
   weekPricesFor, type WeekAdd, type WeekDrop, type WeekPrices,
@@ -531,6 +532,49 @@ function Sleepers(
   );
 }
 
+/** what each group is called on the page, and the line under it */
+const GROUPS: [keyof WaiverGroups, string, string][] = [
+  ["claim", "worth a claim", "the best season adds who play this week"],
+  ["stash", "stash", "season value, but no game this week"],
+  ["stream", "stream this week", "the best lines at QB, TE, DEF and K"],
+  ["rising", "rising roles", "snap share up sharply in his last games"],
+  ["fluke", "fluke watch", "big points on a part-time role"],
+];
+
+/**
+ * The wire sorted into the questions a manager asks of it, above the
+ * table that prices every add. A group with nobody in it is left out.
+ */
+function Groups(
+  { groups, onMore }: { groups: WaiverGroups; onMore: (p: Player) => void },
+) {
+  const shown = GROUPS.filter(([which]) => groups[which].length > 0);
+
+  if (shown.length === 0) {
+    return null;
+  }
+
+  return (
+    <div class="groups">
+      {shown.map(([which, title, under]) => (
+        <section class="group" key={which}>
+          <h3>{title}</h3>
+          <p class="hint">{under}</p>
+          <ul>
+            {groups[which].map(({ p, why }) => (
+              <li key={p.key} onClick={() => onMore(p)}>
+                <span class="who link">{p.name}</span>{" "}
+                <span class="pos">{p.position}</span>
+                <i>{why}</i>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export function Waivers(props: Props) {
   const { players, league, posFilter, rows, games } = props;
   const [query, setQuery] = useState("");
@@ -543,6 +587,11 @@ export function Waivers(props: Props) {
 
   const { drops, listed, priced, wire, working } = useWaiverPrices(
     players, league, props.schedule, posFilter, props.listed, props.week);
+
+  const groups = useMemo(
+    () => groupsFor(wire, props.week, rows, props.listed, league.pays ?? {}),
+    [wire, props.week, rows, props.listed, league.pays],
+  );
 
   const shift = catchShiftOf(league.pays, props.boardPerCatch);
   const lines: Lines = useMemo(
@@ -773,6 +822,8 @@ export function Waivers(props: Props) {
         ? <Reading>{missing.says}</Reading>
         : <p class="hint">{missing.says}</p>)}
       {span === "week" && trouble && <p class="hint">{trouble}</p>}
+
+      {!wanted && <Groups groups={groups} onMore={props.onMore} />}
 
       <h2>waiver wire adds</h2>
       <table class="line pairs">

@@ -570,6 +570,21 @@
   table.pairs td.reason { text-align: left; min-width: 14rem;
     max-width: 22rem; color: var(--muted); font-size: var(--t1); }
   .starting { display: block; }
+
+  /* the wire in groups, above the table that prices every add: a column
+     on a phone, as many across as fit on a wide screen */
+  .groups { display: grid; gap: var(--s2); margin: var(--s2) 0 var(--s4);
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+  .group { background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 12px; padding: var(--s2) var(--s3); }
+  .group h3 { margin: 0; font-size: var(--t2); text-transform: uppercase;
+    letter-spacing: .06em; }
+  .group .hint { margin: 0 0 var(--s1); font-size: var(--t1); }
+  .group ul { list-style: none; margin: 0; padding: 0; }
+  .group li { padding: .2rem 0; cursor: pointer; font-size: var(--t2); }
+  .group li .pos { color: var(--muted); font-size: var(--t1); }
+  .group li i { display: block; font-style: normal; color: var(--faint);
+    font-size: var(--t1); }
   .starting i, .outscores, td .work { display: block; font-style: normal;
     color: var(--faint); font-size: var(--t1); }
 
