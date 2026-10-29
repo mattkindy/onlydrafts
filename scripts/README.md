@@ -3229,3 +3229,42 @@ grid, and that makes 2025 worse, 2.563 against 2.503. Choosing 0.2 after
 seeing both would be choosing on the seasons it is scored on, so it does
 not ship. It is the strongest lead in this round: run it again once 2026
 is played out, with the weight picked on 2024 and 2025 and scored on 2026.
+
+## A defence's season, moved by the season
+
+The board's defence was last season and nothing else: the sacks and
+takeaways of the players on the roster now, and the points the club gave
+up. The weekly line already reads a defence's own recent weeks, but the
+season number the waiver page prices a defence by never moved, so a
+defence that had collapsed or arrived by October was valued as if it were
+still last year.
+
+`defenceSeasonEval.ts` reads every defence at weeks 3, 4, 6, 8 and 10 of
+2017 to 2025 and marks three readings against what it paid a game over
+the rest of the season, under the standard ladder:
+
+```
+rest of the season, MAE then correlation, 2022-2025
+cut   last season    so far         shipped level
+3     1.86 0.16      2.84 0.17      1.51 0.19
+4     1.90 0.12      2.39 0.19      1.55 0.18
+6     2.00 0.10      2.28 0.21      1.62 0.18
+8     2.10 0.12      2.27 0.23      1.76 0.22
+10    2.25 0.09      2.23 0.24      1.93 0.21
+```
+
+The shipped level is `src/features/defenceSeason.ts`: last season pulled
+half way to the league's average, then this season taking a share of
+games over games plus seventeen. The seventeen was picked on 2017 to 2021
+and is the best of the grid on 2022 to 2025 too, within a hair of 25. It
+wins on error and on order at every cut. Most of the error it saves is
+the pull to the middle, since a defence's season is mostly noise and the
+extremes come back; most of the order it gains is this season. Every
+correlation here is small, so the gain is real and the number stays a
+rough one.
+
+The eval reads last season off the club's own games, where the board reads
+the counting parts off the players on the roster now. Before a game is
+played the level is last season pulled to the middle, so the draft board's
+defences move toward each other as well. After week 7 of 2026 it moves
+Philadelphia from 7.4 a game to 5.2 and the Jets from 1.2 to 4.2.
