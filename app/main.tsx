@@ -36,7 +36,8 @@ import { Standings } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import { useWeekPoll } from "./views/scoreboard.ts";
 import {
-  loadSlate, onTheBooks, rosterKeys, slateUnder, weekRefs, weekRowsOf,
+  listedOnSlate, loadSlate, onTheBooks, rosterKeys, slateUnder, weekRefs,
+  weekRowsOf,
   type Slate, type WeekRef,
 } from "./lib/slate.ts";
 import { gameStates } from "./lib/matchups.ts";
@@ -448,6 +449,20 @@ function App() {
     () => weekRowsOf(slate, books, board?.schedule, comingWeek ? listed : undefined),
     [slate, books, board, listed, comingWeek],
   );
+
+  /**
+   * What the waiver page prices injuries by. Sleeper's file, read here, is
+   * the newer word; until it arrives, or when it cannot be read, the
+   * build's reading of the same statuses stands in, so a man on reserve
+   * is not priced as healthy because a fetch failed.
+   */
+  const reported = useMemo(() => {
+    if (allListed.size > 0 || !comingWeek || !slate) {
+      return listed;
+    }
+
+    return new Map([...listedOnSlate(slate), ...listed]);
+  }, [allListed, listed, comingWeek, slate]);
 
   /**
    * The week before the one on screen, read in full for the league tab's
@@ -1135,7 +1150,7 @@ function App() {
             boardPerCatch={board.perCatch}
             scoreboard={scoreboard}
             roster={rosterKeys(active.myRoster)}
-            listed={listed}
+            listed={reported}
             gamesStatus={gamesStatus}
             onMore={setShowing}
           />

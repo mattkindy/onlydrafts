@@ -222,6 +222,61 @@ describe("the views", () => {
       .toBeGreaterThan(0);
   }, 30_000);
 
+  /**
+   * Cam Skattebo was on bye in week 8, so he added nothing that week, and
+   * searching for him came back empty: the search only looked through the
+   * players already over the bar.
+   */
+  it("finds a free agent by name however little he adds", async () => {
+    const taken = new Set(
+      league.allRosters.flatMap((r) => r.keys.map((m) => m.key)));
+    // far enough down the board that he is never one of the listed adds
+    const nobody = players.filter((p) => !taken.has(p.key) && p.position === "WR")
+      .sort((a, b) => (a.ppg ?? 0) - (b.ppg ?? 0))[0]!;
+    const hurt = players.find((p) => !taken.has(p.key) && (p.ppg ?? 0) > 8)!;
+    const held = league.allRosters[2]!;
+
+    render(
+      <Waivers
+        players={players} league={league} posFilter="ALL" rows={new Map()}
+        games={[]} schedule={null} season={2026} week={null}
+        slate={null} roster={null}
+        listed={new Map([[hurt.key, { name: hurt.name, status: "IR" }]])}
+        onMore={() => {}}
+      />,
+      where,
+    );
+
+    for (let i = 0; i < 40 && !where.querySelector("h2"); i++) {
+      await new Promise((settle) => setTimeout(settle, 25));
+    }
+
+    const find = where.querySelector("input.find") as HTMLInputElement;
+    const search = async (name: string) => {
+      find.value = name;
+      find.dispatchEvent(new Event("input"));
+      await new Promise((settle) => setTimeout(settle, 0));
+    };
+    const names = () => Array.from(where.querySelectorAll("td .who"))
+      .map((who) => who.textContent);
+
+    expect(names()).not.toContain(nobody.name);
+    await search(nobody.name);
+    expect(names()).toContain(nobody.name);
+
+    // a man on another team is not missing, he is taken
+    await search(held.keys[0]!.name);
+    expect(where.textContent).toContain(
+      `${held.keys[0]!.name} is on ${held.owner}'s roster.`);
+
+    // and a man on reserve says so on his row
+    await search(hurt.name);
+    const row = Array.from(where.querySelectorAll("tr"))
+      .find((tr) => tr.querySelector(".who")?.textContent === hurt.name)!;
+
+    expect(row.querySelector(".badge")?.textContent).toBe("ir");
+  });
+
   it("lists the free agents the board underpriced", async () => {
     const taken = new Set(
       league.allRosters.flatMap((r) => r.keys.map((m) => m.key)));

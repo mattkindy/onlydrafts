@@ -11,7 +11,7 @@
  */
 
 import {
-  listingFits, outThisWeek, playChance, type Listed,
+  listingFits, OUT_FOR_A_WHILE, outThisWeek, playChance, type Listed,
 } from "./availability.ts";
 import { normalizeName } from "./store.ts";
 
@@ -556,6 +556,30 @@ export function hurtWord(
   }
 
   return row?.ruledOut ? { status: row.status ?? "Out" } : undefined;
+}
+
+/**
+ * Who the build found on a list, by the key a lineup uses, for when the
+ * injury report cannot be read in the browser. The build reads Sleeper's
+ * statuses too, so this is the same word, only older. A word that costs a
+ * week or less is left out: by the time this is all there is, that week
+ * may be over.
+ */
+export function listedOnSlate(slate: Slate): Map<string, Listed> {
+  const listed = new Map<string, Listed>();
+
+  for (const row of slate.rows) {
+    if (row.status && OUT_FOR_A_WHILE.has(row.status)) {
+      listed.set(row.playerId, {
+        name: row.name,
+        status: row.status,
+        position: row.position,
+        team: row.team,
+      });
+    }
+  }
+
+  return listed;
 }
 
 export async function loadSlate(file: string): Promise<Slate> {

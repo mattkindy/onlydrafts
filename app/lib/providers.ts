@@ -326,6 +326,8 @@ export interface SleeperPlayer {
   hurt?: string;
   /** and where, since a hamstring and a thumb are different news */
   part?: string;
+  /** Sleeper's note on it, which is where "torn ACL" is said */
+  note?: string;
 }
 
 export type SleeperPlayers = Record<string, SleeperPlayer>;
@@ -406,12 +408,13 @@ async function playerFile<T>(key: string, read: () => Promise<T>): Promise<T> {
 }
 
 /** Sleeper's whole player file, trimmed */
-export const sleeperPlayers = () => playerFile("players.v6", readSleeperFile);
+export const sleeperPlayers = () => playerFile("players.v7", readSleeperFile);
 
 async function readSleeperFile(): Promise<SleeperPlayers> {
   const raw = await ask("/players/nfl") as Record<string, {
     full_name?: string; position?: string; team?: string | null;
     injury_status?: string | null; injury_body_part?: string | null;
+    injury_notes?: string | null;
   }>;
   const trimmed: SleeperPlayers = {};
 
@@ -431,6 +434,8 @@ async function readSleeperFile(): Promise<SleeperPlayers> {
         ...(p.team ? { t: p.team } : {}),
         ...(p.injury_status ? { hurt: p.injury_status } : {}),
         ...(p.injury_body_part ? { part: p.injury_body_part } : {}),
+        // only for a player on a list, since the file is kept in storage
+        ...(p.injury_status && p.injury_notes ? { note: p.injury_notes } : {}),
       };
     }
   }
@@ -457,6 +462,7 @@ export function listedPlayers(all: SleeperPlayers): Map<string, Listed> {
       name: player.n,
       status: player.hurt,
       ...(player.part ? { part: player.part } : {}),
+      ...(player.note ? { note: player.note } : {}),
       ...(his.pos ? { position: his.pos } : {}),
       ...(his.team ? { team: his.team } : {}),
     });
