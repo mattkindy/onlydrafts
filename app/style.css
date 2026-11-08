@@ -46,6 +46,10 @@
     font-family: system-ui, sans-serif; font-size: var(--t3);
     line-height: 1.45; -webkit-text-size-adjust: 100%; }
   .wrap { max-width: 64rem; margin: 0 auto; padding: var(--s4) var(--s4) 4rem; }
+  /* saved to a home screen the page runs under the status bar and round
+     the notch, so it keeps out of both */
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0
+    env(safe-area-inset-left); }
 
   /* one row, always: the name on the left and the theme on the right.
      It used to wrap into three rows of pills on a 390px phone. */
@@ -88,11 +92,14 @@
     flex: 0 0 auto; display: grid; place-items: center; }
   nav button.theme:hover { color: var(--ink); }
 
-  /* one row of tabs that scrolls rather than wrapping into three lines */
+  /* one row of tabs that scrolls rather than wrapping into three lines,
+     held at the top of a wide screen so a long tab never loses them */
   #subnav { display: flex; gap: var(--s1); flex-wrap: nowrap;
     overflow-x: auto; overscroll-behavior-x: contain;
     scrollbar-width: none; margin-bottom: var(--s3);
-    border-bottom: 1px solid var(--edge); }
+    border-bottom: 1px solid var(--edge);
+    position: sticky; top: 0; z-index: 5; background: var(--bg); }
+  #subnav .ticon { display: none; }
   #subnav::-webkit-scrollbar { display: none; }
   #subnav button, nav button { font: inherit; font-size: var(--t2);
     font-weight: 600; background: transparent; color: var(--muted);
@@ -100,11 +107,19 @@
     min-height: var(--tap); padding: 0 var(--s3); cursor: pointer; }
   nav button.on { color: var(--ink); border-bottom-color: var(--go); }
   #subnav button.on { color: var(--ink); border-bottom-color: var(--go); }
-  /* the longer answer, beside the tab it explains rather than under a
-     line of grey text nobody reads twice */
-  #subnav button.whatis { margin-left: auto; flex: 0 0 auto; width: var(--tap);
-    padding: 0; font-size: var(--t3); font-weight: 700; }
-  #subnav button.whatis.on { color: var(--go); border-bottom-color: transparent; }
+  /* the longer answer, at the end of the league's row rather than under
+     a line of grey text nobody reads twice */
+  #crumb button.whatis { margin-left: auto; flex: 0 0 auto;
+    width: 30px; height: 30px; padding: 0; border-radius: 50%;
+    font: inherit; font-size: var(--t2); font-weight: 700; cursor: pointer;
+    background: var(--chip); color: var(--muted); border: 1px solid var(--edge); }
+  #crumb button.whatis:hover { color: var(--ink); }
+  #crumb button.whatis.on { color: var(--go); border-color: var(--go); }
+  #crumb { position: relative; }
+  /* the button is drawn small, and its tap area is not */
+  #crumb button.whatis::after { content: ""; position: absolute;
+    inset: -6px; }
+  #crumb button.whatis { position: relative; }
 
   /*
    * Two controls, used everywhere and nowhere else.
@@ -852,13 +867,190 @@
   .score .pts { text-align: right; font-weight: 700;
     font-variant-numeric: tabular-nums; }
 
+
+  /* read by a screen reader and nobody else */
+  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /*
+   * The week, stepped. One row with the arrows either side of the week,
+   * rather than a panel the width of the page around a dropdown.
+   */
+  .weekbar { display: flex; align-items: center; gap: var(--s2);
+    flex-wrap: wrap; margin: 0 0 var(--s1); }
+  .weekbar #status { margin-left: auto; }
+  .weekstep { display: inline-flex; align-items: center; gap: var(--s1); }
+  .weekstep .step { display: grid; place-items: center; width: var(--tap);
+    height: var(--tap); border-radius: 50%; border: 1px solid var(--edge);
+    background: var(--panel); color: var(--ink); cursor: pointer; padding: 0; }
+  .weekstep .step:disabled { color: var(--faint); opacity: .45; cursor: default; }
+  .weekstep .step:not(:disabled):hover { border-color: var(--muted); }
+  .weekstep select { appearance: none; -webkit-appearance: none;
+    background: transparent; border: none; color: var(--ink);
+    font-weight: 700; font-size: var(--t4); text-align: center;
+    text-align-last: center; padding: 0 var(--s2); min-width: 5.5rem;
+    cursor: pointer; }
+  .weekstep .now { margin-left: var(--s1); }
+
+  /*
+   * Your game, at the top of the matchup tab: you on the left, them on
+   * the right, and between the two the one number the tab is for. The
+   * card's edge takes the verdict's colour, so the answer reads before
+   * any of the words do.
+   */
+  .hero { --tone: var(--mark); position: relative; overflow: hidden;
+    background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 16px; padding: var(--s3) var(--s4) var(--s4); }
+  .hero.up { --tone: var(--go); }
+  .hero.no { --tone: var(--no); }
+  .hero::before { content: ""; position: absolute; inset: 0 0 auto 0;
+    height: 3px; background: var(--tone); }
+  .hero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 70% at 50% 0%,
+      color-mix(in srgb, var(--tone) 12%, transparent), transparent 70%); }
+  .htop { display: flex; justify-content: space-between; align-items: center;
+    font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--faint); margin-bottom: var(--s2); }
+  .phase { display: inline-flex; align-items: center; gap: var(--s1); }
+  .phase.live { color: var(--go); }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--go);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--go) 60%, transparent);
+    animation: pulse 1.6s ease-out infinite; }
+  @keyframes pulse { to { box-shadow: 0 0 0 8px transparent; } }
+  @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+  .hbody { position: relative; z-index: 1; display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center; gap: var(--s3); }
+  .hside { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+  .hside.them { text-align: right; align-items: flex-end; }
+  .hside .nm { font-weight: 700; font-size: var(--t3); line-height: 1.2;
+    overflow-wrap: anywhere; }
+  .hside .rec { font-size: var(--t1); color: var(--faint);
+    font-variant-numeric: tabular-nums; min-height: 1em; }
+  .hside .pts { font-size: var(--t6); font-weight: 800; line-height: 1.1;
+    letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+    margin-top: var(--s1); }
+  .hside .proj { font-size: var(--t1); color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .hodds { position: relative; display: grid; place-items: center;
+    width: 92px; height: 92px; }
+  .hodds .ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .ring circle { fill: none; stroke-width: 7; }
+  .ring .track { stroke: var(--chip); }
+  .ring .fill { stroke: var(--tone, var(--go)); stroke-linecap: round;
+    transition: stroke-dasharray .6s ease; }
+  @media (prefers-reduced-motion: reduce) { .ring .fill { transition: none; } }
+  .hpct { font-size: var(--t5); font-weight: 800; line-height: 1;
+    font-variant-numeric: tabular-nums; margin-top: -.5rem; }
+  .hword { position: absolute; bottom: 22px; font-size: .625rem;
+    font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--tone); }
+
+  /* the starters who will not play, gathered where they cannot be missed */
+  .worries { background: var(--panel); border: 1px solid var(--edge);
+    border-left: 3px solid var(--mark); border-radius: 12px;
+    padding: var(--s2) var(--s3); }
+  .worries.bad { border-left-color: var(--no);
+    background: color-mix(in srgb, var(--no) 7%, var(--panel)); }
+  .worries h3 { margin: 0 0 var(--s1); font-size: var(--t3); }
+  .worries.bad h3 { color: var(--no); }
+  .worries ul { list-style: none; margin: 0; padding: 0; }
+  .worries li { display: flex; align-items: center; gap: var(--s2);
+    padding: var(--s1) 0; border-top: 1px solid var(--edge); font-size: var(--t2); }
+  .worries li:first-child { border-top: none; }
+  .worries li > .chip { color: var(--muted); background: var(--chip);
+    text-transform: uppercase; min-width: 2.6rem; text-align: center; }
+  .wwho { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+  .wwho i { font-style: normal; font-size: var(--t1); color: var(--mark); }
+  .worries li.bad .wwho i { color: var(--no); font-weight: 600; }
+  .worries button.quiet { flex: 0 0 auto; }
+
+  /* the one move the players tab argues for, said first */
+  .bestmove { display: flex; flex-direction: column; gap: 2px;
+    background: color-mix(in srgb, var(--go) 9%, var(--panel));
+    border: 1px solid color-mix(in srgb, var(--go) 45%, var(--edge));
+    border-radius: 14px; padding: var(--s3) var(--s4); }
+  .bestmove .over { font-size: var(--t1); font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--go); }
+  .bestmove .what { font-size: var(--t4); line-height: 1.3; text-wrap: balance; }
+  .bestmove .swing { font-size: var(--t2); color: var(--muted); }
+  .bestmove .swing b { font-size: var(--t4); }
+
+  /* another team's game, closed to its score until it is asked for */
+  .card.matchup .unfold { grid-column: 1 / -1; display: flex;
+    align-items: center; justify-content: center; gap: var(--s1);
+    font: inherit; font-size: var(--t1); font-weight: 600; color: var(--faint);
+    background: none; border: none; border-top: 1px solid var(--edge);
+    margin-top: var(--s1); padding-top: var(--s2); min-height: 32px;
+    cursor: pointer; }
+  .card.matchup .unfold:hover { color: var(--ink); }
+  .unfold .chev { transition: transform .15s ease; }
+  .unfold .chev.open { transform: rotate(180deg); }
+
+  .review button.whole { margin-top: var(--s4); width: 100%; min-height: var(--tap); }
+
+  /* the roster tab's one line: how many, and how many are a problem */
+  .tally { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2); }
+  .tally span { background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 999px; padding: .2rem var(--s3); font-size: var(--t2);
+    color: var(--muted); }
+  .tally b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tally .bad { border-color: color-mix(in srgb, var(--no) 50%, var(--edge)); }
+  .tally .bad b { color: var(--no); }
+  .tally .warn b { color: var(--mark); }
+  /* what is wrong with a player this week, on his own card */
+  .card .status { display: flex; flex-wrap: wrap; align-items: center;
+    gap: var(--s1) var(--s2); margin-top: var(--s2); font-size: var(--t1);
+    color: var(--muted); }
+  .card .status .badge { margin-left: 0; }
+  .card .status .note { flex-basis: 100%; color: var(--faint); }
+
+  /* where you sit in a league, on its card in the list */
+  .league-card { cursor: pointer; transition: border-color .15s ease, transform .1s ease; }
+  .league-card:hover { border-color: var(--muted); }
+  .league-card:active { transform: scale(.99); }
+  .league-card .standing { margin-top: var(--s2); align-items: center; }
+  .league-card .standing b { color: var(--ink); font-size: var(--t3);
+    font-variant-numeric: tabular-nums; }
+  /* the table is the width of the page, so the numbers line up at its edge */
+  table.rating.standings { display: table; }
+  table.standings td:nth-child(n+3), table.standings th:nth-child(n+3) {
+    text-align: right; font-variant-numeric: tabular-nums; }
+
+  nav button.theme svg { display: block; }
+
   @media (max-width: 600px) {
     .wrap { padding: var(--s3) var(--s3) 4rem; }
     .revrows { grid-template-columns: minmax(0, 1fr); }
     .score { grid-template-columns: 1fr 3.6rem; gap: 2px var(--s1); }
     .score .nm { grid-column: 1 / -1; }
     .strip { gap: var(--s2); }
-    #subnav button { padding: 0 var(--s2); }
+    /*
+     * The tabs, as a bar along the bottom. A phone is held from below,
+     * and the top of a page ten screens long is a long way back up to
+     * change tab. The bar keeps clear of the home indicator on phones
+     * that have one.
+     */
+    #subnav { position: fixed; top: auto; left: 0; right: 0; bottom: 0;
+      z-index: 9; margin: 0; gap: 0; overflow: visible;
+      border-bottom: none; border-top: 1px solid var(--edge);
+      background: color-mix(in srgb, var(--panel) 88%, transparent);
+      -webkit-backdrop-filter: saturate(1.4) blur(14px);
+      backdrop-filter: saturate(1.4) blur(14px);
+      padding: 0 var(--s1) env(safe-area-inset-bottom); }
+    #subnav button { flex: 1 1 0; min-width: 0; display: flex;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 2px; padding: 6px 0 5px; min-height: 54px; font-size: var(--t1);
+      font-weight: 600; border-bottom: none; position: relative; }
+    #subnav button.on { color: var(--go); }
+    /* the tab you are on gets a short bar over its icon, not a line under it */
+    #subnav button.on::before { content: ""; position: absolute; top: -1px;
+      left: 30%; right: 30%; height: 2px; border-radius: 0 0 2px 2px;
+      background: var(--go); }
+    #subnav .ticon { display: block; }
+    .wrap { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+    .hodds { width: 84px; height: 84px; }
+    .hside .pts { font-size: var(--t5); }
     .chips button, .seg button, .keepbtn, button.quiet,
     #espnhelp { min-height: 36px; }
     input, select { min-height: var(--tap); }

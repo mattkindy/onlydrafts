@@ -8,6 +8,8 @@
 
 import type { Player } from "../lib/scoring.ts";
 import type { League } from "../lib/providers.ts";
+import type { Listed } from "../lib/availability.ts";
+import { injuryBadge, WORRYING } from "./Draft.tsx";
 import { SeasonCard, seasonScale } from "./Card.tsx";
 import { KeeperRow, keeperDraft, keeperRounds } from "./Keepers.tsx";
 
@@ -31,6 +33,10 @@ interface Props {
   /** what keeping a player costs you, said once over the grid */
   keepersSay?: string;
   onKeeperChange?: () => void;
+  /** who the injury report has listed, so a hurt player says so on his card */
+  listed?: Map<string, Listed>;
+  /** the week coming up, so a player on bye in it is marked */
+  week?: number | null;
 }
 
 export function Roster(props: Props) {
@@ -44,6 +50,12 @@ export function Roster(props: Props) {
     ? keeperDraft(league, props.byKey, props.perTeam)
     : null;
   const rounds = draft ? keeperRounds(players, mine, draft) : new Map<string, number>();
+
+  const hurtOf = (key: string) => props.listed?.get(key);
+  const hurt = mine.filter(({ r }) => hurtOf(r.key)).length;
+  const onByeNow = (p: Player | null) =>
+    Boolean(p && props.week && p.bye === props.week);
+  const resting = mine.filter(({ p }) => onByeNow(p)).length;
 
   const byPosition = new Map<string, typeof mine>();
 
@@ -68,11 +80,21 @@ export function Roster(props: Props) {
         )}
       </div>
 
-      <div class="empty">
-        <b>{mine.length} players</b> on {league.team} in {league.name}
-        {kept
-          ? `, ${kept} marked as keepers`
-          : ", none marked as keepers yet"}
+      {/* the roster in one line: how many, and how many of them are a
+          problem this week, which is what a reader opens the tab to check */}
+      <div class="tally">
+        <span><b>{mine.length}</b> players</span>
+        {hurt > 0 && (
+          <span class="bad"><b>{hurt}</b> on the injury report</span>
+        )}
+        {resting > 0 && (
+          <span class="warn"><b>{resting}</b> on bye in week {props.week}</span>
+        )}
+        {props.keeperLeague && (
+          <span>
+            {kept ? <><b>{kept}</b> marked as keepers</> : "no keepers marked yet"}
+          </span>
+        )}
       </div>
 
       {props.keeperLeague && props.keepersSay && (
@@ -110,6 +132,7 @@ export function Roster(props: Props) {
                   badge={isKept ? "keeper" : ""}
                   onMore={() => props.onMore(p)}
                 >
+                  <Status his={hurtOf(p.key)} bye={onByeNow(p) ? props.week! : null} />
                   {draft && (
                     <KeeperRow
                       players={players}
@@ -129,6 +152,32 @@ export function Roster(props: Props) {
         </div>
       ))}
     </>
+  );
+}
+
+/** what is wrong with him this week, if anything, on one line of his card */
+function Status(
+  { his, bye }: { his: Listed | undefined; bye: number | null },
+) {
+  const badge = injuryBadge(his);
+
+  if (!badge && bye === null) {
+    return null;
+  }
+
+  return (
+    <div class="status">
+      {badge && (
+        <span class={"badge " + badge.badgeHow} title={badge.badgeTitle}>
+          {badge.badge}
+        </span>
+      )}
+      {his?.part && <span>{his.part.toLowerCase()}</span>}
+      {his && WORRYING.has(his.status) && his.note && (
+        <span class="note">{his.note}</span>
+      )}
+      {bye !== null && <span class="badge even">bye week {bye}</span>}
+    </div>
   );
 }
 

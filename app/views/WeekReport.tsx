@@ -7,7 +7,7 @@
  * is a share of its row, in the page's own colours, so both themes work.
  */
 
-import { useMemo } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 
 import {
   layoutReport, shareReport,
@@ -146,8 +146,16 @@ function Strip({ block }: { block: ScoresBlock }) {
   );
 }
 
+/**
+ * How many blocks the recap opens with. The headline and the scores are
+ * the part a league reads on Tuesday; the rest is there for whoever wants
+ * the whole week, a tap away rather than four screens of scrolling.
+ */
+const OPENS_WITH = 2;
+
 export function WeekReport({ report }: { report: Report }) {
   const layout = useMemo(() => layoutReport(report), [report]);
+  const [whole, setWhole] = useState(false);
 
   if (!layout.blocks.length) {
     return null;
@@ -165,7 +173,7 @@ export function WeekReport({ report }: { report: Report }) {
 
       {layout.note && <p class="hint warn">{layout.note}</p>}
 
-      {layout.blocks.map((block) => (
+      {(whole ? layout.blocks : layout.blocks.slice(0, OPENS_WITH)).map((block) => (
         <section class="revblock" key={block.title}>
           <h4>{block.title}</h4>
           {block.kind === "scores"
@@ -179,6 +187,18 @@ export function WeekReport({ report }: { report: Report }) {
             )}
         </section>
       ))}
+
+      {layout.blocks.length > OPENS_WITH && (
+        <button
+          class="quiet whole"
+          aria-expanded={whole}
+          onClick={() => setWhole((on) => !on)}
+        >
+          {whole
+            ? "show less"
+            : `the whole recap, ${layout.blocks.length - OPENS_WITH} more`}
+        </button>
+      )}
     </div>
   );
 }

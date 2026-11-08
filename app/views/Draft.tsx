@@ -56,7 +56,7 @@ export interface DraftNow {
  * hover, since a card has no room for it and a reader who cares will
  * ask.
  */
-const WORRYING = new Set(["Out", "IR", "PUP", "Sus", "NA", "Doubtful", "DNR"]);
+export const WORRYING = new Set(["Out", "IR", "PUP", "Sus", "NA", "Doubtful", "DNR"]);
 
 export function injuryBadge(
   hurt: { status: string; part?: string } | undefined,
