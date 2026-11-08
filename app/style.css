@@ -58,20 +58,12 @@
   nav .brand { margin-right: auto; font-weight: 800; font-size: var(--t4);
     letter-spacing: -0.02em; cursor: pointer; }
   nav .brand b { color: var(--go); }
-  /* the one flourish on the page: a hairline under the nav in the
-     league's green, drifting slowly enough to read as light rather
-     than as movement */
+  /* a plain rule under the nav. It used to be a green and amber gradient
+     drifting along it, which was colour at the edge of every screen that
+     said nothing about the numbers */
   nav { position: relative; padding-bottom: var(--s2); }
   nav::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
-    height: 2px; border-radius: 2px;
-    background: linear-gradient(90deg,
-      transparent, var(--go), transparent, var(--mark), transparent);
-    background-size: 300% 100%; opacity: .35;
-    animation: drift 24s linear infinite; }
-  @keyframes drift { to { background-position: 300% 0; } }
-  @media (prefers-reduced-motion: reduce) {
-    nav::after { animation: none; background-position: 40% 0; }
-  }
+    height: 1px; background: var(--edge); }
 
   /* which league, on one line, with the way back at the left edge where
      a thumb already reaches for it */
@@ -153,8 +145,8 @@
     border: 1px solid var(--edge); border-radius: 999px; min-height: 32px;
     padding: 0 var(--s3); white-space: nowrap; cursor: pointer; }
   .chips button:hover { color: var(--ink); border-color: var(--muted); }
-  .chips button.on { color: var(--ink); border-color: var(--go);
-    background: color-mix(in srgb, var(--go) 14%, transparent); }
+  .chips button.on { color: var(--ink); border-color: var(--muted);
+    background: var(--chip); }
   /* the box takes the whole row, since a field as wide as the word
      "find" reads as a label somebody forgot to finish */
   input.find { flex: 1 1 100%; min-width: 0; }
@@ -195,7 +187,7 @@
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
     gap: var(--s3); align-items: start; }
   .cards.wide { grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
-    gap: var(--s4); }
+    gap: var(--s3); }
   .card { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; padding: var(--s3) var(--s4); }
   .more { flex: 0 0 auto; margin-left: var(--s1); vertical-align: middle;
@@ -210,7 +202,8 @@
   .keepbtn:hover { color: var(--ink); border-color: var(--muted); }
   .keepbtn.on { background: var(--go); color: #0C1117; border-color: var(--go); }
   .card.plain { cursor: default; }
-  .card.mine { border-color: var(--go); }
+  /* yours is said in words on the card, not in the colour of its edge */
+  .card.mine { border-color: var(--edge); }
   /* a keeper is a ticket you are holding, so its edge is perforated */
   .card.kept { border-color: var(--go); border-left-style: dashed; }
   .card.gone { opacity: .45; }
@@ -405,8 +398,20 @@
     align-self: flex-start; }
   .player.away .playername .link { align-self: flex-end; }
   /* the view stacks headings, notes and grids, and they need air */
+  /*
+   * The view's rhythm, in one place. Everything in the column is spaced
+   * by the column's gap and nothing else, since a card's own margin added
+   * to the gap is how two cards came to sit 28px apart and a heading came
+   * to sit as far from its section as from the one before. A heading
+   * keeps a section's worth of air above it and hugs what it names.
+   */
   #out { display: flex; flex-direction: column; gap: var(--s3); }
-  #out > h2:not(:first-child) { margin-top: var(--s1); }
+  #out > :not(h2):not(.fold) { margin-top: 0; margin-bottom: 0; }
+  #out > h2, #out > .fold { margin: var(--s4) 0 calc(var(--s1) * -1); }
+  #out > h2:first-child, #out > .fold:first-child { margin-top: 0; }
+  #out > .fold { padding-top: var(--s3); }
+  /* a run of like cards sits closer together than the sections around it */
+  .stack { display: flex; flex-direction: column; gap: var(--s2); }
 
   /* one look for nothing to show, and one for work still going on */
   .empty { background: var(--panel); border: 1px dashed var(--edge);
@@ -588,10 +593,10 @@
 
   /* the wire in groups, above the table that prices every add: a column
      on a phone, as many across as fit on a wide screen */
-  .groups { display: grid; gap: var(--s2); margin: var(--s2) 0 var(--s4);
+  .groups { display: grid; gap: var(--s2); margin: 0;
     grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
   .group { background: var(--panel); border: 1px solid var(--edge);
-    border-radius: 12px; padding: var(--s2) var(--s3); }
+    border-radius: 12px; padding: var(--s3) var(--s4); }
   .group h3 { margin: 0; font-size: var(--t2); text-transform: uppercase;
     letter-spacing: .06em; }
   .group .hint { margin: 0 0 var(--s1); font-size: var(--t1); }
@@ -671,7 +676,7 @@
      side named on the left. */
   .card.matchup { display: grid; grid-template-columns: 1fr 1fr;
     gap: var(--s1) var(--s3); }
-  .card.matchup.on { border-color: var(--go); }
+  .card.matchup.on { border-color: var(--edge); }
   .card.matchup .team { display: flex; flex-direction: column; min-width: 0; }
   .card.matchup .team.away { text-align: right; align-items: flex-end; }
   /* a card on its own reads like one in the league grid, not a banner */
@@ -739,8 +744,8 @@
   .advice .bye { margin: var(--s1) 0 0; }
 
   /* one slot in your own lineup, with the bench players who could take it */
-  .slot-card { border: 1px solid var(--edge); border-radius: 10px;
-    padding: var(--s2) var(--s3); margin: var(--s2) 0; background: var(--panel); }
+  .slot-card { border: 1px solid var(--edge); border-radius: 12px;
+    padding: var(--s3) var(--s4); margin: 0; background: var(--panel); }
   .slot-card h3 { display: flex; flex-wrap: wrap; gap: var(--s1);
     align-items: baseline; margin: 0 0 var(--s1); font-size: var(--t3); }
   .slot-card h3 .now { font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -900,17 +905,12 @@
    */
   .hero { --tone: var(--mark); position: relative; overflow: hidden;
     background: var(--panel); border: 1px solid var(--edge);
-    border-radius: 16px; padding: var(--s3) var(--s4) var(--s4); }
+    border-radius: 12px; padding: var(--s4); }
   .hero.up { --tone: var(--go); }
   .hero.no { --tone: var(--no); }
-  .hero::before { content: ""; position: absolute; inset: 0 0 auto 0;
-    height: 3px; background: var(--tone); }
-  .hero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(120% 70% at 50% 0%,
-      color-mix(in srgb, var(--tone) 12%, transparent), transparent 70%); }
   .htop { display: flex; justify-content: space-between; align-items: center;
     font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--faint); margin-bottom: var(--s2); }
+    text-transform: uppercase; color: var(--faint); margin-bottom: var(--s3); }
   .phase { display: inline-flex; align-items: center; gap: var(--s1); }
   .phase.live { color: var(--go); }
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--go);
@@ -948,15 +948,11 @@
 
   /* the starters who will not play, gathered where they cannot be missed */
   .worries { background: var(--panel); border: 1px solid var(--edge);
-    border-left: 3px solid var(--mark); border-radius: 12px;
-    padding: var(--s2) var(--s3); }
-  .worries.bad { border-left-color: var(--no);
-    background: color-mix(in srgb, var(--no) 7%, var(--panel)); }
+    border-radius: 12px; padding: var(--s3) var(--s4) var(--s1); }
   .worries h3 { margin: 0 0 var(--s1); font-size: var(--t3); }
-  .worries.bad h3 { color: var(--no); }
   .worries ul { list-style: none; margin: 0; padding: 0; }
-  .worries li { display: flex; align-items: center; gap: var(--s2);
-    padding: var(--s1) 0; border-top: 1px solid var(--edge); font-size: var(--t2); }
+  .worries li { display: flex; align-items: center; gap: var(--s3);
+    padding: var(--s2) 0; border-top: 1px solid var(--edge); font-size: var(--t2); }
   .worries li:first-child { border-top: none; }
   .worries li > .chip { color: var(--muted); background: var(--chip);
     text-transform: uppercase; min-width: 2.6rem; text-align: center; }
@@ -966,12 +962,11 @@
   .worries button.quiet { flex: 0 0 auto; }
 
   /* the one move the players tab argues for, said first */
-  .bestmove { display: flex; flex-direction: column; gap: 2px;
-    background: color-mix(in srgb, var(--go) 9%, var(--panel));
-    border: 1px solid color-mix(in srgb, var(--go) 45%, var(--edge));
-    border-radius: 14px; padding: var(--s3) var(--s4); }
+  .bestmove { display: flex; flex-direction: column; gap: var(--s1);
+    background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 12px; padding: var(--s3) var(--s4); }
   .bestmove .over { font-size: var(--t1); font-weight: 700;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--go); }
+    letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
   .bestmove .what { font-size: var(--t4); line-height: 1.3; text-wrap: balance; }
   .bestmove .swing { font-size: var(--t2); color: var(--muted); }
   .bestmove .swing b { font-size: var(--t4); }
@@ -995,7 +990,6 @@
     border-radius: 999px; padding: .2rem var(--s3); font-size: var(--t2);
     color: var(--muted); }
   .tally b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .tally .bad { border-color: color-mix(in srgb, var(--no) 50%, var(--edge)); }
   .tally .bad b { color: var(--no); }
   .tally .warn b { color: var(--mark); }
   /* what is wrong with a player this week, on his own card */
@@ -1042,11 +1036,8 @@
       flex-direction: column; align-items: center; justify-content: center;
       gap: 2px; padding: 6px 0 5px; min-height: 54px; font-size: var(--t1);
       font-weight: 600; border-bottom: none; position: relative; }
-    #subnav button.on { color: var(--go); }
-    /* the tab you are on gets a short bar over its icon, not a line under it */
-    #subnav button.on::before { content: ""; position: absolute; top: -1px;
-      left: 30%; right: 30%; height: 2px; border-radius: 0 0 2px 2px;
-      background: var(--go); }
+    #subnav button { color: var(--faint); }
+    #subnav button.on { color: var(--ink); font-weight: 700; }
     #subnav .ticon { display: block; }
     .wrap { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
     .hodds { width: 84px; height: 84px; }
@@ -1056,7 +1047,11 @@
     input, select { min-height: var(--tap); }
     /* a 16px field is what stops the browser zooming in on a tap */
     input, select, textarea { font-size: var(--t4); }
-    .controls { padding: var(--s2) var(--s3); gap: var(--s2); }
+    /* every panel on a phone takes the same inset, so their contents
+       line up down the screen whichever kind of panel they are in */
+    .controls, .card, .slot-card, .group, .worries, .bestmove, .hero,
+    .empty { padding-left: var(--s3); padding-right: var(--s3); }
+    .controls { padding-top: var(--s3); padding-bottom: var(--s3); gap: var(--s2); }
     .controls label { flex: 1 1 auto; }
     /* each control gets the whole width rather than sharing a row, since
        three of them side by side on a phone is three stubs */

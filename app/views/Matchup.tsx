@@ -360,7 +360,7 @@ function Lineup(
   );
 
   return (
-    <>
+    <div class="stack">
       {choices.map((choice, i) => (
         <Slot
           key={choice.starter.key + i}
@@ -380,7 +380,7 @@ function Lineup(
         listed={listed}
         onMore={onMore}
       />
-    </>
+    </div>
   );
 }
 
