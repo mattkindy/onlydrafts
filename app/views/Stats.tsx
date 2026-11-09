@@ -17,7 +17,7 @@ import {
 import { PROVIDERS, type League, type Matchup } from "../lib/providers.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
-  bestLineupPoints, luckOf, playoffOdds, seasonOf, startingSlots,
+  bestLineupPoints, luckOf, pairKey, playoffOdds, seasonOf, startingSlots,
   weeklySpread, winShare, type Strength, type TeamSeason,
 } from "../lib/seasonStats.ts";
 import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
@@ -56,6 +56,10 @@ const GONE_A_WHILE = new Set(["IR", "PUP", "NA", "Sus"]);
 
 /** how often the season is played out */
 const SEASONS = 5000;
+
+/** how many weeks ahead the path runs, and how often each step is played out */
+const PATH_WEEKS = 5;
+const PATH_SEASONS = 1500;
 
 function useWeeks(league: League, through: number) {
   const [weeks, setWeeks] = useState<Map<number, Matchup[]> | null>(null);
@@ -186,6 +190,126 @@ function Weeks(
   );
 }
 
+/**
+ * Your playoff chance a week at a time if you win every game from here,
+ * and if you lose every one: two lines from where you stand now, told
+ * apart by their labels and by one being dashed rather than by colour.
+ * Tapping a week says both figures for it under the chart.
+ */
+function PathChart(
+  { win, lose, coming }: { win: number[]; lose: number[]; coming: number },
+) {
+  const [at, setAt] = useState(win.length - 1);
+  const W = 340, H = 168, L = 36, R = 74, T = 12, B = 26;
+  const x = (i: number) => L + (i * (W - L - R)) / Math.max(1, win.length - 1);
+  const y = (p: number) => T + (1 - p) * (H - T - B);
+  const line = (vals: number[]) =>
+    vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const last = win.length - 1;
+  // the two end labels keep 14 units apart, so they never sit on each other
+  const winY = y(win[last]!);
+  const loseY = Math.max(y(lose[last]!), winY + 14);
+  const weekOf = (i: number) => (i === 0 ? "now" : `wk ${coming + i - 1}`);
+
+  return (
+    <div class="path">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img"
+        aria-label={`playoff chance if you win out: ${pct(win[last]!)}; if you lose out: ${pct(lose[last]!)}`}>
+        {[0, 0.5, 1].map((g) => (
+          <g key={g}>
+            <line class="pgrid" x1={L} x2={W - R} y1={y(g)} y2={y(g)} />
+            <text class="paxis" x={L - 6} y={y(g) + 4} text-anchor="end">{g * 100}%</text>
+          </g>
+        ))}
+        <line class="pnow" x1={x(at)} x2={x(at)} y1={T} y2={H - B} />
+        <path class="pline lose" d={line(lose)} />
+        <path class="pline win" d={line(win)} />
+        {win.map((v, i) => <circle key={"w" + i} class="pdot win" cx={x(i)} cy={y(v)} r={4} />)}
+        {lose.map((v, i) => <circle key={"l" + i} class="pdot lose" cx={x(i)} cy={y(v)} r={4} />)}
+        <text class="plabel" x={x(last) + 8} y={winY + 4}>win out</text>
+        <text class="plabel lose" x={x(last) + 8} y={loseY + 4}>lose out</text>
+        {win.map((_, i) => (
+          <text key={"x" + i} class="paxis" x={x(i)} y={H - 6} text-anchor="middle">
+            {weekOf(i)}
+          </text>
+        ))}
+        {/* each week's whole column takes the tap, not just its dots */}
+        {win.map((_, i) => (
+          <rect
+            key={"t" + i} class="ptap" x={x(i) - 18} y={0} width={36} height={H}
+            onClick={() => setAt(i)}
+          />
+        ))}
+      </svg>
+      <p class="wsay">
+        <b>{at === 0 ? "now" : `after week ${coming + at - 1}`}</b>
+        {at === 0
+          ? ` ${pct(win[0]!)}`
+          : <> win them all <b>{pct(win[at]!)}</b> · lose them all <b>{pct(lose[at]!)}</b></>}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The games still to come, a week at a time, where tapping a side says
+ * it wins. Tapping it again takes the pick back. Every chance on the tab
+ * is played out again with the picks in place.
+ */
+function Picker(
+  { toCome, coming, mine, forced, onPick }: {
+    toCome: [string, string][][];
+    coming: number;
+    mine: string;
+    forced: Map<string, string>;
+    onPick: (week: number, a: string, b: string, winner: string) => void;
+  },
+) {
+  const [w, setW] = useState(0);
+  const pairs = toCome[w] ?? [];
+  const picksIn = (week: number) =>
+    (toCome[week] ?? []).filter(([a, b]) => forced.has(pairKey(week, a, b))).length;
+
+  return (
+    <div class="picker">
+      <div class="chips" role="tablist">
+        {toCome.map((_, i) => (
+          <button
+            key={i} role="tab" aria-selected={i === w}
+            class={i === w ? "on" : ""} onClick={() => setW(i)}
+          >
+            wk {coming + i}{picksIn(i) ? ` · ${picksIn(i)}` : ""}
+          </button>
+        ))}
+      </div>
+      <ul class="picks">
+        {pairs.map(([a, b]) => {
+          const key = pairKey(w, a, b);
+          const won = forced.get(key);
+          const side = (who: string) => (
+            <button
+              class={"side" + (won === who ? " on" : "") + (won && won !== who ? " off" : "") +
+                (who === mine ? " mine" : "")}
+              aria-pressed={won === who}
+              onClick={() => onPick(w, a, b, who)}
+            >
+              {who}
+            </button>
+          );
+
+          return (
+            <li key={key} class={a === mine || b === mine ? "yours" : ""}>
+              {side(a)}
+              <span class="v">v</span>
+              {side(b)}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export function Stats(props: Props) {
   const { league, players, coming } = props;
   const lastRegular = league.lastRegularWeek ?? 14;
@@ -288,7 +412,12 @@ export function Stats(props: Props) {
     });
   }, [props.thisWeek, players, coming, league.pays, props.boardPerCatch]);
 
-  const run = useMemo(() => {
+  /** results somebody has picked, and how you think your team will score */
+  const [forced, setForced] = useState<Map<string, string>>(() => new Map());
+  const [nudge, setNudge] = useState(0);
+
+  /** the pairings of every week left, this one first, and the table now */
+  const setup = useMemo(() => {
     if (!weeks || coming > lastRegular) {
       return null;
     }
@@ -306,16 +435,93 @@ export function Stats(props: Props) {
       return { owner, wins: team?.wins ?? 0, ties: team?.ties ?? 0, pf: team?.pf ?? 0 };
     });
 
-    return playoffOdds({
-      table,
-      weeks: toCome,
-      strength,
+    return { toCome, table };
+  }, [weeks, coming, lastRegular, season, league]);
+
+  /** your team scoring what you think it will, everybody else as projected */
+  const adjusted = useMemo(() => {
+    if (!nudge) {
+      return strength;
+    }
+
+    const out = new Map(strength);
+    const mine = out.get(league.team);
+
+    if (mine) {
+      out.set(league.team, { ...mine, mean: mine.mean * (1 + nudge) });
+    }
+
+    return out;
+  }, [strength, nudge, league.team]);
+
+  const playOut = (picks: Map<string, string>, draws: number) => setup
+    ? playoffOdds({
+      table: setup.table,
+      weeks: setup.toCome,
+      strength: adjusted,
       playoffTeams: league.playoffTeams ?? (league.size >= 12 ? 6 : 4),
       ...(thisWeek ? { thisWeek } : {}),
       mine: league.team,
-      draws: SEASONS,
-    });
-  }, [weeks, coming, lastRegular, season, strength, league, thisWeek]);
+      draws,
+      forced: picks,
+    })
+    : null;
+
+  const run = useMemo(
+    () => playOut(forced, SEASONS),
+    [setup, adjusted, league, thisWeek, forced],
+  );
+
+  /**
+   * Your playoff chance if you win each of your next games, and if you
+   * lose each, a week at a time: the two ways the season can go from
+   * here, on top of whatever has been picked. A game you have picked
+   * keeps your pick.
+   */
+  const [path, setPath] = useState<{ win: number[]; lose: number[] } | null>(null);
+
+  // worked out just after the tap that changed it, so a pick answers at
+  // once and the two lines follow a moment later
+  useEffect(() => {
+    const soon = setTimeout(() => setPath(pathNow()), 30);
+
+    return () => clearTimeout(soon);
+  }, [setup, run, forced, adjusted, league.team]);
+
+  function pathNow() {
+    if (!setup || !run) {
+      return null;
+    }
+
+    const now = run.odds.find((o) => o.owner === league.team)?.playoffs ?? 0;
+    const ahead = Math.min(setup.toCome.length, PATH_WEEKS);
+    const mineIn = setup.toCome.map((pairs) =>
+      pairs.find((pair) => pair.includes(league.team)) ?? null);
+    const along = (winning: boolean) => {
+      const out = [now];
+      const picks = new Map(forced);
+
+      for (let w = 0; w < ahead; w++) {
+        const pair = mineIn[w];
+
+        if (pair) {
+          const key = pairKey(w, pair[0], pair[1]);
+          const them = pair[0] === league.team ? pair[1] : pair[0];
+
+          if (!picks.has(key)) {
+            picks.set(key, winning ? league.team : them);
+          }
+        }
+
+        out.push(playOut(picks, PATH_SEASONS)?.odds
+          .find((o) => o.owner === league.team)?.playoffs ?? 0);
+      }
+
+      return out;
+    };
+
+    return { win: along(true), lose: along(false) };
+  }
 
   if (trouble) {
     return <p class="hint">{trouble}</p>;
@@ -431,6 +637,9 @@ export function Stats(props: Props) {
               }))}
             />
           </div>
+          {(forced.size > 0 || nudge !== 0) && (
+            <p class="hint scenario">With your picks under what if.</p>
+          )}
           <div class="odds-list">
             {[...run.odds].sort((a, b) => b.playoffs - a.playoffs || b.wins - a.wins)
               .map((o) => {
@@ -458,6 +667,56 @@ export function Stats(props: Props) {
             how well it has set its lineups
             {thisWeek ? ", and this week from its lineups" : ""}.
           </p>
+
+          {setup && path && (
+            <>
+              <div class="sectionhead">
+                <h2>what if</h2>
+                {(forced.size > 0 || nudge !== 0) && (
+                  <button
+                    class="textbtn"
+                    onClick={() => { setForced(new Map()); setNudge(0); }}
+                  >
+                    reset{forced.size ? ` ${forced.size} pick${forced.size === 1 ? "" : "s"}` : ""}
+                  </button>
+                )}
+              </div>
+              <PathChart win={path.win} lose={path.lose} coming={coming} />
+              <label class="nudge">
+                <span>
+                  your scoring against its projection{" "}
+                  <b>{nudge > 0 ? "+" : ""}{Math.round(nudge * 100)}%</b>
+                </span>
+                <input
+                  type="range" min={-20} max={20} step={5}
+                  value={Math.round(nudge * 100)}
+                  onInput={(e) => setNudge(Number(e.currentTarget.value) / 100)}
+                />
+              </label>
+              <Picker
+                toCome={setup.toCome}
+                coming={coming}
+                mine={league.team}
+                forced={forced}
+                onPick={(w, a, b, winner) => setForced((was) => {
+                  const next = new Map(was);
+                  const key = pairKey(w, a, b);
+
+                  if (next.get(key) === winner) {
+                    next.delete(key);
+                  } else {
+                    next.set(key, winner);
+                  }
+
+                  return next;
+                })}
+              />
+              <p class="hint">
+                Tap a team to have it win that game. The chances above, and
+                the two lines, play the season out again with your picks.
+              </p>
+            </>
+          )}
         </>
       )}
 

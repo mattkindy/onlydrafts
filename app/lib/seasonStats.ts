@@ -247,6 +247,10 @@ export interface PlayoffOdds {
   wins: number;
 }
 
+/** the key a forced result goes under: the week's place in the run and the pair */
+export const pairKey = (week: number, a: string, b: string) =>
+  week + ":" + [a, b].sort().join("|");
+
 export interface PlayoffRun {
   odds: PlayoffOdds[];
   /** your odds if you win this week's game, and if you lose it */
@@ -274,6 +278,12 @@ export function playoffOdds(input: {
   thisWeek?: { a: string; b: string; odds: number; projected: [number, number] }[];
   mine?: string;
   draws?: number;
+  /**
+   * Results somebody has picked, by pairKey, each naming the winner. A
+   * picked game is settled before anything is drawn for it, which is
+   * how the page plays out a scenario.
+   */
+  forced?: Map<string, string>;
 }): PlayoffRun {
   const draws = input.draws ?? 5000;
   const owners = input.table.map((t) => t.owner);
@@ -301,12 +311,27 @@ export function playoffOdds(input: {
           continue;
         }
 
+        const picked = input.forced?.get(pairKey(w, a, b));
         const known = w === 0 && settled.has(a)
           ? thisWeek.find((g) => (g.a === a && g.b === b) || (g.a === b && g.b === a))
           : undefined;
         let aWins: boolean;
 
-        if (known) {
+        if (picked !== undefined) {
+          // the scores still count toward points for: this week's lineups
+          // where the game has them, and each side's usual otherwise
+          aWins = picked === a;
+
+          if (known) {
+            const [pa, pb] = known.a === a ? known.projected : [known.projected[1], known.projected[0]];
+
+            pf[ia] = pf[ia]! + pa;
+            pf[ib] = pf[ib]! + pb;
+          } else {
+            pf[ia] = pf[ia]! + (input.strength.get(a)?.mean ?? 0);
+            pf[ib] = pf[ib]! + (input.strength.get(b)?.mean ?? 0);
+          }
+        } else if (known) {
           const oddsA = known.a === a ? known.odds : 1 - known.odds;
           const [pa, pb] = known.a === a ? known.projected : [known.projected[1], known.projected[0]];
 
