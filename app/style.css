@@ -1025,6 +1025,22 @@
   .league-card .standing { margin-top: var(--s2); align-items: center; }
   .league-card .standing b { color: var(--ink); font-size: var(--t3);
     font-variant-numeric: tabular-nums; }
+  /* this week in the league, at the foot of its card in the list */
+  .lweek { display: flex; align-items: center; justify-content: space-between;
+    gap: var(--s3); margin-top: var(--s3); padding-top: var(--s3);
+    border-top: 1px solid var(--edge); font-size: var(--t2); color: var(--muted); }
+  .lweek.waiting { color: var(--faint); }
+  .lweek .vs { min-width: 0; display: flex; flex-direction: column; }
+  .lweek .vs b { color: var(--ink); font-weight: 600; }
+  .lweek .vs i { font-style: normal; font-size: var(--t1); color: var(--faint);
+    font-variant-numeric: tabular-nums; }
+  .lweek .odds { flex: 0 0 auto; display: flex; flex-direction: column;
+    align-items: flex-end; font-size: var(--t5); font-weight: 800; line-height: 1;
+    color: var(--ink); font-variant-numeric: tabular-nums; }
+  .lweek .odds.up { color: var(--go); }
+  .lweek .odds.no { color: var(--no); }
+  .lweek .odds small { font-size: .625rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--faint); margin-top: 2px; }
   /* the table is the width of the page, so the numbers line up at its edge */
   table.rating.standings { display: table; }
   table.standings td:nth-child(n+3), table.standings th:nth-child(n+3) {

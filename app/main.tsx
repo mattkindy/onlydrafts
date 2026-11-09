@@ -34,13 +34,14 @@ import { MyMatchup } from "./views/Matchup.tsx";
 import { Matchups } from "./views/Matchups.tsx";
 import { Standings, standingSays } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
+import { LeagueWeek } from "./views/LeagueWeek.tsx";
 import { useWeekPoll } from "./views/scoreboard.ts";
 import {
   listedOnSlate, loadSlate, onTheBooks, rosterKeys, slateUnder, weekRefs,
   weekRowsOf,
   type Slate, type WeekRef,
 } from "./lib/slate.ts";
-import { gameStates } from "./lib/matchups.ts";
+import { gameStates, type GameState } from "./lib/matchups.ts";
 import { readRecapWeek, weekBefore } from "./lib/recapWeek.ts";
 
 export type Order = "war" | "rank" | "adp";
@@ -168,6 +169,9 @@ function scoringSettings(
   return "scoring: " + said.map(([what, n]) => `${n} per ${what}`).join(", ");
 }
 
+/** before the scoreboard has answered, every game is still to kick off */
+const NO_STATES = new Map<string, GameState>();
+
 const NOTHING: DraftNow = {
   taken: new Set(), mine: new Set(), teams: {}, rosteredBy: {}, grid: null,
 };
@@ -217,7 +221,7 @@ const WEEK_VIEWS: View[] = ["matchup", "league", "players"];
  * The views that read the week's lines without pricing a game, so they
  * load the slate but leave the scoreboard alone.
  */
-const SLATE_VIEWS: View[] = [...WEEK_VIEWS, "team"];
+const SLATE_VIEWS: View[] = [...WEEK_VIEWS, "team", "leagues"];
 
 /** how old a read can be before one of those views asks the provider again */
 const STALE_AFTER = 2 * 60 * 1000;
@@ -294,7 +298,10 @@ function App() {
   const [gamesStatus, setGamesStatus] = useState("");
   // one poll for the whole page: each scoreboard read moves `tick`, and
   // the league's points are read again on it, so the two never drift apart
-  const openWeek = week && WEEK_VIEWS.includes(view) ? week : null;
+  // the league list prices each league's game too, once there are leagues
+  const openWeek = week &&
+    (WEEK_VIEWS.includes(view) || (view === "leagues" && leagues.length > 0))
+    ? week : null;
   const scoreboard = useWeekPoll(
     openWeek?.season, openWeek?.week, active?.provider);
   const gamesKey = useRef("");
@@ -1070,6 +1077,18 @@ function App() {
                           {SCORING_NAME[roomFor(lg.pays)]}
                         </span>
                       </div>
+                      {built && comingWeek && board && (
+                        <LeagueWeek
+                          league={lg}
+                          slate={built}
+                          board={board.players}
+                          boardPerCatch={board.perCatch}
+                          schedule={board.schedule}
+                          listed={allListed}
+                          states={scoreboard.states ?? NO_STATES}
+                          tick={scoreboard.tick}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
