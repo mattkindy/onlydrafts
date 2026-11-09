@@ -485,6 +485,9 @@ const SLEEPERS_SHOWN = 8;
  * more than he cost. This asks that instead: who is taking a starter's
  * work on a late round price.
  */
+/** the last week a free agent is measured against where he was drafted */
+const SLEEPERS_UNTIL = 5;
+
 function Sleepers(
   { rows, onMore }: { rows: Add[]; onMore: (p: Player) => void },
 ) {
@@ -911,7 +914,12 @@ export function Waivers(props: Props) {
         </p>
       )}
 
-      <Sleepers rows={wire.filter(matching)} onMore={props.onMore} />
+      {/* a claim against a player's draft spot says less every week the
+          draft recedes, and by midseason the room has priced what it
+          knows, so the section goes once the early weeks are past */}
+      {(props.week === null || props.week <= SLEEPERS_UNTIL) && (
+        <Sleepers rows={wire.filter(matching)} onMore={props.onMore} />
+      )}
 
       <button
         class="fold"

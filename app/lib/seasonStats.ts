@@ -210,7 +210,10 @@ export function weeklySpread(teams: TeamSeason[], fallbackMean: number): number 
     return 0.25 * fallbackMean;
   }
 
-  return Math.sqrt(squares / (count - kept));
+  // a league whose weeks barely move, a few weeks in, would otherwise
+  // play every remaining game out the same way every time; no league
+  // spreads less than about an eighth of its mean
+  return Math.max(Math.sqrt(squares / (count - kept)), 0.12 * fallbackMean);
 }
 
 /** the same random draws every time for the same inputs, so odds do not flicker */
