@@ -264,17 +264,19 @@ function Bench(
                 team={his.line?.team}
                 onOpen={onMore ? () => onMore(option.key) : undefined}
               />
-              <Numbers line={his.line} left={his.left} />
-              <Marks his={listed.get(option.key)} row={rows.get(option.key)} />
               <span class={option.gains > 0 ? "fig delta up" : "fig delta"}>
                 <i>win %</i>{signed(option.gains)}
               </span>
-              <Fig label={`instead of ${nameOf(
-                choice.starter.key, rows, lines, choice.starter.name)}`}>
-                {choice.slot}
-              </Fig>
-              <Fig label="outscores him">{pct(option.outscores)}</Fig>
-              {option.locked && <span class="badge even">locked</span>}
+              <div class="optfigs">
+                <Numbers line={his.line} left={his.left} />
+                <Fig label={`instead of ${nameOf(
+                  choice.starter.key, rows, lines, choice.starter.name)}`}>
+                  {choice.slot}
+                </Fig>
+                <Fig label="outscores him">{pct(option.outscores)}</Fig>
+                <Marks his={listed.get(option.key)} row={rows.get(option.key)} />
+                {option.locked && <span class="badge even">locked</span>}
+              </div>
             </li>
           );
         })}
@@ -343,16 +345,18 @@ function Slot(
                     team={other.line?.team}
                     onOpen={onMore ? () => onMore(option.key) : undefined}
                   />
-                  <Numbers line={other.line} left={other.left} />
-                  <Marks
-                    his={listed.get(option.key)}
-                    row={rows.get(option.key)}
-                  />
                   <span class="fig delta up">
                     <i>win %</i>{signed(option.gains)}
                   </span>
-                  <Fig label="outscores him">{pct(option.outscores)}</Fig>
-                  {option.locked && <span class="badge even">locked</span>}
+                  <div class="optfigs">
+                    <Numbers line={other.line} left={other.left} />
+                    <Fig label="outscores him">{pct(option.outscores)}</Fig>
+                    <Marks
+                      his={listed.get(option.key)}
+                      row={rows.get(option.key)}
+                    />
+                    {option.locked && <span class="badge even">locked</span>}
+                  </div>
                   {option.why && <Why why={option.why} />}
                 </li>
               );
@@ -500,7 +504,7 @@ function Ring({ odds, tone }: { odds: number; tone: string }) {
   const round = 2 * Math.PI * r;
 
   return (
-    <svg class={"ring " + tone} viewBox="0 0 72 72" aria-hidden="true">
+    <svg class={"ring tone-" + tone} viewBox="0 0 72 72" aria-hidden="true">
       <circle class="track" cx="36" cy="36" r={r} />
       <circle
         class="fill" cx="36" cy="36" r={r}
@@ -548,7 +552,9 @@ function Scoreline(
   );
 
   return (
-    <section class={"hero " + verdict.tone} aria-label="your game">
+    // tone-, since a bare "up" is the page's own class for a green figure
+    // and took every word on the card with it
+    <section class={"hero tone-" + verdict.tone} aria-label="your game">
       <div class="htop">
         <span>{week ? "week " + week : "this week"}</span>
         <span class={"phase " + phase}>
@@ -560,9 +566,13 @@ function Scoreline(
       </div>
       <div class="hbody">
         {side(me, projected[at]!, "me")}
+        {/* the figure in the ring and the word under it, since a word
+            inside the ring has to be smaller than anybody reads */}
         <div class="hodds">
-          <Ring odds={odds} tone={verdict.tone} />
-          <span class="hpct">{pct(odds)}</span>
+          <span class="hring">
+            <Ring odds={odds} tone={verdict.tone} />
+            <span class="hpct">{pct(odds)}</span>
+          </span>
           <span class="hword">{verdict.word}</span>
         </div>
         {side(them, projected[1 - at]!, "them")}

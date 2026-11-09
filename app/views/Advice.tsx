@@ -166,7 +166,7 @@ export function Advice(
   );
 
   if (!best.swaps.length && lean) {
-    return <p class="hint">No one on your bench would raise it.</p>;
+    return <p class="hint">No swap you can still make would raise it.</p>;
   }
 
   if (!best.swaps.length) {

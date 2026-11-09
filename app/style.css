@@ -74,8 +74,10 @@
     overflow: hidden; text-overflow: ellipsis; }
   #crumb button.back { font: inherit; font-size: var(--t5); line-height: 1;
     background: none; border: none; color: var(--muted); cursor: pointer;
-    flex: 0 0 auto; width: var(--tap); height: var(--tap);
-    margin-left: calc(var(--s3) * -1); }
+    flex: 0 0 auto; width: 24px; height: var(--tap); padding: 0;
+    text-align: left; position: relative; }
+  #crumb button.back::after { content: ""; position: absolute;
+    inset: 0 -8px 0 -12px; }
   #crumb button.back:hover { color: var(--ink); }
   /* which way the page reads now, as one glyph rather than a word */
   nav button.theme { border: 1px solid var(--edge); border-radius: 999px;
@@ -751,8 +753,10 @@
   /* one slot in your own lineup, with the bench players who could take it */
   .slot-card { border: 1px solid var(--edge); border-radius: 12px;
     padding: var(--s3) var(--s4); margin: 0; background: var(--panel); }
-  .slot-card h3 { display: flex; flex-wrap: wrap; gap: var(--s1);
-    align-items: baseline; margin: 0 0 var(--s1); font-size: var(--t3); }
+  .slot-card h3 { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2);
+    align-items: center; margin: 0 0 var(--s2); font-size: var(--t3); }
+  /* the badges sit at the far end of the slot's heading, not after the name */
+  .slot-card h3 > .badge:first-of-type { margin-left: auto; }
   .slot-card h3 .now { font-weight: 800; font-variant-numeric: tabular-nums; }
   .slot-fig { font-size: var(--t1); color: var(--muted); font-weight: 400;
     font-variant-numeric: tabular-nums; }
@@ -766,16 +770,27 @@
     font-weight: 600; }
   /* what the list under a slot is: the bench players who could take it */
   .slot-card .over { color: var(--faint); text-transform: uppercase;
-    letter-spacing: .05em; font-size: var(--t1); margin-top: var(--s2); }
+    letter-spacing: .05em; font-size: var(--t1); margin-top: var(--s3); }
   .options { list-style: none; margin: 0; padding: 0; }
+  /*
+   * A bench row is two lines: his name with what he does to your win
+   * chance at the far end, then his figures under it. Left to wrap where
+   * they fell, the figures split across three ragged lines with the win
+   * chance stranded at the right of the second.
+   */
   .options li { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3);
-    align-items: baseline; padding: var(--s1) 0;
+    align-items: baseline; padding: var(--s2) 0;
     border-top: 1px solid var(--edge); font-size: var(--t2); }
   .options li.shut { opacity: .55; }
-  /* the name stays next to its figures instead of across the row from them */
-  .options li .playername { flex: 0 1 auto; min-width: 8rem; }
-  .options .delta { margin-left: auto; font-weight: 700; color: var(--muted);
+  .options li .playername { flex: 1 1 0; min-width: 0; }
+  .options .delta { flex: 0 0 auto; font-weight: 700; color: var(--muted);
     font-variant-numeric: tabular-nums; text-align: right; }
+  /* the label rides in front of the figure rather than over it */
+  .options .delta i { display: inline; margin-right: .3rem; }
+  .optfigs { flex: 1 1 100%; display: flex; flex-wrap: wrap;
+    align-items: flex-end; gap: var(--s1) var(--s4);
+    font-variant-numeric: tabular-nums; }
+  .optfigs .badge { margin-left: 0; align-self: center; }
   .options .delta.up { color: var(--go); }
   .why { flex-basis: 100%; margin: .15rem 0 .1rem; font-size: var(--t1);
     color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2);
@@ -904,15 +919,15 @@
 
   /*
    * Your game, at the top of the matchup tab: you on the left, them on
-   * the right, and between the two the one number the tab is for. The
-   * card's edge takes the verdict's colour, so the answer reads before
-   * any of the words do.
+   * the right, and between the two the one number the tab is for. Only
+   * the ring and the word under it take the verdict's colour; the names
+   * and scores stay in ink.
    */
   .hero { --tone: var(--mark); position: relative; overflow: hidden;
     background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; padding: var(--s4); }
-  .hero.up { --tone: var(--go); }
-  .hero.no { --tone: var(--no); }
+  .hero.tone-up { --tone: var(--go); }
+  .hero.tone-no { --tone: var(--no); }
   .htop { display: flex; justify-content: space-between; align-items: center;
     font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
     text-transform: uppercase; color: var(--faint); margin-bottom: var(--s3); }
@@ -937,19 +952,21 @@
     margin-top: var(--s1); }
   .hside .proj { font-size: var(--t1); color: var(--muted);
     font-variant-numeric: tabular-nums; }
-  .hodds { position: relative; display: grid; place-items: center;
-    width: 92px; height: 92px; }
-  .hodds .ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hodds { display: flex; flex-direction: column; align-items: center;
+    gap: var(--s1); }
+  .hring { position: relative; display: grid; place-items: center;
+    width: 80px; height: 80px; }
+  .hring .ring { position: absolute; inset: 0; width: 100%; height: 100%; }
   .ring circle { fill: none; stroke-width: 7; }
   .ring .track { stroke: var(--chip); }
   .ring .fill { stroke: var(--tone, var(--go)); stroke-linecap: round;
     transition: stroke-dasharray .6s ease; }
   @media (prefers-reduced-motion: reduce) { .ring .fill { transition: none; } }
-  .hpct { font-size: var(--t5); font-weight: 800; line-height: 1;
-    font-variant-numeric: tabular-nums; margin-top: -.5rem; }
-  .hword { position: absolute; bottom: 22px; font-size: .625rem;
-    font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--tone); }
+  /* sized so 99.6% fits inside the ring with room either side */
+  .hpct { font-size: var(--t4); font-weight: 800; line-height: 1;
+    letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .hword { font-size: var(--t1); font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--tone); white-space: nowrap; }
 
   /* the starters who will not play, gathered where they cannot be missed */
   .worries { background: var(--panel); border: 1px solid var(--edge);
@@ -1096,7 +1113,7 @@
       margin: calc(var(--s3) * -1) calc(var(--s2) * -1) 0 0;
       background: var(--panel); z-index: 1; }
     .wrap { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
-    .hodds { width: 84px; height: 84px; }
+    .hring { width: 72px; height: 72px; }
     .hside .pts { font-size: var(--t5); }
     .chips button, .seg button, .keepbtn, button.quiet,
     #espnhelp { min-height: 36px; }
