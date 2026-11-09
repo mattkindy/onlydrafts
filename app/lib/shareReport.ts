@@ -181,13 +181,16 @@ export interface ReportLayout extends Picture {
   blocks: ReportBlock[];
 }
 
-const GAP = 24;
-const BLOCK_TITLE = 46;
-const ROW = 92;
-const CHART_ROW = 124;
-const CURVE_ROW = 240;
-const BLOCK_PAD = 20;
-const STRIP_ROW = 46;
+// room to breathe: a recap is read on a phone, a block at a time
+const GAP = 36;
+const BLOCK_TITLE = 66;
+const ROW = 112;
+const CHART_ROW = 152;
+const CURVE_ROW = 268;
+const BLOCK_PAD = 32;
+const STRIP_ROW = 54;
+/** the note on a week still being played, under the subtitle */
+const NOTE_ROOM = 44;
 
 /** a green award is one you would want, a red one is not */
 const AWARD_TONE: Record<Award, Tone> = {
@@ -391,7 +394,7 @@ const noteFor = (report: Report) =>
 
 export function layoutReport(report: Report): ReportLayout {
   const note = noteFor(report);
-  let y = HEAD + (note ? 34 : 0);
+  let y = HEAD + (note ? NOTE_ROOM : 0);
   const blocks: ReportBlock[] = [];
   const put = (block: ReportBlock) => {
     blocks.push(block);
@@ -632,13 +635,13 @@ function drawRow(
   ctx.textAlign = "left";
   ctx.fillStyle = SHADES.faint;
   ctx.font = "700 21px " + FONT;
-  ctx.fillText(fitted(ctx, row.label, width), left, top + 21);
+  ctx.fillText(fitted(ctx, row.label, width), left, top + 22);
 
   ctx.fillStyle = SHADES.ink;
   ctx.font = `700 ${name}px ` + FONT;
 
   const figure = ctx.measureText(row.figure).width;
-  const line = top + 40 + name / 2;
+  const line = top + 48 + name / 2;
 
   ctx.fillText(fitted(ctx, row.head, width - figure - 18), left, line);
 
@@ -650,10 +653,10 @@ function drawRow(
   ctx.textAlign = "left";
   ctx.fillStyle = SHADES.muted;
   ctx.font = "500 21px " + FONT;
-  ctx.fillText(fitted(ctx, row.foot, width), left, line + 26);
+  ctx.fillText(fitted(ctx, row.foot, width), left, line + 32);
 
   if (row.chart) {
-    CHARTS[row.chart.kind](ctx, row.chart, left, width, line + 40);
+    CHARTS[row.chart.kind](ctx, row.chart, left, width, line + 50);
   }
 }
 
@@ -670,30 +673,30 @@ function drawScores(ctx: CanvasRenderingContext2D, block: ScoresBlock) {
     ctx.textAlign = "left";
     ctx.fillStyle = SHADES.ink;
     ctx.font = "700 25px " + FONT;
-    ctx.fillText(fitted(ctx, bar.owner, named - 16), left, top + 26);
+    ctx.fillText(fitted(ctx, bar.owner, named - 16), left, top + 30);
 
     const barLeft = left + named;
 
     ctx.fillStyle = SHADES.chip;
-    roundRect(ctx, barLeft, top + 10, bars, BAR, BAR / 2);
+    roundRect(ctx, barLeft, top + 14, bars, BAR, BAR / 2);
     ctx.fill();
 
     // the paler end is what his bench would have added
     ctx.fillStyle = SHADES.edge;
-    roundRect(ctx, barLeft, top + 10, Math.max(4, bar.most * bars), BAR, BAR / 2);
+    roundRect(ctx, barLeft, top + 14, Math.max(4, bar.most * bars), BAR, BAR / 2);
     ctx.fill();
 
     ctx.fillStyle = bar.won ? SHADES.go : SHADES.muted;
-    roundRect(ctx, barLeft, top + 10, Math.max(4, bar.fill * bars), BAR, BAR / 2);
+    roundRect(ctx, barLeft, top + 14, Math.max(4, bar.fill * bars), BAR, BAR / 2);
     ctx.fill();
 
     ctx.fillStyle = SHADES.mark;
-    ctx.fillRect(barLeft + block.median * bars - 1, top + 5, 3, BAR + 10);
+    ctx.fillRect(barLeft + block.median * bars - 1, top + 9, 3, BAR + 10);
 
     ctx.textAlign = "right";
     ctx.fillStyle = SHADES.ink;
     ctx.font = "700 25px " + FONT;
-    ctx.fillText(scoredSays(bar.points), left + width, top + 26);
+    ctx.fillText(scoredSays(bar.points), left + width, top + 30);
   });
 }
 
@@ -704,7 +707,8 @@ export function paintReport(
     ctx.textAlign = "left";
     ctx.fillStyle = SHADES.mark;
     ctx.font = "600 24px " + FONT;
-    ctx.fillText(layout.note, PAD, HEAD - 24);
+    // under the subtitle, with its own line of room, never on top of it
+    ctx.fillText(layout.note, PAD, HEAD + 6);
   }
 
   const width = layout.width - PAD * 2;
@@ -721,7 +725,7 @@ export function paintReport(
     ctx.textAlign = "left";
     ctx.fillStyle = SHADES.muted;
     ctx.font = "800 26px " + FONT;
-    ctx.fillText(block.title, PAD + BLOCK_PAD, block.y + 34);
+    ctx.fillText(block.title, PAD + BLOCK_PAD, block.y + 44);
 
     if (block.kind === "scores") {
       drawScores(ctx, block);
