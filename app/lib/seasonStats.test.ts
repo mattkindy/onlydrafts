@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Matchup, Side } from "./providers.ts";
 import {
-  bestLineupPoints, luckOf, playoffOdds, seasonOf, weeklySpread, winShare,
+  bestLineupPoints, luckOf, pairKey, playoffOdds, seasonOf, weeklySpread, winShare,
 } from "./seasonStats.ts";
 
 const POS: Record<string, string> = {
@@ -125,6 +125,19 @@ describe("the rest of the season played out", () => {
     });
 
     expect(run.ifWin!).toBeGreaterThan(run.ifLose!);
+  });
+
+  it("plays a picked result the way it was picked", () => {
+    // ann loses every remaining game, cy wins every one
+    const forced = new Map(weeks.flatMap((_, w) => [
+      [pairKey(w, "ann", "bo"), "bo"], [pairKey(w, "di", "cy"), "cy"],
+    ]));
+    const run = playoffOdds({ table, weeks, strength: even, playoffTeams: 2, forced, draws: 500 });
+    const of = (owner: string) => run.odds.find((o) => o.owner === owner)!;
+
+    expect(of("ann").wins).toBe(4);
+    expect(of("cy").wins).toBe(9);
+    expect([of("bo").playoffs, of("cy").playoffs]).toEqual([1, 1]);
   });
 
   it("gives the same answer twice", () => {
