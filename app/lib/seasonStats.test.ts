@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { Tiebreak } from "./playoffRules.ts";
 import type { Matchup, Side } from "./providers.ts";
 import {
-  bestLineupPoints, chanceAt, chanceOf, luckOf, pairKey, playoffOdds, scenarioPath, TIE, seasonOf, weeklySpread, winShare,
+  bestLineupPoints, chanceAt, chanceOf, luckOf, pairKey, playoffOdds, scenarioPath, TIE,
+  type SeedRow, seasonOf, weeklySpread, winShare,
 } from "./seasonStats.ts";
 
 const POS: Record<string, string> = {
@@ -258,5 +260,96 @@ describe("the rest of the season played out", () => {
     const again = playoffOdds({ table, weeks, strength: even, playoffTeams: 2, draws: 500 });
 
     expect(once).toEqual(again);
+  });
+});
+
+describe("a league's own playoff rules", () => {
+  const row = (owner: string, wins: number, pf: number, extra: Partial<SeedRow> = {}): SeedRow =>
+    ({ owner, wins, ties: 0, pf, ...extra });
+  const flat = new Map(["ann", "bo", "cy", "di"].map((o) => [o, { mean: 100, sd: 25 }]));
+  const chance = (run: ReturnType<typeof playoffOdds>, owner: string) =>
+    run.odds.find((o) => o.owner === owner)!;
+
+  it("lets each division's winner in, and the best of the rest after", () => {
+    const divisionOf = new Map([["ann", 1], ["bo", 1], ["cy", 2], ["di", 2]]);
+    const weeks: [string, string][][] = Array.from({ length: 4 }, () => [["ann", "cy"], ["bo", "di"]]);
+    const table = ["ann", "bo", "cy", "di"].map((o) => row(o, 3, 300));
+    const run = playoffOdds({
+      table, weeks, strength: flat, playoffTeams: 3, draws: 2000, divisionOf,
+      rules: { seedBy: "wins", ties: ["pf"], divisions: true },
+    });
+
+    // one title in each division every season
+    expect(chance(run, "ann").division! + chance(run, "bo").division!).toBeCloseTo(1, 9);
+    expect(chance(run, "cy").division! + chance(run, "di").division!).toBeCloseTo(1, 9);
+    expect(run.odds.reduce((sum, o) => sum + o.playoffs, 0)).toBeCloseTo(3, 9);
+  });
+
+  it("puts a weak division's winner in over a better team elsewhere", () => {
+    const divisionOf = new Map([["ann", 1], ["bo", 1], ["cy", 1], ["di", 2]]);
+    const table = [row("ann", 9, 900), row("bo", 8, 800), row("cy", 7, 700), row("di", 2, 200)];
+    const rules = { seedBy: "wins" as const, ties: ["pf" as const], divisions: true };
+    const run = playoffOdds({ table, weeks: [], strength: flat, playoffTeams: 2, draws: 10, divisionOf, rules });
+
+    expect(chance(run, "di").playoffs).toBe(1);
+    expect(chance(run, "bo").playoffs).toBe(0);
+  });
+
+  it("ranks by points for, or by record with the median games, when the league does", () => {
+    const table = [
+      row("ann", 6, 800, { medianWins: 2 }),
+      row("bo", 4, 1000, { medianWins: 5 }),
+    ];
+    const by = (seedBy: "wins" | "median" | "pf") => chance(playoffOdds({
+      table, weeks: [], strength: flat, playoffTeams: 1, draws: 10,
+      rules: { seedBy, ties: [], divisions: false },
+    }), "ann").playoffs;
+
+    expect(by("wins")).toBe(1);
+    expect(by("pf")).toBe(0);
+    expect(by("median")).toBe(0);
+  });
+
+  it("settles a tie head-to-head before points for when asked to", () => {
+    const table = [
+      row("ann", 5, 800, { versus: { bo: { won: 2, games: 2 } } }),
+      row("bo", 5, 900, { versus: { ann: { won: 0, games: 2 } } }),
+    ];
+    const first = (ties: Tiebreak[]) => chance(playoffOdds({
+      table, weeks: [], strength: flat, playoffTeams: 1, draws: 10,
+      rules: { seedBy: "wins", ties, divisions: false },
+    }), "ann").playoffs;
+
+    expect(first(["h2h", "pf"])).toBe(1);
+    expect(first(["pf"])).toBe(0);
+    expect(first(["paFewest", "pf"])).toBe(0);
+  });
+
+  it("flips a coin for two teams nothing can split", () => {
+    const table = [row("ann", 5, 800), row("bo", 5, 800)];
+    const run = playoffOdds({
+      table, weeks: [], strength: flat, playoffTeams: 1, draws: 4000,
+      rules: { seedBy: "wins", ties: ["pf"], divisions: false },
+    });
+
+    expect(chance(run, "ann").playoffs).toBeGreaterThan(0.45);
+    expect(chance(run, "ann").playoffs).toBeLessThan(0.55);
+  });
+
+  it("keeps each week's median wins and each pairing's record from the weeks played", () => {
+    const team = (owner: string, points: number) => ({ owner, points, starters: [], bench: [] });
+    const seasons = seasonOf([{
+      week: 1,
+      games: [
+        { sides: [team("ann", 120), team("bo", 90)] },
+        { sides: [team("cy", 100), team("di", 80)] },
+      ] as unknown as Matchup[],
+    }], null, () => undefined);
+    const of = (owner: string) => seasons.find((t) => t.owner === owner)!;
+
+    // the median of 120, 100, 90 and 80 is 95
+    expect([of("ann"), of("bo"), of("cy"), of("di")].map((t) => t.medianWins)).toEqual([1, 0, 1, 0]);
+    expect(of("ann").versus).toEqual({ bo: { won: 1, games: 1 } });
+    expect(of("bo").versus).toEqual({ ann: { won: 0, games: 1 } });
   });
 });

@@ -1174,6 +1174,28 @@
   .orow.on .obar { background: var(--panel); }
   .obar u { display: block; height: 100%; background: var(--go); border-radius: 0 4px 4px 0; }
   .orow > b { text-align: right; font-variant-numeric: tabular-nums; }
+  /* how the league decides its playoffs, opened from the playoff list */
+  .headbtns { display: flex; align-items: center; gap: var(--s3); }
+  .rules { display: flex; flex-direction: column; gap: var(--s3);
+    margin: 0 0 var(--s3); padding: var(--s3); border: 1px solid var(--edge);
+    border-radius: 14px; background: var(--panel); }
+  .rrow { display: flex; flex-direction: column; gap: var(--s1); }
+  .rrow > i { font-style: normal; font-size: var(--t1); font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .chips.flow { flex-wrap: wrap; overflow: visible; }
+  /* in a column the phone's full-width chip rows would grow tall, so not here */
+  .rules .chips { flex: 0 0 auto; }
+  .chips button .nth { display: inline-grid; place-items: center; width: 18px; height: 18px;
+    margin-right: 6px; border-radius: 999px; background: var(--ink); color: var(--bg);
+    font-size: 11px; font-weight: 800; }
+  .stepper { display: flex; align-items: center; gap: var(--s3); }
+  .stepper b { min-width: 1.5em; text-align: center; font-size: var(--t4);
+    font-variant-numeric: tabular-nums; }
+  .stepper button { font: inherit; font-size: var(--t4); width: var(--tap); height: var(--tap);
+    border-radius: 999px; border: 1px solid var(--edge); background: transparent;
+    color: var(--ink); cursor: pointer; }
+  .stepper button:disabled { color: var(--faint); cursor: default; }
+  .rfoot { display: flex; justify-content: flex-end; gap: var(--s4); }
   /* the playoff line, between the last place in and the first out */
   .ocut { display: flex; align-items: center; gap: var(--s2); margin: 2px 0;
     font-size: var(--t1); color: var(--faint); }

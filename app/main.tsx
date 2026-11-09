@@ -106,7 +106,8 @@ const COPY: Record<View, [string, string, string]> = {
     "roster projects to start, moved halfway toward how well it sets its lineups, and " +
     "this week's games go by their live odds. In what if, tap a team to have it win, or the v between them for a tie; " +
     "the solid line is your chance week by week as picked, the bands where it is " +
-    "likely to sit.",
+    "likely to sit. Rules sets how your league seeds: how many get in, divisions " +
+    "and wild cards, and the tiebreakers in the order you tap them.",
   ],
   draft: [
     "Draft",
