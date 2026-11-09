@@ -622,7 +622,8 @@ const withChance = (sides: SideLine[]) =>
   sides.filter((side): side is SideLine & { chance: Chance } =>
     side.chance !== null);
 
-const fromSays = (chance: Chance) => `from ${asPct(chance.share)} ${chance.when}`;
+/** "12% to win going into Monday night", the chance a result came from */
+const oddsSays = (chance: Chance) => `${asPct(chance.share)} to win ${chance.when}`;
 
 const withProjection = (sides: SideLine[]) =>
   sides.filter((side): side is SideLine & { over: number; expected: number } =>
@@ -692,7 +693,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
 
     return {
       award: "stolen", owner: thief.owner, figure: asPct(thief.chance.share),
-      note: `won ${fromSays(thief.chance)}, ${beat(thief)}`,
+      note: `${oddsSays(thief.chance)}, ${beat(thief)}`,
       fill: thief.chance.share,
       won: true,
     };
@@ -707,7 +708,7 @@ const AWARD_PICKS: Record<Award, (sides: SideLine[]) => Superlative | null> = {
 
     return {
       award: "choke", owner: gone.owner, figure: asPct(gone.chance.share),
-      note: `lost to ${gone.against} ${fromSays(gone.chance)}`,
+      note: `${oddsSays(gone.chance)}, lost to ${gone.against}`,
       fill: gone.chance.share,
       won: false,
     };
@@ -1007,24 +1008,30 @@ function oneIn(share: number): string {
   return "1 in " + rounded.toLocaleString("en-US");
 }
 
+/** how near his projection a week has to land to read as just that */
+const PAR = 0.1;
+
 /**
- * Where a week's points fall on his spread. Inside the spread it is a
- * percentile, and out in either tail it is the odds of a week that far
- * out, which says more about a 40 point week than "99th" does.
+ * Where a week's points fall on his spread, in words a newcomer reads:
+ * out in either tail the odds of a week that far out, a boom or a bust,
+ * which says more about a 40 point week than "top 1%" does; near the
+ * middle, about what he was projected; and otherwise the share of his
+ * weeks it beat or fell under.
  */
 export function quantileSays(quantile: number): string {
   const tail = Math.min(quantile, 1 - quantile);
 
   if (tail < TAIL) {
-    return oneIn(tail) + (quantile > 0.5 ? " good" : " bad");
+    return oneIn(tail).replace(/^1 in /, "1-in-") + (quantile > 0.5 ? " boom" : " bust");
+  }
+
+  if (Math.abs(quantile - 0.5) <= PAR) {
+    return "about his usual";
   }
 
   const at = Math.round(quantile * 100);
-  const last = at % 10;
-  const teens = at > 10 && at < 20;
-  const ends = teens ? "th" : ["th", "st", "nd", "rd"][last] ?? "th";
 
-  return at + ends + " pct";
+  return quantile > 0.5 ? `top ${100 - at}% week` : `bottom ${at}% week`;
 }
 
 /** what one player's week reads as next to his line */

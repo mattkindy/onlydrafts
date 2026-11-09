@@ -417,7 +417,7 @@ describe("reportFor, on steals and chokes", () => {
 
     expect(steal?.owner).toBe("Gus");
     expect(steal?.fill).toBeLessThan(0.35);
-    expect(steal?.note).toMatch(/^won from \d+% going into Monday night, beat Hal/);
+    expect(steal?.note).toMatch(/^\d+% to win going into Monday night, beat Hal/);
   });
 
   it("gives the choke to the side up big going into the last game", () => {
@@ -428,7 +428,7 @@ describe("reportFor, on steals and chokes", () => {
 
     expect(choke?.owner).toBe("Hal");
     expect(choke?.fill).toBeGreaterThan(0.65);
-    expect(choke?.note).toMatch(/^lost to Gus from \d+% going into Monday night$/);
+    expect(choke?.note).toMatch(/^\d+% to win going into Monday night, lost to Gus$/);
   });
 
   it("names the late games when that is where the week ended", () => {
@@ -454,7 +454,7 @@ describe("reportFor, on steals and chokes", () => {
 
     expect(steal?.owner).toBe("Cy");
     expect(steal?.figure).toBe("20%");
-    expect(steal?.note).toBe("won from 20% before kickoff, beat Dot by 0.50");
+    expect(steal?.note).toBe("20% to win before kickoff, beat Dot by 0.50");
   });
 
   it("falls back to the pregame chance when a kickoff is missing", () => {
@@ -499,18 +499,22 @@ describe("windowSays", () => {
 });
 
 describe("quantileSays", () => {
-  it("reads the middle of a spread as a percentile", () => {
-    expect(quantileSays(0.9)).toBe("90th pct");
-    expect(quantileSays(0.21)).toBe("21st pct");
-    expect(quantileSays(0.13)).toBe("13th pct");
-    expect(quantileSays(0.5)).toBe("50th pct");
+  it("reads the spread as the share of his weeks a week beat or fell under", () => {
+    expect(quantileSays(0.9)).toBe("top 10% week");
+    expect(quantileSays(0.21)).toBe("bottom 21% week");
+    expect(quantileSays(0.13)).toBe("bottom 13% week");
   });
 
-  it("reads either tail as odds, to two figures", () => {
-    expect(quantileSays(0.97)).toBe("1 in 33 good");
-    expect(quantileSays(0.9971)).toBe("1 in 340 good");
-    expect(quantileSays(0.02)).toBe("1 in 50 bad");
-    expect(quantileSays(0.0000004)).toBe("1 in 1,000,000 bad");
-    expect(quantileSays(1)).toBe("1 in 1,000,000 good");
+  it("reads a week near the middle as his usual", () => {
+    expect(quantileSays(0.5)).toBe("about his usual");
+    expect(quantileSays(0.58)).toBe("about his usual");
+  });
+
+  it("reads either tail as the odds of a boom or a bust, to two figures", () => {
+    expect(quantileSays(0.97)).toBe("1-in-33 boom");
+    expect(quantileSays(0.9971)).toBe("1-in-340 boom");
+    expect(quantileSays(0.02)).toBe("1-in-50 bust");
+    expect(quantileSays(0.0000004)).toBe("1-in-1,000,000 bust");
+    expect(quantileSays(1)).toBe("1-in-1,000,000 boom");
   });
 });

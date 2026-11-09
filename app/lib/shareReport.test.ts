@@ -133,7 +133,7 @@ describe("layoutReport", () => {
     expect(said).toContain("140.00");
     expect(said).toContain("QB best");
     expect(said).toContain("Josh Allen");
-    expect(said).toContain("Ace, line 12.4, 1 in 25 good");
+    expect(said).toContain("Ace · proj 12.4 · 1-in-25 boom");
     expect(said).toContain("median 105.00");
     expect(said).toContain("BUF stack");
     expect(said[0]).toBe("Dynasty Warriors");

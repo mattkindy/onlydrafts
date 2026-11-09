@@ -194,11 +194,7 @@ export function DraftRating(props: Props) {
 
   return (
     <>
-      <p class="hint">
-        Each team vs what its picks were worth.
-        {drafted.size > 0 ? "" : " Based on rosters, since this league" +
-          " has no pick by pick record."}
-      </p>
+      {drafted.size === 0 && <p class="hint">graded on rosters: no pick-by-pick record</p>}
 
       <table class="rating">
         <thead>
@@ -236,9 +232,7 @@ export function DraftRating(props: Props) {
 
       {nowRated.length > 0 && (
         <>
-          <p class="hint">
-            Same grade, rosters as of today.
-          </p>
+          <h2>rosters today</h2>
 
           <table class="rating">
             <thead>

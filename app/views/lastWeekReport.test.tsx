@@ -227,8 +227,8 @@ describe("the league tab's recap", () => {
     const choke = report.awards.find((given) => given.award === "choke");
 
     expect(steal?.owner).toBe("Alpha");
-    expect(steal?.note).toMatch(/^won from \d+% going into Monday night/);
+    expect(steal?.note).toMatch(/^\d+% to win going into Monday night/);
     expect(choke?.owner).toBe("Bravo");
-    expect(choke?.note).toMatch(/going into Monday night$/);
+    expect(choke?.note).toMatch(/^\d+% to win going into Monday night, lost to /);
   });
 });

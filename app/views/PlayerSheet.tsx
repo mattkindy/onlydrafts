@@ -119,10 +119,12 @@ function WeekByWeek(
   return (
     <>
       <h2>week by week</h2>
-      <div class="hint">
-        Projection and usual range each week, with what he scored in a
-        week already played.
-      </div>
+      <p class="pkey">
+        <span><i class="kseg k-range" />range</span>
+        <span><i class="kseg k-usual" />usual</span>
+        <span><i class="ktick" />proj</span>
+        <span><i class="kdot" /><i class="kdot down" />scored, over or under</span>
+      </p>
       {games.map((w, i) => {
         const { pts, low, q1, q3, high } = bands[i]!;
         const got = played[i] ?? null;

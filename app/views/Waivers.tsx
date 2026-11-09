@@ -503,10 +503,6 @@ function Sleepers(
   return (
     <>
       <h2>sleepers</h2>
-      <p class="hint">
-        Free agents projected to score more than their draft spot
-        suggests, as of week {ranked[0]!.p.sleeper!.week}.
-      </p>
       <table class="line pairs sleepers">
         <thead>
           <tr>
