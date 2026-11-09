@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Matchup, Side } from "./providers.ts";
 import {
-  bestLineupPoints, chanceAt, luckOf, pairKey, playoffOdds, seasonOf, weeklySpread, winShare,
+  bestLineupPoints, chanceAt, luckOf, pairKey, playoffOdds, scenarioPath, seasonOf, weeklySpread, winShare,
 } from "./seasonStats.ts";
 
 const POS: Record<string, string> = {
@@ -186,6 +186,50 @@ describe("the rest of the season played out", () => {
     expect(chanceAt(ways, 0.9)).toBe(0.7);
     expect(chanceAt([{ won: 2, played: 2, share: 1, playoffs: 0.9 }], 0.5)).toBe(0.9);
     expect(chanceAt([], 0.5)).toBe(0);
+  });
+
+  it("moves the path in the week a picked result happens, not before", () => {
+    const meanOf = (col: { share: number; playoffs: number }[]) =>
+      col.reduce((sum, o) => sum + o.share * o.playoffs, 0);
+    const playOut = (picks: Map<string, string>) => playoffOdds({
+      table, weeks, strength: even, playoffTeams: 2, forced: picks, draws: 2000, mine: "ann",
+    });
+    const plays: number[] = [];
+    const counted = (picks: Map<string, string>) => {
+      plays.push(picks.size);
+      return playOut(picks);
+    };
+
+    const won = scenarioPath({
+      forced: new Map([[pairKey(2, "ann", "bo"), "ann"]]),
+      weeks: 5, mine: "ann", playOut: counted,
+    });
+    const lost = scenarioPath({
+      forced: new Map([[pairKey(2, "ann", "bo"), "bo"]]),
+      weeks: 5, mine: "ann", playOut,
+    });
+    const none = playOut(new Map()).odds.find((o) => o.owner === "ann")!.playoffs;
+
+    // today is today, whatever is picked for later
+    expect(won.now).toBe(none);
+    expect(lost.now).toBe(none);
+    // the first two weeks know nothing of the pick, so they agree
+    expect(meanOf(won.cols[1]!)).toBeCloseTo(meanOf(lost.cols[1]!), 9);
+    // and the picked week splits them
+    expect(meanOf(won.cols[2]!)).toBeGreaterThan(meanOf(won.cols[1]!) + 0.05);
+    expect(meanOf(lost.cols[2]!)).toBeLessThan(meanOf(lost.cols[1]!) - 0.05);
+    // one run before the pick and one from it on
+    expect(plays).toEqual([0, 1]);
+
+    // and with the runs kept, a later pick plays only the weeks it changes
+    const runs = new Map();
+    const picks = new Map([[pairKey(2, "ann", "bo"), "ann"]]);
+
+    plays.length = 0;
+    scenarioPath({ forced: picks, weeks: 5, mine: "ann", playOut: counted, runs });
+    picks.set(pairKey(4, "ann", "bo"), "bo");
+    scenarioPath({ forced: picks, weeks: 5, mine: "ann", playOut: counted, runs });
+    expect(plays).toEqual([0, 1, 2]);
   });
 
   it("gives the same answer twice", () => {

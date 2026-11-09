@@ -18,8 +18,9 @@ import {
 import { PROVIDERS, type League, type Matchup } from "../lib/providers.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
-  bestLineupPoints, chanceAt, luckOf, pairKey, playoffOdds, seasonOf, startingSlots,
-  weeklySpread, winShare, type PathOutcome, type Strength, type TeamSeason,
+  bestLineupPoints, chanceAt, luckOf, pairKey, picksSignature, playoffOdds, scenarioPath,
+  seasonOf, startingSlots, weekOfPair, weeklySpread, winShare,
+  type PathOutcome, type PlayoffRun, type ScenarioPath, type Strength, type TeamSeason,
 } from "../lib/seasonStats.ts";
 import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
 import { pct } from "./Advice.tsx";
@@ -58,8 +59,8 @@ const GONE_A_WHILE = new Set(["IR", "PUP", "NA", "Sus"]);
 /** how often the season is played out */
 const SEASONS = 5000;
 
-/** how many weeks ahead the path runs */
-const PATH_WEEKS = 5;
+/** how many weeks ahead the path runs at most, which is the rest of most seasons */
+const PATH_WEEKS = 9;
 
 function useWeeks(league: League, through: number) {
   const [weeks, setWeeks] = useState<Map<number, Matchup[]> | null>(null);
@@ -197,20 +198,31 @@ const BANDS = [[0.1, 0.9], [0.25, 0.75]] as const;
 const WORTH_A_ROW = 0.01;
 
 /**
- * Where your playoff chance is likely to go, a week at a time: the
- * median of the seasons played out, a darker band where half of them
- * sit and a lighter one for 8 in 10. Tapping a week lists the records
- * you can have by then, how often each happens and what each leaves
- * your chance at.
+ * Where your playoff chance is likely to go, a week at a time, as this
+ * tab would tell it each week: the median of the seasons played out, a
+ * darker band where half of them sit and a lighter one for 8 in 10. A
+ * picked game moves the path in its own week, and your own picked games
+ * are marked under theirs. Tapping a week lists the records you can have
+ * by then, how often each happens and what each leaves your chance at.
  */
 function PathChart(
-  { now, path, coming }: { now: number; path: PathOutcome[][]; coming: number },
+  { now, path, coming, marks, picked: anyPicked }: {
+    now: number;
+    path: PathOutcome[][];
+    coming: number;
+    /** under each week after now: your picked result, a dot for others' picks */
+    marks: (string | null)[];
+    picked: boolean;
+  },
 ) {
   const cols = [null, ...path];
   const [tapped, setAt] = useState<number | null>(null);
   const at = Math.min(tapped ?? cols.length - 1, cols.length - 1);
-  const W = 340, H = 168, L = 36, R = 58, T = 12, B = 26;
-  const x = (i: number) => L + (i * (W - L - R)) / Math.max(1, cols.length - 1);
+  const W = 340, H = 180, L = 36, R = 58, T = 12, B = 38;
+  const step = (W - L - R) / Math.max(1, cols.length - 1);
+  const x = (i: number) => L + i * step;
+  // with many weeks, every other one is named, counting back from the last
+  const named = (i: number) => i === 0 || cols.length <= 7 || (cols.length - 1 - i) % 2 === 0;
   const y = (p: number) => T + (1 - p) * (H - T - B);
   const share = (i: number, s: number) => {
     const col = cols[i];
@@ -256,15 +268,22 @@ function PathChart(
         <text class="plabel" x={x(last) + 8} y={y(share(last, 0.5)) + 4}>
           {pct(share(last, 0.5))}
         </text>
-        {cols.map((_, i) => (
-          <text key={"x" + i} class="paxis" x={x(i)} y={H - 6} text-anchor="middle">
+        {cols.map((_, i) => named(i) && (
+          <text key={"x" + i} class="paxis" x={x(i)} y={H - 20} text-anchor="middle">
             {weekOf(i)}
+          </text>
+        ))}
+        {marks.map((mark, i) => mark && (
+          <text key={"k" + i} class={"pmark" + (mark === "L" ? " lost" : "")}
+            x={x(i + 1)} y={H - 4} text-anchor="middle">
+            {mark}
           </text>
         ))}
         {/* each week's whole column takes the tap, not just its dot */}
         {cols.map((_, i) => (
           <rect
-            key={"t" + i} class="ptap" x={x(i) - 18} y={0} width={36} height={H}
+            key={"t" + i} class="ptap" x={x(i) - Math.min(18, step / 2)} y={0}
+            width={Math.min(36, step)} height={H}
             onClick={() => setAt(i)}
           />
         ))}
@@ -280,7 +299,10 @@ function PathChart(
             <b>after week {coming + at - 1}</b> median <b>{pct(share(at, 0.5))}</b>
             {" "}· 8 in 10 between {pct(share(at, 0.1))} and {pct(share(at, 0.9))}
           </>
-          : <><b>now</b> {pct(now)} · tap a week for how it can go</>}
+          : <>
+            <b>now</b> {pct(now)}
+            {anyPicked ? " · before any pick is played" : " · tap a week for how it can go"}
+          </>}
       </p>
       {ways.length > 0 && (
         <table class="ways">
@@ -523,10 +545,81 @@ export function Stats(props: Props) {
     })
     : null;
 
-  const run = useMemo(
-    () => playOut(forced, SEASONS),
-    [setup, adjusted, league, thisWeek, forced],
+  /**
+   * Seasons already played out for the table as it stands, by their
+   * picks, so taking a pick back, or picking a later week, does not play
+   * again what is already known. A new table or new strengths start over.
+   */
+  const runs = useMemo(
+    () => new Map<string, PlayoffRun>(),
+    [setup, adjusted, league, thisWeek],
   );
+
+  const run = useMemo(() => {
+    const key = picksSignature(forced);
+    const known = runs.get(key);
+
+    if (known || !setup) {
+      return known ?? null;
+    }
+
+    const fresh = playOut(forced, SEASONS)!;
+
+    runs.set(key, fresh);
+    return fresh;
+  }, [runs, forced]);
+
+  /**
+   * Your chance week by week as the tab would tell it if the season goes
+   * as picked. With nothing picked the run above already holds it; with
+   * picks it is played again a week at a time just after the tap, so the
+   * tap answers at once and the path follows.
+   */
+  const [path, setPath] = useState<ScenarioPath | null>(null);
+
+  useEffect(() => {
+    if (!setup || !run) {
+      setPath(null);
+      return;
+    }
+
+    const now = () => scenarioPath({
+      forced,
+      weeks: Math.min(setup.toCome.length, PATH_WEEKS),
+      mine: league.team,
+      // as many seasons as the run above, so today with nothing picked
+      // is the same figure it shows before anything is
+      playOut: (picks) => playOut(picks, SEASONS)!,
+      runs,
+    });
+
+    if (!forced.size) {
+      setPath(now());
+      return;
+    }
+
+    const soon = setTimeout(() => setPath(now()), 0);
+
+    return () => clearTimeout(soon);
+  }, [setup, run, forced, league.team, runs]);
+
+  /** under each week of the path, how your own game was picked */
+  const marks = useMemo(() => {
+    if (!setup || !path) {
+      return [];
+    }
+
+    return path.cols.map((_, w) => {
+      const pair = setup.toCome[w]?.find((p) => p.includes(league.team));
+      const mine = pair && forced.get(pairKey(w, pair[0], pair[1]));
+
+      if (mine) {
+        return mine === league.team ? "W" : "L";
+      }
+
+      return [...forced.keys()].some((key) => weekOfPair(key) === w) ? "•" : null;
+    });
+  }, [setup, path, forced, league.team]);
 
   if (trouble) {
     return <p class="hint">{trouble}</p>;
@@ -673,7 +766,7 @@ export function Stats(props: Props) {
             {thisWeek ? ", and this week from its lineups" : ""}.
           </p>
 
-          {setup && run && run.path.length > 0 && (
+          {setup && path && path.cols.length > 0 && (
             <>
               <div class="sectionhead">
                 <h2>what if</h2>
@@ -687,9 +780,11 @@ export function Stats(props: Props) {
                 )}
               </div>
               <PathChart
-                now={run.odds.find((o) => o.owner === league.team)?.playoffs ?? 0}
-                path={run.path.slice(0, PATH_WEEKS)}
+                now={path.now}
+                path={path.cols}
                 coming={coming}
+                marks={marks}
+                picked={forced.size > 0}
               />
               <label class="nudge">
                 <span>
