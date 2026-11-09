@@ -449,7 +449,7 @@ export function Matchups(
         {read
           ? (
             <p class="hint">
-              Week {week}, scores as of {read.toLocaleTimeString()}
+              as of {read.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             </p>
           )
           : <Reading>loading week {week}'s scoreboard...</Reading>}

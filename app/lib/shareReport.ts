@@ -213,8 +213,7 @@ const noteRow = (label: string, note: PlayerNote, tone: Tone): ReportRow => ({
   label,
   head: note.name,
   figure: scoredSays(note.points),
-  foot: `${note.owner}, line ${note.line.toFixed(1)}, ` +
-    quantileSays(note.quantile),
+  foot: `${note.owner} · proj ${note.line.toFixed(1)} · ${quantileSays(note.quantile)}`,
   tone,
   chart: spreadChart(note),
 });

@@ -238,9 +238,9 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
 
       {slate && (
         <>
-          <p class="hint">
-            Amber: we differ from Sleeper by {SPLIT_AT}+ points. Tap two
-            players at a position to compare.
+          <p class="pkey">
+            <span><i class="kseg split" />{SPLIT_AT}+ pts off Sleeper</span>
+            <span>tap two to compare</span>
           </p>
 
           <div class="scroll">

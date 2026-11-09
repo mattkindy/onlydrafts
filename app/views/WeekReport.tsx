@@ -138,9 +138,11 @@ function Strip({ block }: { block: ScoresBlock }) {
           <span class="pts">{scoredSays(bar.points)}</span>
         </div>
       ))}
-      <p class="hint">
-        Green won, grey lost. Pale part is points left on the bench.
-        Line is the league median, {block.middle}.
+      <p class="pkey">
+        <span><i class="kseg won" />won</span>
+        <span><i class="kseg lost" />lost</span>
+        <span><i class="kseg bench" />benched</span>
+        <span><i class="ktick" />median {block.middle}</span>
       </p>
     </div>
   );
