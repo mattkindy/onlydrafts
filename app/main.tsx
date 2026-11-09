@@ -25,7 +25,7 @@ import { draftNow } from "./lib/draftWatch.ts";
 import type { Player } from "./lib/scoring.ts";
 
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
-import { Reading } from "./views/Reading.tsx";
+import { Reading, Skeleton } from "./views/Reading.tsx";
 import { EspnSheet } from "./views/EspnSheet.tsx";
 import { Roster } from "./views/Roster.tsx";
 import { DraftRating, MyDraftPicks } from "./views/DraftRating.tsx";
@@ -265,6 +265,12 @@ function App() {
   const [perTeamSaid, setPerTeam] = useState(() => stored("keepn", 3));
   const perTeam = active?.keepersPerTeam ?? perTeamSaid;
   const [posFilter, setPosFilter] = useState("ALL");
+  /**
+   * The players tab filters on its own. It shared the draft board's,
+   * so a hole filled from the matchup tab left the draft board showing
+   * quarterbacks only the next time it opened.
+   */
+  const [playersPos, setPlayersPos] = useState("ALL");
   const [theme, setTheme] = useState<Theme>(() => stored<Theme>("theme", "system"));
   const [query, setQuery] = useState("");
   /** whether the longer answer behind the tab row's question mark is open */
@@ -812,7 +818,7 @@ function App() {
 
   /** a hole in your lineup, taken to the free agents who could fill it */
   const findAt = (position: string) => {
-    setPosFilter(position);
+    setPlayersPos(position);
     setView("players");
   };
 
@@ -1026,7 +1032,7 @@ function App() {
       )}
 
       <div id="out">
-        {!board && <Reading>loading the board...</Reading>}
+        {!board && <Skeleton saying="loading the board" lead={view !== "leagues"} />}
 
         {board && view === "leagues" && (
           leagues.length === 0
@@ -1209,6 +1215,7 @@ function App() {
             onMore={openKey}
             teams={active?.allRosters ?? []}
             onFind={findAt}
+            leagueOf={active}
           />
         )}
 
@@ -1279,8 +1286,8 @@ function App() {
           <Waivers
             players={players}
             league={active}
-            posFilter={posFilter}
-            onPosFilter={setPosFilter}
+            posFilter={playersPos}
+            onPosFilter={setPlayersPos}
             rows={slateRows}
             games={games}
             schedule={board.schedule ?? null}

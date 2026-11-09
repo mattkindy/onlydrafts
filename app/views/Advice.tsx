@@ -62,6 +62,13 @@ export const gainPct = (share: number) =>
   100 * share < 0.5 ? "<1%" : "+" + pct(share);
 
 /**
+ * The smallest gain the page will suggest acting on. Under a point of
+ * win chance the simulation cannot tell a move from standing still, and
+ * a list of moves worth "<1%" is a list of reasons to fiddle.
+ */
+export const WORTH_A_MOVE = 0.01;
+
+/**
  * Whatever anybody calls this player: the week, the board, the provider, or
  * failing all three his key. The key is a name with its spaces taken out,
  * so falling straight to it printed "treysmack" on a kicker's row.
@@ -165,11 +172,14 @@ export function Advice(
     </p>
   );
 
-  if (!best.swaps.length && lean) {
+  // only the swaps worth a point or more are said, here and everywhere
+  const swaps = best.swaps.filter((swap) => swap.gains >= WORTH_A_MOVE);
+
+  if (!swaps.length && lean) {
     return <p class="hint">No swap you can still make would raise it.</p>;
   }
 
-  if (!best.swaps.length) {
+  if (!swaps.length) {
     return (
       <div class="advice">
         <b>Your lineup wins {pct(standing)}.</b> No swap would raise it.
@@ -186,7 +196,7 @@ export function Advice(
           {pct(best.odds)}.</>}
       {byes}
       <ul>
-        {best.swaps.map((swap) => (
+        {swaps.map((swap) => (
           <li key={swap.starts + swap.benches}>
             Start{" "}
             <Who

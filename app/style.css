@@ -968,15 +968,69 @@
   .hword { font-size: var(--t1); font-weight: 800; letter-spacing: .06em;
     text-transform: uppercase; color: var(--tone); white-space: nowrap; }
 
+  /* a way out to the provider's own page, to act on what the page said */
+  .golink { display: inline-flex; align-items: center; gap: var(--s1);
+    font-size: var(--t2); font-weight: 600; color: var(--muted);
+    text-decoration: none; min-height: 32px; white-space: nowrap; }
+  .golink:hover { color: var(--ink); }
+  .golink:focus-visible { outline: 2px solid var(--go); outline-offset: 2px;
+    border-radius: 4px; }
+  .rosterhead .golink { margin-left: auto; }
+  .bestmove .golink { align-self: flex-start; margin-top: var(--s1); }
+  /* the lineup's heading, with the way to set it at the far end */
+  #out > div.lineuphead { display: flex; align-items: baseline;
+    justify-content: space-between; gap: var(--s3);
+    margin: var(--s4) 0 calc(var(--s1) * -1); }
+  .lineuphead h2 { margin: 0; }
+  /*
+   * The free agent who fills a slot, in a panel of its own under the
+   * slot's row: who, his line, and what he does for you on one line, and
+   * the two ways to act on it under that, with room between them.
+   */
+  .worries .fill { margin: var(--s2) 0 0 calc(2.6rem + var(--s3));
+    background: var(--chip); border-radius: 10px;
+    padding: var(--s2) var(--s3); display: flex; flex-direction: column;
+    gap: var(--s1); }
+  .worries .fill .over { font-size: var(--t1); font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .worries .fwho { display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: var(--s1) var(--s2); }
+  .worries .fwho .playername { display: inline; flex: 0 1 auto; }
+  .worries .fwho .playername b { color: var(--ink); }
+  .worries .fwho i { font-style: normal; color: var(--faint); font-size: var(--t1); }
+  .worries .fwho b.up { margin-left: auto; font-weight: 700; white-space: nowrap; }
+  .worries .fill .facts { display: flex; flex-wrap: wrap; align-items: center;
+    gap: var(--s1) var(--s4); }
+  /* a word you can press, with nothing round it */
+  button.textbtn { font: inherit; font-size: var(--t2); font-weight: 600;
+    color: var(--muted); background: none; border: none; padding: 0;
+    min-height: 32px; cursor: pointer; }
+  button.textbtn:hover { color: var(--ink); }
+
+  /* when the week's lines were built, quiet at the end of the week's row */
+  .weekbar .fresh { margin-left: auto; font-size: var(--t1); color: var(--faint); }
+  .weekbar .fresh + #status:empty { display: none; }
+
+  /* the outline of a page still on its way */
+  .skeleton { display: flex; flex-direction: column; gap: var(--s2); }
+  .sk { height: 76px; border-radius: 12px; border: 1px solid var(--edge);
+    background: linear-gradient(90deg, var(--panel) 30%,
+      color-mix(in srgb, var(--chip) 70%, var(--panel)) 50%, var(--panel) 70%);
+    background-size: 300% 100%; animation: shimmer 1.4s ease-in-out infinite; }
+  .sk.lead { height: 150px; margin-bottom: var(--s1); }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+  @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
   /* the starters who will not play, gathered where they cannot be missed */
   .worries { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; padding: var(--s3) var(--s4) var(--s1); }
   .worries h3 { margin: 0 0 var(--s1); font-size: var(--t3); }
   .worries ul { list-style: none; margin: 0; padding: 0; }
-  .worries li { display: flex; align-items: center; gap: var(--s3);
-    padding: var(--s2) 0; border-top: 1px solid var(--edge); font-size: var(--t2); }
-  .worries li:first-child { border-top: none; }
-  .worries li > .chip { color: var(--muted); background: var(--chip);
+  .worries li { padding: var(--s3) 0; border-top: 1px solid var(--edge);
+    font-size: var(--t2); }
+  .worries li:first-child { border-top: none; padding-top: var(--s2); }
+  .wrow { display: flex; align-items: center; gap: var(--s3); }
+  .wrow > .chip { color: var(--muted); background: var(--chip);
     text-transform: uppercase; min-width: 2.6rem; text-align: center; }
   .wwho { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
   .wwho i { font-style: normal; font-size: var(--t1); color: var(--mark); }

@@ -27,12 +27,14 @@ import {
 } from "../lib/slate.ts";
 import { WeatherMark } from "./WeatherMark.tsx";
 import { WeekPicker } from "./WeekPicker.tsx";
-import { Advice, gainPct, nameOf, pct } from "./Advice.tsx";
+import { Advice, gainPct, nameOf, pct, WORTH_A_MOVE } from "./Advice.tsx";
 import { injuryBadge, WORRYING } from "./Draft.tsx";
 import { PlayerName } from "./PlayerName.tsx";
 import { Game } from "./Matchups.tsx";
-import { Reading } from "./Reading.tsx";
+import { Reading, Skeleton } from "./Reading.tsx";
 import { useLiveWeek, type WeekPoll } from "./scoreboard.ts";
+import { GoLink } from "./GoLink.tsx";
+import { lineupLink, playersLink, PROVIDER_NAME } from "../lib/deepLinks.ts";
 import { standingSays } from "./Standings.tsx";
 
 interface Props {
@@ -69,10 +71,14 @@ interface Props {
   teams?: Roster[];
   /** takes you to the free agents at a position, to fill a hole */
   onFind?: (position: string) => void;
+  /** the league itself, for the links out to the provider's own pages */
+  leagueOf?: League | null;
 }
 
+/** a swap's worth, with anything inside a point either way said as even */
 const signed = (gains: number) =>
-  gains > 0 ? gainPct(gains) : (100 * gains).toFixed(0) + "%";
+  Math.abs(gains) < WORTH_A_MOVE ? "even"
+    : gains > 0 ? gainPct(gains) : (100 * gains).toFixed(0) + "%";
 
 /** one figure with what it measures over it, so no number is bare */
 function Fig(
@@ -222,7 +228,7 @@ function Bench(
   },
 ) {
   const swaps = bestSwaps(choices);
-  const helps = swaps.some(({ option }) => option.gains > 0);
+  const helps = swaps.some(({ option }) => option.gains >= WORTH_A_MOVE);
   /**
    * The whole bench is worth seeing when one of them would help. When
    * none would, it is seven rows of minus signs, so it waits behind a
@@ -264,7 +270,7 @@ function Bench(
                 team={his.line?.team}
                 onOpen={onMore ? () => onMore(option.key) : undefined}
               />
-              <span class={option.gains > 0 ? "fig delta up" : "fig delta"}>
+              <span class={option.gains >= WORTH_A_MOVE ? "fig delta up" : "fig delta"}>
                 <i>win %</i>{signed(option.gains)}
               </span>
               <div class="optfigs">
@@ -303,7 +309,7 @@ function Slot(
    * the same five bench players under every running back slot, which is
    * five screens of rows telling you to do nothing.
    */
-  const better = choice.options.filter((option) => option.gains > 0);
+  const better = choice.options.filter((option) => option.gains >= WORTH_A_MOVE);
 
   return (
     <section class="slot-card">
@@ -453,6 +459,22 @@ export function lockSays(at: number, now: number = Date.now()): string {
   });
 }
 
+/** when the week's lines were built, in the words somebody checking uses */
+export function freshSays(generated: string, now: number = Date.now()): string {
+  const at = Date.parse(generated);
+
+  if (!Number.isFinite(at)) {
+    return "";
+  }
+
+  const days = (now - at) / 86400000;
+  const when = new Date(at).toLocaleString([], days < 6
+    ? { weekday: "short", hour: "numeric", minute: "2-digit" }
+    : { month: "short", day: "numeric" });
+
+  return "projections from " + when;
+}
+
 /** where a game has got to, read off both lineups */
 type Phase = "pre" | "live" | "final";
 
@@ -593,6 +615,76 @@ interface Worry {
   slot: string;
   says: string;
   how: "bad" | "warn";
+  /** the free agent who would do the most in his place, and what he is worth */
+  fill?: Fill;
+}
+
+interface Fill {
+  key: string;
+  name: string;
+  /** "14.9 v CIN" */
+  says: string;
+  /** what starting him in the slot does to your win chance */
+  gains: number;
+}
+
+/** who can play in each slot, by the positions the slate gives */
+const PLAYS_IN: Record<string, string[]> = {
+  QB: ["QB"], RB: ["RB"], WR: ["WR"], TE: ["TE"], K: ["K"], DEF: ["DEF"],
+  FLEX: ["RB", "WR", "TE"], WRRB_FLEX: ["RB", "WR"], REC_FLEX: ["WR", "TE"],
+  SUPER_FLEX: ["QB", "RB", "WR", "TE"],
+};
+
+/**
+ * The free agent who would do the most for you in a slot you cannot fill
+ * from your bench, priced the way the rest of the page prices a swap:
+ * your win chance with him started in the slot, against the one you
+ * have. Only players nobody in the league has, whose game has not
+ * started, and who are not on bye or ruled out are considered, and of
+ * those the three best lines are priced and the best of them kept.
+ */
+function fillFor(
+  worry: Worry, side: Side, against: Side, at: number, odds: number,
+  rostered: Set<string>, pricing: {
+    rows: Map<string, SlateRow>; states: Map<string, GameState>; lines: Lines;
+    listed: Map<string, Listed>; remainder: Map<string, number[]> | null;
+  },
+): Fill | undefined {
+  const fits = PLAYS_IN[worry.slot];
+
+  if (!fits) {
+    return undefined;
+  }
+
+  const free = [...pricing.rows.entries()]
+    .filter(([key, row]) => fits.includes(row.position) && !rostered.has(key) &&
+      !row.bye && !row.ruledOut && row.blend > 0 &&
+      !WORRYING.has(hurtWord(pricing.listed.get(key), row)?.status ?? "") &&
+      (starterState({ key, slot: worry.slot }, pricing.rows, pricing.states,
+        pricing.lines)?.where ?? "pre") === "pre")
+    .sort((a, b) => b[1].blend - a[1].blend)
+    .slice(0, 3);
+
+  let best: Fill | undefined;
+
+  for (const [key, row] of free) {
+    const him = { key, name: row.name, team: row.team, slot: worry.slot, points: 0 };
+    const starters = worry.name === "nobody"
+      ? [...side.starters, him]
+      : side.starters.map((s) => s.key === worry.key ? him : s);
+    const mine = { ...side, starters };
+    const game: Matchup = { sides: at === 0 ? [mine, against] : [against, mine] };
+    const gains = standingFor(game, pricing).odds[at]! - odds;
+
+    if (!best || gains > best.gains) {
+      best = {
+        key, name: row.name, gains,
+        says: `${row.blend.toFixed(1)} ${row.home ? "v" : "@"} ${row.opponent}`,
+      };
+    }
+  }
+
+  return best;
 }
 
 /**
@@ -659,10 +751,12 @@ function worriesOf(
 }
 
 function Worries(
-  { worries, onMore, onFind }: {
+  { worries, onMore, onFind, players }: {
     worries: Worry[];
     onMore?: ((key: string) => void) | undefined;
     onFind?: ((position: string) => void) | undefined;
+    /** the provider's free agents page, where an add is made */
+    players?: { href: string; name: string } | undefined;
   },
 ) {
   if (worries.length === 0) {
@@ -681,25 +775,55 @@ function Worries(
       <ul>
         {worries.map((w) => (
           <li key={w.key} class={w.how}>
-            <span class="chip">{w.slot}</span>
-            <span class="wwho">
-              {w.name === "nobody"
-                ? <b>nobody</b>
-                : (
+            <div class="wrow">
+              <span class="chip">{w.slot}</span>
+              <span class="wwho">
+                {w.name === "nobody"
+                  ? <b>nobody</b>
+                  : (
+                    <PlayerName
+                      name={w.name}
+                      onOpen={onMore ? () => onMore(w.key) : undefined}
+                    />
+                  )}
+                <i>{w.says}</i>
+              </span>
+              {w.how === "bad" && onFind && !w.fill && (
+                <button
+                  class="quiet"
+                  onClick={() => onFind(FIND_AT[w.slot] ?? "ALL")}
+                >
+                  find a {FIND_AT[w.slot]?.toLowerCase() ?? "player"}
+                </button>
+              )}
+            </div>
+            {/* the one free agent worth adding for the slot, so the box
+                answers what to do about it rather than only saying it */}
+            {w.fill && (
+              <div class="fill">
+                <span class="over">best free agent</span>
+                <div class="fwho">
                   <PlayerName
-                    name={w.name}
-                    onOpen={onMore ? () => onMore(w.key) : undefined}
+                    name={w.fill.name}
+                    onOpen={onMore ? () => onMore(w.fill!.key) : undefined}
                   />
-                )}
-              <i>{w.says}</i>
-            </span>
-            {w.how === "bad" && onFind && (
-              <button
-                class="quiet"
-                onClick={() => onFind(FIND_AT[w.slot] ?? "ALL")}
-              >
-                find a {FIND_AT[w.slot]?.toLowerCase() ?? "player"}
-              </button>
+                  <i>{w.fill.says}</i>
+                  <b class="up">{gainPct(w.fill.gains)} to win</b>
+                </div>
+                <div class="facts">
+                  {players && (
+                    <GoLink href={players.href}>add in {players.name}</GoLink>
+                  )}
+                  {onFind && (
+                    <button
+                      class="textbtn"
+                      onClick={() => onFind(FIND_AT[w.slot] ?? "ALL")}
+                    >
+                      other {FIND_AT[w.slot] ?? "player"}s
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
           </li>
         ))}
@@ -732,12 +856,48 @@ export function MyMatchup(props: Props) {
     [ours, rows, states, lines, remainder],
   );
   const odds = ours ? standing?.odds[ours.at] : undefined;
-  const worries = useMemo(
-    () => ours && states
-      ? worriesOf(ours.side, slots, rows, states, lines, props.listed)
-      : [],
-    [ours, slots, rows, states, lines, props.listed],
-  );
+  const worries = useMemo(() => {
+    if (!ours || !states || odds === undefined) {
+      return [];
+    }
+
+    const found = worriesOf(ours.side, slots, rows, states, lines, props.listed);
+    // everybody on a roster in the league, so a fill is somebody you can add
+    const rostered = new Set([
+      ...(props.teams ?? []).flatMap((team) => team.keys.map((p) => p.key)),
+      ...ours.side.starters.map((p) => p.key),
+      ...ours.side.bench.map((p) => p.key),
+      ...ours.against.starters.map((p) => p.key),
+      ...ours.against.bench.map((p) => p.key),
+    ]);
+    const pricing = { rows, states, lines, listed: props.listed, remainder };
+
+    return found.map((worry) => {
+      if (worry.how !== "bad") {
+        return worry;
+      }
+
+      const fill = fillFor(
+        worry, ours.side, ours.against, ours.at, odds, rostered, pricing);
+
+      // a free agent worth less than a point is not worth a claim
+      return fill && fill.gains >= WORTH_A_MOVE ? { ...worry, fill } : worry;
+    });
+  }, [ours, slots, rows, states, lines, props.listed, props.teams, odds, remainder]);
+  const league = props.leagueOf ?? null;
+  const goPlayers = league
+    ? { href: playersLink(league), name: PROVIDER_NAME[league.provider] }
+    : undefined;
+
+  /**
+   * Still on its way: the week's lines, or the league's games. Priced
+   * without the lines, the game came out of the board alone, so the
+   * scoreline said one thing for a second and then another, and missed
+   * who was ruled out. A read that failed says so in the status, and
+   * the page stops waiting for it.
+   */
+  const waiting = !props.status &&
+    (!slate || (!ours && props.games.length === 0));
 
   if (!props.weeks.length) {
     return (
@@ -756,6 +916,11 @@ export function MyMatchup(props: Props) {
           weeks={props.weeks} picked={props.picked} onWeek={props.onWeek}
         />
 
+        {/* when the week's lines were built, since a Sunday morning
+            ruling is in them or it is not, and nothing else says which */}
+        {slate?.generated && !props.status && (
+          <span class="fresh">{freshSays(slate.generated)}</span>
+        )}
         <span id="status">{props.status ?? ""}</span>
       </div>
 
@@ -767,7 +932,7 @@ export function MyMatchup(props: Props) {
         </p>
       )}
 
-      {ours && states && (
+      {ours && states && !waiting && (
         <>
           {standing && odds !== undefined && (
             <Scoreline
@@ -782,7 +947,10 @@ export function MyMatchup(props: Props) {
                 starterState(starter, rows, states, lines)))}
             />
           )}
-          <Worries worries={worries} onMore={onMore} onFind={props.onFind} />
+          <Worries
+            worries={worries} onMore={onMore} onFind={props.onFind}
+            players={goPlayers}
+          />
           <Advice
             side={ours.side}
             against={ours.against}
@@ -795,7 +963,14 @@ export function MyMatchup(props: Props) {
             onMore={onMore}
             lean
           />
-          <h2>your lineup</h2>
+          <div class="lineuphead">
+            <h2>your lineup</h2>
+            {league && (
+              <GoLink href={lineupLink(league)}>
+                set it in {PROVIDER_NAME[league.provider]}
+              </GoLink>
+            )}
+          </div>
           <Lineup
             side={ours.side}
             against={ours.against}
@@ -826,9 +1001,14 @@ export function MyMatchup(props: Props) {
         </>
       )}
 
-      {ours && !states && <Reading>loading the scoreboard...</Reading>}
+      {/* the week, the league's games and the scoreboard each take a
+          moment; until all three are in, the page shows its outline
+          rather than saying there is no game */}
+      {(waiting || (ours && !states)) && (
+        <Skeleton saying="loading your week" />
+      )}
 
-      {!ours && (
+      {!ours && !waiting && (
         <p class="hint">
           No game this week. Rankings are under <b>players</b>.
         </p>

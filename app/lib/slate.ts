@@ -583,9 +583,22 @@ export function listedOnSlate(slate: Slate): Map<string, Listed> {
 }
 
 export async function loadSlate(file: string): Promise<Slate> {
-  const said = await fetch(file + fresh()).then((r) => r.json()) as FileSlate;
+  const answered = await fetch(file + fresh());
+  const said = await answered.json() as FileSlate;
+  const slate = readSlate(said);
 
-  return readSlate(said);
+  // the build writes no time of its own into the file, and the page
+  // wants to say how fresh the week is, so the server's word on when the
+  // file last changed stands in for it
+  if (!slate.generated) {
+    const changed = answered.headers?.get?.("last-modified");
+
+    if (changed && Number.isFinite(Date.parse(changed))) {
+      return { ...slate, generated: new Date(changed).toISOString() };
+    }
+  }
+
+  return slate;
 }
 
 /**
