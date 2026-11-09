@@ -95,6 +95,11 @@ interface Props {
   remainder?: Map<string, number[]> | null;
   /** opens a player's sheet, where the page has one to open */
   onMore?: (key: string) => void;
+  /**
+   * Under the matchup tab's scoreline, which already says the win chance
+   * and lists who is on bye, so the advice is only the swaps.
+   */
+  lean?: boolean;
 }
 
 /**
@@ -120,7 +125,7 @@ export function Who(
 }
 
 export function Advice(
-  { side, against, slots, rows, states, lines, odds, remainder, onMore }: Props,
+  { side, against, slots, rows, states, lines, odds, remainder, onMore, lean }: Props,
 ) {
   const said = useMemo(() => namesIn([side, against]), [side, against]);
   const best = useMemo(
@@ -144,7 +149,7 @@ export function Advice(
     );
   }
 
-  const idle = onBye(side, rows);
+  const idle = lean ? [] : onBye(side, rows);
   const byes = idle.length > 0 && (
     <p class="bye">
       {idle.map((key, at) => (
@@ -160,6 +165,10 @@ export function Advice(
     </p>
   );
 
+  if (!best.swaps.length && lean) {
+    return <p class="hint">No one on your bench would raise it.</p>;
+  }
+
   if (!best.swaps.length) {
     return (
       <div class="advice">
@@ -171,8 +180,10 @@ export function Advice(
 
   return (
     <div class="advice">
-      <b>Your lineup wins {pct(standing)}.</b> With these swaps,{" "}
-      {pct(best.odds)}.
+      {lean
+        ? <b>Swaps that win you more: {pct(standing)} to {pct(best.odds)}.</b>
+        : <><b>Your lineup wins {pct(standing)}.</b> With these swaps,{" "}
+          {pct(best.odds)}.</>}
       {byes}
       <ul>
         {best.swaps.map((swap) => (

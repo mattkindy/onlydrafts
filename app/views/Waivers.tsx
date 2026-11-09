@@ -578,6 +578,8 @@ function Groups(
 export function Waivers(props: Props) {
   const { players, league, posFilter, rows, games } = props;
   const [query, setQuery] = useState("");
+  /** the drop list is reference, opened when you are deciding who goes */
+  const [showDrops, setShowDrops] = useState(false);
   // before any week has been built there is nothing for the week to say,
   // so the page opens on the season instead of on a table of blanks
   const [span, setSpan] = useState<Span>(
@@ -823,6 +825,27 @@ export function Waivers(props: Props) {
         : <p class="hint">{missing.says}</p>)}
       {span === "week" && trouble && <p class="hint">{trouble}</p>}
 
+      {/* the answer first: the one move the rest of the page argues for.
+          It used to be a grey line under the drop table, the last thing on
+          a page five phone screens long. */}
+      {!wanted && (best
+        ? (
+          <section class="bestmove">
+            <span class="over">
+              best move {span === "week" ? "this week" : "for the season"}
+            </span>
+            <span class="what">
+              add <b>{best.add}</b>
+              {best.drop ? <>, drop <b>{best.drop}</b></> : " to your open spot"}
+            </span>
+            <span class="swing">
+              win % {pct(best.before)} <span aria-hidden="true">→</span>{" "}
+              <b class={best.after > best.before ? "up" : ""}>{pct(best.after)}</b>
+            </span>
+          </section>
+        )
+        : <p class="hint">No add is worth a drop right now.</p>)}
+
       {!wanted && <Groups groups={groups} onMore={props.onMore} />}
 
       <h2>waiver wire adds</h2>
@@ -877,8 +900,23 @@ export function Waivers(props: Props) {
 
       <Sleepers rows={wire.filter(matching)} onMore={props.onMore} />
 
-      <h2>what each drop costs</h2>
-      <table class="line pairs">
+      <button
+        class="fold"
+        aria-expanded={showDrops}
+        onClick={() => setShowDrops((on) => !on)}
+      >
+        <h2>what each drop costs</h2>
+        <svg
+          class={"chev" + (showDrops ? " open" : "")}
+          viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"
+        >
+          <path
+            d="M4 6l4 4 4-4" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+      {showDrops && <table class="line pairs">
         <thead>
           <tr>
             <th>player</th>
@@ -902,31 +940,8 @@ export function Waivers(props: Props) {
             />
           ))}
         </tbody>
-      </table>
+      </table>}
 
-      {!best && (
-        <p class="hint">
-          No add is worth a drop right now.
-        </p>
-      )}
-
-      {best && (
-        <p class="hint">
-          {best.drop
-            ? (
-              <>
-                Best move: add <b>{best.add}</b>, drop <b>{best.drop}</b>.
-                Win % {pct(best.before)} to {pct(best.after)}.
-              </>
-            )
-            : (
-              <>
-                Best move: add <b>{best.add}</b> to your open spot.
-                Win % {pct(best.before)} to {pct(best.after)}.
-              </>
-            )}
-        </p>
-      )}
     </>
   );
 }

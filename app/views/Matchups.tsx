@@ -229,7 +229,7 @@ function Lineups(
 export function Game(
   {
     game, rows, states, slots, lines, mine, remainder, onMore, share,
-    withAdvice = true,
+    withAdvice = true, folds = false,
   }: {
     game: Matchup;
     rows: Map<string, SlateRow>;
@@ -243,8 +243,16 @@ export function Game(
     share?: ShareOf | undefined;
     /** the matchup tab says this above the lineup, so its card leaves it out */
     withAdvice?: boolean;
+    /**
+     * Whether the lineups wait behind a tap. Six games of nine rows each
+     * made the league tab ten phone screens long, with the standings and
+     * the recap either end of it; the score and the odds are what a
+     * reader scans the other games for.
+     */
+    folds?: boolean;
   },
 ) {
+  const [open, setOpen] = useState(!folds);
   const { odds, projected, toCome } = useMemo(
     () => standingFor(game, { rows, states, lines, remainder }),
     [game, rows, states, lines, remainder],
@@ -280,7 +288,7 @@ export function Game(
       >
         <u style={{ width: pct(odds[0]) }} />
       </div>
-      {share && (
+      {share && open && (
         <ShareButton
           only
           label="share"
@@ -288,7 +296,25 @@ export function Game(
             share.league, share.week, shareGameOf(game, odds, projected)))}
         />
       )}
-      {mine >= 0 && withAdvice && (
+      {folds && (
+        <button
+          class="unfold"
+          aria-expanded={open}
+          onClick={() => setOpen((on) => !on)}
+        >
+          {open ? "hide lineups" : "show lineups"}
+          <svg
+            class={"chev" + (open ? " open" : "")}
+            viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"
+          >
+            <path
+              d="M4 6l4 4 4-4" fill="none" stroke="currentColor"
+              stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      )}
+      {open && mine >= 0 && withAdvice && (
         <Advice
           side={game.sides[mine]!}
           against={game.sides[1 - mine]!}
@@ -301,10 +327,12 @@ export function Game(
           onMore={onMore}
         />
       )}
-      <Lineups
-        game={game} rows={rows} states={states} lines={lines}
-        remainder={remainder} stillToCome={toCome} onMore={onMore}
-      />
+      {open && (
+        <Lineups
+          game={game} rows={rows} states={states} lines={lines}
+          remainder={remainder} stillToCome={toCome} onMore={onMore}
+        />
+      )}
     </div>
   );
 }
@@ -410,7 +438,7 @@ export function Matchups(
   return (
     <>
       {picker && picker.weeks.length > 1 && (
-        <div class="controls">
+        <div class="weekbar">
           <WeekPicker
             weeks={picker.weeks} picked={picker.picked} onWeek={picker.onWeek}
           />
@@ -448,6 +476,7 @@ export function Matchups(
             remainder={remainder}
             onMore={onMore}
             share={league ? { league, week } : undefined}
+            folds={!game.sides.some((s) => s.owner === mine)}
           />
         ))}
       </div>

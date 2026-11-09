@@ -20,7 +20,7 @@ import {
   alternativesFor, lineFor, linesFor, myGameIn, settledGames, standingFor,
   starterState, type Alternative, type GameState, type Lines, type SlotChoice,
 } from "../lib/matchups.ts";
-import type { League, Matchup, Side } from "../lib/providers.ts";
+import type { League, Matchup, Roster, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import {
   catchShiftOf, hurtWord, type Slate, type SlateRow, type WeekRef,
@@ -28,11 +28,12 @@ import {
 import { WeatherMark } from "./WeatherMark.tsx";
 import { WeekPicker } from "./WeekPicker.tsx";
 import { Advice, gainPct, nameOf, pct } from "./Advice.tsx";
-import { injuryBadge } from "./Draft.tsx";
+import { injuryBadge, WORRYING } from "./Draft.tsx";
 import { PlayerName } from "./PlayerName.tsx";
 import { Game } from "./Matchups.tsx";
 import { Reading } from "./Reading.tsx";
 import { useLiveWeek, type WeekPoll } from "./scoreboard.ts";
+import { standingSays } from "./Standings.tsx";
 
 interface Props {
   weeks: WeekRef[];
@@ -64,6 +65,10 @@ interface Props {
   status?: string;
   /** opens a player's sheet, since every name on the page opens one */
   onMore?: (key: string) => void;
+  /** every team in the league, for the records over the scoreline */
+  teams?: Roster[];
+  /** takes you to the free agents at a position, to fill a hole */
+  onFind?: (position: string) => void;
 }
 
 const signed = (gains: number) =>
@@ -355,7 +360,7 @@ function Lineup(
   );
 
   return (
-    <>
+    <div class="stack">
       {choices.map((choice, i) => (
         <Slot
           key={choice.starter.key + i}
@@ -375,7 +380,252 @@ function Lineup(
         listed={listed}
         onMore={onMore}
       />
-    </>
+    </div>
+  );
+}
+
+/** where a game has got to, read off both lineups */
+type Phase = "pre" | "live" | "final";
+
+function phaseOf(
+  game: Matchup, rows: Map<string, SlateRow>,
+  states: Map<string, GameState>, lines: Lines,
+): Phase {
+  const all = game.sides.flatMap((side) => side.starters)
+    .map((starter) => starterState(starter, rows, states, lines));
+
+  if (all.some((state) => state?.where === "in")) {
+    return "live";
+  }
+
+  if (all.length > 0 && all.every((state) => state && state.left <= 0)) {
+    return "final";
+  }
+
+  return all.some((state) => state && state.where !== "pre") ? "live" : "pre";
+}
+
+/**
+ * The win chance as one word, so the scoreline can be read from across
+ * a room. The bands are wide on purpose: 52% and 48% are the same game.
+ */
+function verdictOf(odds: number, phase: Phase, ahead: boolean) {
+  if (phase === "final") {
+    return ahead ? { word: "won", tone: "up" } : { word: "lost", tone: "no" };
+  }
+
+  if (odds >= 0.6) {
+    return { word: phase === "live" ? "on course" : "favored", tone: "up" };
+  }
+
+  if (odds <= 0.4) {
+    return { word: phase === "live" ? "chasing" : "underdog", tone: "no" };
+  }
+
+  return { word: "toss-up", tone: "even" };
+}
+
+/**
+ * The win chance drawn as a ring, which is the one thing on the page a
+ * reader wants before anything else and reads at a glance in a way a
+ * sentence in grey does not.
+ */
+function Ring({ odds, tone }: { odds: number; tone: string }) {
+  const r = 30;
+  const round = 2 * Math.PI * r;
+
+  return (
+    <svg class={"ring " + tone} viewBox="0 0 72 72" aria-hidden="true">
+      <circle class="track" cx="36" cy="36" r={r} />
+      <circle
+        class="fill" cx="36" cy="36" r={r}
+        stroke-dasharray={`${round * odds} ${round}`}
+        transform="rotate(-90 36 36)"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Your week in one card: who you are playing, the score, what each side
+ * is on course for, and how often you win from here.
+ *
+ * It sits first because it is the question the tab is opened to answer.
+ * The slot by slot card that used to be the only place this was said
+ * sat under eight lineup cards and the bench.
+ */
+function Scoreline(
+  { game, at, odds, projected, phase, week, teams }: {
+    game: Matchup;
+    at: number;
+    odds: number;
+    projected: [number, number];
+    phase: Phase;
+    week: number | undefined;
+    teams: Roster[];
+  },
+) {
+  const me = game.sides[at]!;
+  const them = game.sides[1 - at]!;
+  const ahead = me.points > them.points;
+  const verdict = verdictOf(odds, phase, ahead);
+  const side = (who: Side, proj: number, cls: string) => (
+    <div class={"hside " + cls}>
+      <span class="nm">{who.owner}</span>
+      <span class="rec">{standingSays(teams, who.owner)}</span>
+      <span class="pts">{scoredSays(who.points)}</span>
+      <span class="proj">
+        {phase === "final" ? "final" : "on course for " + scoredSays(proj)}
+      </span>
+    </div>
+  );
+
+  return (
+    <section class={"hero " + verdict.tone} aria-label="your game">
+      <div class="htop">
+        <span>{week ? "week " + week : "this week"}</span>
+        <span class={"phase " + phase}>
+          {phase === "live" && <i class="pulse" aria-hidden="true" />}
+          {phase === "pre" ? "before kickoff" : phase}
+        </span>
+      </div>
+      <div class="hbody">
+        {side(me, projected[at]!, "me")}
+        <div class="hodds">
+          <Ring odds={odds} tone={verdict.tone} />
+          <span class="hpct">{pct(odds)}</span>
+          <span class="hword">{verdict.word}</span>
+        </div>
+        {side(them, projected[1 - at]!, "them")}
+      </div>
+    </section>
+  );
+}
+
+/** a slot's name as the players tab filters by it */
+const FIND_AT: Record<string, string> = {
+  QB: "QB", RB: "RB", WR: "WR", TE: "TE", K: "K", DEF: "DEF",
+  FLEX: "FLEX", WRRB_FLEX: "FLEX", REC_FLEX: "FLEX",
+};
+
+interface Worry {
+  key: string;
+  name: string;
+  slot: string;
+  says: string;
+  how: "bad" | "warn";
+}
+
+/**
+ * The starters who need a look before kickoff: ruled out, on a list, on
+ * bye, or a slot with nobody in it. A badge on the fourth card down is
+ * easy to scroll past, and a zero in your lineup is the most expensive
+ * thing on the page, so they are gathered at the top with the way to
+ * fix each.
+ *
+ * Only games still to kick off count. Once a player's game has started
+ * there is nothing to do about him.
+ */
+function worriesOf(
+  side: Side, slots: string[] | null, rows: Map<string, SlateRow>,
+  states: Map<string, GameState>, lines: Lines, listed: Map<string, Listed>,
+): Worry[] {
+  const out: Worry[] = [];
+
+  for (const starter of side.starters) {
+    const state = starterState(starter, rows, states, lines);
+
+    if (state && state.where !== "pre") {
+      continue;
+    }
+
+    const name = nameOf(starter.key, rows, lines, starter.name);
+    const row = rows.get(starter.key);
+    const hurt = hurtWord(listed.get(starter.key), row);
+
+    if (row?.bye) {
+      out.push({ key: starter.key, name, slot: starter.slot, says: "on bye", how: "bad" });
+    } else if (hurt && WORRYING.has(hurt.status)) {
+      out.push({
+        key: starter.key, name, slot: starter.slot, how: "bad",
+        says: hurt.status.toLowerCase() + (hurt.part ? ", " + hurt.part.toLowerCase() : ""),
+      });
+    } else if (hurt) {
+      out.push({
+        key: starter.key, name, slot: starter.slot, how: "warn",
+        says: hurt.status.toLowerCase() + (hurt.part ? ", " + hurt.part.toLowerCase() : ""),
+      });
+    }
+  }
+
+  const starting = (slots ?? []).filter((s) => !["BN", "IR", "TAXI"].includes(s));
+  const filled = new Map<string, number>();
+
+  for (const starter of side.starters) {
+    filled.set(starter.slot, (filled.get(starter.slot) ?? 0) + 1);
+  }
+
+  for (const slot of starting) {
+    const left = filled.get(slot) ?? 0;
+
+    if (left > 0) {
+      filled.set(slot, left - 1);
+    } else {
+      out.push({ key: "empty-" + slot + out.length, name: "nobody", slot, says: "empty slot", how: "bad" });
+    }
+  }
+
+  // the ones that cost a whole slot first
+  return out.sort((a, b) => Number(a.how === "warn") - Number(b.how === "warn"));
+}
+
+function Worries(
+  { worries, onMore, onFind }: {
+    worries: Worry[];
+    onMore?: ((key: string) => void) | undefined;
+    onFind?: ((position: string) => void) | undefined;
+  },
+) {
+  if (worries.length === 0) {
+    return null;
+  }
+
+  const bad = worries.filter((w) => w.how === "bad").length;
+
+  return (
+    <section class={"worries" + (bad ? " bad" : "")}>
+      <h3>
+        {bad
+          ? `${bad} starter${bad === 1 ? "" : "s"} won't play`
+          : "worth a look before kickoff"}
+      </h3>
+      <ul>
+        {worries.map((w) => (
+          <li key={w.key} class={w.how}>
+            <span class="chip">{w.slot}</span>
+            <span class="wwho">
+              {w.name === "nobody"
+                ? <b>nobody</b>
+                : (
+                  <PlayerName
+                    name={w.name}
+                    onOpen={onMore ? () => onMore(w.key) : undefined}
+                  />
+                )}
+              <i>{w.says}</i>
+            </span>
+            {w.how === "bad" && onFind && (
+              <button
+                class="quiet"
+                onClick={() => onFind(FIND_AT[w.slot] ?? "ALL")}
+              >
+                find a {FIND_AT[w.slot]?.toLowerCase() ?? "player"}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -396,11 +646,18 @@ export function MyMatchup(props: Props) {
   const ours = useMemo(
     () => myGameIn(games, mine, mineId), [games, mine, mineId]);
   // the headline and the card under it have to price the same game
-  const odds = useMemo(
+  const standing = useMemo(
     () => ours && states
-      ? standingFor(ours.game, { rows, states, lines, remainder }).odds[ours.at]
+      ? standingFor(ours.game, { rows, states, lines, remainder })
       : undefined,
     [ours, rows, states, lines, remainder],
+  );
+  const odds = ours ? standing?.odds[ours.at] : undefined;
+  const worries = useMemo(
+    () => ours && states
+      ? worriesOf(ours.side, slots, rows, states, lines, props.listed)
+      : [],
+    [ours, slots, rows, states, lines, props.listed],
   );
 
   if (!props.weeks.length) {
@@ -415,7 +672,7 @@ export function MyMatchup(props: Props) {
 
   return (
     <>
-      <div class="controls">
+      <div class="weekbar">
         <WeekPicker
           weeks={props.weeks} picked={props.picked} onWeek={props.onWeek}
         />
@@ -433,6 +690,18 @@ export function MyMatchup(props: Props) {
 
       {ours && states && (
         <>
+          {standing && odds !== undefined && (
+            <Scoreline
+              game={ours.game}
+              at={ours.at}
+              odds={odds}
+              projected={standing.projected}
+              phase={phaseOf(ours.game, rows, states, lines)}
+              week={props.picked?.week}
+              teams={props.teams ?? []}
+            />
+          )}
+          <Worries worries={worries} onMore={onMore} onFind={props.onFind} />
           <Advice
             side={ours.side}
             against={ours.against}
@@ -443,10 +712,9 @@ export function MyMatchup(props: Props) {
             odds={odds}
             remainder={remainder}
             onMore={onMore}
+            lean
           />
-          <p class="hint">
-            vs {ours.against.owner}
-          </p>
+          <h2>your lineup</h2>
           <Lineup
             side={ours.side}
             against={ours.against}
@@ -459,7 +727,7 @@ export function MyMatchup(props: Props) {
             onMore={onMore}
           />
 
-          <h2>your game</h2>
+          <h2>head to head</h2>
           <Game
             game={ours.game}
             rows={rows}

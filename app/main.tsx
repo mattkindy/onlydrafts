@@ -32,7 +32,7 @@ import { DraftRating, MyDraftPicks } from "./views/DraftRating.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
 import { MyMatchup } from "./views/Matchup.tsx";
 import { Matchups } from "./views/Matchups.tsx";
-import { Standings } from "./views/Standings.tsx";
+import { Standings, standingSays } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import { useWeekPoll } from "./views/scoreboard.ts";
 import {
@@ -98,6 +98,48 @@ const COPY: Record<View, [string, string, string]> = {
     "",
     "Follows your league's draft live. Ranked by how much each player adds to your roster as it stands.",
   ],
+};
+
+/**
+ * What each tab is called in the tab bar, which on a phone is five
+ * buttons across 390px under an icon each, so "my" goes.
+ */
+const TAB_SAYS: Record<View, string> = {
+  leagues: "leagues", matchup: "matchup", league: "league",
+  players: "players", team: "team", draft: "draft",
+};
+
+/** one stroke drawing per tab, in the icon's 24 unit box */
+const TAB_ICON: Record<View, string> = {
+  leagues: "M4 6h16M4 12h16M4 18h16",
+  // a scoreboard: two sides and the line between them
+  matchup: "M3 6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5zM12 5v14M7 10v4M17 10v4",
+  // a cup
+  league: "M8 4h8v5a4 4 0 0 1-8 0zM8 6H5.5a2.5 2.5 0 0 0 2.6 3.6M16 6h2.5a2.5 2.5 0 0 1-2.6 3.6M12 13v4M8.5 20h7M10 17h4",
+  // somebody to add
+  players: "M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6",
+  // a clipboard
+  team: "M7 5H5.5A1.5 1.5 0 0 0 4 6.5v13A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 18.5 5H17M9 3h6v4H9zM8 12h8M8 16h5",
+  // the board
+  draft: "M4 4h16v16H4zM4 9.5h16M4 15h16M9.5 4v16M15 4v16",
+};
+
+function TabIcon({ view }: { view: View }) {
+  return (
+    <svg class="ticon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path
+        d={TAB_ICON[view]} fill="none" stroke="currentColor" stroke-width="1.7"
+        stroke-linecap="round" stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** light, dark and the phone's own, drawn rather than left to a font */
+const THEME_ICON: Record<"system" | "light" | "dark", string> = {
+  system: "M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17z",
+  light: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
+  dark: "M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z",
 };
 
 /** what the keeper section is called, since it has its own heading */
@@ -175,15 +217,6 @@ const WEEK_VIEWS: View[] = ["matchup", "league", "players"];
 const STALE_AFTER = 2 * 60 * 1000;
 
 /**
- * Light, dark, or the phone's own setting, as one glyph. The word used to
- * sit in the nav and take a pill's worth of a 390px row to say something
- * a reader checks once a year.
- */
-const THEME_GLYPH: Record<Theme, string> = {
-  system: "◐", light: "☀", dark: "☾",
-};
-
-/**
  * Work that freezes the page until it is done, held back a frame so the
  * tab you tapped paints first.
  *
@@ -229,6 +262,8 @@ function App() {
   /** and whether your own draft is being replayed under your roster */
   const [myDraft, setMyDraft] = useState(false);
   const [everyTeam, setEveryTeam] = useState(false);
+  /** whether the league tab's draft grades are open; shut until asked */
+  const [gradesAsked, setGrades] = useState<boolean | null>(null);
   // the weeks he wins you leads, because ordering that way beat ordering
   // by value over replacement in 26 of 36 slots across three seasons
   const [order, setOrder] = useState<Order>(() => stored<Order>("order", "war"));
@@ -274,6 +309,16 @@ function App() {
     }
 
     keep("theme", theme);
+
+    // the browser's own bars follow the page rather than the phone, once
+    // somebody has picked one
+    const bars: Record<Theme, [string, string]> = {
+      system: ["#EFF1F4", "#10141C"], light: ["#EFF1F4", "#EFF1F4"],
+      dark: ["#10141C", "#10141C"],
+    };
+
+    document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')
+      .forEach((meta, at) => { meta.content = bars[theme][at] ?? meta.content; });
   }, [theme]);
 
   useEffect(() => {
@@ -736,6 +781,29 @@ function App() {
   useEffect(() => keep("view", view), [view]);
 
   /**
+   * A new tab starts at its top. The league tab runs to several screens,
+   * and leaving it from the bottom used to open the next tab halfway down
+   * a page that was not that long, or past the end of one that was.
+   */
+  const firstView = useRef(true);
+
+  useEffect(() => {
+    if (firstView.current) {
+      firstView.current = false;
+
+      return;
+    }
+
+    window.scrollTo(0, 0);
+  }, [view]);
+
+  /** a hole in your lineup, taken to the free agents who could fill it */
+  const findAt = (position: string) => {
+    setPosFilter(position);
+    setView("players");
+  };
+
+  /**
    * Whether this league keeps players. Sleeper and ESPN both say, but
    * an older saved league does not, and then the reader is asked once
    * and it is remembered.
@@ -744,6 +812,7 @@ function App() {
     ? active.keepers ?? stored(keeperKey(active), false)
     : false;
 
+  const grades = gradesAsked ?? weeks.length <= 1;
   const [title, blurb, legend] = COPY[view];
   const asks = PROVIDERS[provider]!;
 
@@ -759,7 +828,16 @@ function App() {
           title="light, dark, or whatever your phone is set to"
           onClick={() => setTheme(NEXT_THEME[theme])}
         >
-          {THEME_GLYPH[theme]}
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path
+              d={THEME_ICON[theme]} stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round" fill="none"
+            />
+            {/* the phone's own setting is half of each */}
+            {theme === "system" && (
+              <path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor" />
+            )}
+          </svg>
         </button>
       </nav>
 
@@ -778,20 +856,6 @@ function App() {
           <span class="pays" title={scoringSettings(active.pays)}>
             {SCORING_NAME[roomFor(active.pays)]}
           </span>
-        </div>
-      )}
-
-      {view !== "leagues" && (
-        <div id="subnav">
-          {tabs.map((v) => (
-            <button
-              key={v}
-              class={v === view ? "on" : ""}
-              onClick={() => setView(v)}
-            >
-              {COPY[v][0].toLowerCase()}
-            </button>
-          ))}
           {legend && (
             <button
               class={"whatis" + (asking ? " on" : "")}
@@ -802,6 +866,25 @@ function App() {
               ?
             </button>
           )}
+        </div>
+      )}
+
+      {/* the tabs: along the top on a wide screen, and on a phone a bar
+          along the bottom, where a thumb already is and where it stays
+          put however far down a page you have scrolled */}
+      {view !== "leagues" && (
+        <div id="subnav" role="navigation" aria-label="sections">
+          {tabs.map((v) => (
+            <button
+              key={v}
+              class={v === view ? "on" : ""}
+              aria-current={v === view ? "page" : undefined}
+              onClick={() => setView(v)}
+            >
+              <TabIcon view={v} />
+              <span>{TAB_SAYS[v]}</span>
+            </button>
+          ))}
         </div>
       )}
 
@@ -969,8 +1052,11 @@ function App() {
                       {/* which scoring, since picking the wrong league
                           of two is otherwise silent. What it pays a
                           catch is the same fact, so it is the chip's
-                          tooltip rather than a second line. */}
-                      <div class="sub">
+                          tooltip rather than a second line. Beside it,
+                          where you sit, which is what you would open the
+                          league to find out first. */}
+                      <div class="sub standing">
+                        <b>{standingSays(lg.allRosters ?? [], lg.team)}</b>
                         <span
                           class="pays"
                           title={scoringSettings(lg.pays)}
@@ -1003,6 +1089,8 @@ function App() {
               keeperLeague={keeperLeague}
               keepersSay={KEEPERS_SAY}
               onKeeperChange={() => setMarks((n) => n + 1)}
+              listed={listed}
+              week={weeks.length ? weeks[weeks.length - 1]!.week : null}
             />
 
             {active.keepers === undefined || active.keepers === null
@@ -1090,6 +1178,8 @@ function App() {
             scoreboard={scoreboard}
             status={gamesStatus || weekStatus}
             onMore={openKey}
+            teams={active?.allRosters ?? []}
+            onFind={findAt}
           />
         )}
 
@@ -1123,15 +1213,36 @@ function App() {
               )
               : <p class="hint">No week has been built yet.</p>}
 
-            <h2>draft grades</h2>
-            <AfterPaint saying="grading every team's draft">
-              <DraftRating
-                board={players}
-                byKey={byKey}
-                league={active}
-                made={draft.made ?? []}
-              />
-            </AfterPaint>
+            {/* open while the draft is fresh, and behind a tap once weeks
+                are being played: grading every draft is a second of work
+                that used to land on every visit to this tab */}
+            <button
+              class="fold"
+              aria-expanded={grades}
+              onClick={() => setGrades((on) => !on)}
+            >
+              <h2>draft grades</h2>
+              <svg
+                class={"chev" + (grades ? " open" : "")}
+                viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"
+              >
+                <path
+                  d="M4 6l4 4 4-4" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            {grades && (
+              <AfterPaint saying="grading every team's draft">
+                <DraftRating
+                  board={players}
+                  byKey={byKey}
+                  league={active}
+                  made={draft.made ?? []}
+                />
+              </AfterPaint>
+            )}
           </>
         )}
 
