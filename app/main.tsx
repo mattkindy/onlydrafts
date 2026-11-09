@@ -104,7 +104,7 @@ const COPY: Record<View, [string, string, string]> = {
     "starters scored over the most your roster could have. Playoff chances play the " +
     "rest of the regular season out 5,000 times: each team scores around what its " +
     "roster projects to start, moved halfway toward how well it sets its lineups, and " +
-    "this week's games go by their live odds. In what if, tap a team to have it win; " +
+    "this week's games go by their live odds. In what if, tap a team to have it win, or the v between them for a tie; " +
     "the solid line is your chance week by week as picked, the bands where it is " +
     "likely to sit.",
   ],

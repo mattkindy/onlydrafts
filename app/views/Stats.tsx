@@ -20,7 +20,7 @@ import { PROVIDERS, type League, type Matchup } from "../lib/providers.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
   bestLineupPoints, chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, scenarioPath,
-  seasonOf, startingSlots, weekOfPair, weeklySpread, winShare,
+  seasonOf, startingSlots, TIE, weekOfPair, weeklySpread, winShare,
   type PathOutcome, type PlayoffRun, type ScenarioPath, type Strength, type TeamSeason,
 } from "../lib/seasonStats.ts";
 import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
@@ -341,7 +341,9 @@ function PathChart(
           <tbody>
             {ways.map((o) => (
               <tr key={o.won}>
-                <td>{o.won}–{o.played - o.won}</td>
+                <td>
+                  {o.won}–{o.played - o.won - o.tied}{o.tied ? `–${o.tied}` : ""}
+                </td>
                 <td>
                   <span class="wlik">
                     <span class="obar"><u style={{ width: `${(o.share / most) * 100}%` }} /></span>
@@ -393,6 +395,7 @@ function Picker(
         {pairs.map(([a, b]) => {
           const key = pairKey(w, a, b);
           const won = forced.get(key);
+          const tied = won === TIE;
           const side = (who: string) => (
             <button
               class={"side" + (won === who ? " on" : "") + (won && won !== who ? " off" : "") +
@@ -407,7 +410,15 @@ function Picker(
           return (
             <li key={key} class={a === mine || b === mine ? "yours" : ""}>
               {side(a)}
-              <span class="v">v</span>
+              {/* the v between them calls it a tie, and takes the tie back */}
+              <button
+                class={"v" + (tied ? " on" : "")}
+                aria-pressed={tied}
+                aria-label={`${a} and ${b} tie`}
+                onClick={() => onPick(w, a, b, TIE)}
+              >
+                {tied ? "tie" : "v"}
+              </button>
               {side(b)}
             </li>
           );
@@ -650,7 +661,7 @@ export function Stats(props: Props) {
       const mine = pair && forced.get(pairKey(w, pair[0], pair[1]));
 
       if (mine) {
-        return mine === league.team ? "W" : "L";
+        return mine === TIE ? "T" : mine === league.team ? "W" : "L";
       }
 
       return [...forced.keys()].some((key) => weekOfPair(key) === w) ? "•" : null;
