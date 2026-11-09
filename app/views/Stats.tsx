@@ -8,6 +8,7 @@
  * come are read for their pairings alone.
  */
 
+import { Fragment } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
@@ -18,7 +19,7 @@ import {
 import { PROVIDERS, type League, type Matchup } from "../lib/providers.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
-  bestLineupPoints, chanceAt, luckOf, pairKey, picksSignature, playoffOdds, scenarioPath,
+  bestLineupPoints, chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, scenarioPath,
   seasonOf, startingSlots, weekOfPair, weeklySpread, winShare,
   type PathOutcome, type PlayoffRun, type ScenarioPath, type Strength, type TeamSeason,
 } from "../lib/seasonStats.ts";
@@ -186,8 +187,29 @@ function Weeks(
               </>}
         </p>
       )}
-      <p class="hint">Bars are your score, the dashed mark the league's median.</p>
+      <p class="pkey">
+        <span><i class="kbar" />you</span>
+        <span><i class="kline median" />league median</span>
+      </p>
     </div>
+  );
+}
+
+/** the playoff chance the what-if comes to, and its change from today's */
+function WhatNow({ chance, today }: { chance: number; today: number | null }) {
+  // from the figures as shown, so two that read the same are level
+  const move = today === null ? null : Math.round(chance * 100) - Math.round(today * 100);
+
+  return (
+    <p class="whatnow">
+      <b>{pct(chance)}</b>
+      <span>playoffs</span>
+      {today !== null && move !== null && (
+        <span class="moved">
+          {move === 0 ? "=" : move > 0 ? `+${move}` : `−${-move}`} from {pct(today)}
+        </span>
+      )}
+    </p>
   );
 }
 
@@ -199,20 +221,21 @@ const WORTH_A_ROW = 0.01;
 
 /**
  * Where your playoff chance is likely to go, a week at a time, as this
- * tab would tell it each week: the median of the seasons played out, a
- * darker band where half of them sit and a lighter one for 8 in 10. A
- * picked game moves the path in its own week, and your own picked games
- * are marked under theirs. Tapping a week lists the records you can have
- * by then, how often each happens and what each leaves your chance at.
+ * tab would tell it each week. The solid line is the chance itself,
+ * which only moves when a picked game is played and ends on the chance
+ * with every pick in. The dashed line is the median of the seasons
+ * played out, with a darker band where half of them sit and a lighter
+ * one for 8 in 10. Your own picked games are marked under their week.
+ * Tapping a week lists the records you can have by then, how often each
+ * happens and what each leaves your chance at.
  */
 function PathChart(
-  { now, path, coming, marks, picked: anyPicked }: {
+  { now, path, coming, marks }: {
     now: number;
     path: PathOutcome[][];
     coming: number;
     /** under each week after now: your picked result, a dot for others' picks */
     marks: (string | null)[];
-    picked: boolean;
   },
 ) {
   const cols = [null, ...path];
@@ -229,8 +252,14 @@ function PathChart(
 
     return col ? chanceAt(col, s) : now;
   };
-  const line = (s: number) =>
-    cols.map((_, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(share(i, s)).toFixed(1)}`).join("");
+  const chance = (i: number) => {
+    const col = cols[i];
+
+    return col ? chanceOf(col) : now;
+  };
+  const line = (at: (i: number) => number) =>
+    cols.map((_, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(at(i)).toFixed(1)}`).join("");
+  const median = (i: number) => share(i, 0.5);
   const band = ([lo, hi]: readonly [number, number]) => {
     const top = cols.map((_, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(share(i, hi)).toFixed(1)}`);
     const bottom = cols.map((_, i) => `L${x(i).toFixed(1)},${y(share(i, lo)).toFixed(1)}`).reverse();
@@ -249,7 +278,7 @@ function PathChart(
     <div class="path">
       <svg viewBox={`0 0 ${W} ${H}`} role="img"
         aria-label={`your playoff chance after week ${coming + last - 1}: ` +
-          `median ${pct(share(last, 0.5))}, 8 in 10 seasons between ` +
+          `${pct(chance(last))}, median ${pct(median(last))}, 8 in 10 seasons between ` +
           `${pct(share(last, 0.1))} and ${pct(share(last, 0.9))}`}>
         {[0, 0.5, 1].map((g) => (
           <g key={g}>
@@ -260,13 +289,14 @@ function PathChart(
         <path class="pband wide" d={band(BANDS[0])} />
         <path class="pband" d={band(BANDS[1])} />
         <line class="pnow" x1={x(at)} x2={x(at)} y1={T} y2={H - B} />
-        <path class="pline" d={line(0.5)} />
+        <path class="pline median" d={line(median)} />
+        <path class="pline" d={line(chance)} />
         {cols.map((_, i) => (
           <circle key={"m" + i} class={"pdot" + (i === at ? " on" : "")}
-            cx={x(i)} cy={y(share(i, 0.5))} r={i === at ? 5 : 4} />
+            cx={x(i)} cy={y(chance(i))} r={i === at ? 5 : 4} />
         ))}
-        <text class="plabel" x={x(last) + 8} y={y(share(last, 0.5)) + 4}>
-          {pct(share(last, 0.5))}
+        <text class="plabel" x={x(last) + 8} y={y(chance(last)) + 4}>
+          {pct(chance(last))}
         </text>
         {cols.map((_, i) => named(i) && (
           <text key={"x" + i} class="paxis" x={x(i)} y={H - 20} text-anchor="middle">
@@ -289,20 +319,19 @@ function PathChart(
         ))}
       </svg>
       <p class="pkey">
-        <span><i class="kline" />median</span>
-        <span><i class="kband" />half the seasons</span>
-        <span><i class="kband wide" />8 in 10</span>
+        <span><i class="kline" />chance</span>
+        <span><i class="kline median" />median</span>
+        <span><i class="kband" />middle 50%</span>
+        <span><i class="kband wide" />middle 80%</span>
       </p>
       <p class="wsay">
         {picked
           ? <>
-            <b>after week {coming + at - 1}</b> median <b>{pct(share(at, 0.5))}</b>
-            {" "}· 8 in 10 between {pct(share(at, 0.1))} and {pct(share(at, 0.9))}
+            <b>wk {coming + at - 1}</b> {pct(chance(at))}
+            {" "}· median {pct(median(at))}
+            {" "}· 80% in {pct(share(at, 0.1))}–{pct(share(at, 0.9))}
           </>
-          : <>
-            <b>now</b> {pct(now)}
-            {anyPicked ? " · before any pick is played" : " · tap a week for how it can go"}
-          </>}
+          : <><b>now</b> {pct(now)}</>}
       </p>
       {ways.length > 0 && (
         <table class="ways">
@@ -532,11 +561,11 @@ export function Stats(props: Props) {
     return out;
   }, [strength, nudge, league.team]);
 
-  const playOut = (picks: Map<string, string>, draws: number) => setup
+  const playOut = (picks: Map<string, string>, draws: number, using = adjusted) => setup
     ? playoffOdds({
       table: setup.table,
       weeks: setup.toCome,
-      strength: adjusted,
+      strength: using,
       playoffTeams: league.playoffTeams ?? (league.size >= 12 ? 6 : 4),
       ...(thisWeek ? { thisWeek } : {}),
       mine: league.team,
@@ -568,6 +597,13 @@ export function Stats(props: Props) {
     runs.set(key, fresh);
     return fresh;
   }, [runs, forced]);
+
+  /** your chance as things stand, with nothing picked and your scoring as projected */
+  const today = useMemo(() => {
+    const as = playOut(new Map(), SEASONS, strength);
+
+    return as?.odds.find((o) => o.owner === league.team)?.playoffs ?? null;
+  }, [setup, strength, league, thisWeek]);
 
   /**
    * Your chance week by week as the tab would tell it if the season goes
@@ -676,14 +712,14 @@ export function Stats(props: Props) {
                 label="playoff chance"
                 value={pct(myOdds.playoffs)}
                 {...(run?.ifWin != null && run.ifLose != null
-                  ? { note: `${pct(run.ifWin)} if you win this week, ${pct(run.ifLose)} if not` }
+                  ? { note: `win ${pct(run.ifWin)} · lose ${pct(run.ifLose)}` }
                   : {})}
               />
             )}
             <Tile
               label="all-play"
               value={pct(winShare(me.allWins, me.allLosses, me.allTies))}
-              note={`${recordSays({ wins: me.allWins, losses: me.allLosses, ties: me.allTies })} against everybody`}
+              note={recordSays({ wins: me.allWins, losses: me.allLosses, ties: me.allTies })}
             />
             <Tile
               label="points for"
@@ -698,12 +734,11 @@ export function Stats(props: Props) {
             <Tile
               label="luck"
               value={(luckOf(me) >= 0 ? "+" : "") + luckOf(me).toFixed(1) + " wins"}
-              note="wins over what your scoring earns"
             />
             <Tile
               label="start efficiency"
               value={me.best > 0 ? pct(me.started / me.best) : "–"}
-              note={`${pts(me.best - me.started)} pts left on your bench`}
+              note={`${pts(me.best - me.started)} pts benched`}
             />
           </div>
         </section>
@@ -714,7 +749,10 @@ export function Stats(props: Props) {
           {/* every table here goes to the league chat as a picture, since
               the playoff race is the one thing the whole league argues over */}
           <div class="sectionhead">
-            <h2>playoff chances</h2>
+            <h2>
+              playoff chances
+              {(forced.size > 0 || nudge !== 0) && <span class="tag">what if</span>}
+            </h2>
             <ShareButton
               label="share"
               onShare={() => sharePlayoffs(layoutPlayoffs({
@@ -735,16 +773,15 @@ export function Stats(props: Props) {
               }))}
             />
           </div>
-          {(forced.size > 0 || nudge !== 0) && (
-            <p class="hint scenario">With your picks under what if.</p>
-          )}
           <div class="odds-list">
             {[...run.odds].sort((a, b) => b.playoffs - a.playoffs || b.wins - a.wins)
-              .map((o) => {
+              .map((o, i) => {
                 const team = season.find((t) => t.owner === o.owner);
 
                 return (
-                  <div class={"orow" + (o.owner === league.team ? " on" : "")} key={o.owner}>
+                  <Fragment key={o.owner}>
+                  {i === playoffTeams && <div class="ocut"><span>top {playoffTeams} make it</span></div>}
+                  <div class={"orow" + (o.owner === league.team ? " on" : "")}>
                     <span class="onm">{o.owner}</span>
                     <span class="orec">
                       {team ? recordSays(team) : "0-0"}
@@ -755,16 +792,10 @@ export function Stats(props: Props) {
                     </span>
                     <b>{pct(o.playoffs)}</b>
                   </div>
+                  </Fragment>
                 );
               })}
           </div>
-          <p class="hint">
-            The top {playoffTeams} make it. The rest of the regular season,
-            played out {SEASONS.toLocaleString()} times, each team scoring
-            around what its roster projects to start, moved halfway toward
-            how well it has set its lineups
-            {thisWeek ? ", and this week from its lineups" : ""}.
-          </p>
 
           {setup && path && path.cols.length > 0 && (
             <>
@@ -779,16 +810,21 @@ export function Stats(props: Props) {
                   </button>
                 )}
               </div>
+              {run && (forced.size > 0 || nudge !== 0) && (
+                <WhatNow
+                  chance={run.odds.find((o) => o.owner === league.team)?.playoffs ?? 0}
+                  today={today}
+                />
+              )}
               <PathChart
                 now={path.now}
                 path={path.cols}
                 coming={coming}
                 marks={marks}
-                picked={forced.size > 0}
               />
               <label class="nudge">
                 <span>
-                  your scoring against its projection{" "}
+                  your scoring vs projection{" "}
                   <b>{nudge > 0 ? "+" : ""}{Math.round(nudge * 100)}%</b>
                 </span>
                 <input
@@ -818,10 +854,6 @@ export function Stats(props: Props) {
                   return next;
                 })}
               />
-              <p class="hint">
-                Tap a team to have it win that game. The chances above, and
-                the two lines, play the season out again with your picks.
-              </p>
             </>
           )}
         </>

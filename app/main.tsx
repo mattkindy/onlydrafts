@@ -15,6 +15,7 @@ import "./style.css";
 import { loadBoard, loadMeta, type Board } from "./lib/data.ts";
 import { rescore, roomFor } from "./lib/board.ts";
 import { keep, stored, normalizeName } from "./lib/store.ts";
+import { landingTab } from "./lib/tabs.ts";
 import {
   NeedsEspnCookies, listedPlayers, listedPlayersWith, PROVIDERS, sleeperPlayers,
   type League, type Matchup, type SleeperPlayers,
@@ -101,8 +102,11 @@ const COPY: Record<View, [string, string, string]> = {
     "All-play is the share of games you would win playing every team every week. " +
     "Luck is your wins over what that share earns you. Start efficiency is what your " +
     "starters scored over the most your roster could have. Playoff chances play the " +
-    "rest of the regular season out thousands of times, each team scoring around what " +
-    "its roster projects to start.",
+    "rest of the regular season out 5,000 times: each team scores around what its " +
+    "roster projects to start, moved halfway toward how well it sets its lineups, and " +
+    "this week's games go by their live odds. In what if, tap a team to have it win; " +
+    "the solid line is your chance week by week as picked, the bands where it is " +
+    "likely to sit.",
   ],
   draft: [
     "Draft",
@@ -810,11 +814,15 @@ function App() {
     ? ["draft", "matchup", "league", "players", "team"]
     : ["matchup", "league", "players", "team", "stats"];
 
+  // the season's weeks say whether the draft is over, so a tab is only
+  // moved off once they are read: a reload on stats stays on stats
   useEffect(() => {
-    if (view !== "leagues" && !tabs.includes(view)) {
-      setView(tabs[0]!);
+    const landing = landingTab(view, tabs, season !== null, "leagues");
+
+    if (landing !== view) {
+      setView(landing);
     }
-  }, [drafting, view]);
+  }, [drafting, view, season]);
 
   // the answer belongs to the tab it was opened on, so moving off it
   // closes it rather than carrying it over to a page it does not explain
