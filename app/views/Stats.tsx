@@ -8,6 +8,7 @@
  * come are read for their pairings alone.
  */
 
+import { Fragment } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
@@ -186,36 +187,26 @@ function Weeks(
               </>}
         </p>
       )}
-      <p class="hint">Bars are your score, the dashed mark the league's median.</p>
+      <p class="pkey">
+        <span><i class="kbar" />you</span>
+        <span><i class="kline median" />league median</span>
+      </p>
     </div>
   );
 }
 
-/**
- * The playoff chance the what-if comes to: with the games picked as they
- * are and your scoring where the slider has it, against today's.
- */
-function WhatNow({ chance, today, picked, nudged }: {
-  chance: number;
-  today: number | null;
-  picked: boolean;
-  nudged: boolean;
-}) {
-  const how = picked && nudged ? "with these picks, at that scoring"
-    : picked ? "with these picks"
-    : nudged ? "at that scoring"
-    : "as things stand";
+/** the playoff chance the what-if comes to, and its change from today's */
+function WhatNow({ chance, today }: { chance: number; today: number | null }) {
   // from the figures as shown, so two that read the same are level
   const move = today === null ? null : Math.round(chance * 100) - Math.round(today * 100);
 
   return (
     <p class="whatnow">
-      <span>playoff chance {how}</span>
       <b>{pct(chance)}</b>
-      {(picked || nudged) && today !== null && move !== null && (
+      <span>playoffs</span>
+      {today !== null && move !== null && (
         <span class="moved">
-          {move === 0 ? "level with" : move > 0 ? `up ${move} on` : `down ${-move} on`}
-          {" "}{pct(today)} now
+          {move === 0 ? "=" : move > 0 ? `+${move}` : `−${-move}`} from {pct(today)}
         </span>
       )}
     </p>
@@ -239,14 +230,12 @@ const WORTH_A_ROW = 0.01;
  * happens and what each leaves your chance at.
  */
 function PathChart(
-  { now, path, coming, marks, nowNote }: {
+  { now, path, coming, marks }: {
     now: number;
     path: PathOutcome[][];
     coming: number;
     /** under each week after now: your picked result, a dot for others' picks */
     marks: (string | null)[];
-    /** what the figure for now says about itself */
-    nowNote: string;
   },
 ) {
   const cols = [null, ...path];
@@ -332,17 +321,17 @@ function PathChart(
       <p class="pkey">
         <span><i class="kline" />chance</span>
         <span><i class="kline median" />median</span>
-        <span><i class="kband" />half the seasons</span>
-        <span><i class="kband wide" />8 in 10</span>
+        <span><i class="kband" />middle 50%</span>
+        <span><i class="kband wide" />middle 80%</span>
       </p>
       <p class="wsay">
         {picked
           ? <>
-            <b>after week {coming + at - 1}</b> chance <b>{pct(chance(at))}</b>
+            <b>wk {coming + at - 1}</b> {pct(chance(at))}
             {" "}· median {pct(median(at))}
-            {" "}· 8 in 10 between {pct(share(at, 0.1))} and {pct(share(at, 0.9))}
+            {" "}· 80% in {pct(share(at, 0.1))}–{pct(share(at, 0.9))}
           </>
-          : <><b>now</b> {pct(now)} · {nowNote}</>}
+          : <><b>now</b> {pct(now)}</>}
       </p>
       {ways.length > 0 && (
         <table class="ways">
@@ -723,14 +712,14 @@ export function Stats(props: Props) {
                 label="playoff chance"
                 value={pct(myOdds.playoffs)}
                 {...(run?.ifWin != null && run.ifLose != null
-                  ? { note: `${pct(run.ifWin)} if you win this week, ${pct(run.ifLose)} if not` }
+                  ? { note: `win ${pct(run.ifWin)} · lose ${pct(run.ifLose)}` }
                   : {})}
               />
             )}
             <Tile
               label="all-play"
               value={pct(winShare(me.allWins, me.allLosses, me.allTies))}
-              note={`${recordSays({ wins: me.allWins, losses: me.allLosses, ties: me.allTies })} against everybody`}
+              note={recordSays({ wins: me.allWins, losses: me.allLosses, ties: me.allTies })}
             />
             <Tile
               label="points for"
@@ -745,12 +734,11 @@ export function Stats(props: Props) {
             <Tile
               label="luck"
               value={(luckOf(me) >= 0 ? "+" : "") + luckOf(me).toFixed(1) + " wins"}
-              note="wins over what your scoring earns"
             />
             <Tile
               label="start efficiency"
               value={me.best > 0 ? pct(me.started / me.best) : "–"}
-              note={`${pts(me.best - me.started)} pts left on your bench`}
+              note={`${pts(me.best - me.started)} pts benched`}
             />
           </div>
         </section>
@@ -761,7 +749,10 @@ export function Stats(props: Props) {
           {/* every table here goes to the league chat as a picture, since
               the playoff race is the one thing the whole league argues over */}
           <div class="sectionhead">
-            <h2>playoff chances</h2>
+            <h2>
+              playoff chances
+              {(forced.size > 0 || nudge !== 0) && <span class="tag">what if</span>}
+            </h2>
             <ShareButton
               label="share"
               onShare={() => sharePlayoffs(layoutPlayoffs({
@@ -782,16 +773,15 @@ export function Stats(props: Props) {
               }))}
             />
           </div>
-          {(forced.size > 0 || nudge !== 0) && (
-            <p class="hint scenario">With your picks under what if.</p>
-          )}
           <div class="odds-list">
             {[...run.odds].sort((a, b) => b.playoffs - a.playoffs || b.wins - a.wins)
-              .map((o) => {
+              .map((o, i) => {
                 const team = season.find((t) => t.owner === o.owner);
 
                 return (
-                  <div class={"orow" + (o.owner === league.team ? " on" : "")} key={o.owner}>
+                  <Fragment key={o.owner}>
+                  {i === playoffTeams && <div class="ocut"><span>top {playoffTeams} make it</span></div>}
+                  <div class={"orow" + (o.owner === league.team ? " on" : "")}>
                     <span class="onm">{o.owner}</span>
                     <span class="orec">
                       {team ? recordSays(team) : "0-0"}
@@ -802,16 +792,10 @@ export function Stats(props: Props) {
                     </span>
                     <b>{pct(o.playoffs)}</b>
                   </div>
+                  </Fragment>
                 );
               })}
           </div>
-          <p class="hint">
-            The top {playoffTeams} make it. The rest of the regular season,
-            played out {SEASONS.toLocaleString()} times, each team scoring
-            around what its roster projects to start, moved halfway toward
-            how well it has set its lineups
-            {thisWeek ? ", and this week from its lineups" : ""}.
-          </p>
 
           {setup && path && path.cols.length > 0 && (
             <>
@@ -826,12 +810,10 @@ export function Stats(props: Props) {
                   </button>
                 )}
               </div>
-              {run && (
+              {run && (forced.size > 0 || nudge !== 0) && (
                 <WhatNow
                   chance={run.odds.find((o) => o.owner === league.team)?.playoffs ?? 0}
                   today={today}
-                  picked={forced.size > 0}
-                  nudged={nudge !== 0}
                 />
               )}
               <PathChart
@@ -839,14 +821,10 @@ export function Stats(props: Props) {
                 path={path.cols}
                 coming={coming}
                 marks={marks}
-                nowNote={[
-                  nudge ? "at that scoring" : "",
-                  forced.size ? "before any pick is played" : "tap a week for how it can go",
-                ].filter(Boolean).join(", ")}
               />
               <label class="nudge">
                 <span>
-                  your scoring against its projection{" "}
+                  your scoring vs projection{" "}
                   <b>{nudge > 0 ? "+" : ""}{Math.round(nudge * 100)}%</b>
                 </span>
                 <input
@@ -876,10 +854,6 @@ export function Stats(props: Props) {
                   return next;
                 })}
               />
-              <p class="hint">
-                Tap a team to have it win that game. The chances above, and
-                the two lines, play the season out again with your picks.
-              </p>
             </>
           )}
         </>

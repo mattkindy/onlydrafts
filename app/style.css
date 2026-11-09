@@ -1174,6 +1174,13 @@
   .orow.on .obar { background: var(--panel); }
   .obar u { display: block; height: 100%; background: var(--go); border-radius: 0 4px 4px 0; }
   .orow > b { text-align: right; font-variant-numeric: tabular-nums; }
+  /* the playoff line, between the last place in and the first out */
+  .ocut { display: flex; align-items: center; gap: var(--s2); margin: 2px 0;
+    font-size: var(--t1); color: var(--faint); }
+  .ocut::before { content: ""; flex: 1; border-top: 2px dashed var(--faint); }
+  .sectionhead h2 .tag { font-family: system-ui, sans-serif; margin-left: var(--s2); padding: 2px 8px; border-radius: 999px;
+    background: var(--chip); color: var(--muted); font-size: var(--t1); font-weight: 700;
+    letter-spacing: 0; text-transform: none; vertical-align: middle; }
 
   /* your score each week, a bar each, the league median a dashed mark */
   .wchart { position: relative; display: flex; align-items: flex-end; gap: 2px;
@@ -1196,6 +1203,7 @@
   .wsay { margin: var(--s2) 0 0; font-size: var(--t2); color: var(--muted);
     font-variant-numeric: tabular-nums; }
   .wsay b { color: var(--ink); }
+  table.stats th { white-space: nowrap; }
   table.stats td:first-child { max-width: 9rem; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
 
@@ -1220,14 +1228,16 @@
   .pkey span { display: inline-flex; align-items: center; gap: 6px; }
   .pkey i { display: inline-block; width: 16px; }
   .pkey .kline { height: 2px; background: var(--ink); border-radius: 1px; }
+  .pkey .kbar { width: 8px; height: 10px; border-radius: 2px 2px 0 0;
+    background: color-mix(in srgb, var(--muted) 55%, var(--chip)); }
   .pkey .kline.median { background: repeating-linear-gradient(90deg,
     var(--muted) 0 4px, transparent 4px 7px); }
   /* what the what-if comes to, above its chart */
   .whatnow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--s2);
     margin: 0 0 var(--s2); font-size: var(--t2); color: var(--muted);
     font-variant-numeric: tabular-nums; }
-  .whatnow > span:first-child { flex-basis: 100%; }
   .whatnow b { font-size: var(--t5); font-weight: 800; color: var(--ink); line-height: 1.1; }
+  .whatnow .moved { font-weight: 700; color: var(--ink); }
   .pkey .kband { height: 10px; border-radius: 2px;
     background: color-mix(in srgb, var(--ink) 22%, transparent); }
   .pkey .kband.wide { background: color-mix(in srgb, var(--ink) 8%, transparent); }
