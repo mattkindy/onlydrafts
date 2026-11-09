@@ -384,6 +384,12 @@ export function SeasonCard(
     lead?: "war" | "rank" | "adp";
     /** what he adds to the weeks you win, when that is the order */
     wins?: string;
+    /**
+     * His line for the week coming up, which leads in season: the roster
+     * tab is read on a Thursday to set a lineup, and a draft-night rank
+     * in the corner answers a question nobody is asking by then.
+     */
+    thisWeek?: { label: string; value: string };
   },
 ) {
   const { p, teams } = props;
@@ -393,12 +399,14 @@ export function SeasonCard(
 
   // whatever the list is sorted by leads, since a reader going down the
   // page is reading that; leading with something else reads as a broken sort
-  const leading = props.lead === "war" && props.wins
+  const leading = props.thisWeek ?? (props.lead === "war" && props.wins
     ? { label: "weeks won", value: props.wins }
     : props.lead === "adp"
       ? room && { label: "adp", value: room }
-      : ours && { label: "ours", value: ours };
-  const then = props.lead === "war"
+      : ours && { label: "ours", value: ours });
+  const then = props.thisWeek
+    ? ours && { label: "ours", value: ours }
+    : props.lead === "war"
     ? ours && { label: "ours", value: ours }
     : props.lead === "adp"
       ? ours && { label: "ours", value: ours }

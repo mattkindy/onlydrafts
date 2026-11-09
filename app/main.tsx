@@ -213,6 +213,12 @@ const ROSTER_VIEWS: View[] = ["matchup", "league", "players", "team", "draft"];
  */
 const WEEK_VIEWS: View[] = ["matchup", "league", "players"];
 
+/**
+ * The views that read the week's lines without pricing a game, so they
+ * load the slate but leave the scoreboard alone.
+ */
+const SLATE_VIEWS: View[] = [...WEEK_VIEWS, "team"];
+
 /** how old a read can be before one of those views asks the provider again */
 const STALE_AFTER = 2 * 60 * 1000;
 
@@ -359,9 +365,9 @@ function App() {
     return () => { stale = true; };
   }, [scoreboard.tick]);
 
-  /** the week itself is only fetched once you ask for a tab that prices one */
+  /** the week itself is only fetched once you ask for a tab that reads one */
   useEffect(() => {
-    if (!WEEK_VIEWS.includes(view) || !week) {
+    if (!SLATE_VIEWS.includes(view) || !week) {
       return;
     }
 
@@ -1091,6 +1097,10 @@ function App() {
               onKeeperChange={() => setMarks((n) => n + 1)}
               listed={listed}
               week={weeks.length ? weeks[weeks.length - 1]!.week : null}
+              // the roster is this week's roster, so it only takes the
+              // lines of the week coming up, whatever week the matchup
+              // tab was last left on
+              rows={comingWeek ? slateRows : undefined}
             />
 
             {active.keepers === undefined || active.keepers === null

@@ -10,6 +10,7 @@
 import { useState } from "preact/hooks";
 import { keep } from "../lib/store.ts";
 import { espnCookiesFrom } from "../lib/providers.ts";
+import { useSheet } from "./useSheet.ts";
 
 const STEPS = [
   <>Sign in at <a href="https://www.espn.com/fantasy/" target="_blank" rel="noreferrer">espn.com</a> in this browser.</>,
@@ -40,9 +41,15 @@ export function EspnSheet(
     onKept();
   };
 
+  const sheet = useSheet(onClose);
+
   return (
     <div id="overlay" class="open" onClick={onClose}>
-      <div class="sheet" onClick={(e) => e.stopPropagation()}>
+      <div
+        class="sheet" ref={sheet} role="dialog" aria-modal="true"
+        aria-label="opening a private ESPN league"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h3>Opening a private ESPN league</h3>
         <div class="sub">
           ESPN only shares the two cookies that sign you in with its own

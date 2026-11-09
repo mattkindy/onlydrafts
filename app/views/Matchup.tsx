@@ -12,7 +12,7 @@
  */
 
 import type { ComponentChildren } from "preact";
-import { useMemo } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
 import { leadFor, type Explanation } from "../lib/explain.ts";
@@ -222,9 +222,32 @@ function Bench(
   },
 ) {
   const swaps = bestSwaps(choices);
+  const helps = swaps.some(({ option }) => option.gains > 0);
+  /**
+   * The whole bench is worth seeing when one of them would help. When
+   * none would, it is seven rows of minus signs, so it waits behind a
+   * line that says as much.
+   */
+  const [open, setOpen] = useState(false);
 
   if (swaps.length === 0) {
     return null;
+  }
+
+  if (!helps && !open) {
+    return (
+      <button class="slot-card benchfold" onClick={() => setOpen(true)}>
+        <b>bench</b>
+        <span>
+          {swaps.length} {swaps.length === 1 ? "player" : "players"}, none
+          would raise it
+        </span>
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+    );
   }
 
   return (
@@ -384,6 +407,48 @@ function Lineup(
   );
 }
 
+/**
+ * When the next of your starters locks: the earliest kickoff among the
+ * ones whose games have not started. Nothing when none of them has a
+ * kickoff the scoreboard gave, or all of them have started.
+ */
+export function nextLockOf(states: (GameState | null)[]): number | null {
+  const ahead = states
+    .filter((state): state is GameState =>
+      Boolean(state && state.where === "pre" && state.kickoff))
+    .map((state) => state.kickoff!);
+
+  return ahead.length ? Math.min(...ahead) : null;
+}
+
+/**
+ * A lock time the way you would say it: in minutes or hours when it is
+ * close, since "locks in 40 min" is a nudge and a clock time is not, and
+ * as a day and a time when it is further off.
+ */
+export function lockSays(at: number, now: number = Date.now()): string {
+  const mins = Math.round((at - now) / 60000);
+
+  if (mins <= 0) {
+    return "locking now";
+  }
+
+  if (mins < 60) {
+    return `locks in ${mins} min`;
+  }
+
+  if (mins < 6 * 60) {
+    const hours = Math.floor(mins / 60);
+    const rest = mins % 60;
+
+    return `locks in ${hours}h${rest ? ` ${rest}m` : ""}`;
+  }
+
+  return "locks " + new Date(at).toLocaleString([], {
+    weekday: "short", hour: "numeric", minute: "2-digit",
+  });
+}
+
 /** where a game has got to, read off both lineups */
 type Phase = "pre" | "live" | "final";
 
@@ -455,7 +520,7 @@ function Ring({ odds, tone }: { odds: number; tone: string }) {
  * sat under eight lineup cards and the bench.
  */
 function Scoreline(
-  { game, at, odds, projected, phase, week, teams }: {
+  { game, at, odds, projected, phase, week, teams, lock }: {
     game: Matchup;
     at: number;
     odds: number;
@@ -463,6 +528,8 @@ function Scoreline(
     phase: Phase;
     week: number | undefined;
     teams: Roster[];
+    /** when your next starter's game kicks off, if one is still to */
+    lock: number | null;
   },
 ) {
   const me = game.sides[at]!;
@@ -486,7 +553,9 @@ function Scoreline(
         <span>{week ? "week " + week : "this week"}</span>
         <span class={"phase " + phase}>
           {phase === "live" && <i class="pulse" aria-hidden="true" />}
-          {phase === "pre" ? "before kickoff" : phase}
+          {lock !== null && phase !== "final"
+            ? (phase === "live" ? "live · " : "") + lockSays(lock)
+            : phase === "pre" ? "before kickoff" : phase}
         </span>
       </div>
       <div class="hbody">
@@ -699,6 +768,8 @@ export function MyMatchup(props: Props) {
               phase={phaseOf(ours.game, rows, states, lines)}
               week={props.picked?.week}
               teams={props.teams ?? []}
+              lock={nextLockOf(ours.side.starters.map((starter) =>
+                starterState(starter, rows, states, lines)))}
             />
           )}
           <Worries worries={worries} onMore={onMore} onFind={props.onFind} />
