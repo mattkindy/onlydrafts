@@ -755,8 +755,9 @@
     padding: var(--s3) var(--s4); margin: 0; background: var(--panel); }
   .slot-card h3 { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2);
     align-items: center; margin: 0 0 var(--s2); font-size: var(--t3); }
-  /* the badges sit at the far end of the slot's heading, not after the name */
-  .slot-card h3 > .badge:first-of-type { margin-left: auto; }
+  /* what the injury report says sits by the name it is about; only
+     locked, which is about the game rather than the player, goes to the end */
+  .slot-card h3 > .badge.lock { margin-left: auto; }
   .slot-card h3 .now { font-weight: 800; font-variant-numeric: tabular-nums; }
   .slot-fig { font-size: var(--t1); color: var(--muted); font-weight: 400;
     font-variant-numeric: tabular-nums; }
@@ -933,6 +934,21 @@
     text-transform: uppercase; color: var(--faint); margin-bottom: var(--s3); }
   .phase { display: inline-flex; align-items: center; gap: var(--s1); }
   .phase.live { color: var(--go); }
+  /* the next lock, at the foot of the scoreline under a rule of its own */
+  .hlock { display: flex; align-items: center; gap: var(--s2);
+    margin-top: var(--s3); padding-top: var(--s3);
+    border-top: 1px solid var(--edge); font-size: var(--t2); color: var(--muted); }
+  .hlock svg { flex: 0 0 auto; }
+  .hlock { align-items: flex-start; }
+  .hlock svg { margin-top: 2px; }
+  /* the time on a line of its own, and who kicks off then under it */
+  .ltext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .hlock b { color: var(--ink); font-weight: 700; }
+  .hlock b::first-letter { text-transform: uppercase; }
+  .hlock .lwho { font-size: var(--t1); color: var(--muted); font-weight: 400; }
+  /* inside the hour it is worth reading first */
+  .hlock.soon { color: var(--mark); font-weight: 700; }
+  .hlock.soon b { color: var(--mark); }
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--go);
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--go) 60%, transparent);
     animation: pulse 1.6s ease-out infinite; }
@@ -950,8 +966,11 @@
   .hside .pts { font-size: var(--t6); font-weight: 800; line-height: 1.1;
     letter-spacing: -.02em; font-variant-numeric: tabular-nums;
     margin-top: var(--s1); }
-  .hside .proj { font-size: var(--t1); color: var(--muted);
+  .hside .proj { font-size: var(--t2); color: var(--muted); font-weight: 600;
     font-variant-numeric: tabular-nums; }
+  .hside .proj i { font-style: normal; font-size: var(--t1); font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint);
+    margin-right: .3rem; }
   .hodds { display: flex; flex-direction: column; align-items: center;
     gap: var(--s1); }
   .hring { position: relative; display: grid; place-items: center;
@@ -1033,8 +1052,11 @@
   .wrow > .chip { color: var(--muted); background: var(--chip);
     text-transform: uppercase; min-width: 2.6rem; text-align: center; }
   .wwho { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
-  .wwho i { font-style: normal; font-size: var(--t1); color: var(--mark); }
-  .worries li.bad .wwho i { color: var(--no); font-weight: 600; }
+  .wname { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+  .wname .playername { flex: 0 1 auto; }
+  .wname .badge { margin-left: 0; }
+  .wwho i { font-style: normal; font-size: var(--t1); color: var(--muted); }
+  .worries li.bad .wwho > i:only-of-type { color: var(--muted); }
   .worries button.quiet { flex: 0 0 auto; }
 
   /* a bench with nothing to offer, said in one line you can open */

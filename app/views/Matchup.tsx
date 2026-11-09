@@ -325,7 +325,7 @@ function Slot(
           his={listed.get(choice.starter.key)}
           row={rows.get(choice.starter.key)}
         />
-        {choice.locked && <span class="badge even">locked</span>}
+        {choice.locked && <span class="badge even lock">locked</span>}
       </h3>
 
       <div class="slot-figs">
@@ -418,10 +418,16 @@ function Lineup(
 }
 
 /**
- * When the next of your starters locks: the earliest kickoff among the
+ * When the next of your starters plays: the earliest kickoff among the
  * ones whose games have not started. Nothing when none of them has a
  * kickoff the scoreboard gave, or all of them have started.
  */
+export interface NextLock {
+  at: number;
+  /** the starters whose games kick off then */
+  who: string[];
+}
+
 export function nextLockOf(states: (GameState | null)[]): number | null {
   const ahead = states
     .filter((state): state is GameState =>
@@ -432,29 +438,31 @@ export function nextLockOf(states: (GameState | null)[]): number | null {
 }
 
 /**
- * A lock time the way you would say it: in minutes or hours when it is
- * close, since "locks in 40 min" is a nudge and a clock time is not, and
- * as a day and a time when it is further off.
+ * The next kickoff among your starters, the way you would say it: in
+ * minutes or hours when it is close, since "kickoff in 40 min" is a
+ * nudge and a clock time is not, and as a day and a time further off.
+ * Kickoff rather than lock, because that is the word people use, and a
+ * lineup locking at kickoff goes without saying.
  */
-export function lockSays(at: number, now: number = Date.now()): string {
+export function kickoffSays(at: number, now: number = Date.now()): string {
   const mins = Math.round((at - now) / 60000);
 
   if (mins <= 0) {
-    return "locking now";
+    return "kicking off now";
   }
 
   if (mins < 60) {
-    return `locks in ${mins} min`;
+    return `kickoff in ${mins} min`;
   }
 
   if (mins < 6 * 60) {
     const hours = Math.floor(mins / 60);
     const rest = mins % 60;
 
-    return `locks in ${hours}h${rest ? ` ${rest}m` : ""}`;
+    return `kickoff in ${hours}h${rest ? ` ${rest}m` : ""}`;
   }
 
-  return "locks " + new Date(at).toLocaleString([], {
+  return "kickoff " + new Date(at).toLocaleString([], {
     weekday: "short", hour: "numeric", minute: "2-digit",
   });
 }
@@ -475,8 +483,43 @@ export function freshSays(generated: string, now: number = Date.now()): string {
   return "projections from " + when;
 }
 
-/** where a game has got to, read off both lineups */
-type Phase = "pre" | "live" | "final";
+/** the next lock and whose it is, among the starters still to play */
+function nextLockIn(
+  side: Side, rows: Map<string, SlateRow>, states: Map<string, GameState>,
+  lines: Lines,
+): NextLock | null {
+  const each = side.starters.map((starter) => ({
+    starter, state: starterState(starter, rows, states, lines),
+  }));
+  const at = nextLockOf(each.map((e) => e.state));
+
+  if (at === null) {
+    return null;
+  }
+
+  return {
+    at,
+    who: each.filter((e) => e.state?.kickoff === at && e.state.where === "pre")
+      .map((e) => nameOf(e.starter.key, rows, lines, e.starter.name)),
+  };
+}
+
+/** a list of names the way it is said: A, B and 2 more */
+function namesSay(names: string[]): string {
+  if (names.length <= 2) {
+    return names.join(" and ");
+  }
+
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
+}
+
+/**
+ * Where a game has got to, read off both lineups: before anybody has
+ * kicked off, live while one of their games is being played, under way
+ * when some are done and none is on (a Sunday evening before the late
+ * game), and final.
+ */
+type Phase = "pre" | "live" | "between" | "final";
 
 function phaseOf(
   game: Matchup, rows: Map<string, SlateRow>,
@@ -493,7 +536,7 @@ function phaseOf(
     return "final";
   }
 
-  return all.some((state) => state && state.where !== "pre") ? "live" : "pre";
+  return all.some((state) => state && state.where !== "pre") ? "between" : "pre";
 }
 
 /**
@@ -506,11 +549,11 @@ function verdictOf(odds: number, phase: Phase, ahead: boolean) {
   }
 
   if (odds >= 0.6) {
-    return { word: phase === "live" ? "on course" : "favored", tone: "up" };
+    return { word: "favored", tone: "up" };
   }
 
   if (odds <= 0.4) {
-    return { word: phase === "live" ? "chasing" : "underdog", tone: "no" };
+    return { word: "underdog", tone: "no" };
   }
 
   return { word: "toss-up", tone: "even" };
@@ -554,8 +597,8 @@ function Scoreline(
     phase: Phase;
     week: number | undefined;
     teams: Roster[];
-    /** when your next starter's game kicks off, if one is still to */
-    lock: number | null;
+    /** when your next starter's game kicks off, and whose, if one is still to */
+    lock: NextLock | null;
   },
 ) {
   const me = game.sides[at]!;
@@ -567,9 +610,11 @@ function Scoreline(
       <span class="nm">{who.owner}</span>
       <span class="rec">{standingSays(teams, who.owner)}</span>
       <span class="pts">{scoredSays(who.points)}</span>
-      <span class="proj">
-        {phase === "final" ? "final" : "on course for " + scoredSays(proj)}
-      </span>
+      {/* where the side finishes on average, counting what it has; once
+          the game is over that is the score above, so it goes */}
+      {phase !== "final" && (
+        <span class="proj"><i>proj</i>{scoredSays(proj)}</span>
+      )}
     </div>
   );
 
@@ -581,9 +626,7 @@ function Scoreline(
         <span>{week ? "week " + week : "this week"}</span>
         <span class={"phase " + phase}>
           {phase === "live" && <i class="pulse" aria-hidden="true" />}
-          {lock !== null && phase !== "final"
-            ? (phase === "live" ? "live · " : "") + lockSays(lock)
-            : phase === "pre" ? "before kickoff" : phase}
+          {PHASE_SAYS[phase]}
         </span>
       </div>
       <div class="hbody">
@@ -599,9 +642,32 @@ function Scoreline(
         </div>
         {side(them, projected[1 - at]!, "them")}
       </div>
+      {/* the next lock on a line of its own, since it is a warning about
+          something you can still do and the corner says how the game is */}
+      {lock && phase !== "final" && (
+        <div class={"hlock" + (lock.at - Date.now() < 3600000 ? " soon" : "")}>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor"
+              stroke-width="1.6" />
+            <path d="M8 4.8V8l2.2 1.4" fill="none" stroke="currentColor"
+              stroke-width="1.6" stroke-linecap="round" />
+          </svg>
+          {/* kickoff is a noun, so the line reads the same whether one
+              player plays then or three */}
+          <span class="ltext">
+            <b>{kickoffSays(lock.at)}</b>
+            {lock.who.length > 0 && <span class="lwho">{namesSay(lock.who)}</span>}
+          </span>
+        </div>
+      )}
     </section>
   );
 }
+
+/** what the corner of the scoreline says at each point in the week */
+const PHASE_SAYS: Record<Phase, string> = {
+  pre: "before kickoff", live: "live", between: "under way", final: "final",
+};
 
 /** a slot's name as the players tab filters by it */
 const FIND_AT: Record<string, string> = {
@@ -615,6 +681,8 @@ interface Worry {
   slot: string;
   says: string;
   how: "bad" | "warn";
+  /** what the injury report calls it, IR or Out, worn as a badge by the name */
+  status?: string;
   /** the free agent who would do the most in his place, and what he is worth */
   fill?: Fill;
 }
@@ -715,16 +783,13 @@ function worriesOf(
     const hurt = hurtWord(listed.get(starter.key), row);
 
     if (row?.bye) {
-      out.push({ key: starter.key, name, slot: starter.slot, says: "on bye", how: "bad" });
-    } else if (hurt && WORRYING.has(hurt.status)) {
-      out.push({
-        key: starter.key, name, slot: starter.slot, how: "bad",
-        says: hurt.status.toLowerCase() + (hurt.part ? ", " + hurt.part.toLowerCase() : ""),
-      });
+      out.push({ key: starter.key, name, slot: starter.slot, status: "Bye", says: "", how: "bad" });
     } else if (hurt) {
       out.push({
-        key: starter.key, name, slot: starter.slot, how: "warn",
-        says: hurt.status.toLowerCase() + (hurt.part ? ", " + hurt.part.toLowerCase() : ""),
+        key: starter.key, name, slot: starter.slot,
+        how: WORRYING.has(hurt.status) ? "bad" : "warn",
+        status: hurt.status,
+        says: hurt.part ? hurt.part.toLowerCase() : "",
       });
     }
   }
@@ -742,7 +807,7 @@ function worriesOf(
     if (left > 0) {
       filled.set(slot, left - 1);
     } else {
-      out.push({ key: "empty-" + slot + out.length, name: "nobody", slot, says: "empty slot", how: "bad" });
+      out.push({ key: "empty-" + slot + out.length, name: "nobody", slot, status: "Empty", says: "", how: "bad" });
     }
   }
 
@@ -778,15 +843,22 @@ function Worries(
             <div class="wrow">
               <span class="chip">{w.slot}</span>
               <span class="wwho">
-                {w.name === "nobody"
-                  ? <b>nobody</b>
-                  : (
-                    <PlayerName
-                      name={w.name}
-                      onOpen={onMore ? () => onMore(w.key) : undefined}
-                    />
+                <span class="wname">
+                  {w.name === "nobody"
+                    ? <b>nobody</b>
+                    : (
+                      <PlayerName
+                        name={w.name}
+                        onOpen={onMore ? () => onMore(w.key) : undefined}
+                      />
+                    )}
+                  {w.status && (
+                    <span class={"badge " + (w.how === "bad" ? "bad" : "warn")}>
+                      {w.status}
+                    </span>
                   )}
-                <i>{w.says}</i>
+                </span>
+                {w.says && <i>{w.says}</i>}
               </span>
               {w.how === "bad" && onFind && !w.fill && (
                 <button
@@ -943,8 +1015,7 @@ export function MyMatchup(props: Props) {
               phase={phaseOf(ours.game, rows, states, lines)}
               week={props.picked?.week}
               teams={props.teams ?? []}
-              lock={nextLockOf(ours.side.starters.map((starter) =>
-                starterState(starter, rows, states, lines)))}
+              lock={nextLockIn(ours.side, rows, states, lines)}
             />
           )}
           <Worries
