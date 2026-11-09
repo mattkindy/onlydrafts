@@ -136,11 +136,23 @@ export interface ReportRow {
   head: string;
   /** the number, against the right hand edge of its column */
   figure: string;
-  /** the short line underneath */
+  /**
+   * The short line underneath. A line break splits it in two in the
+   * picture, where a column is too narrow for all of it, and the page
+   * reads the two parts as one line.
+   */
   foot: string;
   tone: Tone;
   chart?: RowChart;
+  /** across the whole card, where its line would not fit in a column */
+  wide?: boolean;
 }
+
+/** where a row sits across its card */
+export type Place = "left" | "right" | "wide";
+
+/** the foot as one line, for the page and for reading the picture back */
+export const footLine = (row: ReportRow) => row.foot.split("\n").join(" · ");
 
 /** one team's bar on the scores strip */
 export interface ScoreBar extends SideScore {
@@ -169,6 +181,8 @@ export interface RowsBlock {
   wide: boolean;
   /** where each row starts under the title, since a chart needs more room */
   tops: number[];
+  /** and where it sits across the card */
+  places: Place[];
   y: number;
   height: number;
 }
@@ -184,9 +198,11 @@ export interface ReportLayout extends Picture {
 // room to breathe: a recap is read on a phone, a block at a time
 const GAP = 36;
 const BLOCK_TITLE = 66;
-const ROW = 112;
-const CHART_ROW = 152;
-const CURVE_ROW = 268;
+const ROW = 120;
+const CHART_ROW = 176;
+const CURVE_ROW = 276;
+/** each line a foot runs to past its first */
+const FOOT_LINE = 28;
 const BLOCK_PAD = 32;
 const STRIP_ROW = 54;
 /** the note on a week still being played, under the subtitle */
@@ -216,7 +232,8 @@ const noteRow = (label: string, note: PlayerNote, tone: Tone): ReportRow => ({
   label,
   head: note.name,
   figure: scoredSays(note.points),
-  foot: `${note.owner} · proj ${note.line.toFixed(1)} · ${quantileSays(note.quantile)}`,
+  // in two lines, since in a column the whole of it would be cut short
+  foot: `${note.owner}\nproj ${note.line.toFixed(1)} · ${quantileSays(note.quantile)}`,
   tone,
   chart: spreadChart(note),
 });
@@ -236,39 +253,52 @@ const ROW_HEIGHTS: Record<RowChart["kind"], number> = {
 };
 
 const rowHeight = (row: ReportRow) =>
-  row.chart ? ROW_HEIGHTS[row.chart.kind] : ROW;
+  (row.chart ? ROW_HEIGHTS[row.chart.kind] : ROW) +
+  (row.foot.split("\n").length - 1) * FOOT_LINE;
 
 /**
- * Where each row starts under its block's title.
+ * Where each row starts under its block's title, and where it sits.
  *
- * Rows go two to a line unless the block is wide, and a line is as tall
- * as the taller of its two, so a spread bar next to a plain row does not
- * run into the line below.
+ * Rows go two to a line unless the block or the row is wide, and a line
+ * is as tall as the taller of its two, so a spread bar next to a plain
+ * row does not run into the line below.
  */
 function rowTops(
   rows: ReportRow[], wide: boolean,
-): { tops: number[]; height: number } {
-  const perLine = wide ? 1 : 2;
+): { tops: number[]; places: Place[]; height: number } {
   const tops: number[] = [];
+  const places: Place[] = [];
   let height = 0;
 
-  for (let at = 0; at < rows.length; at += perLine) {
-    const line = rows.slice(at, at + perLine);
+  for (let at = 0; at < rows.length;) {
+    const row = rows[at]!;
+    const next = rows[at + 1];
 
-    for (const _ of line) {
+    if (wide || row.wide) {
       tops.push(height);
+      places.push("wide");
+      height += rowHeight(row);
+      at += 1;
+    } else if (next && !next.wide) {
+      tops.push(height, height);
+      places.push("left", "right");
+      height += Math.max(rowHeight(row), rowHeight(next));
+      at += 2;
+    } else {
+      tops.push(height);
+      places.push("left");
+      height += rowHeight(row);
+      at += 1;
     }
-
-    height += Math.max(...line.map(rowHeight));
   }
 
-  return { tops, height };
+  return { tops, places, height };
 }
 
 function rowsBlock(
   title: string, rows: ReportRow[], y: number, wide = false,
 ): RowsBlock {
-  const { tops, height } = rowTops(rows, wide);
+  const { tops, places, height } = rowTops(rows, wide);
 
   return {
     kind: "rows",
@@ -276,6 +306,7 @@ function rowsBlock(
     rows,
     wide,
     tops,
+    places,
     y,
     height: BLOCK_TITLE + height + BLOCK_PAD,
   };
@@ -308,6 +339,30 @@ const positionRows = (report: Report): ReportRow[] =>
       : []),
   ]);
 
+/** how many characters of a foot fit across half the card */
+const COLUMN_CHARS = 34;
+
+/**
+ * A foot too long for a column, broken in two at the space nearest its
+ * middle, so it reads whole rather than cut short.
+ */
+export function inTwo(foot: string, fits = COLUMN_CHARS): string {
+  if (foot.length <= fits) {
+    return foot;
+  }
+
+  const middle = foot.length / 2;
+  let best = -1;
+
+  for (let at = foot.indexOf(" "); at >= 0; at = foot.indexOf(" ", at + 1)) {
+    if (best < 0 || Math.abs(at - middle) < Math.abs(best - middle)) {
+      best = at;
+    }
+  }
+
+  return best < 0 ? foot : foot.slice(0, best) + "\n" + foot.slice(best + 1);
+}
+
 const awardRows = (report: Report): ReportRow[] =>
   report.awards
     // the manager of the week is already at the top of the report
@@ -316,11 +371,14 @@ const awardRows = (report: Report): ReportRow[] =>
       label: AWARD_SAYS[given.award],
       head: given.owner,
       figure: given.figure,
-      foot: given.note ?? "",
+      // a chance bar's row is across the card, and the rest share a line
+      foot: given.fill === undefined ? inTwo(given.note ?? "") : given.note ?? "",
       tone: AWARD_TONE[given.award],
       ...(given.fill === undefined
         ? {}
         : {
+          // a chance bar's row has a sentence for a foot, so it takes the card
+          wide: true,
           chart: {
             kind: "fill", fill: given.fill, won: given.won ?? null,
           } as RowChart,
@@ -455,7 +513,7 @@ export function reportTextOf(layout: ReportLayout): string[] {
     }
 
     for (const row of block.rows) {
-      words.push(row.label, row.head, row.figure, row.foot);
+      words.push(row.label, row.head, row.figure, footLine(row));
     }
   }
 
@@ -653,10 +711,16 @@ function drawRow(
   ctx.textAlign = "left";
   ctx.fillStyle = SHADES.muted;
   ctx.font = "500 21px " + FONT;
-  ctx.fillText(fitted(ctx, row.foot, width), left, line + 32);
+
+  const feet = row.foot.split("\n");
+
+  feet.forEach((foot, at) => {
+    ctx.fillText(fitted(ctx, foot, width), left, line + 32 + at * FOOT_LINE);
+  });
 
   if (row.chart) {
-    CHARTS[row.chart.kind](ctx, row.chart, left, width, line + 50);
+    CHARTS[row.chart.kind](
+      ctx, row.chart, left, width, line + 60 + (feet.length - 1) * FOOT_LINE);
   }
 }
 
@@ -734,9 +798,9 @@ export function paintReport(
     }
 
     block.rows.forEach((row, at) => {
-      const side = block.wide ? 0 : at % 2;
-      const left = PAD + BLOCK_PAD + side * (column + GAP);
-      const across = block.wide ? width - BLOCK_PAD * 2 : column;
+      const place = block.places[at] ?? "wide";
+      const left = PAD + BLOCK_PAD + (place === "right" ? column + GAP : 0);
+      const across = place === "wide" ? width - BLOCK_PAD * 2 : column;
 
       drawRow(ctx, row, left, across, block.y + BLOCK_TITLE + block.tops[at]!);
     });

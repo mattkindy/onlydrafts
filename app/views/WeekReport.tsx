@@ -10,7 +10,7 @@
 import { useMemo, useState } from "preact/hooks";
 
 import {
-  layoutReport, shareReport,
+  footLine, layoutReport, shareReport,
   type ReportRow, type RowChart, type ScoresBlock,
 } from "../lib/shareReport.ts";
 import { scoredSays } from "../lib/scoring.ts";
@@ -114,7 +114,7 @@ function Row({ row }: { row: ReportRow }) {
       <span class="lab">{row.label}</span>
       <span class="who">{row.head}</span>
       <span class={"fig " + row.tone}>{row.figure}</span>
-      {row.foot && <span class="ft">{row.foot}</span>}
+      {row.foot && <span class="ft">{footLine(row)}</span>}
       {Chart && row.chart && <Chart chart={row.chart} />}
     </div>
   );

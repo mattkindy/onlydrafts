@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  inTwo,
   curveOf, layoutReport, reportTextOf, spreadBarOf,
 } from "./shareReport.ts";
 import { WIDTH } from "./shareImage.ts";
@@ -238,5 +239,16 @@ describe("curveOf", () => {
 
   it("marks a week under the middle as a low one", () => {
     expect(curveOf(spread, 2).high).toBe(false);
+  });
+});
+
+describe("a foot too long for a column", () => {
+  it("breaks at the space nearest its middle", () => {
+    expect(inTwo("starting KC Concepcion over George Pickens wins it"))
+      .toBe("starting KC Concepcion over\nGeorge Pickens wins it");
+  });
+
+  it("leaves a short one alone", () => {
+    expect(inTwo("could have had 139.95")).toBe("could have had 139.95");
   });
 });
