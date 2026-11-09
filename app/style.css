@@ -1208,6 +1208,7 @@
   .pband.wide { opacity: .08; }
   .pline { fill: none; stroke: var(--ink); stroke-width: 2;
     stroke-linejoin: round; stroke-linecap: round; }
+  .pline.median { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
   .pdot { fill: var(--ink); stroke: var(--bg); stroke-width: 2; }
   .plabel { fill: var(--ink); font-size: 11px; font-weight: 700;
     font-variant-numeric: tabular-nums; }
@@ -1219,6 +1220,14 @@
   .pkey span { display: inline-flex; align-items: center; gap: 6px; }
   .pkey i { display: inline-block; width: 16px; }
   .pkey .kline { height: 2px; background: var(--ink); border-radius: 1px; }
+  .pkey .kline.median { background: repeating-linear-gradient(90deg,
+    var(--muted) 0 4px, transparent 4px 7px); }
+  /* what the what-if comes to, above its chart */
+  .whatnow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--s2);
+    margin: 0 0 var(--s2); font-size: var(--t2); color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .whatnow > span:first-child { flex-basis: 100%; }
+  .whatnow b { font-size: var(--t5); font-weight: 800; color: var(--ink); line-height: 1.1; }
   .pkey .kband { height: 10px; border-radius: 2px;
     background: color-mix(in srgb, var(--ink) 22%, transparent); }
   .pkey .kband.wide { background: color-mix(in srgb, var(--ink) 8%, transparent); }

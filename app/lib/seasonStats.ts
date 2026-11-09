@@ -279,6 +279,10 @@ export interface PlayoffRun {
   path: PathOutcome[][];
 }
 
+/** your playoff chance across all the ways a week can leave you */
+export const chanceOf = (outcomes: PathOutcome[]) =>
+  outcomes.reduce((sum, o) => sum + o.share * o.playoffs, 0);
+
 /**
  * The playoff chance a given share of seasons sit at or under, from the
  * ways a week can leave you. Each outcome stands at the middle of its

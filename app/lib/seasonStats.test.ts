@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Matchup, Side } from "./providers.ts";
 import {
-  bestLineupPoints, chanceAt, luckOf, pairKey, playoffOdds, scenarioPath, seasonOf, weeklySpread, winShare,
+  bestLineupPoints, chanceAt, chanceOf, luckOf, pairKey, playoffOdds, scenarioPath, seasonOf, weeklySpread, winShare,
 } from "./seasonStats.ts";
 
 const POS: Record<string, string> = {
@@ -189,8 +189,7 @@ describe("the rest of the season played out", () => {
   });
 
   it("moves the path in the week a picked result happens, not before", () => {
-    const meanOf = (col: { share: number; playoffs: number }[]) =>
-      col.reduce((sum, o) => sum + o.share * o.playoffs, 0);
+    const meanOf = chanceOf;
     const playOut = (picks: Map<string, string>) => playoffOdds({
       table, weeks, strength: even, playoffTeams: 2, forced: picks, draws: 2000, mine: "ann",
     });
@@ -220,6 +219,11 @@ describe("the rest of the season played out", () => {
     expect(meanOf(lost.cols[2]!)).toBeLessThan(meanOf(lost.cols[1]!) - 0.05);
     // one run before the pick and one from it on
     expect(plays).toEqual([0, 1]);
+    // and the last week's chance is the chance with the pick
+    const picked = playOut(new Map([[pairKey(2, "ann", "bo"), "ann"]]));
+
+    expect(chanceOf(won.cols[4]!)).toBeCloseTo(
+      picked.odds.find((o) => o.owner === "ann")!.playoffs, 9);
 
     // and with the runs kept, a later pick plays only the weeks it changes
     const runs = new Map();
