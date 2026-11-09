@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Matchup, Side } from "./providers.ts";
 import {
-  bestLineupPoints, luckOf, pairKey, playoffOdds, seasonOf, weeklySpread, winShare,
+  bestLineupPoints, chanceAt, luckOf, pairKey, playoffOdds, seasonOf, weeklySpread, winShare,
 } from "./seasonStats.ts";
 
 const POS: Record<string, string> = {
@@ -138,6 +138,54 @@ describe("the rest of the season played out", () => {
     expect(of("ann").wins).toBe(4);
     expect(of("cy").wins).toBe(9);
     expect([of("bo").playoffs, of("cy").playoffs]).toEqual([1, 1]);
+  });
+
+  it("follows your record week by week, and averages back to your chance", () => {
+    const run = playoffOdds({
+      table, weeks, strength: even, playoffTeams: 2, draws: 3000, mine: "ann",
+    });
+    const now = run.odds.find((o) => o.owner === "ann")!.playoffs;
+
+    expect(run.path).toHaveLength(weeks.length);
+    run.path.forEach((week, w) => {
+      expect(week.every((o) => o.played === w + 1)).toBe(true);
+      expect(week.reduce((sum, o) => sum + o.share, 0)).toBeCloseTo(1, 9);
+      // however the seasons are split, the split averages to the whole
+      expect(week.reduce((sum, o) => sum + o.share * o.playoffs, 0)).toBeCloseTo(now, 9);
+    });
+
+    const last = run.path[weeks.length - 1]!;
+    const most = last.find((o) => o.won === 5)!;
+    const fewest = last.find((o) => o.won === 0)!;
+
+    expect(most.playoffs).toBeGreaterThan(fewest.playoffs);
+  });
+
+  it("keeps only the record a pick leaves you", () => {
+    const forced = new Map([[pairKey(0, "ann", "bo"), "ann"]]);
+    const run = playoffOdds({
+      table, weeks, strength: even, playoffTeams: 2, forced, draws: 500, mine: "ann",
+    });
+
+    expect(run.path[0]!.map((o) => [o.won, o.share])).toEqual([[1, 1]]);
+  });
+
+  it("has no path without a team of yours", () => {
+    expect(playoffOdds({ table, weeks, strength: even, playoffTeams: 2, draws: 50 }).path)
+      .toEqual([]);
+  });
+
+  it("reads a share of seasons off the ways a week can go", () => {
+    const ways = [
+      { won: 0, played: 1, share: 0.5, playoffs: 0.4 },
+      { won: 1, played: 1, share: 0.5, playoffs: 0.7 },
+    ];
+
+    expect(chanceAt(ways, 0.5)).toBeCloseTo(0.55, 9);
+    expect(chanceAt(ways, 0.1)).toBe(0.4);
+    expect(chanceAt(ways, 0.9)).toBe(0.7);
+    expect(chanceAt([{ won: 2, played: 2, share: 1, playoffs: 0.9 }], 0.5)).toBe(0.9);
+    expect(chanceAt([], 0.5)).toBe(0);
   });
 
   it("gives the same answer twice", () => {

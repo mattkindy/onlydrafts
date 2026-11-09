@@ -251,11 +251,68 @@ export interface PlayoffOdds {
 export const pairKey = (week: number, a: string, b: string) =>
   week + ":" + [a, b].sort().join("|");
 
+/** one way your season can stand after a week still to play */
+export interface PathOutcome {
+  /** your wins from here through that week */
+  won: number;
+  /** and your games from here through it */
+  played: number;
+  /** how often the season goes that way */
+  share: number;
+  /** your playoff chance when it does */
+  playoffs: number;
+}
+
 export interface PlayoffRun {
   odds: PlayoffOdds[];
   /** your odds if you win this week's game, and if you lose it */
   ifWin: number | null;
   ifLose: number | null;
+  /**
+   * After each week still to play, this one first, the records you can
+   * have from here, how often you have each and how often you make it
+   * from there. Empty without a team of yours in the table.
+   */
+  path: PathOutcome[][];
+}
+
+/**
+ * The playoff chance a given share of seasons sit at or under, from the
+ * ways a week can leave you. Each outcome stands at the middle of its
+ * share and the chance runs straight between them, so two equally
+ * likely outcomes put the median halfway between their chances.
+ */
+export function chanceAt(outcomes: PathOutcome[], share: number): number {
+  const sorted = outcomes.filter((o) => o.share > 0)
+    .sort((a, b) => a.playoffs - b.playoffs);
+  const total = sorted.reduce((sum, o) => sum + o.share, 0);
+
+  if (!sorted.length || total <= 0) {
+    return 0;
+  }
+
+  let before = 0;
+  const marks = sorted.map((o) => {
+    const mid = (before + o.share / 2) / total;
+
+    before += o.share;
+    return { mid, value: o.playoffs };
+  });
+
+  if (share <= marks[0]!.mid) {
+    return marks[0]!.value;
+  }
+
+  for (let i = 1; i < marks.length; i++) {
+    const lo = marks[i - 1]!;
+    const hi = marks[i]!;
+
+    if (share <= hi.mid) {
+      return lo.value + ((share - lo.mid) / (hi.mid - lo.mid)) * (hi.value - lo.value);
+    }
+  }
+
+  return marks[marks.length - 1]!.value;
 }
 
 /**
@@ -296,11 +353,27 @@ export function playoffOdds(input: {
   const next = seeded(owners.length * 7919 + input.weeks.length * 104729 + draws);
   const thisWeek = input.thisWeek ?? [];
   const settled = new Set(thisWeek.flatMap((g) => [g.a, g.b]));
+  // your games from here through each week, and for each week and each
+  // number of wins by then, how many seasons went that way and made it
+  const playedBy: number[] = [];
+
+  input.weeks.reduce((count, pairs) => {
+    const plays = me !== undefined && pairs.some(([a, b]) =>
+      (at.get(a) === me && at.has(b)) || (at.get(b) === me && at.has(a)));
+
+    playedBy.push(count + Number(plays));
+    return count + Number(plays);
+  }, 0);
+
+  const ways = playedBy.map((n) => new Array<number>(n + 1).fill(0));
+  const waysMade = playedBy.map((n) => new Array<number>(n + 1).fill(0));
+  const trail = new Array<number>(input.weeks.length).fill(0);
 
   for (let run = 0; run < draws; run++) {
     const wins = input.table.map((t) => t.wins + t.ties / 2);
     const pf = input.table.map((t) => t.pf);
     let iWon: boolean | null = null;
+    let mineWon = 0;
 
     input.weeks.forEach((pairs, w) => {
       for (const [a, b] of pairs) {
@@ -351,10 +424,18 @@ export function playoffOdds(input: {
 
         wins[aWins ? ia : ib]! += 1;
 
-        if (w === 0 && me !== undefined && (ia === me || ib === me)) {
-          iWon = (ia === me) === aWins;
+        if (me !== undefined && (ia === me || ib === me)) {
+          const won = (ia === me) === aWins;
+
+          mineWon += Number(won);
+
+          if (w === 0) {
+            iWon = won;
+          }
         }
       }
+
+      trail[w] = mineWon;
     });
 
     const order = owners.map((_, i) => i)
@@ -364,9 +445,18 @@ export function playoffOdds(input: {
     firsts[order[0]!]!++;
     owners.forEach((_, i) => { winsSum[i]! += wins[i]!; });
 
-    if (me !== undefined && iWon !== null) {
-      const inIt = order.slice(0, input.playoffTeams).includes(me);
+    if (me === undefined) {
+      continue;
+    }
 
+    const inIt = order.slice(0, input.playoffTeams).includes(me);
+
+    trail.forEach((won, w) => {
+      ways[w]![won]! += 1;
+      waysMade[w]![won]! += Number(inIt);
+    });
+
+    if (iWon !== null) {
       if (iWon) {
         wonRuns++;
         wonMade += Number(inIt);
@@ -386,5 +476,14 @@ export function playoffOdds(input: {
     })),
     ifWin: wonRuns ? wonMade / wonRuns : null,
     ifLose: lostRuns ? lostMade / lostRuns : null,
+    path: me === undefined ? [] : ways.map((counts, w) =>
+      counts.flatMap((seasons, won): PathOutcome[] => seasons
+        ? [{
+          won,
+          played: playedBy[w]!,
+          share: seasons / draws,
+          playoffs: waysMade[w]![won]! / seasons,
+        }]
+        : [])),
   };
 }

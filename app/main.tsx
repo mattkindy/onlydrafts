@@ -527,6 +527,17 @@ function App() {
   );
 
   /**
+   * This week as the stats tab plays it out: its games, lineups and the
+   * scoreboard, so a game under way counts from the score it has. Kept
+   * as one value, so the season is played again when a score moves and
+   * not every time the page draws.
+   */
+  const statsWeek = useMemo(
+    () => ({ games, rows: slateRows, states: scoreboard.states }),
+    [games, slateRows, scoreboard.states],
+  );
+
+  /**
    * What the waiver page prices injuries by. Sleeper's file, read here, is
    * the newer word; until it arrives, or when it cannot be read, the
    * build's reading of the same statuses stands in, so a man on reserve
@@ -827,6 +838,16 @@ function App() {
 
     window.scrollTo(0, 0);
   }, [view]);
+
+  // the stats tab plays the season out from today, so it reads the week
+  // being played, whichever week another tab was looking back at
+  useEffect(() => {
+    const latest = weeks[weeks.length - 1];
+
+    if (view === "stats" && latest && week?.week !== latest.week) {
+      setWeek(latest);
+    }
+  }, [view, weeks]);
 
   /** a hole in your lineup, taken to the free agents who could fill it */
   const findAt = (position: string) => {
@@ -1300,7 +1321,7 @@ function App() {
             players={players}
             coming={weeks[weeks.length - 1]!.week}
             thisWeek={comingWeek
-              ? { games, rows: slateRows, states: scoreboard.states }
+              ? statsWeek
               : undefined}
             boardPerCatch={board.perCatch}
             listed={listed}

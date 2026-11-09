@@ -1199,20 +1199,38 @@
   table.stats td:first-child { max-width: 9rem; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
 
-  /* the two ways the season goes from here, a line each */
+  /* where your chance is likely to go: a median, and two bands around it */
   .path svg { width: 100%; height: auto; display: block; overflow: visible; }
   .pgrid { stroke: var(--edge); stroke-width: 1; }
   .paxis { fill: var(--faint); font-size: 10px; font-variant-numeric: tabular-nums; }
-  .pnow { stroke: var(--edge); stroke-width: 1; stroke-dasharray: 2 3; }
-  .pline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-  .pline.win { stroke: var(--ink); }
-  .pline.lose { stroke: var(--muted); stroke-dasharray: 5 4; }
-  .pdot { stroke: var(--bg); stroke-width: 2; }
-  .pdot.win { fill: var(--ink); }
-  .pdot.lose { fill: var(--muted); }
-  .plabel { fill: var(--ink); font-size: 11px; font-weight: 700; }
-  .plabel.lose { fill: var(--muted); }
+  .pnow { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 2 3; }
+  .pband { fill: var(--ink); opacity: .14; }
+  .pband.wide { opacity: .08; }
+  .pline { fill: none; stroke: var(--ink); stroke-width: 2;
+    stroke-linejoin: round; stroke-linecap: round; }
+  .pdot { fill: var(--ink); stroke: var(--bg); stroke-width: 2; }
+  .plabel { fill: var(--ink); font-size: 11px; font-weight: 700;
+    font-variant-numeric: tabular-nums; }
   .ptap { fill: transparent; cursor: pointer; }
+  .pkey { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); margin: var(--s1) 0 0;
+    font-size: var(--t1); color: var(--muted); }
+  .pkey span { display: inline-flex; align-items: center; gap: 6px; }
+  .pkey i { display: inline-block; width: 16px; }
+  .pkey .kline { height: 2px; background: var(--ink); border-radius: 1px; }
+  .pkey .kband { height: 10px; border-radius: 2px;
+    background: color-mix(in srgb, var(--ink) 22%, transparent); }
+  .pkey .kband.wide { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+  /* the records a week can leave you with, how likely, and what each is worth */
+  table.ways { width: 100%; border-collapse: collapse; margin-top: var(--s2);
+    font-size: var(--t2); font-variant-numeric: tabular-nums; }
+  table.ways th { font-size: var(--t1); font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--faint); text-align: left;
+    padding: 0 var(--s2) var(--s1) 0; white-space: nowrap; }
+  table.ways td { padding: var(--s1) 0; border-top: 1px solid var(--edge); }
+  table.ways th:last-child, table.ways td:last-child { text-align: right; }
+  table.ways td:first-child { font-weight: 600; width: 6rem; }
+  .wlik { display: grid; grid-template-columns: minmax(3rem, 7rem) auto; align-items: center;
+    gap: var(--s2); color: var(--muted); }
   .hint.scenario { color: var(--mark); margin: 0; }
 
   /* how you think your team will score, on a slider */
