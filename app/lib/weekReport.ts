@@ -184,6 +184,13 @@ export interface ReportInput {
   weeks?: PlayerWeek[];
   /** the keys of every player somebody in the league has */
   rostered?: Set<string>;
+  /**
+   * The week is known to be over, as every week before the one being
+   * played is, so every game counts as final whatever the scoreboard
+   * says. A feed that has moved on to this week, or lost a game, would
+   * otherwise leave an old week's recap saying its numbers will move.
+   */
+  over?: boolean;
 }
 
 type Starter = Side["starters"][number];
@@ -556,7 +563,7 @@ function sideLinesOf(input: ReportInput): SideLine[] {
   const out: SideLine[] = [];
 
   for (const [at, game] of input.games.entries()) {
-    if (!finishedGame(game, input.rows, input.states, input.lines)) {
+    if (!input.over && !finishedGame(game, input.rows, input.states, input.lines)) {
       continue;
     }
 

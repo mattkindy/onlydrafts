@@ -5,9 +5,10 @@ import { join } from "node:path";
 import {
   alternativesFor, bestLineupFor, clockLeftOf, fractionLeft, gameStates,
   hasLineup, hurtFrom, initialForm, liveDraws, myGameIn, nextKickoffFrom,
-  outscoreShare, oddsFor, settledGame, standingFor, sideTotals, situationsFrom,
-  spreadOf, starterState, statesFrom, stockLine,
+  outscoreShare, oddsFor, sameWeekAs, settledGame, standingFor, sideTotals, situationsFrom,
+  spreadOf, starterState, statesFrom, stockLine, withEspnFilling,
 } from "./matchups.ts";
+import type { GameRead } from "./gameRead.ts";
 import type { GameState, InGameStatus } from "./matchups.ts";
 import type { Matchup, Side } from "./providers.ts";
 import type { SlateRow } from "./slate.ts";
@@ -1098,5 +1099,41 @@ describe("gameStates", () => {
 
     expect(got.states.get("GB")?.kickoff).toBe(Date.parse("2026-09-25T00:15Z"));
     expect(got.states.get("ATL")?.kickoff).toBe(Date.parse("2026-09-25T00:15Z"));
+  });
+});
+
+describe("the league's feed and ESPN's scoreboard", () => {
+  const SUNDAY = Date.UTC(2026, 9, 25, 17);
+  const WEEK = 7 * 24 * 60 * 60 * 1000;
+  const game = (home: string, away: string, kickoff: number, where: GameRead["where"] = "post"): GameRead => ({
+    where, home, away, points: {}, kickoff, period: 4, clock: 0, timeouts: {}, redZone: false,
+  });
+  // ESPN asked for week 8, and the league's feed for the same week
+  const espn = [game("DET", "MIN", SUNDAY), game("KC", "LV", SUNDAY + 3 * 3600e3), game("BUF", "MIA", SUNDAY)];
+
+  it("keeps the league's games when they are the same week's", () => {
+    const own = [game("DET", "MIN", SUNDAY + 60e3), game("KC", "LV", SUNDAY + 3 * 3600e3)];
+
+    expect(sameWeekAs(own, espn)).toBe(true);
+    // and ESPN fills the game the league's feed left out
+    expect(withEspnFilling(own, espn).map((g) => g.home)).toEqual(["DET", "KC", "BUF"]);
+  });
+
+  it("takes ESPN's whole week when the league's feed answered for another", () => {
+    // the week being played now: other pairings, two weeks on, not yet over
+    const now = [
+      game("DET", "GB", SUNDAY + 2 * WEEK, "pre"),
+      game("KC", "DEN", SUNDAY + 2 * WEEK, "in"),
+      game("MIA", "NYJ", SUNDAY + 2 * WEEK, "pre"),
+    ];
+
+    expect(sameWeekAs(now, espn)).toBe(false);
+    expect(withEspnFilling(now, espn)).toEqual(espn);
+  });
+
+  it("goes with the league's feed when ESPN has nothing to check it by", () => {
+    const own = [game("DET", "GB", SUNDAY)];
+
+    expect(withEspnFilling(own, [])).toEqual(own);
   });
 });

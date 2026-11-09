@@ -551,11 +551,52 @@ const OWN_GAMES: Record<League["provider"], (
   espn: () => Promise.resolve(null),
 };
 
+/** kickoffs further apart than this are not the same game */
+const SAME_GAME_WITHIN = 12 * 60 * 60 * 1000;
+
+/**
+ * Whether the provider's games are for the same week as ESPN's. Asked
+ * for a week already played, a live feed can answer with the week being
+ * played now, and every game it has would then be another week's: other
+ * pairings, kicking off days apart. A game only one of them has says
+ * nothing either way.
+ */
+export function sameWeekAs(own: GameRead[], espn: GameRead[]): boolean {
+  const espnByTeam = new Map(espn.flatMap((game) => [[game.home, game], [game.away, game]]));
+  let compared = 0;
+  let agreed = 0;
+
+  for (const game of own) {
+    const theirs = espnByTeam.get(game.home);
+
+    if (!theirs) {
+      continue;
+    }
+
+    const paired = new Set([theirs.home, theirs.away]).has(game.away);
+    const timed = game.kickoff === undefined || theirs.kickoff === undefined ||
+      Math.abs(game.kickoff - theirs.kickoff) < SAME_GAME_WITHIN;
+
+    compared++;
+    agreed += Number(paired && timed);
+  }
+
+  return compared === 0 || agreed * 2 >= compared;
+}
+
 /** the provider's own games, with ESPN's for any team those leave out */
 export function withEspnFilling(
   own: GameRead[] | null, espn: GameRead[],
 ): GameRead[] {
   if (!own) {
+    return espn;
+  }
+
+  // another week's games would price this week's starters by the wrong
+  // clock, so ESPN, which is asked by week, has the whole week instead
+  if (espn.length && !sameWeekAs(own, espn)) {
+    sayOnce("the league's feed answered for another week, so ESPN's scoreboard stands in");
+
     return espn;
   }
 

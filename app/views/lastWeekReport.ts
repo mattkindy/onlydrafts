@@ -48,6 +48,8 @@ export function recapOf(
     pregame: games.length ? pregameOf(games, got.rows, lines) : [],
     ...(got.weeks ? { weeks: got.weeks } : {}),
     rostered: of.rostered,
+    // the week before the one on screen has always been played
+    over: true,
   });
 }
 

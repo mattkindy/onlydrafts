@@ -398,15 +398,19 @@ export function Matchups(
     [games, rows, lines],
   );
 
+  // a week before the newest one is over, whatever the scoreboard says
+  const newest = picker?.weeks[picker.weeks.length - 1]?.week;
+  const over = newest !== undefined && week < newest;
   const report = useMemo(
     () => states && league && games.length
       ? reportFor({
         league, week, games, rows, states, lines, slots, pregame,
         ...(weeks ? { weeks } : {}),
         rostered,
+        over,
       })
       : null,
-    [states, league, games, rows, lines, slots, week, pregame, weeks, rostered],
+    [states, league, games, rows, lines, slots, week, pregame, weeks, rostered, over],
   );
 
   // the newest week is the coming one from Tuesday on, so without this the

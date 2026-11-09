@@ -164,6 +164,15 @@ describe("reportFor", () => {
     expect(report.games).toBe(3);
   });
 
+  it("counts every game final in a week known to be over, whatever the scoreboard says", () => {
+    // a feed that has moved on to this week still has the Dolphins playing
+    const report = reportFor(input({ states: states({ MIA: IN_PLAY }), over: true }));
+
+    expect(report.provisional).toBe(false);
+    expect(report.finished).toBe(3);
+    expect(report.awards.length).toBeGreaterThan(0);
+  });
+
   it("counts the games that are over when one is not", () => {
     const late: Matchup[] = [
       ...GAMES.slice(0, 2),
