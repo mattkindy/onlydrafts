@@ -348,6 +348,30 @@ describe("the views", () => {
     expect(where.textContent).not.toContain("games played");
   });
 
+  it("drops the sleepers once the early weeks are past", async () => {
+    const taken = new Set(league.allRosters.flatMap((r) => r.keys.map((k) => k.key)));
+    const only = players.map((p) => ({ ...p, sleeper: null }));
+    const free = only.find((p) => !taken.has(p.key))!;
+
+    render(
+      <Waivers
+        players={only.map((p) => p.key === free.key
+          ? { ...p, sleeper: A_CLAIM } : p)}
+        league={league} posFilter="ALL" rows={new Map()}
+        games={[]} schedule={null} season={2026} week={9}
+        slate={null} roster={null} listed={new Map()}
+        onMore={() => {}}
+      />,
+      where,
+    );
+
+    for (let i = 0; i < 40 && !where.querySelector("h2"); i++) {
+      await new Promise((settle) => setTimeout(settle, 25));
+    }
+
+    expect(headings(where)).not.toContain("sleepers");
+  });
+
   it("draws the draft board", async () => {
     render(
       <DraftView

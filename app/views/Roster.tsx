@@ -11,6 +11,8 @@ import type { League } from "../lib/providers.ts";
 import type { Listed } from "../lib/availability.ts";
 import { hurtWord, type SlateRow } from "../lib/slate.ts";
 import { injuryBadge, WORRYING } from "./Draft.tsx";
+import { GoLink } from "./GoLink.tsx";
+import { lineupLink, PROVIDER_NAME } from "../lib/deepLinks.ts";
 import { SeasonCard, seasonScale } from "./Card.tsx";
 import { KeeperRow, keeperDraft, keeperRounds } from "./Keepers.tsx";
 
@@ -93,6 +95,9 @@ export function Roster(props: Props) {
             {props.rereading ? "refreshing..." : "refresh"}
           </button>
         )}
+        <GoLink href={lineupLink(league)}>
+          open in {PROVIDER_NAME[league.provider]}
+        </GoLink>
       </div>
 
       {/* the roster in one line: how many, and how many of them are a

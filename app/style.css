@@ -74,8 +74,10 @@
     overflow: hidden; text-overflow: ellipsis; }
   #crumb button.back { font: inherit; font-size: var(--t5); line-height: 1;
     background: none; border: none; color: var(--muted); cursor: pointer;
-    flex: 0 0 auto; width: var(--tap); height: var(--tap);
-    margin-left: calc(var(--s3) * -1); }
+    flex: 0 0 auto; width: 24px; height: var(--tap); padding: 0;
+    text-align: left; position: relative; }
+  #crumb button.back::after { content: ""; position: absolute;
+    inset: 0 -8px 0 -12px; }
   #crumb button.back:hover { color: var(--ink); }
   /* which way the page reads now, as one glyph rather than a word */
   nav button.theme { border: 1px solid var(--edge); border-radius: 999px;
@@ -751,8 +753,11 @@
   /* one slot in your own lineup, with the bench players who could take it */
   .slot-card { border: 1px solid var(--edge); border-radius: 12px;
     padding: var(--s3) var(--s4); margin: 0; background: var(--panel); }
-  .slot-card h3 { display: flex; flex-wrap: wrap; gap: var(--s1);
-    align-items: baseline; margin: 0 0 var(--s1); font-size: var(--t3); }
+  .slot-card h3 { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2);
+    align-items: center; margin: 0 0 var(--s2); font-size: var(--t3); }
+  /* what the injury report says sits by the name it is about; only
+     locked, which is about the game rather than the player, goes to the end */
+  .slot-card h3 > .badge.lock { margin-left: auto; }
   .slot-card h3 .now { font-weight: 800; font-variant-numeric: tabular-nums; }
   .slot-fig { font-size: var(--t1); color: var(--muted); font-weight: 400;
     font-variant-numeric: tabular-nums; }
@@ -766,16 +771,27 @@
     font-weight: 600; }
   /* what the list under a slot is: the bench players who could take it */
   .slot-card .over { color: var(--faint); text-transform: uppercase;
-    letter-spacing: .05em; font-size: var(--t1); margin-top: var(--s2); }
+    letter-spacing: .05em; font-size: var(--t1); margin-top: var(--s3); }
   .options { list-style: none; margin: 0; padding: 0; }
+  /*
+   * A bench row is two lines: his name with what he does to your win
+   * chance at the far end, then his figures under it. Left to wrap where
+   * they fell, the figures split across three ragged lines with the win
+   * chance stranded at the right of the second.
+   */
   .options li { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3);
-    align-items: baseline; padding: var(--s1) 0;
+    align-items: baseline; padding: var(--s2) 0;
     border-top: 1px solid var(--edge); font-size: var(--t2); }
   .options li.shut { opacity: .55; }
-  /* the name stays next to its figures instead of across the row from them */
-  .options li .playername { flex: 0 1 auto; min-width: 8rem; }
-  .options .delta { margin-left: auto; font-weight: 700; color: var(--muted);
+  .options li .playername { flex: 1 1 0; min-width: 0; }
+  .options .delta { flex: 0 0 auto; font-weight: 700; color: var(--muted);
     font-variant-numeric: tabular-nums; text-align: right; }
+  /* the label rides in front of the figure rather than over it */
+  .options .delta i { display: inline; margin-right: .3rem; }
+  .optfigs { flex: 1 1 100%; display: flex; flex-wrap: wrap;
+    align-items: flex-end; gap: var(--s1) var(--s4);
+    font-variant-numeric: tabular-nums; }
+  .optfigs .badge { margin-left: 0; align-self: center; }
   .options .delta.up { color: var(--go); }
   .why { flex-basis: 100%; margin: .15rem 0 .1rem; font-size: var(--t1);
     color: var(--muted); display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2);
@@ -904,24 +920,40 @@
 
   /*
    * Your game, at the top of the matchup tab: you on the left, them on
-   * the right, and between the two the one number the tab is for. The
-   * card's edge takes the verdict's colour, so the answer reads before
-   * any of the words do.
+   * the right, and between the two the one number the tab is for. Only
+   * the ring and the word under it take the verdict's colour; the names
+   * and scores stay in ink.
    */
   .hero { --tone: var(--mark); position: relative; overflow: hidden;
     background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; padding: var(--s4); }
-  .hero.up { --tone: var(--go); }
-  .hero.no { --tone: var(--no); }
+  .hero.tone-up { --tone: var(--go); }
+  .hero.tone-no { --tone: var(--no); }
   .htop { display: flex; justify-content: space-between; align-items: center;
     font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
     text-transform: uppercase; color: var(--faint); margin-bottom: var(--s3); }
-  .phase { display: inline-flex; align-items: center; gap: var(--s1); }
+  /* the dot's glow spreads 8px, so the word keeps clear of all of it */
+  .phase { display: inline-flex; align-items: center; gap: 12px; }
   .phase.live { color: var(--go); }
+  /* the next lock, at the foot of the scoreline under a rule of its own */
+  .hlock { display: flex; align-items: center; gap: var(--s2);
+    margin-top: var(--s3); padding-top: var(--s3);
+    border-top: 1px solid var(--edge); font-size: var(--t2); color: var(--muted); }
+  .hlock svg { flex: 0 0 auto; }
+  .hlock { align-items: flex-start; }
+  .hlock svg { margin-top: 2px; }
+  /* the time on a line of its own, and who kicks off then under it */
+  .ltext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .hlock b { color: var(--ink); font-weight: 700; }
+  .hlock b::first-letter { text-transform: uppercase; }
+  .hlock .lwho { font-size: var(--t1); color: var(--muted); font-weight: 400; }
+  /* inside the hour it is worth reading first */
+  .hlock.soon { color: var(--mark); font-weight: 700; }
+  .hlock.soon b { color: var(--mark); }
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--go);
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--go) 60%, transparent);
     animation: pulse 1.6s ease-out infinite; }
-  @keyframes pulse { to { box-shadow: 0 0 0 8px transparent; } }
+  @keyframes pulse { to { box-shadow: 0 0 0 7px transparent; } }
   @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
   .hbody { position: relative; z-index: 1; display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -935,35 +967,102 @@
   .hside .pts { font-size: var(--t6); font-weight: 800; line-height: 1.1;
     letter-spacing: -.02em; font-variant-numeric: tabular-nums;
     margin-top: var(--s1); }
-  .hside .proj { font-size: var(--t1); color: var(--muted);
+  .hside .proj { font-size: var(--t2); color: var(--muted); font-weight: 600;
     font-variant-numeric: tabular-nums; }
-  .hodds { position: relative; display: grid; place-items: center;
-    width: 92px; height: 92px; }
-  .hodds .ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hside .proj i { font-style: normal; font-size: var(--t1); font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint);
+    margin-right: .3rem; }
+  .hodds { display: flex; flex-direction: column; align-items: center;
+    gap: var(--s1); }
+  .hring { position: relative; display: grid; place-items: center;
+    width: 80px; height: 80px; }
+  .hring .ring { position: absolute; inset: 0; width: 100%; height: 100%; }
   .ring circle { fill: none; stroke-width: 7; }
   .ring .track { stroke: var(--chip); }
   .ring .fill { stroke: var(--tone, var(--go)); stroke-linecap: round;
     transition: stroke-dasharray .6s ease; }
   @media (prefers-reduced-motion: reduce) { .ring .fill { transition: none; } }
-  .hpct { font-size: var(--t5); font-weight: 800; line-height: 1;
-    font-variant-numeric: tabular-nums; margin-top: -.5rem; }
-  .hword { position: absolute; bottom: 22px; font-size: .625rem;
-    font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--tone); }
+  /* sized so 99.6% fits inside the ring with room either side */
+  .hpct { font-size: var(--t4); font-weight: 800; line-height: 1;
+    letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .hword { font-size: var(--t1); font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--tone); white-space: nowrap; }
+
+  /* a way out to the provider's own page, to act on what the page said */
+  .golink { display: inline-flex; align-items: center; gap: var(--s1);
+    font-size: var(--t2); font-weight: 600; color: var(--muted);
+    text-decoration: none; min-height: 32px; white-space: nowrap; }
+  .golink:hover { color: var(--ink); }
+  .golink:focus-visible { outline: 2px solid var(--go); outline-offset: 2px;
+    border-radius: 4px; }
+  .rosterhead .golink { margin-left: auto; }
+  .bestmove .golink { align-self: flex-start; margin-top: var(--s1); }
+  /* the lineup's heading, with the way to set it at the far end */
+  #out > div.lineuphead { display: flex; align-items: baseline;
+    justify-content: space-between; gap: var(--s3);
+    margin: var(--s4) 0 calc(var(--s1) * -1); }
+  .lineuphead h2 { margin: 0; }
+  /* a section's heading with what you can do with the section at its end */
+  #out > div.sectionhead { display: flex; align-items: center;
+    justify-content: space-between; gap: var(--s3);
+    margin: var(--s4) 0 calc(var(--s1) * -1); }
+  .sectionhead h2 { margin: 0; }
+  /*
+   * The free agent who fills a slot, in a panel of its own under the
+   * slot's row: who, his line, and what he does for you on one line, and
+   * the two ways to act on it under that, with room between them.
+   */
+  .worries .fill { margin: var(--s2) 0 0 calc(2.6rem + var(--s3));
+    background: var(--chip); border-radius: 10px;
+    padding: var(--s2) var(--s3); display: flex; flex-direction: column;
+    gap: var(--s1); }
+  .worries .fill .over { font-size: var(--t1); font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .worries .fwho { display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: var(--s1) var(--s2); }
+  .worries .fwho .playername { display: inline; flex: 0 1 auto; }
+  .worries .fwho .playername b { color: var(--ink); }
+  .worries .fwho i { font-style: normal; color: var(--faint); font-size: var(--t1); }
+  .worries .fwho b.up { margin-left: auto; font-weight: 700; white-space: nowrap; }
+  .worries .fill .facts { display: flex; flex-wrap: wrap; align-items: center;
+    gap: var(--s1) var(--s4); }
+  /* a word you can press, with nothing round it */
+  button.textbtn { font: inherit; font-size: var(--t2); font-weight: 600;
+    color: var(--muted); background: none; border: none; padding: 0;
+    min-height: 32px; cursor: pointer; }
+  button.textbtn:hover { color: var(--ink); }
+
+  /* when the week's lines were built, quiet at the end of the week's row */
+  .weekbar .fresh { margin-left: auto; font-size: var(--t1); color: var(--faint); }
+  .weekbar .fresh + #status:empty { display: none; }
+
+  /* the outline of a page still on its way */
+  .skeleton { display: flex; flex-direction: column; gap: var(--s2); }
+  .sk { height: 76px; border-radius: 12px; border: 1px solid var(--edge);
+    background: linear-gradient(90deg, var(--panel) 30%,
+      color-mix(in srgb, var(--chip) 70%, var(--panel)) 50%, var(--panel) 70%);
+    background-size: 300% 100%; animation: shimmer 1.4s ease-in-out infinite; }
+  .sk.lead { height: 150px; margin-bottom: var(--s1); }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+  @media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
 
   /* the starters who will not play, gathered where they cannot be missed */
   .worries { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 12px; padding: var(--s3) var(--s4) var(--s1); }
   .worries h3 { margin: 0 0 var(--s1); font-size: var(--t3); }
   .worries ul { list-style: none; margin: 0; padding: 0; }
-  .worries li { display: flex; align-items: center; gap: var(--s3);
-    padding: var(--s2) 0; border-top: 1px solid var(--edge); font-size: var(--t2); }
-  .worries li:first-child { border-top: none; }
-  .worries li > .chip { color: var(--muted); background: var(--chip);
+  .worries li { padding: var(--s3) 0; border-top: 1px solid var(--edge);
+    font-size: var(--t2); }
+  .worries li:first-child { border-top: none; padding-top: var(--s2); }
+  .wrow { display: flex; align-items: center; gap: var(--s3); }
+  .wrow > .chip { color: var(--muted); background: var(--chip);
     text-transform: uppercase; min-width: 2.6rem; text-align: center; }
   .wwho { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
-  .wwho i { font-style: normal; font-size: var(--t1); color: var(--mark); }
-  .worries li.bad .wwho i { color: var(--no); font-weight: 600; }
+  .wname { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+  .wname .playername { flex: 0 1 auto; }
+  .wname .badge { margin-left: 0; }
+  .wwho i { font-style: normal; font-size: var(--t1); color: var(--muted); }
+  .worries li.bad .wwho > i:only-of-type { color: var(--muted); }
   .worries button.quiet { flex: 0 0 auto; }
 
   /* a bench with nothing to offer, said in one line you can open */
@@ -1041,6 +1140,65 @@
   .lweek .odds.no { color: var(--no); }
   .lweek .odds small { font-size: .625rem; font-weight: 700; letter-spacing: .08em;
     text-transform: uppercase; color: var(--faint); margin-top: 2px; }
+  /*
+   * The stats tab. Your season as a card of tiles, two across on a phone:
+   * the label small over the figure, and what the figure means under it.
+   */
+  .statcard { background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 12px; padding: var(--s4); }
+  .shead { display: flex; justify-content: space-between; align-items: baseline;
+    gap: var(--s2); margin-bottom: var(--s3); }
+  .shead b { font-size: var(--t4); }
+  .shead span { color: var(--muted); font-size: var(--t2);
+    font-variant-numeric: tabular-nums; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    gap: var(--s4) var(--s3); }
+  .tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .tile i { font-style: normal; font-size: var(--t1); font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .tile b { font-size: var(--t5); font-weight: 800; line-height: 1.15;
+    font-variant-numeric: tabular-nums; }
+  .tile span { font-size: var(--t1); color: var(--muted); }
+
+  /* each team's playoff chance, a row each, the bar a share of the row */
+  .odds-list { display: flex; flex-direction: column; }
+  .orow { display: grid; grid-template-columns: minmax(0, 1fr) auto 5rem 3rem;
+    align-items: center; gap: var(--s3); padding: var(--s2) var(--s1);
+    border-bottom: 1px solid var(--edge); font-size: var(--t2); }
+  .orow.on { background: var(--chip); border-radius: 6px; }
+  .onm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .orec { display: flex; flex-direction: column; align-items: flex-end;
+    font-variant-numeric: tabular-nums; color: var(--muted); line-height: 1.2; }
+  .orec small { font-size: var(--t1); color: var(--faint); }
+  .obar { height: 8px; background: var(--chip); border-radius: 999px; overflow: hidden; }
+  .orow.on .obar { background: var(--panel); }
+  .obar u { display: block; height: 100%; background: var(--go); border-radius: 0 4px 4px 0; }
+  .orow > b { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* your score each week, a bar each, the league median a dashed mark */
+  .wchart { position: relative; display: flex; align-items: flex-end; gap: 2px;
+    height: 160px; padding-top: var(--s2); }
+  .wbar { flex: 1 1 0; min-width: 0; height: 100%; display: flex;
+    flex-direction: column; align-items: stretch; gap: 2px; background: none;
+    border: none; padding: 0; cursor: pointer; font: inherit; }
+  .wbar .col { position: relative; flex: 1 1 auto; }
+  .wbar .col u { position: absolute; left: 15%; right: 15%; bottom: 0;
+    background: color-mix(in srgb, var(--muted) 55%, var(--chip));
+    border-radius: 4px 4px 0 0; }
+  .wbar.on .col u { background: var(--ink); }
+  .wbar .col s { position: absolute; left: 4%; right: 4%; height: 0;
+    border-top: 2px dashed var(--faint); text-decoration: none; }
+  .wbar em { font-style: normal; font-size: var(--t1); font-weight: 700;
+    color: var(--muted); text-align: center; }
+  .wbar small { font-size: .625rem; color: var(--faint); text-align: center; }
+  .wbar:focus-visible { outline: 2px solid var(--go); outline-offset: 2px; border-radius: 4px; }
+  .wgrid { display: none; }
+  .wsay { margin: var(--s2) 0 0; font-size: var(--t2); color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .wsay b { color: var(--ink); }
+  table.stats td:first-child { max-width: 9rem; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+
   /* the table is the width of the page, so the numbers line up at its edge */
   table.rating.standings { display: table; }
   table.standings td:nth-child(n+3), table.standings th:nth-child(n+3) {
@@ -1096,7 +1254,7 @@
       margin: calc(var(--s3) * -1) calc(var(--s2) * -1) 0 0;
       background: var(--panel); z-index: 1; }
     .wrap { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
-    .hodds { width: 84px; height: 84px; }
+    .hring { width: 72px; height: 72px; }
     .hside .pts { font-size: var(--t5); }
     .chips button, .seg button, .keepbtn, button.quiet,
     #espnhelp { min-height: 36px; }

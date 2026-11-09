@@ -35,12 +35,14 @@ import { whyWords } from "../lib/waiverWhy.ts";
 import {
   weekPricesFor, type WeekAdd, type WeekDrop, type WeekPrices,
 } from "../lib/waiversWeek.ts";
-import { nameOf } from "./Advice.tsx";
+import { nameOf, WORTH_A_MOVE } from "./Advice.tsx";
 import { injuryBadge, matchesFilter } from "./Draft.tsx";
 import { Reading } from "./Reading.tsx";
 import { PRICED, useWaiverPrices } from "./waiverPrices.ts";
 import { useScoreboard, type WeekPoll } from "./scoreboard.ts";
 import { WeekRanks } from "./WeekRanks.tsx";
+import { GoLink } from "./GoLink.tsx";
+import { playersLink, PROVIDER_NAME } from "../lib/deepLinks.ts";
 
 /** which of the three questions the reader is asking */
 type Span = "week" | "season" | "ranks";
@@ -483,6 +485,9 @@ const SLEEPERS_SHOWN = 8;
  * more than he cost. This asks that instead: who is taking a starter's
  * work on a late round price.
  */
+/** the last week a free agent is measured against where he was drafted */
+const SLEEPERS_UNTIL = 5;
+
 function Sleepers(
   { rows, onMore }: { rows: Add[]; onMore: (p: Player) => void },
 ) {
@@ -836,7 +841,7 @@ export function Waivers(props: Props) {
       {/* the answer first: the one move the rest of the page argues for.
           It used to be a grey line under the drop table, the last thing on
           a page five phone screens long. */}
-      {!wanted && (best
+      {!wanted && (best && best.after - best.before >= WORTH_A_MOVE
         ? (
           <section class="bestmove">
             <span class="over">
@@ -850,9 +855,12 @@ export function Waivers(props: Props) {
               win % {pct(best.before)} <span aria-hidden="true">→</span>{" "}
               <b class={best.after > best.before ? "up" : ""}>{pct(best.after)}</b>
             </span>
+            <GoLink href={playersLink(league)}>
+              make the move in {PROVIDER_NAME[league.provider]}
+            </GoLink>
           </section>
         )
-        : <p class="hint">No add is worth a drop right now.</p>)}
+        : null)}
 
       {!wanted && <Groups groups={groups} onMore={props.onMore} />}
 
@@ -906,7 +914,12 @@ export function Waivers(props: Props) {
         </p>
       )}
 
-      <Sleepers rows={wire.filter(matching)} onMore={props.onMore} />
+      {/* a claim against a player's draft spot says less every week the
+          draft recedes, and by midseason the room has priced what it
+          knows, so the section goes once the early weeks are past */}
+      {(props.week === null || props.week <= SLEEPERS_UNTIL) && (
+        <Sleepers rows={wire.filter(matching)} onMore={props.onMore} />
+      )}
 
       <button
         class="fold"

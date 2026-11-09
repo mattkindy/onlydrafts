@@ -25,7 +25,7 @@ import { draftNow } from "./lib/draftWatch.ts";
 import type { Player } from "./lib/scoring.ts";
 
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
-import { Reading } from "./views/Reading.tsx";
+import { Reading, Skeleton } from "./views/Reading.tsx";
 import { EspnSheet } from "./views/EspnSheet.tsx";
 import { Roster } from "./views/Roster.tsx";
 import { DraftRating, MyDraftPicks } from "./views/DraftRating.tsx";
@@ -35,6 +35,7 @@ import { Matchups } from "./views/Matchups.tsx";
 import { Standings, standingSays } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import { LeagueWeek } from "./views/LeagueWeek.tsx";
+import { Stats } from "./views/Stats.tsx";
 import { useWeekPoll } from "./views/scoreboard.ts";
 import {
   listedOnSlate, loadSlate, onTheBooks, rosterKeys, slateUnder, weekRefs,
@@ -58,7 +59,7 @@ const ORDER_MEANS: Record<Order, string> = {
   adp: "where he usually goes, so who lasts until your next pick",
 };
 
-type View = "leagues" | "matchup" | "league" | "players" | "team" | "draft";
+type View = "leagues" | "matchup" | "league" | "players" | "team" | "stats" | "draft";
 
 /**
  * What each view is called, the one line under it, and the longer
@@ -94,6 +95,15 @@ const COPY: Record<View, [string, string, string]> = {
     "",
     "Tap a player for his season outlook. In keeper leagues, tap keep to price him.",
   ],
+  stats: [
+    "Stats",
+    "",
+    "All-play is the share of games you would win playing every team every week. " +
+    "Luck is your wins over what that share earns you. Start efficiency is what your " +
+    "starters scored over the most your roster could have. Playoff chances play the " +
+    "rest of the regular season out thousands of times, each team scoring around what " +
+    "its roster projects to start.",
+  ],
   draft: [
     "Draft",
     "",
@@ -107,7 +117,7 @@ const COPY: Record<View, [string, string, string]> = {
  */
 const TAB_SAYS: Record<View, string> = {
   leagues: "leagues", matchup: "matchup", league: "league",
-  players: "players", team: "team", draft: "draft",
+  players: "players", team: "team", stats: "stats", draft: "draft",
 };
 
 /** one stroke drawing per tab, in the icon's 24 unit box */
@@ -123,6 +133,8 @@ const TAB_ICON: Record<View, string> = {
   team: "M7 5H5.5A1.5 1.5 0 0 0 4 6.5v13A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 18.5 5H17M9 3h6v4H9zM8 12h8M8 16h5",
   // the board
   draft: "M4 4h16v16H4zM4 9.5h16M4 15h16M9.5 4v16M15 4v16",
+  // three bars on a baseline
+  stats: "M4 20h16M6.5 20v-6M12 20V6M17.5 20v-9",
 };
 
 function TabIcon({ view }: { view: View }) {
@@ -208,14 +220,14 @@ const keeperKey = (lg: League) => "keepers." + lg.provider + "." + lg.leagueId;
  * The views where your own roster is part of the answer, so a player
  * added off waivers since the league was read would show as missing.
  */
-const ROSTER_VIEWS: View[] = ["matchup", "league", "players", "team", "draft"];
+const ROSTER_VIEWS: View[] = ["matchup", "league", "players", "team", "stats", "draft"];
 
 /**
  * The views that price this week, so they need the slate and the league's
  * own games for it. The players page needs both to say what a move does to
  * the game you are actually playing.
  */
-const WEEK_VIEWS: View[] = ["matchup", "league", "players"];
+const WEEK_VIEWS: View[] = ["matchup", "league", "players", "stats"];
 
 /**
  * The views that read the week's lines without pricing a game, so they
@@ -265,6 +277,12 @@ function App() {
   const [perTeamSaid, setPerTeam] = useState(() => stored("keepn", 3));
   const perTeam = active?.keepersPerTeam ?? perTeamSaid;
   const [posFilter, setPosFilter] = useState("ALL");
+  /**
+   * The players tab filters on its own. It shared the draft board's,
+   * so a hole filled from the matchup tab left the draft board showing
+   * quarterbacks only the next time it opened.
+   */
+  const [playersPos, setPlayersPos] = useState("ALL");
   const [theme, setTheme] = useState<Theme>(() => stored<Theme>("theme", "system"));
   const [query, setQuery] = useState("");
   /** whether the longer answer behind the tab row's question mark is open */
@@ -779,7 +797,7 @@ function App() {
    */
   const tabs: View[] = drafting
     ? ["draft", "matchup", "league", "players", "team"]
-    : ["matchup", "league", "players", "team"];
+    : ["matchup", "league", "players", "team", "stats"];
 
   useEffect(() => {
     if (view !== "leagues" && !tabs.includes(view)) {
@@ -812,7 +830,7 @@ function App() {
 
   /** a hole in your lineup, taken to the free agents who could fill it */
   const findAt = (position: string) => {
-    setPosFilter(position);
+    setPlayersPos(position);
     setView("players");
   };
 
@@ -1026,7 +1044,7 @@ function App() {
       )}
 
       <div id="out">
-        {!board && <Reading>loading the board...</Reading>}
+        {!board && <Skeleton saying="loading the board" lead={view !== "leagues"} />}
 
         {board && view === "leagues" && (
           leagues.length === 0
@@ -1209,6 +1227,7 @@ function App() {
             onMore={openKey}
             teams={active?.allRosters ?? []}
             onFind={findAt}
+            leagueOf={active}
           />
         )}
 
@@ -1275,12 +1294,25 @@ function App() {
           </>
         )}
 
+        {board && active && view === "stats" && weeks.length > 0 && (
+          <Stats
+            league={active}
+            players={players}
+            coming={weeks[weeks.length - 1]!.week}
+            thisWeek={comingWeek
+              ? { games, rows: slateRows, states: scoreboard.states }
+              : undefined}
+            boardPerCatch={board.perCatch}
+            listed={listed}
+          />
+        )}
+
         {board && active && view === "players" && (
           <Waivers
             players={players}
             league={active}
-            posFilter={posFilter}
-            onPosFilter={setPosFilter}
+            posFilter={playersPos}
+            onPosFilter={setPlayersPos}
             rows={slateRows}
             games={games}
             schedule={board.schedule ?? null}
