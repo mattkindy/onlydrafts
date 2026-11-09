@@ -251,6 +251,13 @@ export interface PlayoffOdds {
 export const pairKey = (week: number, a: string, b: string) =>
   week + ":" + [a, b].sort().join("|");
 
+/**
+ * What a forced result says when nobody won: the game is a tie, half a
+ * win to each side. No team can be called this, since team names are
+ * printable.
+ */
+export const TIE = "\u0000tie";
+
 /** the week's place in the run a forced result's key is for */
 export const weekOfPair = (key: string) => Number(key.split(":")[0]);
 
@@ -258,6 +265,8 @@ export const weekOfPair = (key: string) => Number(key.split(":")[0]);
 export interface PathOutcome {
   /** your wins from here through that week */
   won: number;
+  /** your ties by then, which only a pick makes, so the same in every season */
+  tied: number;
   /** and your games from here through it */
   played: number;
   /** how often the season goes that way */
@@ -343,9 +352,9 @@ export function playoffOdds(input: {
   mine?: string;
   draws?: number;
   /**
-   * Results somebody has picked, by pairKey, each naming the winner. A
-   * picked game is settled before anything is drawn for it, which is
-   * how the page plays out a scenario.
+   * Results somebody has picked, by pairKey, each naming the winner, or
+   * TIE. A picked game is settled before anything is drawn for it, which
+   * is how the page plays out a scenario.
    */
   forced?: Map<string, string>;
 }): PlayoffRun {
@@ -363,14 +372,20 @@ export function playoffOdds(input: {
   // your games from here through each week, and for each week and each
   // number of wins by then, how many seasons went that way and made it
   const playedBy: number[] = [];
+  const tiedBy: number[] = [];
+  let playedSoFar = 0;
+  let tiedSoFar = 0;
 
-  input.weeks.reduce((count, pairs) => {
-    const plays = me !== undefined && pairs.some(([a, b]) =>
+  input.weeks.forEach((pairs, w) => {
+    const mine = me === undefined ? undefined : pairs.find(([a, b]) =>
       (at.get(a) === me && at.has(b)) || (at.get(b) === me && at.has(a)));
 
-    playedBy.push(count + Number(plays));
-    return count + Number(plays);
-  }, 0);
+    playedSoFar += Number(mine !== undefined);
+    tiedSoFar += Number(mine !== undefined &&
+      input.forced?.get(pairKey(w, mine[0], mine[1])) === TIE);
+    playedBy.push(playedSoFar);
+    tiedBy.push(tiedSoFar);
+  });
 
   const ways = playedBy.map((n) => new Array<number>(n + 1).fill(0));
   const waysMade = playedBy.map((n) => new Array<number>(n + 1).fill(0));
@@ -400,7 +415,7 @@ export function playoffOdds(input: {
 
     return [{
       ia, ib, known,
-      picked: picked === undefined ? null : picked === a,
+      picked: picked === undefined ? null : picked === TIE ? "tie" as const : picked === a,
       mine: me !== undefined && (ia === me || ib === me),
     }];
   }));
@@ -423,7 +438,14 @@ export function playoffOdds(input: {
       for (const { ia, ib, known, picked, mine } of games) {
         let aWins: boolean;
 
-        if (picked !== null) {
+        if (picked === "tie") {
+          // half a win each, and each side's usual score toward points for
+          wins[ia]! += 0.5;
+          wins[ib]! += 0.5;
+          pf[ia] = pf[ia]! + (known ? known.pa : meanOf[ia]!);
+          pf[ib] = pf[ib]! + (known ? known.pb : meanOf[ib]!);
+          continue;
+        } else if (picked !== null) {
           // the scores still count toward points for: this week's lineups
           // where the game has them, and each side's usual otherwise
           aWins = picked;
@@ -499,6 +521,7 @@ export function playoffOdds(input: {
       counts.flatMap((seasons, won): PathOutcome[] => seasons
         ? [{
           won,
+          tied: tiedBy[w]!,
           played: playedBy[w]!,
           share: seasons / draws,
           playoffs: waysMade[w]![won]! / seasons,

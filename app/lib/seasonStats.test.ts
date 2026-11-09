@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Matchup, Side } from "./providers.ts";
 import {
-  bestLineupPoints, chanceAt, chanceOf, luckOf, pairKey, playoffOdds, scenarioPath, seasonOf, weeklySpread, winShare,
+  bestLineupPoints, chanceAt, chanceOf, luckOf, pairKey, playoffOdds, scenarioPath, TIE, seasonOf, weeklySpread, winShare,
 } from "./seasonStats.ts";
 
 const POS: Record<string, string> = {
@@ -170,6 +170,23 @@ describe("the rest of the season played out", () => {
     expect(run.path[0]!.map((o) => [o.won, o.share])).toEqual([[1, 1]]);
   });
 
+  it("splits a picked tie, half a win to each side", () => {
+    const forced = new Map(weeks.flatMap((_, w) => [
+      [pairKey(w, "ann", "bo"), TIE], [pairKey(w, "cy", "di"), "cy"],
+    ]));
+    const run = playoffOdds({
+      table, weeks, strength: even, playoffTeams: 2, forced, draws: 200, mine: "ann",
+    });
+    const of = (owner: string) => run.odds.find((o) => o.owner === owner)!;
+
+    expect(of("ann").wins).toBe(6.5);
+    expect(of("bo").wins).toBe(6.5);
+    expect(of("cy").wins).toBe(9);
+    // a tie this week is neither the win nor the loss the tile prices
+    expect([run.ifWin, run.ifLose]).toEqual([null, null]);
+    expect(run.path[2]!.map((o) => [o.won, o.tied, o.played])).toEqual([[0, 3, 3]]);
+  });
+
   it("has no path without a team of yours", () => {
     expect(playoffOdds({ table, weeks, strength: even, playoffTeams: 2, draws: 50 }).path)
       .toEqual([]);
@@ -177,14 +194,14 @@ describe("the rest of the season played out", () => {
 
   it("reads a share of seasons off the ways a week can go", () => {
     const ways = [
-      { won: 0, played: 1, share: 0.5, playoffs: 0.4 },
-      { won: 1, played: 1, share: 0.5, playoffs: 0.7 },
+      { won: 0, tied: 0, played: 1, share: 0.5, playoffs: 0.4 },
+      { won: 1, tied: 0, played: 1, share: 0.5, playoffs: 0.7 },
     ];
 
     expect(chanceAt(ways, 0.5)).toBeCloseTo(0.55, 9);
     expect(chanceAt(ways, 0.1)).toBe(0.4);
     expect(chanceAt(ways, 0.9)).toBe(0.7);
-    expect(chanceAt([{ won: 2, played: 2, share: 1, playoffs: 0.9 }], 0.5)).toBe(0.9);
+    expect(chanceAt([{ won: 2, tied: 0, played: 2, share: 1, playoffs: 0.9 }], 0.5)).toBe(0.9);
     expect(chanceAt([], 0.5)).toBe(0);
   });
 
