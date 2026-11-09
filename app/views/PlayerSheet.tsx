@@ -1,7 +1,5 @@
 /** Everything the board says about one player, on top of whatever view you were in. */
 
-import { useEffect } from "preact/hooks";
-
 import type { Pays, Player } from "../lib/scoring.ts";
 import { payFor } from "../lib/scoring.ts";
 import { asRound } from "../lib/picks.ts";
@@ -12,6 +10,7 @@ import {
 import { WeatherMark, weatherWords } from "./WeatherMark.tsx";
 import { lineOver, movedBy } from "../lib/statLine.ts";
 import { workOf, type Work } from "../lib/usage.ts";
+import { useSheet } from "./useSheet.ts";
 
 /** the week the slate covers, and his row on it if he has one */
 export interface ThisWeek {
@@ -227,21 +226,14 @@ export function PlayerSheet(props: Props) {
   const why = said ? reasonWords(said) : "";
   const ifTheJobOpens = said ? roleWords(said) : "";
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        props.onClose();
-      }
-    };
-
-    window.addEventListener("keydown", onKey);
-
-    return () => window.removeEventListener("keydown", onKey);
-  }, [props.onClose]);
+  const sheet = useSheet(props.onClose);
 
   return (
     <div id="overlay" class="open" onClick={props.onClose}>
-      <div class="sheet" onClick={(e) => e.stopPropagation()}>
+      <div
+        class="sheet" ref={sheet} role="dialog" aria-modal="true"
+        aria-label={p.name} onClick={(e) => e.stopPropagation()}
+      >
         <button class="close" aria-label="close" onClick={props.onClose}>
           ×
         </button>

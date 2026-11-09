@@ -15,7 +15,7 @@
 
 import { useMemo, useState } from "preact/hooks";
 
-import { normalizeName } from "../lib/store.ts";
+import { keep, normalizeName, stored } from "../lib/store.ts";
 import type { Player } from "../lib/scoring.ts";
 import { claimWords, reasonWords } from "../lib/sleeperWords.ts";
 import type { League, Matchup } from "../lib/providers.ts";
@@ -580,10 +580,18 @@ export function Waivers(props: Props) {
   const [query, setQuery] = useState("");
   /** the drop list is reference, opened when you are deciding who goes */
   const [showDrops, setShowDrops] = useState(false);
+  // the page opens on whichever span you last read it in, except that
   // before any week has been built there is nothing for the week to say,
-  // so the page opens on the season instead of on a table of blanks
-  const [span, setSpan] = useState<Span>(
-    () => props.week === null ? "season" : "week");
+  // so it opens on the season instead of on a table of blanks
+  const [span, setSpanState] = useState<Span>(() => {
+    const last = stored<Span>("span", "week");
+
+    return props.week === null && last !== "ranks" ? "season" : last;
+  });
+  const setSpan = (which: Span) => {
+    setSpanState(which);
+    keep("span", which);
+  };
   const { states, trouble } = useScoreboard(
     props.season ?? undefined, props.week ?? undefined, props.scoreboard);
 

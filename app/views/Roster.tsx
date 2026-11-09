@@ -9,6 +9,7 @@
 import type { Player } from "../lib/scoring.ts";
 import type { League } from "../lib/providers.ts";
 import type { Listed } from "../lib/availability.ts";
+import { hurtWord, type SlateRow } from "../lib/slate.ts";
 import { injuryBadge, WORRYING } from "./Draft.tsx";
 import { SeasonCard, seasonScale } from "./Card.tsx";
 import { KeeperRow, keeperDraft, keeperRounds } from "./Keepers.tsx";
@@ -37,13 +38,25 @@ interface Props {
   listed?: Map<string, Listed>;
   /** the week coming up, so a player on bye in it is marked */
   week?: number | null;
+  /** every player's line for that week, where it has loaded */
+  rows?: Map<string, SlateRow>;
 }
 
 export function Roster(props: Props) {
   const { league, marked, players } = props;
+  const rowOf = (key: string) => props.rows?.get(key);
+  /**
+   * Once a week has loaded, each position reads in the order you would
+   * start it this week; before then, by what he is worth over the
+   * season. The two part ways for a player who is hurt or on bye, and
+   * that week is when the order matters.
+   */
+  const weekly = Boolean(props.rows?.size);
   const mine = league.myRoster
     .map((r) => ({ r, p: props.byKey.get(r.key) ?? null }))
-    .sort((a, b) => (b.p?.vor ?? -99) - (a.p?.vor ?? -99));
+    .sort((a, b) => weekly
+      ? (rowOf(b.r.key)?.blend ?? -1) - (rowOf(a.r.key)?.blend ?? -1)
+      : (b.p?.vor ?? -99) - (a.p?.vor ?? -99));
   const kept = Object.keys(marked).filter((k) => marked[k] === league.team).length;
   const max = seasonScale(mine.map((x) => x.p).filter((p): p is Player => Boolean(p)));
   const draft = props.keeperLeague
@@ -51,10 +64,12 @@ export function Roster(props: Props) {
     : null;
   const rounds = draft ? keeperRounds(players, mine, draft) : new Map<string, number>();
 
-  const hurtOf = (key: string) => props.listed?.get(key);
+  // the same word the matchup tab gives, so the two tabs never disagree
+  // about who is out
+  const hurtOf = (key: string) => hurtWord(props.listed?.get(key), rowOf(key));
   const hurt = mine.filter(({ r }) => hurtOf(r.key)).length;
   const onByeNow = (p: Player | null) =>
-    Boolean(p && props.week && p.bye === props.week);
+    Boolean(p && (rowOf(p.key)?.bye || (props.week && p.bye === props.week)));
   const resting = mine.filter(({ p }) => onByeNow(p)).length;
 
   const byPosition = new Map<string, typeof mine>();
@@ -120,6 +135,7 @@ export function Roster(props: Props) {
               }
 
               const isKept = Boolean(marked[p.key]);
+              const row = rowOf(p.key);
 
               return (
                 <SeasonCard
@@ -131,7 +147,21 @@ export function Roster(props: Props) {
                   kept={isKept}
                   badge={isKept ? "keeper" : ""}
                   onMore={() => props.onMore(p)}
+                  {...(row && !row.bye
+                    ? { thisWeek: { label: "proj", value: row.blend.toFixed(1) } }
+                    : {})}
                 >
+                  {row && !row.bye && (
+                    <div class="weekline">
+                      <span>week {props.week}</span>
+                      <span>{row.home ? "v" : "@"} {row.opponent}</span>
+                      {/* a range from nothing to nothing says less than
+                          the badge under it already does */}
+                      {row.ceiling > 0 && (
+                        <span>{row.floor.toFixed(1)} to {row.ceiling.toFixed(1)}</span>
+                      )}
+                    </div>
+                  )}
                   <Status his={hurtOf(p.key)} bye={onByeNow(p) ? props.week! : null} />
                   {draft && (
                     <KeeperRow
@@ -157,7 +187,10 @@ export function Roster(props: Props) {
 
 /** what is wrong with him this week, if anything, on one line of his card */
 function Status(
-  { his, bye }: { his: Listed | undefined; bye: number | null },
+  { his, bye }: {
+    his: { status: string; part?: string; note?: string } | undefined;
+    bye: number | null;
+  },
 ) {
   const badge = injuryBadge(his);
 

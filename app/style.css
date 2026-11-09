@@ -424,6 +424,11 @@
     border: 2px solid var(--edge); border-top-color: var(--go);
     animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes rise { from { transform: translateY(40%); } }
+  @keyframes dim { from { background: rgba(0,0,0,0); } }
+  @media (prefers-reduced-motion: reduce) {
+    #overlay, #overlay .sheet { animation: none !important; }
+  }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
   .pastewrap { display: block; margin-top: var(--s3); font-size: var(--t1);
@@ -961,6 +966,13 @@
   .worries li.bad .wwho i { color: var(--no); font-weight: 600; }
   .worries button.quiet { flex: 0 0 auto; }
 
+  /* a bench with nothing to offer, said in one line you can open */
+  .slot-card.benchfold { display: flex; align-items: center; gap: var(--s2);
+    width: 100%; font: inherit; color: var(--muted); text-align: left;
+    cursor: pointer; min-height: var(--tap); }
+  .benchfold b { color: var(--ink); font-size: var(--t3); }
+  .benchfold span { font-size: var(--t2); flex: 1 1 auto; }
+
   /* the one move the players tab argues for, said first */
   .bestmove { display: flex; flex-direction: column; gap: var(--s1);
     background: var(--panel); border: 1px solid var(--edge);
@@ -992,6 +1004,13 @@
   .tally b { color: var(--ink); font-variant-numeric: tabular-nums; }
   .tally .bad b { color: var(--no); }
   .tally .warn b { color: var(--mark); }
+  /* his week on his roster card: which week, who against, and his range */
+  .card .weekline { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3);
+    margin-top: var(--s2); padding-top: var(--s2);
+    border-top: 1px solid var(--edge); font-size: var(--t1);
+    color: var(--muted); font-variant-numeric: tabular-nums; }
+  .card .weekline span:first-child { color: var(--faint); text-transform: uppercase;
+    letter-spacing: .06em; font-weight: 600; }
   /* what is wrong with a player this week, on his own card */
   .card .status { display: flex; flex-wrap: wrap; align-items: center;
     gap: var(--s1) var(--s2); margin-top: var(--s2); font-size: var(--t1);
@@ -1006,6 +1025,22 @@
   .league-card .standing { margin-top: var(--s2); align-items: center; }
   .league-card .standing b { color: var(--ink); font-size: var(--t3);
     font-variant-numeric: tabular-nums; }
+  /* this week in the league, at the foot of its card in the list */
+  .lweek { display: flex; align-items: center; justify-content: space-between;
+    gap: var(--s3); margin-top: var(--s3); padding-top: var(--s3);
+    border-top: 1px solid var(--edge); font-size: var(--t2); color: var(--muted); }
+  .lweek.waiting { color: var(--faint); }
+  .lweek .vs { min-width: 0; display: flex; flex-direction: column; }
+  .lweek .vs b { color: var(--ink); font-weight: 600; }
+  .lweek .vs i { font-style: normal; font-size: var(--t1); color: var(--faint);
+    font-variant-numeric: tabular-nums; }
+  .lweek .odds { flex: 0 0 auto; display: flex; flex-direction: column;
+    align-items: flex-end; font-size: var(--t5); font-weight: 800; line-height: 1;
+    color: var(--ink); font-variant-numeric: tabular-nums; }
+  .lweek .odds.up { color: var(--go); }
+  .lweek .odds.no { color: var(--no); }
+  .lweek .odds small { font-size: .625rem; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--faint); margin-top: 2px; }
   /* the table is the width of the page, so the numbers line up at its edge */
   table.rating.standings { display: table; }
   table.standings td:nth-child(n+3), table.standings th:nth-child(n+3) {
@@ -1039,6 +1074,27 @@
     #subnav button { color: var(--faint); }
     #subnav button.on { color: var(--ink); font-weight: 700; }
     #subnav .ticon { display: block; }
+
+    /*
+     * A sheet rises from the bottom on a phone, the full width, with a
+     * handle that says it can be pulled back down. It scrolls inside
+     * itself, so the close button and the handle stay where the sheet
+     * starts rather than scrolling off with the page under it.
+     */
+    #overlay { align-items: flex-end; padding: 0; overflow: hidden;
+      animation: dim .2s ease-out; }
+    #overlay .sheet { max-width: none; max-height: 92vh; max-height: 92dvh;
+      overflow-y: auto; overscroll-behavior: contain;
+      border-radius: 16px 16px 0 0; border-bottom: none;
+      padding: var(--s2) var(--s4) calc(var(--s5) + env(safe-area-inset-bottom));
+      animation: rise .24s cubic-bezier(.2, .8, .2, 1);
+      transition: transform .2s ease; }
+    #overlay .sheet::before { content: ""; display: block; width: 36px;
+      height: 4px; border-radius: 2px; background: var(--edge);
+      margin: 0 auto var(--s3); }
+    #overlay .sheet .close { position: sticky; top: 0; float: right;
+      margin: calc(var(--s3) * -1) calc(var(--s2) * -1) 0 0;
+      background: var(--panel); z-index: 1; }
     .wrap { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
     .hodds { width: 84px; height: 84px; }
     .hside .pts { font-size: var(--t5); }
