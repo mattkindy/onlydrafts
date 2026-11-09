@@ -120,8 +120,8 @@ function WeekByWeek(
     <>
       <h2>week by week</h2>
       <p class="pkey">
-        <span><i class="kseg range" />range</span>
-        <span><i class="kseg mid" />usual</span>
+        <span><i class="kseg k-range" />range</span>
+        <span><i class="kseg k-usual" />usual</span>
         <span><i class="ktick" />proj</span>
         <span><i class="kdot" /><i class="kdot down" />scored, over or under</span>
       </p>

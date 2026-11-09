@@ -139,9 +139,9 @@ function Strip({ block }: { block: ScoresBlock }) {
         </div>
       ))}
       <p class="pkey">
-        <span><i class="kseg won" />won</span>
-        <span><i class="kseg lost" />lost</span>
-        <span><i class="kseg bench" />benched</span>
+        <span><i class="kseg k-won" />won</span>
+        <span><i class="kseg k-lost" />lost</span>
+        <span><i class="kseg k-bench" />benched</span>
         <span><i class="ktick" />median {block.middle}</span>
       </p>
     </div>

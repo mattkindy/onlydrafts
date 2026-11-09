@@ -1251,12 +1251,12 @@
   .pkey i { display: inline-block; width: 16px; }
   .pkey .kline { height: 2px; background: var(--ink); border-radius: 1px; }
   .pkey .kseg { height: 10px; border-radius: 999px; }
-  .pkey .kseg.won { background: var(--go); }
-  .pkey .kseg.lost { background: var(--muted); }
-  .pkey .kseg.bench { background: var(--edge); }
-  .pkey .kseg.range { background: color-mix(in srgb, var(--go) 55%, var(--chip)); }
-  .pkey .kseg.mid { height: 6px; background: color-mix(in srgb, var(--go) 22%, var(--chip)); }
-  .pkey .kseg.split { background: color-mix(in srgb, var(--mark) 30%, transparent); }
+  .pkey .kseg.k-won { background: var(--go); }
+  .pkey .kseg.k-lost { background: var(--muted); }
+  .pkey .kseg.k-bench { background: var(--edge); }
+  .pkey .kseg.k-range { background: color-mix(in srgb, var(--go) 55%, var(--chip)); }
+  .pkey .kseg.k-usual { height: 6px; background: color-mix(in srgb, var(--go) 22%, var(--chip)); }
+  .pkey .kseg.k-split { background: color-mix(in srgb, var(--mark) 30%, transparent); }
   .pkey .ktick { width: 3px; height: 14px; border-radius: 2px; background: var(--mark); }
   .pkey .kdot { width: 8px; height: 8px; border-radius: 50%; background: var(--go); }
   .pkey .kdot.down { background: var(--mark); margin-left: -4px; }

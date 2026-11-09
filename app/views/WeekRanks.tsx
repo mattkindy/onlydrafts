@@ -239,7 +239,7 @@ export function WeekRanks({ slate, rows: priced, roster, listed }: Props) {
       {slate && (
         <>
           <p class="pkey">
-            <span><i class="kseg split" />{SPLIT_AT}+ pts off Sleeper</span>
+            <span><i class="kseg k-split" />{SPLIT_AT}+ pts off Sleeper</span>
             <span>tap two to compare</span>
           </p>
 
