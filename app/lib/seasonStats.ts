@@ -12,6 +12,7 @@
  */
 
 import type { Matchup, Side } from "./providers.ts";
+import type { PlayoffRules, Tiebreak } from "./playoffRules.ts";
 
 /** the slots a lineup starts, leaving the bench and the reserve out */
 export const startingSlots = (slots: string[] | null) =>
@@ -67,11 +68,27 @@ export interface TeamSeason {
   allWins: number;
   allLosses: number;
   allTies: number;
+  /** its wins against each week's median score, a tie counting half */
+  medianWins: number;
+  /** its record against each team it has played, a tie counting half a win */
+  versus: Record<string, { won: number; games: number }>;
   /** what its starters scored, and the most its roster could have */
   started: number;
   best: number;
   /** its score each week, in week order, null for a week it had no game */
   weekly: (number | null)[];
+}
+
+/** the middle of some scores, halfway between the two middle ones when they are even */
+function medianOf(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+
+  if (!sorted.length) {
+    return 0;
+  }
+
+  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
 /** the share of games a record wins, a tie counting half */
@@ -97,7 +114,7 @@ export function seasonOf(
     if (!team) {
       team = {
         owner, wins: 0, losses: 0, ties: 0, pf: 0, pa: 0,
-        allWins: 0, allLosses: 0, allTies: 0, started: 0, best: 0,
+        allWins: 0, allLosses: 0, allTies: 0, medianWins: 0, versus: {}, started: 0, best: 0,
         weekly: weeks.map(() => null),
       };
       teams.set(owner, team);
@@ -128,20 +145,30 @@ export function seasonOf(
         // a best lineup can never score less than the one that played
         team.best += Math.max(me.points, bestOf(me));
 
+        const versus = team.versus[them.owner] ??= { won: 0, games: 0 };
+
+        versus.games++;
+
         if (me.points > them.points) {
           team.wins++;
+          versus.won++;
         } else if (me.points < them.points) {
           team.losses++;
         } else {
           team.ties++;
+          versus.won += 0.5;
         }
 
         scores.push({ owner: me.owner, points: me.points });
       }
     }
 
+    const middle = medianOf(scores.map((one) => one.points));
+
     for (const one of scores) {
       const team = teamOf(one.owner);
+
+      team.medianWins += one.points > middle ? 1 : one.points === middle ? 0.5 : 0;
 
       for (const other of scores) {
         if (other.owner === one.owner) {
@@ -245,6 +272,8 @@ export interface PlayoffOdds {
   first: number;
   /** the wins it ends the regular season on, on average */
   wins: number;
+  /** how often it wins its division, where division winners get in */
+  division?: number;
 }
 
 /** the key a forced result goes under: the week's place in the run and the pair */
@@ -331,22 +360,46 @@ export function chanceAt(outcomes: PathOutcome[], share: number): number {
   return marks[marks.length - 1]!.value;
 }
 
+/** one team's place in the table the rest of the season starts from */
+export interface SeedRow {
+  owner: string;
+  wins: number;
+  ties: number;
+  pf: number;
+  pa?: number;
+  allWins?: number;
+  allLosses?: number;
+  allTies?: number;
+  medianWins?: number;
+  versus?: Record<string, { won: number; games: number }>;
+}
+
+const PLAIN_RULES: Pick<PlayoffRules, "seedBy" | "ties" | "divisions"> = {
+  seedBy: "wins", ties: ["pf"], divisions: false,
+};
+
 /**
  * The rest of the regular season played out many times over.
  *
  * Each week still to come, each pairing draws both scores from the two
  * teams' strengths and the higher one wins. This week, where a game's
  * own odds are known from the lineups, the winner is drawn from those
- * instead. The table is ordered by wins, then by points scored, which
- * is how both providers break ties by default, and the top so many make
- * it.
+ * instead. The table is then ranked the league's way: by record, record
+ * with a game against each week's median, all-play or points for, with
+ * its tiebreakers in order and a coin flip after them. Where division
+ * winners get in, each division's best team does, and the best of the
+ * rest fill the places left.
  */
 export function playoffOdds(input: {
-  table: { owner: string; wins: number; ties: number; pf: number }[];
+  table: SeedRow[];
   /** the pairings of every week still to play, this one first */
   weeks: [string, string][][];
   strength: Map<string, Strength>;
   playoffTeams: number;
+  /** how the table is ranked; by record, then points for, without */
+  rules?: Pick<PlayoffRules, "seedBy" | "ties" | "divisions">;
+  /** each team's division, where division winners get in */
+  divisionOf?: Map<string, number>;
   /** this week's games with their odds, owner a beating owner b */
   thisWeek?: { a: string; b: string; odds: number; projected: [number, number] }[];
   mine?: string;
@@ -359,16 +412,32 @@ export function playoffOdds(input: {
   forced?: Map<string, string>;
 }): PlayoffRun {
   const draws = input.draws ?? 5000;
+  const rules = input.rules ?? PLAIN_RULES;
   const owners = input.table.map((t) => t.owner);
+  const n = owners.length;
   const at = new Map(owners.map((o, i) => [o, i]));
-  const made = new Array<number>(owners.length).fill(0);
-  const firsts = new Array<number>(owners.length).fill(0);
-  const winsSum = new Array<number>(owners.length).fill(0);
+  const made = new Array<number>(n).fill(0);
+  const firsts = new Array<number>(n).fill(0);
+  const titles = new Array<number>(n).fill(0);
+  const winsSum = new Array<number>(n).fill(0);
   const me = input.mine !== undefined ? at.get(input.mine) : undefined;
   let wonRuns = 0, wonMade = 0, lostRuns = 0, lostMade = 0;
-  const next = seeded(owners.length * 7919 + input.weeks.length * 104729 + draws);
+  const next = seeded(n * 7919 + input.weeks.length * 104729 + draws);
   const thisWeek = input.thisWeek ?? [];
   const settled = new Set(thisWeek.flatMap((g) => [g.a, g.b]));
+
+  // what the ranking needs kept beyond wins and points for
+  const uses = (tie: Tiebreak) => rules.ties.includes(tie);
+  const needAll = rules.seedBy === "allplay" || uses("allplay");
+  const needMedian = rules.seedBy === "median";
+  const needPairs = uses("h2h") || uses("division");
+  const needPa = uses("paMost") || uses("paFewest");
+  const division = owners.map((o) => input.divisionOf?.get(o) ?? null);
+  const divisionIds = rules.divisions
+    ? [...new Set(division.filter((d): d is number => d !== null))]
+    : [];
+  const byDivision = divisionIds.length > 1;
+
   // your games from here through each week, and for each week and each
   // number of wins by then, how many seasons went that way and made it
   const playedBy: number[] = [];
@@ -387,8 +456,8 @@ export function playoffOdds(input: {
     tiedBy.push(tiedSoFar);
   });
 
-  const ways = playedBy.map((n) => new Array<number>(n + 1).fill(0));
-  const waysMade = playedBy.map((n) => new Array<number>(n + 1).fill(0));
+  const ways = playedBy.map((count) => new Array<number>(count + 1).fill(0));
+  const waysMade = playedBy.map((count) => new Array<number>(count + 1).fill(0));
   const trail = new Array<number>(input.weeks.length).fill(0);
 
   // every game to come worked out once, so a season played out is only
@@ -415,20 +484,122 @@ export function playoffOdds(input: {
 
     return [{
       ia, ib, known,
-      picked: picked === undefined ? null : picked === TIE ? "tie" as const : picked === a,
+      picked: picked === undefined ? null : picked === TIE ? 0.5 : picked === a ? 1 : 0,
       mine: me !== undefined && (ia === me || ib === me),
     }];
   }));
+
+  // the table the season starts from, and the same kept for each season
   const startWins = input.table.map((t) => t.wins + t.ties / 2);
   const startPf = input.table.map((t) => t.pf);
+  const startPa = input.table.map((t) => t.pa ?? 0);
+  const startAllWon = input.table.map((t) => (t.allWins ?? 0) + (t.allTies ?? 0) / 2);
+  const startAllGames = input.table.map((t) =>
+    (t.allWins ?? 0) + (t.allLosses ?? 0) + (t.allTies ?? 0));
+  const startMedian = input.table.map((t) => t.medianWins ?? 0);
+  const startPairWon = new Float64Array(n * n);
+  const startPairGames = new Float64Array(n * n);
+
+  input.table.forEach((t, i) => {
+    for (const [them, record] of Object.entries(t.versus ?? {})) {
+      const j = at.get(them);
+
+      if (j !== undefined) {
+        startPairWon[i * n + j] = record.won;
+        startPairGames[i * n + j] = record.games;
+      }
+    }
+  });
+
   const wins = startWins.slice();
   const pf = startPf.slice();
+  const pa = startPa.slice();
+  const allWon = startAllWon.slice();
+  const allGames = startAllGames.slice();
+  const median = startMedian.slice();
+  const pairWon = new Float64Array(n * n);
+  const pairGames = new Float64Array(n * n);
+  const score = new Float64Array(n).fill(NaN);
+  const primary = new Float64Array(n);
+  const inIt = new Uint8Array(n);
   const order = owners.map((_, i) => i);
 
+  /** a team's share of games against these others, half where it has none */
+  const shareAgainst = (i: number, others: (j: number) => boolean) => {
+    let won = 0, games = 0;
+
+    for (let j = 0; j < n; j++) {
+      if (j !== i && others(j)) {
+        won += pairWon[i * n + j]!;
+        games += pairGames[i * n + j]!;
+      }
+    }
+
+    return games ? won / games : 0.5;
+  };
+  const keyOf = (tie: Tiebreak, i: number, group: number[]): number => {
+    switch (tie) {
+      case "h2h": return shareAgainst(i, (j) => group.includes(j));
+      case "division": return division[i] === null ? 0.5
+        : shareAgainst(i, (j) => division[j] === division[i]);
+      case "pf": return pf[i]!;
+      case "paMost": return pa[i]!;
+      case "paFewest": return -pa[i]!;
+      case "allplay": return allGames[i] ? allWon[i]! / allGames[i]! : 0;
+      case "wins": return wins[i]!;
+    }
+  };
+
+  /** puts order[from..to), all level so far, in order by the tiebreakers from this one */
+  const settle = (from: number, to: number, layer: number) => {
+    const group = order.slice(from, to);
+
+    if (layer >= rules.ties.length) {
+      // a coin flip for whoever is still level
+      for (let k = group.length - 1; k > 0; k--) {
+        const pick = Math.floor(next() * (k + 1));
+
+        [group[k], group[pick]] = [group[pick]!, group[k]!];
+      }
+
+      group.forEach((team, k) => { order[from + k] = team; });
+      return;
+    }
+
+    const tie = rules.ties[layer]!;
+    const keys = new Map(group.map((team) => [team, keyOf(tie, team, group)]));
+
+    group.sort((x, y) => keys.get(y)! - keys.get(x)!);
+    group.forEach((team, k) => { order[from + k] = team; });
+
+    for (let k = from; k < to;) {
+      let end = k + 1;
+
+      while (end < to && keys.get(order[end]!) === keys.get(order[k]!)) {
+        end++;
+      }
+
+      if (end - k > 1) {
+        settle(k, end, layer + 1);
+      }
+
+      k = end;
+    }
+  };
+
   for (let run = 0; run < draws; run++) {
-    for (let i = 0; i < owners.length; i++) {
+    for (let i = 0; i < n; i++) {
       wins[i] = startWins[i]!;
       pf[i] = startPf[i]!;
+      pa[i] = startPa[i]!;
+      allWon[i] = startAllWon[i]!;
+      allGames[i] = startAllGames[i]!;
+      median[i] = startMedian[i]!;
+    }
+
+    if (needPairs) {
+      pairWon.set(startPairWon);
+      pairGames.set(startPairGames);
     }
 
     let iWon: boolean | null = null;
@@ -436,38 +607,49 @@ export function playoffOdds(input: {
 
     plan.forEach((games, w) => {
       for (const { ia, ib, known, picked, mine } of games) {
-        let aWins: boolean;
+        let sa: number, sb: number, resultA: number;
 
-        if (picked === "tie") {
-          // half a win each, and each side's usual score toward points for
-          wins[ia]! += 0.5;
-          wins[ib]! += 0.5;
-          pf[ia] = pf[ia]! + (known ? known.pa : meanOf[ia]!);
-          pf[ib] = pf[ib]! + (known ? known.pb : meanOf[ib]!);
-          continue;
-        } else if (picked !== null) {
-          // the scores still count toward points for: this week's lineups
-          // where the game has them, and each side's usual otherwise
-          aWins = picked;
-          pf[ia] = pf[ia]! + (known ? known.pa : meanOf[ia]!);
-          pf[ib] = pf[ib]! + (known ? known.pb : meanOf[ib]!);
+        if (picked !== null) {
+          // a picked game still scores toward points for: this week's
+          // lineups where the game has them, and each side's usual otherwise
+          resultA = picked;
+          sa = known ? known.pa : meanOf[ia]!;
+          sb = known ? known.pb : meanOf[ib]!;
         } else if (known) {
-          aWins = next() < known.oddsA;
-          pf[ia] = pf[ia]! + known.pa;
-          pf[ib] = pf[ib]! + known.pb;
+          resultA = next() < known.oddsA ? 1 : 0;
+          sa = known.pa;
+          sb = known.pb;
         } else {
-          const xa = meanOf[ia]! + sdOf[ia]! * normal(next);
-          const xb = meanOf[ib]! + sdOf[ib]! * normal(next);
-
-          aWins = xa > xb;
-          pf[ia] = pf[ia]! + xa;
-          pf[ib] = pf[ib]! + xb;
+          sa = meanOf[ia]! + sdOf[ia]! * normal(next);
+          sb = meanOf[ib]! + sdOf[ib]! * normal(next);
+          resultA = sa > sb ? 1 : 0;
         }
 
-        wins[aWins ? ia : ib]! += 1;
+        wins[ia]! += resultA;
+        wins[ib]! += 1 - resultA;
+        pf[ia] = pf[ia]! + sa;
+        pf[ib] = pf[ib]! + sb;
 
-        if (mine) {
-          const won = (ia === me) === aWins;
+        if (needPa) {
+          pa[ia] = pa[ia]! + sb;
+          pa[ib] = pa[ib]! + sa;
+        }
+
+        if (needAll || needMedian) {
+          score[ia] = sa;
+          score[ib] = sb;
+        }
+
+        if (needPairs) {
+          pairWon[ia * n + ib]! += resultA;
+          pairWon[ib * n + ia]! += 1 - resultA;
+          pairGames[ia * n + ib]! += 1;
+          pairGames[ib * n + ia]! += 1;
+        }
+
+        // a tie is neither the win nor the loss your path counts
+        if (mine && resultA !== 0.5) {
+          const won = (ia === me) === (resultA === 1);
 
           mineWon += Number(won);
 
@@ -477,33 +659,120 @@ export function playoffOdds(input: {
         }
       }
 
+      if (needAll || needMedian) {
+        const playing: number[] = [];
+
+        for (let i = 0; i < n; i++) {
+          if (!Number.isNaN(score[i]!)) {
+            playing.push(i);
+          }
+        }
+
+        if (needAll) {
+          for (const i of playing) {
+            for (const j of playing) {
+              if (i !== j) {
+                allWon[i] = allWon[i]! + (score[i]! > score[j]! ? 1 : score[i] === score[j] ? 0.5 : 0);
+                allGames[i] = allGames[i]! + 1;
+              }
+            }
+          }
+        }
+
+        if (needMedian && playing.length) {
+          const middle = medianOf(playing.map((i) => score[i]!));
+
+          for (const i of playing) {
+            median[i] = median[i]! + (score[i]! > middle ? 1 : score[i] === middle ? 0.5 : 0);
+          }
+        }
+
+        score.fill(NaN);
+      }
+
       trail[w] = mineWon;
     });
 
-    order.sort((x, y) => wins[y]! - wins[x]! || pf[y]! - pf[x]! || x - y);
+    for (let i = 0; i < n; i++) {
+      primary[i] = rules.seedBy === "wins" ? wins[i]!
+        : rules.seedBy === "median" ? wins[i]! + median[i]!
+        : rules.seedBy === "allplay" ? (allGames[i] ? allWon[i]! / allGames[i]! : 0)
+        : pf[i]!;
+    }
 
-    order.slice(0, input.playoffTeams).forEach((i) => { made[i]!++; });
+    order.sort((x, y) => primary[y]! - primary[x]! || x - y);
+
+    for (let k = 0; k < n;) {
+      let end = k + 1;
+
+      while (end < n && primary[order[end]!] === primary[order[k]!]) {
+        end++;
+      }
+
+      if (end - k > 1) {
+        settle(k, end, 0);
+      }
+
+      k = end;
+    }
+
+    // who gets in: each division's best first where winners do, then the rest
+    inIt.fill(0);
+
+    if (byDivision) {
+      const won = new Set<number>();
+
+      for (const i of order) {
+        const d = division[i] ?? null;
+
+        if (d !== null && divisionIds.includes(d) && !won.has(d)) {
+          won.add(d);
+          inIt[i] = 1;
+          titles[i]!++;
+        }
+      }
+
+      let wild = input.playoffTeams - won.size;
+
+      for (const i of order) {
+        if (wild <= 0) {
+          break;
+        }
+
+        if (!inIt[i]) {
+          inIt[i] = 1;
+          wild--;
+        }
+      }
+    } else {
+      order.slice(0, input.playoffTeams).forEach((i) => { inIt[i] = 1; });
+    }
+
+    for (let i = 0; i < n; i++) {
+      made[i]! += inIt[i]!;
+      winsSum[i]! += wins[i]!;
+    }
+
     firsts[order[0]!]!++;
-    owners.forEach((_, i) => { winsSum[i]! += wins[i]!; });
 
     if (me === undefined) {
       continue;
     }
 
-    const inIt = order.slice(0, input.playoffTeams).includes(me);
+    const mineIn = inIt[me] === 1;
 
     trail.forEach((won, w) => {
       ways[w]![won]! += 1;
-      waysMade[w]![won]! += Number(inIt);
+      waysMade[w]![won]! += Number(mineIn);
     });
 
     if (iWon !== null) {
       if (iWon) {
         wonRuns++;
-        wonMade += Number(inIt);
+        wonMade += Number(mineIn);
       } else {
         lostRuns++;
-        lostMade += Number(inIt);
+        lostMade += Number(mineIn);
       }
     }
   }
@@ -514,6 +783,7 @@ export function playoffOdds(input: {
       playoffs: made[i]! / draws,
       first: firsts[i]! / draws,
       wins: winsSum[i]! / draws,
+      ...(byDivision ? { division: titles[i]! / draws } : {}),
     })),
     ifWin: wonRuns ? wonMade / wonRuns : null,
     ifLose: lostRuns ? lostMade / lostRuns : null,

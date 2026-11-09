@@ -7,6 +7,7 @@
  */
 
 import { PLAYED_POSITIONS, type Listed } from "./availability.ts";
+import type { Tiebreak } from "./playoffRules.ts";
 import {
   boardKeyOf, boardPositionOf, boardTeamOf, ESPN_TEAMS,
 } from "./boardKeys.ts";
@@ -33,6 +34,8 @@ export interface Roster {
   keys: RosterPlayer[];
   /** wins, losses and points for, where the provider says */
   record?: TeamRecord;
+  /** the division it plays in, by the id in the league's divisions */
+  division?: number | null;
 }
 
 export interface TeamRecord {
@@ -72,6 +75,12 @@ export interface League {
   playoffTeams?: number | null;
   /** the last week of the regular season, when the provider says */
   lastRegularWeek?: number | null;
+  /** the league's divisions, when it has them */
+  divisions?: { id: number; name: string }[] | null;
+  /** whether every week also plays each team against the week's median */
+  medianGame?: boolean | null;
+  /** the first thing the provider says breaks a tie in the standings */
+  seedTiebreak?: Tiebreak | null;
 }
 
 export interface Provider {
@@ -556,7 +565,26 @@ interface SleeperRoster {
   settings?: {
     wins?: number; losses?: number; ties?: number;
     fpts?: number; fpts_decimal?: number;
+    division?: number;
   };
+}
+
+/**
+ * A Sleeper league's divisions: how many it says it has, each named by
+ * the league's own names where it gave them. A roster carries the
+ * number of its division, from 1.
+ */
+function sleeperDivisions(lg: Record<string, any>): { id: number; name: string }[] | null {
+  const count = Number(lg["settings"]?.["divisions"]) || 0;
+
+  if (count < 2) {
+    return null;
+  }
+
+  return Array.from({ length: count }, (_, i) => ({
+    id: i + 1,
+    name: String(lg["metadata"]?.[`division_${i + 1}`] ?? `Division ${i + 1}`),
+  }));
 }
 
 /** what a Sleeper roster has won and scored so far */
@@ -713,11 +741,14 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       lastRegularWeek: Number(lg["settings"]?.["playoff_week_start"])
         ? Number(lg["settings"]["playoff_week_start"]) - 1
         : null,
+      divisions: sleeperDivisions(lg),
+      medianGame: Number(lg["settings"]?.["league_average_match"]) === 1,
       allRosters: (rosters as SleeperRoster[]).map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
         picks: held(r.roster_id),
         keys: sleeperPlayersOf(players, r.players),
         ...(sleeperRecord(r) ? { record: sleeperRecord(r)! } : {}),
+        division: r.settings?.division ?? null,
       })),
     });
   }
@@ -1198,6 +1229,7 @@ const ESPN_INJURIES: Record<string, string> = {
 
 interface EspnTeam {
   id: number;
+  divisionId?: number;
   name?: string;
   location?: string;
   nickname?: string;
@@ -1349,6 +1381,24 @@ export function espnPays(items: EspnScoringItem[]): Pays {
   return pays;
 }
 
+/** an ESPN league's divisions, when it has more than one */
+function espnDivisions(said: unknown): { id: number; name: string }[] | null {
+  const list = Array.isArray(said) ? said as { id?: number; name?: string }[] : [];
+  const divisions = list
+    .filter((d) => typeof d.id === "number")
+    .map((d) => ({ id: d.id!, name: (d.name ?? `Division ${d.id! + 1}`).trim() }));
+
+  return divisions.length > 1 ? divisions : null;
+}
+
+/** ESPN's names for the tiebreaker it seeds by, where we can follow it */
+const ESPN_TIEBREAK: Record<string, Tiebreak> = {
+  H2H_RECORD: "h2h",
+  TOTAL_POINTS_SCORED: "pf",
+  INTRA_DIVISION_RECORD: "division",
+  TOTAL_POINTS_AGAINST: "paMost",
+};
+
 async function espnLeagues(leagueId: string, season: number): Promise<League[]> {
   const said = await espnAnswer(leagueId, season);
 
@@ -1396,11 +1446,14 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     keepersPerTeam: settings.draftSettings?.keeperCount || null,
     playoffTeams: settings.scheduleSettings?.playoffTeamCount || null,
     lastRegularWeek: settings.scheduleSettings?.matchupPeriodCount || null,
+    divisions: espnDivisions(settings.scheduleSettings?.divisions),
+    seedTiebreak: ESPN_TIEBREAK[settings.scheduleSettings?.playoffSeedingRule ?? ""] ?? null,
     allRosters: teams.map((t) => ({
       owner: nameOf(t),
       picks: everyRound,
       keys: playersOf(t),
       ...(espnRecord(t) ? { record: espnRecord(t)! } : {}),
+      division: t.divisionId ?? null,
     })),
   }));
 }

@@ -13,6 +13,8 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
 import { tick } from "../lib/haptics.ts";
+import { readRules, rulesKey, rulesSay, type PlayoffRules } from "../lib/playoffRules.ts";
+import { keep, stored } from "../lib/store.ts";
 import {
   linesFor, settledGames, standingFor, type GameState,
 } from "../lib/matchups.ts";
@@ -26,6 +28,7 @@ import {
 import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
 import { pct } from "./Advice.tsx";
 import { Skeleton } from "./Reading.tsx";
+import { RulesPanel } from "./RulesPanel.tsx";
 import { ShareButton } from "./ShareButton.tsx";
 import {
   layoutPlayoffs, layoutSeasonTable, sharePlayoffs, shareSeasonTable,
@@ -535,6 +538,27 @@ export function Stats(props: Props) {
   const [nudge, setNudge] = useState(0);
 
   /** the pairings of every week left, this one first, and the table now */
+  /**
+   * How this league decides its playoffs, kept per league: the league's
+   * own settings until the reader changes them.
+   */
+  const [rules, setRulesNow] = useState<PlayoffRules>(() =>
+    readRules(stored(rulesKey(league), null), league));
+  const [showRules, setShowRules] = useState(false);
+
+  useEffect(() => {
+    setRulesNow(readRules(stored(rulesKey(league), null), league));
+  }, [league.provider, league.leagueId]);
+
+  const setRules = (next: PlayoffRules) => {
+    setRulesNow(next);
+    keep(rulesKey(league), next);
+  };
+  const divisionOf = useMemo(() => new Map(league.allRosters
+    .filter((r) => typeof r.division === "number")
+    .map((r) => [r.owner, r.division!])), [league]);
+  const divisionCount = league.divisions?.length ?? 0;
+
   const setup = useMemo(() => {
     if (!weeks || coming > lastRegular) {
       return null;
@@ -550,7 +574,18 @@ export function Stats(props: Props) {
     const table = [...owners].map((owner) => {
       const team = season.find((t) => t.owner === owner);
 
-      return { owner, wins: team?.wins ?? 0, ties: team?.ties ?? 0, pf: team?.pf ?? 0 };
+      return {
+        owner,
+        wins: team?.wins ?? 0,
+        ties: team?.ties ?? 0,
+        pf: team?.pf ?? 0,
+        pa: team?.pa ?? 0,
+        allWins: team?.allWins ?? 0,
+        allLosses: team?.allLosses ?? 0,
+        allTies: team?.allTies ?? 0,
+        medianWins: team?.medianWins ?? 0,
+        versus: team?.versus ?? {},
+      };
     });
 
     return { toCome, table };
@@ -577,7 +612,9 @@ export function Stats(props: Props) {
       table: setup.table,
       weeks: setup.toCome,
       strength: using,
-      playoffTeams: league.playoffTeams ?? (league.size >= 12 ? 6 : 4),
+      playoffTeams: rules.teams,
+      rules,
+      divisionOf,
       ...(thisWeek ? { thisWeek } : {}),
       mine: league.team,
       draws,
@@ -592,7 +629,7 @@ export function Stats(props: Props) {
    */
   const runs = useMemo(
     () => new Map<string, PlayoffRun>(),
-    [setup, adjusted, league, thisWeek],
+    [setup, adjusted, league, thisWeek, rules, divisionOf],
   );
 
   const run = useMemo(() => {
@@ -614,7 +651,7 @@ export function Stats(props: Props) {
     const as = playOut(new Map(), SEASONS, strength);
 
     return as?.odds.find((o) => o.owner === league.team)?.playoffs ?? null;
-  }, [setup, strength, league, thisWeek]);
+  }, [setup, strength, league, thisWeek, rules, divisionOf]);
 
   /**
    * Your chance week by week as the tab would tell it if the season goes
@@ -678,7 +715,7 @@ export function Stats(props: Props) {
 
   const me = season.find((t) => t.owner === league.team);
   const myOdds = run?.odds.find((o) => o.owner === league.team);
-  const playoffTeams = league.playoffTeams ?? (league.size >= 12 ? 6 : 4);
+  const playoffTeams = rules.teams;
   const placed = [...season].sort((a, b) =>
     (b.wins + b.ties / 2) - (a.wins + a.ties / 2) || b.pf - a.pf);
   const medians = played.map(({ games }) => {
@@ -727,6 +764,9 @@ export function Stats(props: Props) {
                   : {})}
               />
             )}
+            {myOdds?.division !== undefined && (
+              <Tile label="division title" value={pct(myOdds.division)} />
+            )}
             <Tile
               label="all-play"
               value={pct(winShare(me.allWins, me.allLosses, me.allTies))}
@@ -764,12 +804,20 @@ export function Stats(props: Props) {
               playoff chances
               {(forced.size > 0 || nudge !== 0) && <span class="tag">what if</span>}
             </h2>
+            <div class="headbtns">
+            <button
+              class="textbtn" aria-expanded={showRules}
+              onClick={() => setShowRules((was) => !was)}
+            >
+              rules
+            </button>
             <ShareButton
               label="share"
               onShare={() => sharePlayoffs(layoutPlayoffs({
                 league: league.name,
                 week: coming,
                 playoffTeams,
+                rule: rulesSay(rules, divisionCount),
                 teams: run.odds.map((o) => {
                   const team = season.find((t) => t.owner === o.owner);
 
@@ -783,7 +831,14 @@ export function Stats(props: Props) {
                 }),
               }))}
             />
+            </div>
           </div>
+          {showRules && (
+            <RulesPanel
+              league={league} rules={rules} onRules={setRules}
+              onDone={() => setShowRules(false)}
+            />
+          )}
           <div class="odds-list">
             {[...run.odds].sort((a, b) => b.playoffs - a.playoffs || b.wins - a.wins)
               .map((o, i) => {
@@ -791,12 +846,19 @@ export function Stats(props: Props) {
 
                 return (
                   <Fragment key={o.owner}>
-                  {i === playoffTeams && <div class="ocut"><span>top {playoffTeams} make it</span></div>}
+                  {i === playoffTeams && (
+                    <div class="ocut">
+                      <span>{rulesSay(rules, divisionCount)}</span>
+                    </div>
+                  )}
                   <div class={"orow" + (o.owner === league.team ? " on" : "")}>
                     <span class="onm">{o.owner}</span>
                     <span class="orec">
                       {team ? recordSays(team) : "0-0"}
-                      <small>{o.wins.toFixed(1)} proj W</small>
+                      <small>
+                        {o.wins.toFixed(1)} proj W
+                        {o.division !== undefined && ` · div ${pct(o.division)}`}
+                      </small>
                     </span>
                     <span class="obar" aria-hidden="true">
                       <u style={{ width: `${o.playoffs * 100}%` }} />

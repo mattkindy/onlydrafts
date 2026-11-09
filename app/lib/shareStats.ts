@@ -53,6 +53,8 @@ export function layoutPlayoffs(input: {
   league: string;
   week: number;
   playoffTeams: number;
+  /** who gets in, in a line, where it is more than the top so many */
+  rule?: string;
   teams: { name: string; record: string; wins: number; odds: number; mine: boolean }[];
 }): PlayoffPicture {
   const top = HEAD + COLUMNS;
@@ -76,7 +78,7 @@ export function layoutPlayoffs(input: {
     height: top + rows.length * ROW + FOOT + PAD,
     title: input.league,
     subtitle: `playoff chances, week ${input.week}`,
-    footer: `${SITE} · top ${input.playoffTeams} make it · 5,000 seasons simulated`,
+    footer: `${SITE} · ${input.rule ?? `top ${input.playoffTeams} make it`} · 5,000 seasons simulated`,
     rows,
     cut,
   };
