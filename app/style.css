@@ -1002,6 +1002,11 @@
     justify-content: space-between; gap: var(--s3);
     margin: var(--s4) 0 calc(var(--s1) * -1); }
   .lineuphead h2 { margin: 0; }
+  /* a section's heading with what you can do with the section at its end */
+  #out > div.sectionhead { display: flex; align-items: center;
+    justify-content: space-between; gap: var(--s3);
+    margin: var(--s4) 0 calc(var(--s1) * -1); }
+  .sectionhead h2 { margin: 0; }
   /*
    * The free agent who fills a slot, in a panel of its own under the
    * slot's row: who, his line, and what he does for you on one line, and

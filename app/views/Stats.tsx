@@ -23,6 +23,10 @@ import {
 import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
 import { pct } from "./Advice.tsx";
 import { Skeleton } from "./Reading.tsx";
+import { ShareButton } from "./ShareButton.tsx";
+import {
+  layoutPlayoffs, layoutSeasonTable, sharePlayoffs, shareSeasonTable,
+} from "../lib/shareStats.ts";
 import { ordinal, recordSays } from "./Standings.tsx";
 
 interface Props {
@@ -217,6 +221,12 @@ export function Stats(props: Props) {
    * for weeks. Points a game run high, since nobody plays every week, so
    * every team is scaled by the same amount to the league's actual
    * scoring.
+   *
+   * That alone assumes every manager sets the league's average lineup.
+   * Each team is moved toward its own start efficiency instead, halfway,
+   * since a few weeks of lineup calls are partly luck: a team that has
+   * started 95% of its best where the league starts 90% scores about 3%
+   * over its roster's line.
    */
   const strength = useMemo(() => {
     const starting = startingSlots(league.slots);
@@ -241,9 +251,19 @@ export function Stats(props: Props) {
       Math.max(1, projectedAll.length);
     const scale = actual && meanProjected ? actual / meanProjected : 1;
     const sd = weeklySpread(season, actual ?? meanProjected);
+    const started = season.reduce((sum, t) => sum + t.started, 0);
+    const best = season.reduce((sum, t) => sum + t.best, 0);
+    const leagueEff = best > 0 ? started / best : 1;
+    const coaching = (owner: string) => {
+      const team = season.find((t) => t.owner === owner);
+
+      return team && team.best > 0
+        ? 1 + 0.5 * (team.started / team.best / leagueEff - 1)
+        : 1;
+    };
 
     return new Map<string, Strength>([...projected].map(([owner, mean]) => [
-      owner, { mean: mean * scale, sd },
+      owner, { mean: mean * scale * coaching(owner), sd },
     ]));
   }, [league, byKey, season, props.listed]);
 
@@ -387,7 +407,30 @@ export function Stats(props: Props) {
 
       {run && (
         <>
-          <h2>playoff chances</h2>
+          {/* every table here goes to the league chat as a picture, since
+              the playoff race is the one thing the whole league argues over */}
+          <div class="sectionhead">
+            <h2>playoff chances</h2>
+            <ShareButton
+              label="share"
+              onShare={() => sharePlayoffs(layoutPlayoffs({
+                league: league.name,
+                week: coming,
+                playoffTeams,
+                teams: run.odds.map((o) => {
+                  const team = season.find((t) => t.owner === o.owner);
+
+                  return {
+                    name: o.owner,
+                    record: team ? recordSays(team) : "0-0",
+                    wins: o.wins,
+                    odds: o.playoffs,
+                    mine: o.owner === league.team,
+                  };
+                }),
+              }))}
+            />
+          </div>
           <div class="odds-list">
             {[...run.odds].sort((a, b) => b.playoffs - a.playoffs || b.wins - a.wins)
               .map((o) => {
@@ -411,7 +454,8 @@ export function Stats(props: Props) {
           <p class="hint">
             The top {playoffTeams} make it. The rest of the regular season,
             played out {SEASONS.toLocaleString()} times, each team scoring
-            around what its roster projects to start
+            around what its roster projects to start, moved halfway toward
+            how well it has set its lineups
             {thisWeek ? ", and this week from its lineups" : ""}.
           </p>
         </>
@@ -431,7 +475,28 @@ export function Stats(props: Props) {
 
       {season.length > 0 && (
         <>
-          <h2>every team</h2>
+          <div class="sectionhead">
+            <h2>every team</h2>
+            <ShareButton
+              label="share"
+              onShare={() => shareSeasonTable(layoutSeasonTable({
+                league: league.name,
+                week: coming - 1,
+                teams: [...season].sort((a, b) =>
+                  (b.wins + b.ties / 2) - (a.wins + a.ties / 2) || b.pf - a.pf)
+                  .map((t) => ({
+                    name: t.owner,
+                    record: recordSays(t),
+                    pf: t.pf,
+                    pa: t.pa,
+                    allPlay: winShare(t.allWins, t.allLosses, t.allTies),
+                    luck: luckOf(t),
+                    efficiency: t.best > 0 ? t.started / t.best : null,
+                    mine: t.owner === league.team,
+                  })),
+              }))}
+            />
+          </div>
           <div class="scroll">
             <table class="rating standings stats">
               <thead>
