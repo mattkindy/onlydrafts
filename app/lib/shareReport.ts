@@ -197,14 +197,35 @@ export interface ReportLayout extends Picture {
 
 // room to breathe: a recap is read on a phone, a block at a time
 const GAP = 36;
-const BLOCK_TITLE = 66;
-const ROW = 120;
-const CHART_ROW = 176;
-const CURVE_ROW = 276;
-/** each line a foot runs to past its first */
-const FOOT_LINE = 28;
+/** from a block's top to its first row, the title in between */
+const BLOCK_TITLE = 70;
+/** inside a block, at its sides and under its last row */
 const BLOCK_PAD = 32;
 const STRIP_ROW = 54;
+
+/*
+ * A row's type, and where each line of it sits under the row's top. The
+ * lines of one row sit close, and rows sit well apart, so a label reads
+ * as the start of its own row rather than the end of the one above.
+ */
+const LABEL_SIZE = 20;
+const NAME_SIZE = 30;
+/** the week's headline is set larger */
+const HERO_SIZE = 46;
+const FOOT_SIZE = 21;
+/** the label's baseline */
+const LABEL_AT = 20;
+/** between the label and the top of the name */
+const OVER_NAME = 12;
+/** a name's baseline to its foot's, more under a bigger name, and one foot line to the next */
+const nameToFoot = (size: number) => Math.round(size * 0.35) + 20;
+const FOOT_LINE = 27;
+/** how far type reaches under its baseline */
+const DESCENT = 6;
+/** from the last line of a row's words to the top of its chart */
+const TO_CHART = 18;
+/** between the bottom of one row and the top of the next */
+const ROW_GAP = 44;
 /** the note on a week still being played, under the subtitle */
 const NOTE_ROOM = 44;
 
@@ -246,15 +267,44 @@ const scorerRow = (label: string, his: Scorer, tone: Tone): ReportRow => ({
   tone,
 });
 
-const ROW_HEIGHTS: Record<RowChart["kind"], number> = {
-  spread: CHART_ROW,
-  curve: CURVE_ROW,
-  fill: CHART_ROW,
+/** how tall each chart is drawn */
+const CHART_TALL: Record<RowChart["kind"], number> = {
+  spread: 14,
+  curve: 120,
+  fill: 14,
 };
 
-const rowHeight = (row: ReportRow) =>
-  (row.chart ? ROW_HEIGHTS[row.chart.kind] : ROW) +
-  (row.foot.split("\n").length - 1) * FOOT_LINE;
+interface RowLines {
+  /** the name's size, and the baselines of the name and each foot line */
+  size: number;
+  name: number;
+  feet: number[];
+  /** the top of the chart, where there is one */
+  chart: number | null;
+  /** where the row's ink ends */
+  bottom: number;
+}
+
+/** where every line of a row sits under its top, for laying it out and drawing it */
+export function linesOf(row: ReportRow): RowLines {
+  const size = row.chart?.kind === "curve" ? HERO_SIZE : NAME_SIZE;
+  const name = LABEL_AT + OVER_NAME + size;
+  const feet = (row.foot ? row.foot.split("\n") : [])
+    .map((_, at) => name + nameToFoot(size) + at * FOOT_LINE);
+  const words = (feet[feet.length - 1] ?? name) + DESCENT;
+  const chart = row.chart ? words + TO_CHART : null;
+
+  return {
+    size,
+    name,
+    feet,
+    chart,
+    bottom: chart === null ? words : chart + CHART_TALL[row.chart!.kind],
+  };
+}
+
+/** a row and the gap under it */
+const rowHeight = (row: ReportRow) => linesOf(row).bottom + ROW_GAP;
 
 /**
  * Where each row starts under its block's title, and where it sits.
@@ -308,7 +358,8 @@ function rowsBlock(
     tops,
     places,
     y,
-    height: BLOCK_TITLE + height + BLOCK_PAD,
+    // the last row's gap gives way to the block's own padding
+    height: BLOCK_TITLE + height - ROW_GAP + BLOCK_PAD,
   };
 }
 
@@ -327,7 +378,7 @@ function scoresBlock(report: Report, y: number): ScoresBlock {
     median: share(report.median),
     middle: scoredSays(report.median),
     y,
-    height: BLOCK_TITLE + report.scores.length * STRIP_ROW + BLOCK_PAD,
+    height: BLOCK_TITLE + report.scores.length * STRIP_ROW + BLOCK_PAD - 14,
   };
 }
 
@@ -531,8 +582,21 @@ const TONES: Record<Tone, string> = {
 const BAR = 12;
 const DOT = 9;
 
-/** the middle half of a spread, the page's green over its chip, mixed */
-const MIDDLE = "#2A674E";
+/*
+ * The picture's own greys, lighter than the page's: a picture is seen
+ * small and often in a bright room, so every word clears 7:1 against
+ * the panel, and every bar 3:1 against its track.
+ */
+const LABEL = "#A3ADBC";
+const FOOT_INK = "#BCC4CF";
+const TITLE = SHADES.ink;
+const TRACK = "#38424F";
+const BENCHED = "#5A6678";
+const TICK = "#D5DBE4";
+const CURVE_EDGE = "#7A8597";
+
+/** the middle half of a spread, clear of its track */
+const MIDDLE = "#47A574";
 
 function drawSpread(
   ctx: CanvasRenderingContext2D, bar: SpreadBar,
@@ -542,14 +606,14 @@ function drawSpread(
   // still a dot on the bar rather than half of one past it
   const at = (share: number) => left + DOT + share * (width - DOT * 2);
 
-  ctx.fillStyle = SHADES.chip;
+  ctx.fillStyle = TRACK;
   roundRect(ctx, left, top, width, BAR, BAR / 2);
   ctx.fill();
 
   ctx.fillStyle = MIDDLE;
   ctx.fillRect(at(bar.q1), top, Math.max(2, at(bar.q3) - at(bar.q1)), BAR);
 
-  ctx.fillStyle = SHADES.faint;
+  ctx.fillStyle = TICK;
   ctx.fillRect(at(bar.mid) - 1, top - 3, 3, BAR + 6);
 
   ctx.beginPath();
@@ -588,7 +652,7 @@ function drawCurve(
   };
 
   outline();
-  ctx.fillStyle = SHADES.chip;
+  ctx.fillStyle = TRACK;
   ctx.fill();
 
   const edge = left + curve.at * width;
@@ -604,7 +668,7 @@ function drawCurve(
   ctx.fill();
   ctx.restore();
 
-  ctx.strokeStyle = SHADES.edge;
+  ctx.strokeStyle = CURVE_EDGE;
   ctx.lineWidth = 2;
   ctx.beginPath();
 
@@ -623,7 +687,7 @@ function drawCurve(
   ctx.stroke();
 
   // where the line had him, so the gap to where he landed is the story
-  ctx.strokeStyle = SHADES.faint;
+  ctx.strokeStyle = LABEL;
   ctx.setLineDash([4, 5]);
   ctx.beginPath();
   ctx.moveTo(left + curve.mid * width, top + 20);
@@ -639,7 +703,7 @@ function drawFill(
   ctx: CanvasRenderingContext2D, chart: { fill: number; won: boolean | null },
   left: number, width: number, top: number,
 ) {
-  ctx.fillStyle = SHADES.chip;
+  ctx.fillStyle = TRACK;
   roundRect(ctx, left, top, width, BAR, BAR / 2);
   ctx.fill();
 
@@ -687,40 +751,35 @@ function drawRow(
   left: number, width: number, top: number,
 ) {
   const right = left + width;
-  // the row with the curve is the week's headline, so it is set larger
-  const name = row.chart?.kind === "curve" ? 46 : 29;
+  const lines = linesOf(row);
 
   ctx.textAlign = "left";
-  ctx.fillStyle = SHADES.faint;
-  ctx.font = "700 21px " + FONT;
-  ctx.fillText(fitted(ctx, row.label, width), left, top + 22);
+  ctx.fillStyle = LABEL;
+  ctx.font = `700 ${LABEL_SIZE}px ` + FONT;
+  ctx.fillText(fitted(ctx, row.label, width), left, top + LABEL_AT);
 
   ctx.fillStyle = SHADES.ink;
-  ctx.font = `700 ${name}px ` + FONT;
+  ctx.font = `800 ${lines.size}px ` + FONT;
 
   const figure = ctx.measureText(row.figure).width;
-  const line = top + 48 + name / 2;
 
-  ctx.fillText(fitted(ctx, row.head, width - figure - 18), left, line);
+  ctx.font = `700 ${lines.size}px ` + FONT;
+  ctx.fillText(fitted(ctx, row.head, width - figure - 18), left, top + lines.name);
 
   ctx.textAlign = "right";
   ctx.fillStyle = TONES[row.tone];
-  ctx.font = `800 ${name}px ` + FONT;
-  ctx.fillText(row.figure, right, line);
+  ctx.font = `800 ${lines.size}px ` + FONT;
+  ctx.fillText(row.figure, right, top + lines.name);
 
   ctx.textAlign = "left";
-  ctx.fillStyle = SHADES.muted;
-  ctx.font = "500 21px " + FONT;
-
-  const feet = row.foot.split("\n");
-
-  feet.forEach((foot, at) => {
-    ctx.fillText(fitted(ctx, foot, width), left, line + 32 + at * FOOT_LINE);
+  ctx.fillStyle = FOOT_INK;
+  ctx.font = `500 ${FOOT_SIZE}px ` + FONT;
+  row.foot.split("\n").forEach((foot, at) => {
+    ctx.fillText(fitted(ctx, foot, width), left, top + lines.feet[at]!);
   });
 
-  if (row.chart) {
-    CHARTS[row.chart.kind](
-      ctx, row.chart, left, width, line + 60 + (feet.length - 1) * FOOT_LINE);
+  if (row.chart && lines.chart !== null) {
+    CHARTS[row.chart.kind](ctx, row.chart, left, width, top + lines.chart);
   }
 }
 
@@ -741,12 +800,12 @@ function drawScores(ctx: CanvasRenderingContext2D, block: ScoresBlock) {
 
     const barLeft = left + named;
 
-    ctx.fillStyle = SHADES.chip;
+    ctx.fillStyle = TRACK;
     roundRect(ctx, barLeft, top + 14, bars, BAR, BAR / 2);
     ctx.fill();
 
     // the paler end is what his bench would have added
-    ctx.fillStyle = SHADES.edge;
+    ctx.fillStyle = BENCHED;
     roundRect(ctx, barLeft, top + 14, Math.max(4, bar.most * bars), BAR, BAR / 2);
     ctx.fill();
 
@@ -787,9 +846,9 @@ export function paintReport(
     ctx.stroke();
 
     ctx.textAlign = "left";
-    ctx.fillStyle = SHADES.muted;
-    ctx.font = "800 26px " + FONT;
-    ctx.fillText(block.title, PAD + BLOCK_PAD, block.y + 44);
+    ctx.fillStyle = TITLE;
+    ctx.font = "800 27px " + FONT;
+    ctx.fillText(block.title, PAD + BLOCK_PAD, block.y + 46);
 
     if (block.kind === "scores") {
       drawScores(ctx, block);
