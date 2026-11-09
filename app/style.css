@@ -1212,6 +1212,8 @@
   .plabel { fill: var(--ink); font-size: 11px; font-weight: 700;
     font-variant-numeric: tabular-nums; }
   .ptap { fill: transparent; cursor: pointer; }
+  .pmark { fill: var(--ink); font-size: 10px; font-weight: 800; }
+  .pmark.lost { fill: var(--muted); }
   .pkey { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); margin: var(--s1) 0 0;
     font-size: var(--t1); color: var(--muted); }
   .pkey span { display: inline-flex; align-items: center; gap: 6px; }

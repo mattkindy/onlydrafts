@@ -251,6 +251,9 @@ export interface PlayoffOdds {
 export const pairKey = (week: number, a: string, b: string) =>
   week + ":" + [a, b].sort().join("|");
 
+/** the week's place in the run a forced result's key is for */
+export const weekOfPair = (key: string) => Number(key.split(":")[0]);
+
 /** one way your season can stand after a week still to play */
 export interface PathOutcome {
   /** your wins from here through that week */
@@ -369,53 +372,66 @@ export function playoffOdds(input: {
   const waysMade = playedBy.map((n) => new Array<number>(n + 1).fill(0));
   const trail = new Array<number>(input.weeks.length).fill(0);
 
+  // every game to come worked out once, so a season played out is only
+  // numbers: who plays whom, a picked winner, or this week's known odds
+  const meanOf = owners.map((o) => input.strength.get(o)?.mean ?? 0);
+  const sdOf = owners.map((o) => input.strength.get(o)?.sd ?? 0);
+  const plan = input.weeks.map((pairs, w) => pairs.flatMap(([a, b]) => {
+    const ia = at.get(a);
+    const ib = at.get(b);
+
+    if (ia === undefined || ib === undefined) {
+      return [];
+    }
+
+    const picked = input.forced?.get(pairKey(w, a, b));
+    const game = w === 0 && settled.has(a)
+      ? thisWeek.find((g) => (g.a === a && g.b === b) || (g.a === b && g.b === a))
+      : undefined;
+    const known = game && {
+      oddsA: game.a === a ? game.odds : 1 - game.odds,
+      pa: game.a === a ? game.projected[0] : game.projected[1],
+      pb: game.a === a ? game.projected[1] : game.projected[0],
+    };
+
+    return [{
+      ia, ib, known,
+      picked: picked === undefined ? null : picked === a,
+      mine: me !== undefined && (ia === me || ib === me),
+    }];
+  }));
+  const startWins = input.table.map((t) => t.wins + t.ties / 2);
+  const startPf = input.table.map((t) => t.pf);
+  const wins = startWins.slice();
+  const pf = startPf.slice();
+  const order = owners.map((_, i) => i);
+
   for (let run = 0; run < draws; run++) {
-    const wins = input.table.map((t) => t.wins + t.ties / 2);
-    const pf = input.table.map((t) => t.pf);
+    for (let i = 0; i < owners.length; i++) {
+      wins[i] = startWins[i]!;
+      pf[i] = startPf[i]!;
+    }
+
     let iWon: boolean | null = null;
     let mineWon = 0;
 
-    input.weeks.forEach((pairs, w) => {
-      for (const [a, b] of pairs) {
-        const ia = at.get(a);
-        const ib = at.get(b);
-
-        if (ia === undefined || ib === undefined) {
-          continue;
-        }
-
-        const picked = input.forced?.get(pairKey(w, a, b));
-        const known = w === 0 && settled.has(a)
-          ? thisWeek.find((g) => (g.a === a && g.b === b) || (g.a === b && g.b === a))
-          : undefined;
+    plan.forEach((games, w) => {
+      for (const { ia, ib, known, picked, mine } of games) {
         let aWins: boolean;
 
-        if (picked !== undefined) {
+        if (picked !== null) {
           // the scores still count toward points for: this week's lineups
           // where the game has them, and each side's usual otherwise
-          aWins = picked === a;
-
-          if (known) {
-            const [pa, pb] = known.a === a ? known.projected : [known.projected[1], known.projected[0]];
-
-            pf[ia] = pf[ia]! + pa;
-            pf[ib] = pf[ib]! + pb;
-          } else {
-            pf[ia] = pf[ia]! + (input.strength.get(a)?.mean ?? 0);
-            pf[ib] = pf[ib]! + (input.strength.get(b)?.mean ?? 0);
-          }
+          aWins = picked;
+          pf[ia] = pf[ia]! + (known ? known.pa : meanOf[ia]!);
+          pf[ib] = pf[ib]! + (known ? known.pb : meanOf[ib]!);
         } else if (known) {
-          const oddsA = known.a === a ? known.odds : 1 - known.odds;
-          const [pa, pb] = known.a === a ? known.projected : [known.projected[1], known.projected[0]];
-
-          aWins = next() < oddsA;
-          pf[ia] = pf[ia]! + pa;
-          pf[ib] = pf[ib]! + pb;
+          aWins = next() < known.oddsA;
+          pf[ia] = pf[ia]! + known.pa;
+          pf[ib] = pf[ib]! + known.pb;
         } else {
-          const sa = input.strength.get(a);
-          const sb = input.strength.get(b);
-          const xa = (sa?.mean ?? 0) + (sa?.sd ?? 0) * normal(next);
-          const xb = (sb?.mean ?? 0) + (sb?.sd ?? 0) * normal(next);
+          const xa = meanOf[ia]! + sdOf[ia]! * normal(next);
+          const xb = meanOf[ib]! + sdOf[ib]! * normal(next);
 
           aWins = xa > xb;
           pf[ia] = pf[ia]! + xa;
@@ -424,7 +440,7 @@ export function playoffOdds(input: {
 
         wins[aWins ? ia : ib]! += 1;
 
-        if (me !== undefined && (ia === me || ib === me)) {
+        if (mine) {
           const won = (ia === me) === aWins;
 
           mineWon += Number(won);
@@ -438,8 +454,7 @@ export function playoffOdds(input: {
       trail[w] = mineWon;
     });
 
-    const order = owners.map((_, i) => i)
-      .sort((x, y) => wins[y]! - wins[x]! || pf[y]! - pf[x]!);
+    order.sort((x, y) => wins[y]! - wins[x]! || pf[y]! - pf[x]! || x - y);
 
     order.slice(0, input.playoffTeams).forEach((i) => { made[i]!++; });
     firsts[order[0]!]!++;
@@ -485,5 +500,61 @@ export function playoffOdds(input: {
           playoffs: waysMade[w]![won]! / seasons,
         }]
         : [])),
+  };
+}
+
+/** a set of picks as one string, the same however they were made */
+export const picksSignature = (picks: Map<string, string>) =>
+  [...picks].map(([key, winner]) => key + "=" + winner).sort().join(",");
+
+export interface ScenarioPath {
+  /** your chance today, before any pick has happened */
+  now: number;
+  /** after each week, the ways your season can stand then */
+  cols: PathOutcome[][];
+}
+
+/**
+ * Your chance as this tab would tell it each week if the season goes as
+ * picked. A pick is not known until its week is played, so the path
+ * starts from today's chance and moves when a picked game happens: up
+ * for a win, down for a loss, and either way for a rival's result.
+ *
+ * Each week is played out with only the picks up to it settled, and the
+ * weeks that share a set of settled picks share a run, so nothing picked
+ * means one run for the whole path.
+ */
+export function scenarioPath(input: {
+  forced: Map<string, string>;
+  /** how many weeks the path runs */
+  weeks: number;
+  mine: string;
+  /** the season played out with these picks */
+  playOut: (picks: Map<string, string>) => PlayoffRun;
+  /**
+   * Runs already played, by picksSignature, which this adds to: a pick
+   * leaves the weeks before it as they were, so they are not played again.
+   */
+  runs?: Map<string, PlayoffRun>;
+}): ScenarioPath {
+  const runs = input.runs ?? new Map<string, PlayoffRun>();
+  const runFor = (picks: Map<string, string>) => {
+    const key = picksSignature(picks);
+    let run = runs.get(key);
+
+    if (!run) {
+      run = input.playOut(picks);
+      runs.set(key, run);
+    }
+
+    return run;
+  };
+  const through = (week: number) =>
+    new Map([...input.forced].filter(([key]) => weekOfPair(key) <= week));
+  const today = runFor(through(-1));
+
+  return {
+    now: today.odds.find((o) => o.owner === input.mine)?.playoffs ?? 0,
+    cols: Array.from({ length: input.weeks }, (_, w) => runFor(through(w)).path[w] ?? []),
   };
 }
