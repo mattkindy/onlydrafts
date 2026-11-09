@@ -232,7 +232,7 @@ function Bench(
   /**
    * The whole bench is worth seeing when one of them would help. When
    * none would, it is seven rows of minus signs, so it waits behind a
-   * line that says as much.
+   * line you can open.
    */
   const [open, setOpen] = useState(false);
 
@@ -244,10 +244,7 @@ function Bench(
     return (
       <button class="slot-card benchfold" onClick={() => setOpen(true)}>
         <b>bench</b>
-        <span>
-          {swaps.length} {swaps.length === 1 ? "player" : "players"}, none
-          would raise it
-        </span>
+        <span>{swaps.length} {swaps.length === 1 ? "player" : "players"}</span>
         <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
           <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor"
             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />

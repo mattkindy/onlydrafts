@@ -68,6 +68,10 @@ export interface League {
   keepers?: boolean | null;
   /** how many each team may keep, when the provider says */
   keepersPerTeam?: number | null;
+  /** how many teams make the playoffs, when the provider says */
+  playoffTeams?: number | null;
+  /** the last week of the regular season, when the provider says */
+  lastRegularWeek?: number | null;
 }
 
 export interface Provider {
@@ -703,6 +707,11 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       keepers: keeperLeague(lg, rosters as SleeperRoster[]),
       keepersPerTeam: keeperLeague(lg, rosters as SleeperRoster[])
         ? (lg["settings"]?.["max_keepers"] ?? null)
+        : null,
+      playoffTeams: Number(lg["settings"]?.["playoff_teams"]) || null,
+      // the week the playoffs start, so the regular season is the one before
+      lastRegularWeek: Number(lg["settings"]?.["playoff_week_start"])
+        ? Number(lg["settings"]["playoff_week_start"]) - 1
         : null,
       allRosters: (rosters as SleeperRoster[]).map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
@@ -1385,6 +1394,8 @@ async function espnLeagues(leagueId: string, season: number): Promise<League[]> 
     snake: true,
     keepers: (settings.draftSettings?.keeperCount ?? 0) > 0,
     keepersPerTeam: settings.draftSettings?.keeperCount || null,
+    playoffTeams: settings.scheduleSettings?.playoffTeamCount || null,
+    lastRegularWeek: settings.scheduleSettings?.matchupPeriodCount || null,
     allRosters: teams.map((t) => ({
       owner: nameOf(t),
       picks: everyRound,

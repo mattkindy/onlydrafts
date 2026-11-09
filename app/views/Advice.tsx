@@ -176,7 +176,8 @@ export function Advice(
   const swaps = best.swaps.filter((swap) => swap.gains >= WORTH_A_MOVE);
 
   if (!swaps.length && lean) {
-    return <p class="hint">No swap you can still make would raise it.</p>;
+    // nothing to do says nothing: the scoreline above already has the odds
+    return null;
   }
 
   if (!swaps.length) {

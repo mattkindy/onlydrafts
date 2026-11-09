@@ -857,7 +857,7 @@ export function Waivers(props: Props) {
             </GoLink>
           </section>
         )
-        : <p class="hint">No add is worth a drop right now.</p>)}
+        : null)}
 
       {!wanted && <Groups groups={groups} onMore={props.onMore} />}
 

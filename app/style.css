@@ -932,7 +932,8 @@
   .htop { display: flex; justify-content: space-between; align-items: center;
     font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
     text-transform: uppercase; color: var(--faint); margin-bottom: var(--s3); }
-  .phase { display: inline-flex; align-items: center; gap: var(--s1); }
+  /* the dot's glow spreads 8px, so the word keeps clear of all of it */
+  .phase { display: inline-flex; align-items: center; gap: 12px; }
   .phase.live { color: var(--go); }
   /* the next lock, at the foot of the scoreline under a rule of its own */
   .hlock { display: flex; align-items: center; gap: var(--s2);
@@ -952,7 +953,7 @@
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--go);
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--go) 60%, transparent);
     animation: pulse 1.6s ease-out infinite; }
-  @keyframes pulse { to { box-shadow: 0 0 0 8px transparent; } }
+  @keyframes pulse { to { box-shadow: 0 0 0 7px transparent; } }
   @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
   .hbody { position: relative; z-index: 1; display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
