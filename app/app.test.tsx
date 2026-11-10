@@ -1092,16 +1092,32 @@ describe("a defence costs what the pick costs", () => {
     }
   });
 
-  it("keeps what he beats the last starter by as his own", () => {
+  it("keeps what he beats the bar by as his own, in the order he projects", () => {
     const defences = players
       .filter((p) => p.position === "DEF")
       .sort((a, b) => (b.ownVor ?? 0) - (a.ownVor ?? 0));
 
     // the one signal worth having about a defence, which is why it
-    // survives the curve rather than being replaced by it
-    expect(defences[0]!.ownVor!).toBeGreaterThan(0);
+    // survives the curve rather than being replaced by it: it spreads
+    // the defences out in the order their own projections put them.
+    // It need not be above zero. The bar is the wire's best plus what
+    // streaming on the matchup adds, and by midseason the projections
+    // bunch close enough that streaming beats holding even the best.
     expect(defences[0]!.ownVor!)
       .toBeGreaterThan(defences[defences.length - 1]!.ownVor!);
+
+    const perGame = (p: Player) => (p.ownVor ?? 0) / Math.max(1, p.games ?? 17);
+
+    for (let i = 1; i < defences.length; i++) {
+      const [ahead, here] = [defences[i - 1]!, defences[i]!];
+
+      if ((ahead.games ?? 17) === (here.games ?? 17)) {
+        expect(perGame(ahead), `${ahead.name} over ${here.name}`)
+          .toBeGreaterThanOrEqual(perGame(here));
+        expect(ahead.ppg!, `${ahead.name} over ${here.name}`)
+          .toBeGreaterThanOrEqual(here.ppg!);
+      }
+    }
   });
 });
 
