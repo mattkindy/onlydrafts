@@ -6,6 +6,9 @@ import { rescore } from "./lib/board.ts";
 
 const DATA = join(import.meta.dirname, "..", "docs", "data");
 
+/** past this many points nobody's projected week is one to believe */
+const BELIEVABLE_WEEK = 30;
+
 /**
  * The newest week the site lists. An older slate stays on disk after the
  * build stops writing it, so a test pinned to one keeps passing on a file
@@ -79,11 +82,21 @@ it("the shipped files load and score end to end", async () => {
 
   // a week at exactly zero is a player the slate has not playing, ruled
   // out or a backup Sleeper gives no number, which the build writes on
-  // purpose so the app does not start them
+  // purpose so the app does not start them.
+  //
+  // A week past three times his average is a backup who has taken the
+  // job, whose season line is mostly weeks on the bench: a quarterback
+  // on four and a half a game starting for an injured one projects
+  // three and a half times that, which is right. What the bound is for
+  // is a number nobody scores, so past three times the week itself has
+  // to stay a believable one.
   for (const p of worthReading) {
     for (const w of p.weeks!) {
+      const points = w.of * (p.ownPpg ?? 0);
+
       expect(
-        w.of === 0 || (w.of > 0.02 && w.of < 3), `${p.name} w${w.w} ${w.of}`,
+        w.of === 0 || (w.of > 0.02 && (w.of < 3 || points < BELIEVABLE_WEEK)),
+        `${p.name} w${w.w} ${w.of} (${points.toFixed(1)} points)`,
       ).toBe(true);
     }
   }
