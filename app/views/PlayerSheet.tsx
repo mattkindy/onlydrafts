@@ -1,4 +1,13 @@
-/** Everything the board says about one player, on top of whatever view you were in. */
+/**
+ * Everything the board says about one player, on top of whatever view
+ * you were in, in the order a manager asks it: what he is worth this
+ * week and on average, what he has done lately and how much he plays,
+ * the weeks to come, his season, and why the model sees him that way.
+ * Figures and small tables rather than sentences, and the long lists
+ * open on a tap.
+ */
+
+import { useState } from "preact/hooks";
 
 import type { Pays, Player } from "../lib/scoring.ts";
 import { payFor } from "../lib/scoring.ts";
@@ -9,7 +18,6 @@ import {
 } from "../lib/slate.ts";
 import { WeatherMark, weatherWords } from "./WeatherMark.tsx";
 import { lineOver, movedBy } from "../lib/statLine.ts";
-import { workOf, type Work } from "../lib/usage.ts";
 import { useSheet } from "./useSheet.ts";
 
 /** the week the slate covers, and his row on it if he has one */
@@ -41,132 +49,225 @@ interface WeekBands {
 
 type Week = NonNullable<Player["weeks"]>[number];
 
+/** one week of his season: its line, and what he scored if it is played */
+interface WeekRow {
+  week: Week;
+  band: WeekBands;
+  got: number | null;
+}
+
+/** how many rows a list shows before it opens on a tap */
+const SHOWN = 4;
+
 /**
- * One row per week, drawn as a box and whisker rather than a filled
- * bar. The season's per-game quantiles give the shape of a single week;
- * each week stretches that shape by its own matchup, so a soft one
- * shows a lower box and a shorter tail, not only a shorter bar.
+ * Every week of his season as the sheet reads it.
  *
- * The week the slate covers takes the slate's own line instead, so the
- * card says the same number the matchup page starts him on. A later week
- * takes the board's blend of our line with Sleeper's, so week 3 and week
- * 9 are answering the same question as the week in front of you.
+ * The season's per-game quantiles give the shape of a single week, and
+ * each week stretches that shape by its own matchup. The week the slate
+ * covers takes the slate's own line instead, so the sheet says the same
+ * number the matchup page starts him on. A later week takes the board's
+ * blend of our line with Sleeper's, moved for what this league pays a
+ * catch. A played week carries what he scored under the league's rules.
  */
-function WeekByWeek(
-  { p, pays, boardPerCatch, thisWeek }: {
-    p: Player;
-    pays: Pays;
-    boardPerCatch?: number;
-    thisWeek?: ThisWeek;
-  },
-) {
-  const games = p.weeks ?? [];
-
-  if (!games.length) {
-    return null;
-  }
-
+function weekRowsOf(
+  p: Player, pays: Pays, boardPerCatch?: number, thisWeek?: ThisWeek,
+): WeekRow[] {
   const g = p.game;
   const ev = g?.["ev"] ?? 0;
   const spread = g && ev > 0
     ? { low: g["low"]! / ev, q1: g["q1"]! / ev, q3: g["q3"]! / ev, high: g["high"]! / ev }
     : { low: 1, q1: 1, q3: 1, high: 1 };
-  // The blend was scored once, at the build. A league paying a catch
-  // differently moves it, the same way the slate moves.
   const shift = catchShiftOf(pays, boardPerCatch);
-  const blendOf = (w: Week) => {
-    if (w.blend === undefined) {
-      return undefined;
-    }
+  const blendOf = (w: Week) => w.blend === undefined
+    ? undefined
+    : movedForCatches(w.blend, w.blend, w.catches ?? 0, shift);
 
-    return movedForCatches(w.blend, w.blend, w.catches ?? 0, shift);
-  };
-  // a week with no blend is a multiple of his own average, so the
-  // league's own scoring is already in the number the card shows
-  const bands = games.map((w): WeekBands => {
-    const row = w.w === thisWeek?.week ? thisWeek.row : undefined;
+  return (p.weeks ?? []).map((week): WeekRow => {
+    const row = week.w === thisWeek?.week ? thisWeek.row : undefined;
+    const got = week.played ? payFor(week.played, pays) : null;
 
     if (row) {
       return {
-        pts: row.blend,
-        low: row.floor,
-        q1: row.q1 ?? row.blend * spread.q1,
-        q3: row.q3 ?? row.blend * spread.q3,
-        high: row.ceiling,
+        week,
+        got,
+        band: {
+          pts: row.blend,
+          low: row.floor,
+          q1: row.q1 ?? row.blend * spread.q1,
+          q3: row.q3 ?? row.blend * spread.q3,
+          high: row.ceiling,
+        },
       };
     }
 
-    const pts = blendOf(w) ?? w.of * (p.ppg ?? 0);
+    // a week with no blend is a multiple of his own average, so the
+    // league's own scoring is already in the number
+    const pts = blendOf(week) ?? week.of * (p.ppg ?? 0);
 
     return {
-      pts,
-      low: pts * spread.low,
-      q1: pts * spread.q1,
-      q3: pts * spread.q3,
-      high: pts * spread.high,
+      week,
+      got,
+      band: {
+        pts,
+        low: pts * spread.low,
+        q1: pts * spread.q1,
+        q3: pts * spread.q3,
+        high: pts * spread.high,
+      },
     };
   });
-  // what he actually scored, under this league's rules, in a week
-  // already played; a week not yet played has nothing to score
-  const played = games.map((w) => w.played ? payFor(w.played, pays) : null);
-  const max = Math.max(
-    ...bands.map((b) => b.high),
-    ...played.filter((n): n is number => n !== null),
-  ) || 1;
-  const pct = (v: number) => (Math.max(0, v) / max) * 100;
+}
+
+/** a list's first rows, and a tap to open the rest */
+function useOpening<T>(rows: T[]): { shown: T[]; more: number; toggle: () => void; open: boolean } {
+  const [open, setOpen] = useState(false);
+
+  return {
+    shown: open ? rows : rows.slice(0, SHOWN),
+    more: rows.length - SHOWN,
+    toggle: () => setOpen((was) => !was),
+    open,
+  };
+}
+
+/**
+ * The figures a manager looks for first: this week's line where the
+ * slate has one, what he averages, and where the room drafts him.
+ */
+function KeyTiles(
+  { p, teams, now, thisWeek }: {
+    p: Player; teams: number; now: WeekRow | undefined; thisWeek?: ThisWeek;
+  },
+) {
   const weather = thisWeek?.row ? weatherWords(thisWeek.row) : undefined;
 
   return (
-    <>
-      <h2>week by week</h2>
-      <p class="pkey">
-        <span><i class="kseg k-range" />range</span>
-        <span><i class="kseg k-usual" />usual</span>
-        <span><i class="ktick" />proj</span>
-        <span><i class="kdot" /><i class="kdot down" />scored, over or under</span>
-      </p>
-      {games.map((w, i) => {
-        const { pts, low, q1, q3, high } = bands[i]!;
-        const got = played[i] ?? null;
-        const beat = got !== null ? got >= pts : null;
+    <div class="tiles key">
+      {/* a week of the season with no game for him is his bye */}
+      {thisWeek && !now && (
+        <div class="tile"><i>wk {thisWeek.week}</i><b>bye</b></div>
+      )}
+      {now && (
+        <div class="tile">
+          <i>wk {now.week.w} {now.week.opp}</i>
+          <b>{now.band.pts.toFixed(1)}</b>
+          <span>
+            {now.band.low.toFixed(0)}–{now.band.high.toFixed(0)}
+            {weather && <> · {weather}</>}
+          </span>
+        </div>
+      )}
+      {p.ppg !== undefined && (
+        <div class="tile"><i>a game</i><b>{p.ppg.toFixed(1)}</b></div>
+      )}
+      <div class="tile">
+        <i>adp</i>
+        <b>{p.adp ? asRound(p.adp, teams) : "–"}</b>
+        {p.adp && p.adpLow && p.adpHigh && (
+          <span>{asRound(p.adpHigh, teams)}–{asRound(p.adpLow, teams)}</span>
+        )}
+      </div>
+    </div>
+  );
+}
 
-        return (
-          <div class="wk" key={w.w}>
-            <span>w{w.w}</span>
-            <span>
-              {w.opp}
-              {w.w === thisWeek?.week && thisWeek.row && (
-                <WeatherMark row={thisWeek.row} />
-              )}
-            </span>
-            <span class="bar">
-              <u style={{
-                left: pct(low) + "%",
-                right: (100 - pct(high)) + "%",
-              }} />
-              <i style={{
-                left: pct(q1) + "%",
-                right: (100 - pct(q3)) + "%",
-              }} />
-              <b style={{ left: pct(pts) + "%" }} />
-              {got !== null && (
-                <s class={beat ? "up" : "down"} style={{ left: pct(got) + "%" }} />
-              )}
-            </span>
-            <span class="wkpts">
-              {pts.toFixed(1)}
-              <em>{low.toFixed(0)} to {high.toFixed(0)}</em>
-            </span>
-            {got !== null && (
-              <span class="wkline">
-                <b class={beat ? "up" : "down"}>{got.toFixed(1)}</b>
-                <i>{beat ? "+" : ""}{(got - pts).toFixed(1)} vs projection</i>
-                {w.use && <i>{useWords(w.use)}</i>}
-              </span>
+/**
+ * The weeks he has played, newest first: what he scored against his
+ * line, and how much he played, a column each. Points say what happened
+ * and the work says whether it is likely to keep happening.
+ */
+function PlayedWeeks({ rows }: { rows: WeekRow[] }) {
+  const newest = [...rows].reverse();
+  const list = useOpening(newest);
+
+  if (!rows.length) {
+    return null;
+  }
+
+  return (
+    <>
+      <h2>played</h2>
+      <table class="played">
+        <thead>
+          <tr>
+            <th>wk</th><th /><th>pts</th><th>vs proj</th>
+            <th>snaps</th><th>car</th><th>tgt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.shown.map(({ week, band, got }) => {
+            const over = (got ?? 0) - band.pts;
+            const use = week.use;
+
+            // a week gone by with nothing scored is one he missed
+            if (got === null) {
+              return (
+                <tr key={week.w} class="missed">
+                  <td>{week.w}</td>
+                  <td class="opp">{week.opp}</td>
+                  <td colSpan={5}>did not play</td>
+                </tr>
+              );
+            }
+
+            return (
+              <tr key={week.w}>
+                <td>{week.w}</td>
+                <td class="opp">{week.opp}</td>
+                <td class={"pts " + (over >= 0 ? "up" : "down")}>{got.toFixed(1)}</td>
+                <td class="vs">{over >= 0 ? "+" : "−"}{Math.abs(over).toFixed(1)}</td>
+                <td>{use ? `${use[0]}%` : "–"}</td>
+                <td>{use ? use[1] : "–"}</td>
+                <td>{use ? use[2] : "–"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {list.more > 0 && (
+        <button class="textbtn more" onClick={list.toggle}>
+          {list.open ? "fewer" : `all ${rows.length} weeks`}
+        </button>
+      )}
+    </>
+  );
+}
+
+/**
+ * The weeks to come, a line each: the week, the opponent, his 80% and
+ * 50% ranges as a bar with his line marked, and the line itself. The
+ * next few show, and the rest of the season opens on a tap.
+ */
+function ComingWeeks({ rows, thisWeek }: { rows: WeekRow[]; thisWeek?: ThisWeek }) {
+  const list = useOpening(rows);
+
+  if (!rows.length) {
+    return null;
+  }
+
+  const max = Math.max(...rows.map((r) => r.band.high)) || 1;
+  const pct = (v: number) => (Math.max(0, v) / max) * 100;
+
+  return (
+    <>
+      <h2>coming up</h2>
+      {list.shown.map(({ week, band }) => (
+        <div class="wk" key={week.w}>
+          <span>w{week.w}</span>
+          <span>
+            {week.opp}
+            {week.w === thisWeek?.week && thisWeek.row && (
+              <WeatherMark row={thisWeek.row} />
             )}
-          </div>
-        );
-      })}
+          </span>
+          <span class="bar" title={`${band.low.toFixed(0)}–${band.high.toFixed(0)}`}>
+            <u style={{ left: pct(band.low) + "%", right: (100 - pct(band.high)) + "%" }} />
+            <i style={{ left: pct(band.q1) + "%", right: (100 - pct(band.q3)) + "%" }} />
+            <b style={{ left: pct(band.pts) + "%" }} />
+          </span>
+          <span class="wkpts">{band.pts.toFixed(1)}</span>
+        </div>
+      ))}
       <div class="wk">
         <span /><span />
         <div class="scale">
@@ -174,59 +275,287 @@ function WeekByWeek(
         </div>
         <span />
       </div>
-      {weather && (
-        <div class="hint">Week {thisWeek!.week}: {weather}.</div>
+      <p class="pkey">
+        <span><i class="kseg k-range" />80% range</span>
+        <span><i class="kseg k-usual" />50% range</span>
+        <span><i class="ktick" />proj</span>
+      </p>
+      {list.more > 0 && (
+        <button class="textbtn more" onClick={list.toggle}>
+          {list.open ? "fewer" : `rest of the season, ${list.more} more`}
+        </button>
       )}
     </>
   );
 }
 
-/** one week's work, short enough to sit under his points */
-const useWords = (use: NonNullable<Week["use"]>) =>
-  `${use[0]}% snaps, ${use[1]} car, ${use[2]} tgt` +
-  (use[3] > 0 ? `, ${use[3]} in the 20` : "");
-
-/** a stretch of his work as a sentence */
-const workLine = (work: Work) =>
-  `${Math.round(work.snaps)}% of the snaps, ${work.carries.toFixed(1)} ` +
-  `carries, ${work.targets.toFixed(1)} targets, ${work.redZone.toFixed(1)} ` +
-  "inside the 20";
+/** one slot on the season strip: a week he played, missed, has to come, or his bye */
+type Slot =
+  | { w: number; kind: "bye" }
+  | { w: number; kind: "played" | "missed" | "coming"; row: WeekRow };
 
 /**
- * His work, the last few games against the ones before. Points say what
- * happened and this says whether it is likely to keep happening.
+ * His whole season on one strip, a week to a column, so the story reads
+ * at a glance: a bar of what he scored where he played, green where he
+ * beat his line and amber where he fell short, his line marked across
+ * it; a box of his 50% range with its 80% whiskers for a week to come;
+ * his bye and his missed weeks where they fall. This week is lit, and
+ * tapping a week says it in full under the strip.
  */
-function HisWork({ p }: { p: Player }) {
-  const work = workOf(p);
+function SeasonStrip(
+  { slots, now, picked, onPick }: {
+    slots: Slot[]; now: number | null; picked: number | null;
+    onPick: (w: number) => void;
+  },
+) {
+  const W = 340, H = 156, L = 26, R = 4, T = 8, B = 22;
+  const n = slots.length;
+  const step = (W - L - R) / Math.max(1, n);
+  const barW = Math.max(4, Math.min(12, step * 0.62));
+  const tallest = Math.max(1, ...slots.flatMap((slot) => slot.kind === "bye" ? [] : [
+    slot.row.got ?? 0, slot.kind === "coming" ? slot.row.band.high : slot.row.band.pts,
+  ]));
+  const top = Math.ceil(tallest / 10) * 10;
+  const y = (v: number) => T + (1 - Math.max(0, v) / top) * (H - T - B);
+  const x = (at: number) => L + step * (at + 0.5);
+  const named = (at: number, w: number) =>
+    step >= 17 || at % 2 === 0 || w === now || w === picked;
 
-  if (!work) {
+  return (
+    <svg class="strip-chart" viewBox={`0 0 ${W} ${H}`} role="img"
+      aria-label="his season, a week to a column">
+      {[0, top / 2, top].map((g) => (
+        <g key={g}>
+          <line class="sgrid" x1={L} x2={W - R} y1={y(g)} y2={y(g)} />
+          <text class="saxis" x={L - 5} y={y(g) + 3.5} text-anchor="end">{g}</text>
+        </g>
+      ))}
+      {slots.map((slot, at) => {
+        const cx = x(at);
+        const lit = slot.w === now;
+        const chosen = slot.w === picked;
+
+        return (
+          <g key={slot.w}>
+            {(lit || chosen) && (
+              <rect class={"scol" + (chosen ? " picked" : "")}
+                x={cx - step / 2 + 1} y={T - 4} width={step - 2} height={H - T - B + 8} rx={4} />
+            )}
+            {slot.kind === "bye" && (
+              <text class="sbye" x={cx} y={y(0) - 4} text-anchor="middle">bye</text>
+            )}
+            {slot.kind === "missed" && (
+              <path class="smiss" d={`M${cx - 3},${y(0) - 9}l6,6m0,-6l-6,6`} />
+            )}
+            {slot.kind === "played" && (
+              <>
+                <rect class={"sbar " + ((slot.row.got ?? 0) >= slot.row.band.pts ? "up" : "down")}
+                  x={cx - barW / 2} y={y(slot.row.got ?? 0)} width={barW}
+                  height={Math.max(1, y(0) - y(slot.row.got ?? 0))} rx={2} />
+                <line class="stick" x1={cx - barW / 2 - 2} x2={cx + barW / 2 + 2}
+                  y1={y(slot.row.band.pts)} y2={y(slot.row.band.pts)} />
+              </>
+            )}
+            {slot.kind === "coming" && (
+              <>
+                <line class="swhisk" x1={cx} x2={cx}
+                  y1={y(slot.row.band.high)} y2={y(slot.row.band.low)} />
+                <rect class="sbox" x={cx - barW / 2} y={y(slot.row.band.q3)} width={barW}
+                  height={Math.max(2, y(slot.row.band.q1) - y(slot.row.band.q3))} rx={2} />
+                <line class="stick" x1={cx - barW / 2 - 2} x2={cx + barW / 2 + 2}
+                  y1={y(slot.row.band.pts)} y2={y(slot.row.band.pts)} />
+              </>
+            )}
+            {named(at, slot.w) && (
+              <text class={"saxis" + (lit || chosen ? " on" : "")} x={cx} y={H - 6}
+                text-anchor="middle">{slot.w}</text>
+            )}
+            <rect class="stap" x={cx - step / 2} y={0} width={step} height={H}
+              onClick={() => onPick(slot.w)} />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** the week a tap picked, in full, under the strip */
+function SlotSays({ slot }: { slot: Slot | undefined }) {
+  if (!slot) {
+    return null;
+  }
+
+  if (slot.kind === "bye") {
+    return <p class="wsay"><b>wk {slot.w}</b> · bye</p>;
+  }
+
+  const { week, band, got } = slot.row;
+
+  if (slot.kind === "missed") {
+    return <p class="wsay"><b>wk {slot.w}</b> {week.opp} · did not play</p>;
+  }
+
+  if (slot.kind === "coming") {
+    return (
+      <p class="wsay">
+        <b>wk {slot.w}</b> {week.opp} · proj <b>{band.pts.toFixed(1)}</b>
+        {" "}· 80% range {band.low.toFixed(0)}–{band.high.toFixed(0)}
+      </p>
+    );
+  }
+
+  const over = (got ?? 0) - band.pts;
+  const use = week.use;
+
+  return (
+    <p class="wsay">
+      <b>wk {slot.w}</b> {week.opp} · <b class={over >= 0 ? "up" : "down"}>{(got ?? 0).toFixed(1)}</b>
+      {" "}({over >= 0 ? "+" : "−"}{Math.abs(over).toFixed(1)} vs {band.pts.toFixed(1)})
+      {use && <> · {use[0]}% snaps · {use[1]} car · {use[2]} tgt</>}
+    </p>
+  );
+}
+
+/** a label's position along the season bar, and how near two may sit */
+const LABEL_ROOM = 14;
+
+/**
+ * His season over the simulations: what he is projected and the median
+ * season, one bar with his 80% range across it, the 50% range darker
+ * and the median marked, and the stat line his projection adds up to.
+ * The numbers sit at the edges they belong to, and an inner one too
+ * close to its neighbour is left off.
+ */
+function Season({ p }: { p: Player }) {
+  const sim = p.sim;
+  const line = p.games !== undefined
+    ? lineOver(p.projected ?? p.simulated, p.position, p.games, movedBy(p))
+    : [];
+
+  if (!sim && !line.length) {
     return null;
   }
 
   return (
     <>
-      <h2>his work</h2>
-      <div class="fact">
-        last {work.recent.games === 1 ? "game" : `${work.recent.games} games`}:{" "}
-        {workLine(work.recent)}
-      </div>
-      {work.before && (
-        <div class="fact">
-          {work.before.games === 1 ? "the game" : `the ${work.before.games} games`}
-          {" "}before: {workLine(work.before)}
+      <h2>season{p.games !== undefined ? ` · ${p.games.toFixed(1)} games` : ""}</h2>
+      {sim && <SeasonRange sim={sim} />}
+      {line.length > 0 && (
+        <div class="statline big">
+          {line.map((f) => (
+            <span class="s" key={f.label}>
+              <i>{f.label}</i>{f.value.toFixed(f.places)}
+            </span>
+          ))}
         </div>
       )}
     </>
   );
 }
 
-export function PlayerSheet(props: Props) {
-  const { p, teams } = props;
-  const g = p.game;
-  const sim = p.sim;
+function SeasonRange({ sim }: { sim: Record<string, number> }) {
+  const low = sim["low"] ?? 0;
+  const q1 = sim["q1"] ?? 0;
+  const mid = sim["mid"] ?? 0;
+  const q3 = sim["q3"] ?? 0;
+  const high = sim["high"] ?? 0;
+  const top = Math.max(high, 1);
+  const at = (v: number) => (Math.max(0, v) / top) * 100;
+  const roomy = (a: number, b: number) => Math.abs(at(a) - at(b)) >= LABEL_ROOM;
+
+  return (
+    <>
+      <div class="tiles season">
+        <div class="tile"><i>proj</i><b>{Math.round(sim["ev"] ?? 0)}</b></div>
+        <div class="tile"><i>median</i><b>{Math.round(mid)}</b></div>
+      </div>
+      <div class="srange" role="img"
+        aria-label={`80% range ${low} to ${high}, 50% range ${q1} to ${q3}`}>
+        <span class="bar">
+          <u style={{ left: at(low) + "%", right: (100 - at(high)) + "%" }} />
+          <i style={{ left: at(q1) + "%", right: (100 - at(q3)) + "%" }} />
+          <b style={{ left: at(mid) + "%" }} />
+        </span>
+        <span class="ends" aria-hidden="true">
+          <span class="lo" style={{ left: at(low) + "%" }}>{Math.round(low)}</span>
+          {roomy(q1, low) && roomy(q1, q3) && (
+            <span class="in" style={{ left: at(q1) + "%" }}>{Math.round(q1)}</span>
+          )}
+          {roomy(q3, high) && roomy(q1, q3) && (
+            <span class="in" style={{ left: at(q3) + "%" }}>{Math.round(q3)}</span>
+          )}
+          <span class="hi" style={{ right: (100 - at(high)) + "%" }}>{Math.round(high)}</span>
+        </span>
+      </div>
+      <p class="pkey">
+        <span><i class="kseg k-range" />80% range</span>
+        <span><i class="kseg k-usual" />50% range</span>
+        <span><i class="ktick" />median</span>
+      </p>
+    </>
+  );
+}
+
+/**
+ * Why the model sees him the way it does: what he projects against his
+ * draft spot, what taking the job would do, and the factors against his
+ * past years, each a line.
+ */
+function Why({ p, plus, minus }: { p: Player; plus: string[]; minus: string[] }) {
   const said = p.sleeper;
   const why = said ? reasonWords(said) : "";
   const ifTheJobOpens = said ? roleWords(said) : "";
+
+  if (!said && !ifTheJobOpens && !plus.length && !minus.length) {
+    return null;
+  }
+
+  return (
+    <>
+      <h2>why</h2>
+      {said && (
+        <div class="claim">
+          <b>{claimWords(said)}</b>
+          <span>wk {said.week}{why && ` · ${why}`}</span>
+        </div>
+      )}
+      {ifTheJobOpens && <div class="fact">as the starter: {ifTheJobOpens}</div>}
+      {plus.map((f) => <div class="fact p" key={f}>{f}</div>)}
+      {minus.map((f) => <div class="fact m" key={f}>{f}</div>)}
+    </>
+  );
+}
+
+export function PlayerSheet(props: Props) {
+  const { p, teams } = props;
+  const [picked, setPicked] = useState<number | null>(null);
+  const [every, setEvery] = useState(false);
+  const rows = weekRowsOf(p, props.pays ?? {}, props.boardPerCatch, props.thisWeek);
+  // a week before the one being played is behind him, scored or missed
+  const gone = (r: WeekRow) =>
+    r.got !== null || (props.thisWeek !== undefined && r.week.w < props.thisWeek.week);
+  const played = rows.filter(gone);
+  const coming = rows.filter((r) => !gone(r));
+  // this week's line where the slate has one; on draft night there is none
+  const now = props.thisWeek
+    ? coming.find((r) => r.week.w === props.thisWeek!.week)
+    : undefined;
+  // every week of the season a slot, the bye where his schedule has no game
+  const lastWeek = Math.max(0, ...rows.map((r) => r.week.w));
+  const byWeek = new Map(rows.map((r) => [r.week.w, r]));
+  const slots: Slot[] = Array.from({ length: lastWeek }, (_, i): Slot => {
+    const w = i + 1;
+    const row = byWeek.get(w);
+
+    if (!row) {
+      return { w, kind: "bye" };
+    }
+
+    return { w, kind: row.got !== null ? "played" : gone(row) ? "missed" : "coming", row };
+  });
+  const nowWeek = props.thisWeek?.week ?? null;
+  const shownWeek = picked ?? nowWeek ??
+    [...slots].reverse().find((slot) => slot.kind === "played")?.w ?? slots[0]?.w ?? null;
 
   const sheet = useSheet(props.onClose);
 
@@ -237,79 +566,39 @@ export function PlayerSheet(props: Props) {
         aria-label={p.name} onClick={(e) => e.stopPropagation()}
       >
         <button class="close" aria-label="close" onClick={props.onClose}>
-          ×
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
         </button>
         <h3>{p.name}</h3>
-        <div class="sub">
-          {p.position} &middot; {p.team ?? ""}
-          {p.ppg !== undefined && (
-            <>
-              {" "}&middot; {p.ppg.toFixed(1)} a game
-              {g && ` (median ${g["mid"]!.toFixed(1)}, eight weeks in ten ` +
-                `${g["low"]!.toFixed(1)} to ${g["high"]!.toFixed(1)})`}
-            </>
-          )}
-          {p.adp
-            ? <>
-                {" "}&middot; adp {asRound(p.adp, teams)}
-                {p.adpLow && p.adpHigh &&
-                  ` (${asRound(p.adpHigh, teams)} to ${asRound(p.adpLow, teams)})`}
+        <div class="sub">{p.position} &middot; {p.team ?? "no team"}</div>
+
+        <KeyTiles p={p} teams={teams} now={now} thisWeek={props.thisWeek} />
+
+        {slots.length > 0 && (
+          <>
+            <h2>his season</h2>
+            <SeasonStrip slots={slots} now={nowWeek} picked={shownWeek} onPick={setPicked} />
+            <SlotSays slot={slots.find((slot) => slot.w === shownWeek)} />
+            <p class="pkey">
+              <span><i class="kseg k-won" />beat proj</span>
+              <span><i class="kseg k-under" />under</span>
+              <span><i class="kseg k-box" />50% range</span>
+              <span><i class="ktick k-ink" />proj</span>
+            </p>
+            <button class="fold" aria-expanded={every} onClick={() => setEvery((was) => !was)}>
+              <h2>every week</h2>
+            </button>
+            {every && (
+              <>
+                <PlayedWeeks rows={played} />
+                <ComingWeeks rows={coming} thisWeek={props.thisWeek} />
               </>
-            : " · undrafted"}
-        </div>
-
-        {said && (
-          <div class="fact">
-            sleeper score: <b>{claimWords(said)}</b> as of week{" "}
-            {said.week}
-            {why && `, from ${why}`}
-          </div>
-        )}
-
-        {ifTheJobOpens && (
-          <div class="fact">as the starter: {ifTheJobOpens}</div>
-        )}
-
-        {p.games !== undefined && (
-          <>
-            <h2>season outlook, over {p.games.toFixed(1)} projected games</h2>
-            <div class="statline big">
-              {lineOver(p.projected ?? p.simulated, p.position, p.games, movedBy(p))
-                .map((f) => (
-                  <span class="s" key={f.label}>
-                    <i>{f.label}</i>{f.value.toFixed(f.places)}
-                  </span>
-                ))}
-            </div>
+            )}
           </>
         )}
-
-        {sim && (
-          <>
-            <h2>season total, 2000 simulations</h2>
-            <div class="fact">expected <b>{sim["ev"]}</b> points, median <b>{sim["mid"]}</b></div>
-            <div class="fact">eight seasons in ten between <b>{sim["low"]}</b> and <b>{sim["high"]}</b></div>
-            <div class="fact">the middle half between <b>{sim["q1"]}</b> and <b>{sim["q3"]}</b></div>
-            <div class="fact">about {sim.games} games played</div>
-          </>
-        )}
-
-        {(props.plus.length > 0 || props.minus.length > 0) && (
-          <>
-            <h2>factors vs past years</h2>
-            {props.plus.map((f) => <div class="fact p" key={f}>{f}</div>)}
-            {props.minus.map((f) => <div class="fact m" key={f}>{f}</div>)}
-          </>
-        )}
-
-        <HisWork p={p} />
-
-        <WeekByWeek
-          p={p}
-          pays={props.pays ?? {}}
-          boardPerCatch={props.boardPerCatch}
-          thisWeek={props.thisWeek}
-        />
+        <Season p={p} />
+        <Why p={p} plus={props.plus} minus={props.minus} />
       </div>
     </div>
   );

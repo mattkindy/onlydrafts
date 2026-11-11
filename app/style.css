@@ -16,7 +16,8 @@
 
   :root {
     --bg: #10141C; --panel: #1A2029; --edge: #2A3342; --ink: #E8ECF2;
-    --muted: #8B95A5; --faint: #5B6575; --go: #35C06F; --mark: #F5B841;
+    /* the two greys of small text clear 7:1 and 4.5:1 on the panel */
+    --muted: #A3ADBC; --faint: #808A9B; --go: #35C06F; --mark: #F5B841;
     --chip: #232B38; --no: #E5534B;
 
     --t1: .75rem; --t2: .8125rem; --t3: .875rem;
@@ -29,13 +30,13 @@
      ink stops short of black, so a long list is not a glare */
   :root[data-theme="light"] {
     --bg: #EFF1F4; --panel: #FFFFFF; --edge: #D8DCE3; --ink: #171B22;
-    --muted: #5A6270; --faint: #767E8B; --go: #1E8A4C; --mark: #B57D0A;
+    --muted: #4A5260; --faint: #666E7B; --go: #1E8A4C; --mark: #B57D0A;
     --chip: #E7EAEF; --no: #B3261E;
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
       --bg: #EFF1F4; --panel: #FFFFFF; --edge: #D8DCE3; --ink: #171B22;
-      --muted: #5A6270; --faint: #767E8B; --go: #1E8A4C; --mark: #B57D0A;
+      --muted: #4A5260; --faint: #666E7B; --go: #1E8A4C; --mark: #B57D0A;
       --chip: #E7EAEF; --no: #B3261E;
     }
   }
@@ -496,11 +497,14 @@
     width: 100%; position: relative; }
   .sheet h3 { margin: 0; font-size: var(--t5); text-wrap: balance;
     padding-right: var(--tap); }
+  /* a drawn cross in a filled circle, so it reads at a glance on any sheet */
   .close { position: absolute; top: var(--s2); right: var(--s2);
-    min-width: var(--tap); min-height: var(--tap); border: none;
-    background: none; color: var(--muted); font-size: var(--t5);
-    line-height: 1; cursor: pointer; border-radius: 50%; }
-  .close:hover, .close:focus-visible { color: var(--ink); background: var(--chip); }
+    width: var(--tap); height: var(--tap); display: grid; place-items: center;
+    padding: 0; border: 1px solid var(--edge); background: var(--chip);
+    color: var(--ink); cursor: pointer; border-radius: 50%; }
+  .close svg { width: 20px; height: 20px; fill: none; stroke: currentColor;
+    stroke-width: 2.4; stroke-linecap: round; }
+  .close:hover, .close:focus-visible { background: var(--edge); }
   .sheet .sub { color: var(--faint); font-size: var(--t2);
     margin-bottom: var(--s3); }
   .wk { display: grid; grid-template-columns: 2.2rem 3.2rem 1fr 3.6rem;
@@ -509,29 +513,18 @@
   /* the same bar the card draws its range with, a row per week */
   .wk .bar { height: 12px; position: relative; background: var(--chip);
     border-radius: 999px; }
-  .wk .bar u, .wk .bar i, .wk .bar b, .wk .bar s { position: absolute; }
+  .wk .bar u, .wk .bar i, .wk .bar b { position: absolute; }
   /* a bad week to a big one */
   .wk .bar u { top: 0; bottom: 0;
-    background: color-mix(in srgb, var(--go) 55%, var(--chip));
+    background: color-mix(in srgb, var(--go) 38%, var(--chip));
     border-radius: 999px; }
-  /* the middle half, which is where he lands most weeks */
-  .wk .bar i { top: 3px; bottom: 3px;
-    background: color-mix(in srgb, var(--go) 22%, var(--chip));
-    border-radius: 2px; }
+  /* the middle half, which is where he lands most weeks, so the darker */
+  .wk .bar i { top: 2px; bottom: 2px; background: var(--go); border-radius: 2px; }
   /* and what he averages there */
   .wk .bar b { top: -3px; width: 3px; height: 18px; background: var(--mark);
     border-radius: 2px; box-shadow: 0 0 0 2px var(--panel); }
-  /* what he actually scored in a played week, a dot rather than a tick
-     so it never reads as the projection mark */
-  .wk .bar s { top: 2px; width: 8px; height: 8px; margin-left: -4px;
-    border-radius: 50%; box-shadow: 0 0 0 2px var(--panel);
-    text-decoration: none; }
-  .wk .bar s.up { background: var(--go); }
-  .wk .bar s.down { background: var(--mark); }
   .wk .wkpts { display: flex; flex-direction: column; align-items: flex-end;
     line-height: 1.15; font-variant-numeric: tabular-nums; }
-  .wk .wkpts em { font-style: normal; font-size: var(--t1); color: var(--faint);
-    }
   .wk .scale { grid-column: 3; display: flex; justify-content: space-between;
     color: var(--faint); font-size: var(--t1); padding-top: .2rem; }
   .fact { font-size: var(--t2); margin: .15rem 0; }
@@ -549,6 +542,66 @@
   .statline .over { color: var(--faint); text-transform: uppercase;
     letter-spacing: .05em; font-size: var(--t1); align-self: center; }
   .statline.big { font-size: var(--t2); margin: .2rem 0 var(--s3); }
+  /* the sleeper claim: the figure, then where it comes from, quieter */
+  .claim { display: flex; flex-direction: column; gap: 2px; margin: var(--s2) 0;
+    font-size: var(--t2); }
+  .claim span { color: var(--muted); font-size: var(--t1); }
+  /* his season on one strip: a column a week, played as bars, to come as boxes */
+  .strip-chart { width: 100%; height: auto; display: block; overflow: visible;
+    margin-top: var(--s1); }
+  .strip-chart .sgrid { stroke: var(--edge); stroke-width: 1; }
+  .strip-chart .saxis { fill: var(--faint); font-size: 9px; font-variant-numeric: tabular-nums; }
+  .strip-chart .saxis.on { fill: var(--ink); font-weight: 700; }
+  .strip-chart .scol { fill: var(--chip); }
+  .strip-chart .scol.picked { stroke: var(--faint); stroke-width: 1; }
+  .strip-chart .sbar.up { fill: var(--go); }
+  .strip-chart .sbar.down { fill: var(--mark); }
+  .strip-chart .stick { stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; }
+  .strip-chart .swhisk { stroke: var(--muted); stroke-width: 1.5; }
+  .strip-chart .sbox { fill: color-mix(in srgb, var(--muted) 55%, var(--panel)); }
+  .strip-chart .sbye { fill: var(--faint); font-size: 8px; font-weight: 700; }
+  .strip-chart .smiss { stroke: var(--faint); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+  .strip-chart .stap { fill: transparent; cursor: pointer; }
+  .wsay b.up { color: var(--go); }
+  .wsay b.down { color: var(--mark); }
+  .pkey .kseg.k-under { background: var(--mark); }
+  .pkey .kseg.k-box { height: 10px; width: 10px; border-radius: 2px;
+    background: color-mix(in srgb, var(--muted) 55%, var(--panel)); }
+  .pkey .ktick.k-ink { background: var(--ink); }
+  /* the figures a manager looks for first, three across */
+  .tiles.key { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: var(--s3) 0 var(--s1); }
+  .tiles.key .tile span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* the weeks he has played: points against his line, then his work */
+  table.played { width: 100%; border-collapse: collapse; font-size: var(--t2);
+    font-variant-numeric: tabular-nums; margin: var(--s1) 0 0; }
+  table.played th, table.played td { padding: var(--s2) var(--s1); text-align: right; }
+  table.played th:first-child, table.played td:first-child { padding-left: 0; text-align: left; }
+  table.played th:last-child, table.played td:last-child { padding-right: 0; }
+  table.played thead th { font-size: var(--t1); font-weight: 700; color: var(--faint);
+    padding-top: 0; }
+  table.played tbody td { border-top: 1px solid var(--edge); color: var(--muted); }
+  table.played td.opp { text-align: left; white-space: nowrap; }
+  table.played td.pts { font-weight: 800; }
+  table.played td.pts.up { color: var(--go); }
+  table.played td.pts.down { color: var(--mark); }
+  table.played td.vs { color: var(--ink); }
+  table.played tr.missed td[colspan] { text-align: left; color: var(--faint); }
+  .sheet .textbtn.more { margin-top: var(--s1); }
+  /* a season over the simulations: three figures, then one bar */
+  .tiles.season { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--s3); }
+  .srange { position: relative; padding-bottom: 1.4rem; }
+  .srange .bar { display: block; position: relative; height: 12px;
+    background: var(--chip); border-radius: 999px; }
+  .srange .bar u, .srange .bar i, .srange .bar b { position: absolute; }
+  .srange .bar u { top: 0; bottom: 0; border-radius: 999px;
+    background: color-mix(in srgb, var(--go) 38%, var(--chip)); }
+  .srange .bar i { top: 2px; bottom: 2px; border-radius: 2px; background: var(--go); }
+  .srange .bar b { top: -3px; width: 3px; height: 18px; margin-left: -1px;
+    background: var(--mark); border-radius: 2px; box-shadow: 0 0 0 2px var(--panel); }
+  .srange .ends { position: absolute; left: 0; right: 0; top: 18px;
+    font-size: var(--t1); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .srange .ends span { position: absolute; white-space: nowrap; }
+  .srange .ends .in { transform: translateX(-50%); }
   /* the second way of counting him, under the one the list is sorted by */
   .big .then { display: block; font-style: normal; font-size: var(--t1);
     font-weight: 600; color: var(--faint); letter-spacing: .04em;
@@ -631,14 +684,6 @@
     margin-right: var(--s1); font-size: var(--t1); }
   .needs .f small { color: var(--faint); font-size: var(--t1);
     margin-left: var(--s1); }
-  /* what he actually scored, under the bar rather than beside it since
-     four columns and a fifth do not fit across a phone */
-  .wk .wkline { grid-column: 3 / -1; display: flex; flex-wrap: wrap;
-    gap: .1rem var(--s2); font-size: var(--t1); color: var(--muted);
-    font-variant-numeric: tabular-nums; margin: -.1rem 0 var(--s1); }
-  .wk .wkline b { font-weight: 700; }
-  .wk .wkline i { font-style: normal; color: var(--faint);
-    margin-left: .15rem; }
   /* which scoring the numbers are in, since a standard league and no
      league at all come out looking the same */
   .league-card .pays, #crumb .pays { background: var(--chip); color: var(--ink);
@@ -1254,8 +1299,8 @@
   .pkey .kseg.k-won { background: var(--go); }
   .pkey .kseg.k-lost { background: var(--muted); }
   .pkey .kseg.k-bench { background: var(--edge); }
-  .pkey .kseg.k-range { background: color-mix(in srgb, var(--go) 55%, var(--chip)); }
-  .pkey .kseg.k-usual { height: 6px; background: color-mix(in srgb, var(--go) 22%, var(--chip)); }
+  .pkey .kseg.k-range { background: color-mix(in srgb, var(--go) 38%, var(--chip)); }
+  .pkey .kseg.k-usual { height: 8px; background: var(--go); }
   .pkey .kseg.k-split { background: color-mix(in srgb, var(--mark) 30%, transparent); }
   .pkey .ktick { width: 3px; height: 14px; border-radius: 2px; background: var(--mark); }
   .pkey .kdot { width: 8px; height: 8px; border-radius: 50%; background: var(--go); }
@@ -1362,8 +1407,7 @@
       height: 4px; border-radius: 2px; background: var(--edge);
       margin: 0 auto var(--s3); }
     #overlay .sheet .close { position: sticky; top: 0; float: right;
-      margin: calc(var(--s3) * -1) calc(var(--s2) * -1) 0 0;
-      background: var(--panel); z-index: 1; }
+      margin: calc(var(--s3) * -1) calc(var(--s2) * -1) 0 0; z-index: 1; }
     .wrap { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
     .hring { width: 72px; height: 72px; }
     .hside .pts { font-size: var(--t5); }
