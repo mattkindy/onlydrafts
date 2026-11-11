@@ -123,6 +123,15 @@ const shortlist = (at: HTMLElement) => at.querySelector(".cards")!;
 const headings = (at: HTMLElement) =>
   Array.from(at.querySelectorAll("h2")).map((h) => h.textContent);
 
+/** a player sheet's every-week tables, which open on a tap under his season strip */
+async function openEveryWeek(at: HTMLElement) {
+  const fold = Array.from(at.querySelectorAll("button.fold"))
+    .find((b) => b.textContent === "every week") as HTMLButtonElement | undefined;
+
+  fold?.click();
+  await new Promise((settle) => setTimeout(settle, 0));
+}
+
 /** a sleeper claim of the shape the board writes */
 const A_CLAIM: Player["sleeper"] = {
   week: 1,
@@ -391,7 +400,7 @@ describe("the views", () => {
       .toBe(players.length);
   });
 
-  it("draws one player's card", () => {
+  it("draws one player's card", async () => {
     render(
       <PlayerSheet
         p={{ ...players[0]!, sleeper: null }} plus={["a factor"]} minus={[]}
@@ -400,11 +409,24 @@ describe("the views", () => {
       where,
     );
     expect(where.textContent).toContain(players[0]!.name);
-    expect(where.querySelectorAll(".wk").length).toBeGreaterThan(5);
-    expect(where.textContent).not.toContain("sleeper score");
+    expect(where.querySelector(".claim")).toBeNull();
+
+    // the season strip draws every week, and the tables open under it
+    expect(where.querySelectorAll(".strip-chart .stap").length).toBeGreaterThan(5);
+    await openEveryWeek(where);
+
+    // the next few weeks show, and the rest of the season opens on a tap
+    const coming = () => where.querySelectorAll(".wk .bar").length;
+    const more = Array.from(where.querySelectorAll("button"))
+      .find((b) => b.textContent?.startsWith("rest of the season"))!;
+
+    expect(coming()).toBe(4);
+    more.click();
+    await new Promise((settle) => setTimeout(settle, 0));
+    expect(coming()).toBeGreaterThan(5);
   });
 
-  it("puts a player's work beside his points", () => {
+  it("puts a player's work beside his points", async () => {
     const p = players[0]!;
     const weeks = [1, 2, 3, 4, 5].map((w) => ({
       w, opp: "v NE", of: 1, played: { rushYds: 50 },
@@ -418,12 +440,18 @@ describe("the views", () => {
       />,
       where,
     );
-    expect(headings(where)).toContain("his work");
-    expect(where.textContent).toContain(
-      "last 3 games: 72% of the snaps, 16.0 carries, 3.0 targets, " +
-        "2.0 inside the 20");
-    expect(where.textContent).toContain("the 2 games before: 40% of the snaps");
-    expect(where.textContent).toContain("72% snaps, 16 car, 3 tgt, 2 in the 20");
+    await openEveryWeek(where);
+    expect(headings(where)).toContain("played");
+
+    // newest first, the work a column each, four weeks before the rest open
+    const rows = Array.from(where.querySelectorAll("table.played tbody tr"))
+      .map((tr) => Array.from(tr.children).map((cell) => cell.textContent));
+
+    expect(rows.map((r) => r[0])).toEqual(["5", "4", "3", "2"]);
+    expect(rows[0]!.slice(4)).toEqual(["72%", "16", "3"]);
+    expect(rows[3]!.slice(4)).toEqual(["40%", "6", "1"]);
+    expect(Array.from(where.querySelectorAll("button"))
+      .some((b) => b.textContent === "all 5 weeks")).toBe(true);
   });
 
   it("says what a card's player is worth against his draft spot", () => {
@@ -434,10 +462,10 @@ describe("the views", () => {
       />,
       where,
     );
-    expect(where.textContent).toContain(
-      "sleeper score: +2.1 a game vs his draft spot as of week 1, " +
-        "from work share, scoring so far",
-    );
+    const claim = where.querySelector(".claim")!;
+
+    expect(claim.querySelector("b")!.textContent).toBe("+2.1 a game vs his draft spot");
+    expect(claim.textContent).toContain("wk 1 · work share, scoring so far");
   });
 });
 
@@ -719,6 +747,7 @@ describe("a week row keeps its shape", () => {
       />,
       where,
     );
+    await openEveryWeek(where);
 
     // the last week of the season, since a week already played says
     // what he scored in it and this is about the ones still ahead
@@ -728,14 +757,13 @@ describe("a week row keeps its shape", () => {
 
     expect(Array.from(row.children).map((k) => k.className || "plain"))
       .toEqual(["plain", "plain", "bar", "wkpts"]);
-    expect(row.querySelector(".wkline")).toBeNull();
+    expect(row.querySelector(".wkpts")!.textContent).toMatch(/^\d+\.\d$/);
 
-    // the average barely moves, so the row has to say the swing as well
-    const said = row.querySelector(".wkpts")!;
-    expect(said.querySelector("em")!.textContent).toMatch(/\d+ to \d+/);
+    // the average barely moves, so the bar carries the swing as well
+    expect(row.querySelector(".bar")!.getAttribute("title")).toMatch(/^\d+–\d+$/);
   });
 
-  it("shows what he actually scored in a week already played", () => {
+  it("shows what he actually scored in a week already played", async () => {
     const p: Player = {
       name: "Test Wideout", key: "test-wideout", position: "WR", team: "AAA",
       ppg: 10,
@@ -758,23 +786,27 @@ describe("a week row keeps its shape", () => {
       />,
       where,
     );
+    await openEveryWeek(where);
 
-    const rows = Array.from(where.querySelectorAll(".wk"));
-    const [week1, week2, week3] = rows;
+    // the played weeks, newest first, with what he scored against his line
+    const [week2, week1] = Array.from(where.querySelectorAll("table.played tbody tr"));
 
-    expect(week1!.querySelector(".bar s.up")).not.toBeNull();
-    expect(week1!.querySelector(".wkline b")!.textContent).toBe("19.0");
-    expect(week1!.querySelector(".wkline b")!.className).toBe("up");
+    expect(week1!.querySelector(".pts")!.textContent).toBe("19.0");
+    expect(week1!.querySelector(".pts")!.className).toBe("pts up");
+    expect(week1!.querySelector(".vs")!.textContent).toBe("+9.0");
 
-    expect(week2!.querySelector(".bar s.down")).not.toBeNull();
-    expect(week2!.querySelector(".wkline b")!.textContent).toBe("3.0");
-    expect(week2!.querySelector(".wkline b")!.className).toBe("down");
+    expect(week2!.querySelector(".pts")!.textContent).toBe("3.0");
+    expect(week2!.querySelector(".pts")!.className).toBe("pts down");
+    expect(week2!.querySelector(".vs")!.textContent).toBe("−7.0");
 
-    expect(week3!.querySelector(".bar s")).toBeNull();
-    expect(week3!.querySelector(".wkline")).toBeNull();
+    // and the one still to come, with only its line
+    const coming = Array.from(where.querySelectorAll(".wk"))
+      .filter((one) => one.querySelector(".wkpts"));
+
+    expect(coming.map((one) => one.children[0]!.textContent)).toEqual(["w3"]);
   });
 
-  it("says the slate's line for the week the slate covers", () => {
+  it("says the slate's line for the week the slate covers", async () => {
     const p: Player = {
       name: "Test Wideout", key: "test-wideout", position: "WR", team: "AAA",
       ppg: 10,
@@ -799,14 +831,22 @@ describe("a week row keeps its shape", () => {
       />,
       where,
     );
+    await openEveryWeek(where);
 
     const [week2, week3] = Array.from(where.querySelectorAll(".wk"));
+    const line = (week: Element) =>
+      [week.querySelector(".wkpts")!.textContent, week.querySelector(".bar")!.getAttribute("title")];
 
-    expect(week2!.querySelector(".wkpts")!.textContent).toBe("13.04 to 24");
-    expect(week3!.querySelector(".wkpts")!.textContent).toBe("10.05 to 15");
+    expect(line(week2!)).toEqual(["13.0", "4–24"]);
+    expect(line(week3!)).toEqual(["10.0", "5–15"]);
+    // and the slate's line leads the sheet as this week's
+    const now = where.querySelector(".tiles.key .tile")!;
+
+    expect(now.querySelector("i")!.textContent).toBe("wk 2 @ BBB");
+    expect(now.querySelector("b")!.textContent).toBe("13.0");
   });
 
-  it("says the blended line for a week the board has one for", () => {
+  it("says the blended line for a week the board has one for", async () => {
     const p: Player = {
       name: "Test End", key: "test-end", position: "TE", team: "AAA",
       ppg: 10,
@@ -824,14 +864,17 @@ describe("a week row keeps its shape", () => {
       />,
       where,
     );
+    await openEveryWeek(where);
 
     const [week3, week4] = Array.from(where.querySelectorAll(".wk"));
+    const line = (week: Element) =>
+      [week.querySelector(".wkpts")!.textContent, week.querySelector(".bar")!.getAttribute("title")];
 
-    expect(week3!.querySelector(".wkpts")!.textContent).toBe("10.05 to 15");
-    expect(week4!.querySelector(".wkpts")!.textContent).toBe("8.44 to 13");
+    expect(line(week3!)).toEqual(["10.0", "5–15"]);
+    expect(line(week4!)).toEqual(["8.4", "4–13"]);
   });
 
-  it("moves a blended week to what the league pays a catch", () => {
+  it("moves a blended week to what the league pays a catch", async () => {
     const p: Player = {
       name: "Test End", key: "test-end", position: "TE", team: "AAA",
       ppg: 10,
@@ -849,8 +892,10 @@ describe("a week row keeps its shape", () => {
       />,
       where,
     );
+    await openEveryWeek(where);
 
-    expect(where.querySelector(".wkpts")!.textContent).toBe("10.45 to 16");
+    expect(where.querySelector(".wkpts")!.textContent).toBe("10.4");
+    expect(where.querySelector(".wk .bar")!.getAttribute("title")).toBe("5–16");
   });
 });
 
@@ -859,6 +904,48 @@ describe("a week row keeps its shape", () => {
  * the same way, so the board has to say which it is. Matt had to work
  * out from a stat line whether his own league had been read.
  */
+describe("a player's season on one strip", () => {
+  it("draws each week as what it was, and says the one tapped in full", async () => {
+    const p: Player = {
+      name: "Test Wideout", key: "test-wideout", position: "WR", team: "AAA",
+      ppg: 10,
+      game: { ev: 10, mid: 10, low: 5, q1: 8, q3: 12, high: 15 },
+      weeks: [
+        // a big week and a quiet one, then his bye in week 3
+        { w: 1, opp: "v AAA", of: 1, played: { receptions: 5, recYds: 80, recTd: 1 },
+          use: [88, 0, 9, 2] },
+        { w: 2, opp: "@ BBB", of: 1, played: { receptions: 2, recYds: 10 } },
+        { w: 4, opp: "v DDD", of: 1 },
+        { w: 5, opp: "@ EEE", of: 1 },
+      ],
+    };
+
+    render(
+      <PlayerSheet
+        p={p} plus={[]} minus={[]} teams={12} onClose={() => {}}
+        pays={{ rec: 1, rec_yd: 0.1, rec_td: 6 }} thisWeek={{ week: 4, row: undefined }}
+      />,
+      where,
+    );
+
+    const chart = where.querySelector(".strip-chart")!;
+
+    expect(chart.querySelectorAll(".sbar.up").length).toBe(1);
+    expect(chart.querySelectorAll(".sbar.down").length).toBe(1);
+    expect(chart.querySelectorAll(".sbye").length).toBe(1);
+    expect(chart.querySelectorAll(".sbox").length).toBe(2);
+
+    // this week first, then the week tapped
+    const says = () => where.querySelector(".sheet .wsay")!.textContent;
+
+    expect(says()).toBe("wk 4 v DDD · proj 10.0 · 80% range 5–15");
+    (chart.querySelectorAll(".stap")[0] as SVGRectElement).dispatchEvent(
+      new MouseEvent("click", { bubbles: true }));
+    await new Promise((settle) => setTimeout(settle, 0));
+    expect(says()).toBe("wk 1 v AAA · 19.0 (+9.0 vs 10.0) · 88% snaps · 0 car · 9 tgt");
+  });
+});
+
 describe("the scoring in play is on screen", () => {
   it("names it from what the league pays", async () => {
     const { roomFor } = await import("./lib/board.ts");
