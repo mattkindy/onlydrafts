@@ -411,8 +411,8 @@ describe("the views", () => {
     expect(where.textContent).toContain(players[0]!.name);
     expect(where.querySelector(".claim")).toBeNull();
 
-    // the season strip draws every week, and the tables open under it
-    expect(where.querySelectorAll(".season-cols .scol").length).toBeGreaterThan(5);
+    // the weeks ahead as tiles, and every week in tables under a fold
+    expect(where.querySelectorAll(".tiles.next .tile").length).toBe(4);
     await openEveryWeek(where);
 
     // the next few weeks show, and the rest of the season opens on a tap
@@ -904,8 +904,8 @@ describe("a week row keeps its shape", () => {
  * the same way, so the board has to say which it is. Matt had to work
  * out from a stat line whether his own league had been read.
  */
-describe("a player's season on one strip", () => {
-  it("draws each week as what it was, and says the one tapped in full", async () => {
+describe("a player's recent weeks, the weeks ahead and the read", () => {
+  it("puts his line beside what he scored, then the weeks after this one", () => {
     const p: Player = {
       name: "Test Wideout", key: "test-wideout", position: "WR", team: "AAA",
       ppg: 10,
@@ -928,28 +928,29 @@ describe("a player's season on one strip", () => {
       where,
     );
 
-    const chart = where.querySelector(".season-cols")!;
+    // each recent week: his line, then what he scored, over or under it
+    const weeks = Array.from(where.querySelectorAll(".form .fweek")).map((week) => ({
+      bars: Array.from(week.querySelectorAll(".fbar")).map((bar) =>
+        [bar.className, bar.querySelector("b")!.textContent]),
+      week: week.querySelector(".fwk")!.textContent,
+      opp: week.querySelector(".fopp")!.textContent,
+    }));
 
-    expect(chart.querySelectorAll(".sbar.up").length).toBe(1);
-    expect(chart.querySelectorAll(".sbar.down").length).toBe(1);
-    expect(chart.querySelectorAll(".sbye").length).toBe(1);
-    expect(chart.querySelectorAll(".sbox").length).toBe(2);
+    expect(weeks).toEqual([
+      { bars: [["fbar proj", "10.0"], ["fbar got up", "19.0"]], week: "wk 1", opp: "AAA" },
+      { bars: [["fbar proj", "10.0"], ["fbar got down", "3.0"]], week: "wk 2", opp: "@BBB" },
+    ]);
 
-    // every column says its number and its opponent, so nothing needs a tap to read
-    const columns = Array.from(chart.querySelectorAll(".scol"));
+    // this week leads, and the weeks after it follow
+    const now = where.querySelector(".tiles.key .tile")!;
 
-    expect(columns.map((c) => c.querySelector(".sval")!.textContent))
-      .toEqual(["19.0", "3.0", "", "10.0", "10.0"]);
-    expect(columns.map((c) => c.querySelector(".sopp")!.textContent))
-      .toEqual(["AAA", "@BBB", "\u00a0", "DDD", "@EEE"]);
+    expect(now.querySelector("i")!.textContent).toBe("wk 4 v DDD");
+    expect(Array.from(where.querySelectorAll(".tiles.next .tile")).map((t) => t.textContent))
+      .toEqual(["wk 510.0@EEE"]);
 
-    // this week first, then the week tapped
-    const says = () => where.querySelector(".sheet .wsay")!.textContent;
-
-    expect(says()).toBe("wk 4 v DDD · proj 10.0 · 80% range 5–15");
-    (columns[0] as HTMLButtonElement).click();
-    await new Promise((settle) => setTimeout(settle, 0));
-    expect(says()).toBe("wk 1 v AAA · 19.0 (+9.0 vs 10.0) · 88% snaps · 0 car · 9 tgt");
+    // and the read says the story in a few phrases
+    expect(Array.from(where.querySelectorAll(".read .rchip")).map((c) => c.textContent))
+      .toEqual(["1 of last 2 over proj", "snaps steady 88%"]);
   });
 });
 
