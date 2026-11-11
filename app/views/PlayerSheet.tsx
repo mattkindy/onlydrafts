@@ -7,7 +7,7 @@
  * open on a tap.
  */
 
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 
 import type { Pays, Player } from "../lib/scoring.ts";
 import { payFor } from "../lib/scoring.ts";
@@ -294,13 +294,18 @@ type Slot =
   | { w: number; kind: "bye" }
   | { w: number; kind: "played" | "missed" | "coming"; row: WeekRow };
 
+/** the opponent as short as a column can hold: "NYG" at home, "@DAL" away */
+const shortOpp = (opp: string) => opp.replace(/^v\s+/, "").replace(/^@\s+/, "@");
+
 /**
- * His whole season on one strip, a week to a column, so the story reads
- * at a glance: a bar of what he scored where he played, green where he
- * beat his line and amber where he fell short, his line marked across
- * it; a box of his 50% range with its 80% whiskers for a week to come;
- * his bye and his missed weeks where they fall. This week is lit, and
- * tapping a week says it in full under the strip.
+ * His whole season as columns, a week each, wide enough to read: what he
+ * scored on top of each played week, a bar of it green over his line or
+ * amber under with the line across it; his line on top of each week to
+ * come, over a box of his 50% range with its 80% whiskers; his bye and
+ * his missed weeks where they fall. The weeks run sideways past the
+ * sheet's edge, so the strip opens on this week with the last few played
+ * to its left. This week is lit, and tapping a week says it in full
+ * underneath.
  */
 function SeasonStrip(
   { slots, now, picked, onPick }: {
@@ -308,74 +313,74 @@ function SeasonStrip(
     onPick: (w: number) => void;
   },
 ) {
-  const W = 340, H = 156, L = 26, R = 4, T = 8, B = 22;
-  const n = slots.length;
-  const step = (W - L - R) / Math.max(1, n);
-  const barW = Math.max(4, Math.min(12, step * 0.62));
+  const strip = useRef<HTMLDivElement>(null);
   const tallest = Math.max(1, ...slots.flatMap((slot) => slot.kind === "bye" ? [] : [
     slot.row.got ?? 0, slot.kind === "coming" ? slot.row.band.high : slot.row.band.pts,
   ]));
-  const top = Math.ceil(tallest / 10) * 10;
-  const y = (v: number) => T + (1 - Math.max(0, v) / top) * (H - T - B);
-  const x = (at: number) => L + step * (at + 0.5);
-  const named = (at: number, w: number) =>
-    step >= 17 || at % 2 === 0 || w === now || w === picked;
+  const at = (v: number) => (Math.max(0, v) / tallest) * 100 + "%";
+  const span = (from: number, to: number) => ((Math.max(0, to) - Math.max(0, from)) / tallest) * 100 + "%";
+
+  // open on this week, with the weeks just played to its left
+  useEffect(() => {
+    const box = strip.current;
+    const lit = slots.findIndex((slot) => slot.w === now);
+
+    if (box && lit >= 0) {
+      const column = box.children[lit] as HTMLElement | undefined;
+
+      box.scrollLeft = Math.max(0, (column?.offsetLeft ?? 0) - box.clientWidth * 0.62);
+    }
+  }, []);
 
   return (
-    <svg class="strip-chart" viewBox={`0 0 ${W} ${H}`} role="img"
-      aria-label="his season, a week to a column">
-      {[0, top / 2, top].map((g) => (
-        <g key={g}>
-          <line class="sgrid" x1={L} x2={W - R} y1={y(g)} y2={y(g)} />
-          <text class="saxis" x={L - 5} y={y(g) + 3.5} text-anchor="end">{g}</text>
-        </g>
-      ))}
-      {slots.map((slot, at) => {
-        const cx = x(at);
-        const lit = slot.w === now;
-        const chosen = slot.w === picked;
+    <div class="season-cols" ref={strip} role="list" aria-label="his season, a week to a column">
+      {slots.map((slot) => {
+        const classes = "scol " + slot.kind + (slot.w === now ? " now" : "") +
+          (slot.w === picked ? " picked" : "");
+
+        if (slot.kind === "bye") {
+          return (
+            <button key={slot.w} class={classes} role="listitem" onClick={() => onPick(slot.w)}>
+              <span class="sval" />
+              <span class="splot"><i class="sbye">bye</i></span>
+              <span class="swk">{slot.w}</span>
+              <span class="sopp">&nbsp;</span>
+            </button>
+          );
+        }
+
+        const { week, band, got } = slot.row;
+        const beat = (got ?? 0) >= band.pts;
 
         return (
-          <g key={slot.w}>
-            {(lit || chosen) && (
-              <rect class={"scol" + (chosen ? " picked" : "")}
-                x={cx - step / 2 + 1} y={T - 4} width={step - 2} height={H - T - B + 8} rx={4} />
-            )}
-            {slot.kind === "bye" && (
-              <text class="sbye" x={cx} y={y(0) - 4} text-anchor="middle">bye</text>
-            )}
-            {slot.kind === "missed" && (
-              <path class="smiss" d={`M${cx - 3},${y(0) - 9}l6,6m0,-6l-6,6`} />
-            )}
+          <button key={slot.w} class={classes} role="listitem" onClick={() => onPick(slot.w)}>
             {slot.kind === "played" && (
-              <>
-                <rect class={"sbar " + ((slot.row.got ?? 0) >= slot.row.band.pts ? "up" : "down")}
-                  x={cx - barW / 2} y={y(slot.row.got ?? 0)} width={barW}
-                  height={Math.max(1, y(0) - y(slot.row.got ?? 0))} rx={2} />
-                <line class="stick" x1={cx - barW / 2 - 2} x2={cx + barW / 2 + 2}
-                  y1={y(slot.row.band.pts)} y2={y(slot.row.band.pts)} />
-              </>
+              <span class={"sval " + (beat ? "up" : "down")}>{(got ?? 0).toFixed(1)}</span>
             )}
-            {slot.kind === "coming" && (
-              <>
-                <line class="swhisk" x1={cx} x2={cx}
-                  y1={y(slot.row.band.high)} y2={y(slot.row.band.low)} />
-                <rect class="sbox" x={cx - barW / 2} y={y(slot.row.band.q3)} width={barW}
-                  height={Math.max(2, y(slot.row.band.q1) - y(slot.row.band.q3))} rx={2} />
-                <line class="stick" x1={cx - barW / 2 - 2} x2={cx + barW / 2 + 2}
-                  y1={y(slot.row.band.pts)} y2={y(slot.row.band.pts)} />
-              </>
-            )}
-            {named(at, slot.w) && (
-              <text class={"saxis" + (lit || chosen ? " on" : "")} x={cx} y={H - 6}
-                text-anchor="middle">{slot.w}</text>
-            )}
-            <rect class="stap" x={cx - step / 2} y={0} width={step} height={H}
-              onClick={() => onPick(slot.w)} />
-          </g>
+            {slot.kind === "coming" && <span class="sval proj">{band.pts.toFixed(1)}</span>}
+            {slot.kind === "missed" && <span class="sval">–</span>}
+            <span class="splot">
+              {slot.kind === "played" && (
+                <>
+                  <i class={"sbar " + (beat ? "up" : "down")} style={{ height: at(got ?? 0) }} />
+                  <i class="stick" style={{ bottom: at(band.pts) }} />
+                </>
+              )}
+              {slot.kind === "coming" && (
+                <>
+                  <i class="swhisk" style={{ bottom: at(band.low), height: span(band.low, band.high) }} />
+                  <i class="sbox" style={{ bottom: at(band.q1), height: span(band.q1, band.q3) }} />
+                  <i class="stick" style={{ bottom: at(band.pts) }} />
+                </>
+              )}
+              {slot.kind === "missed" && <i class="sout">out</i>}
+            </span>
+            <span class="swk">{slot.w}</span>
+            <span class="sopp">{shortOpp(week.opp)}</span>
+          </button>
         );
       })}
-    </svg>
+    </div>
   );
 }
 

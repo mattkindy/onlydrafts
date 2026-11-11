@@ -412,7 +412,7 @@ describe("the views", () => {
     expect(where.querySelector(".claim")).toBeNull();
 
     // the season strip draws every week, and the tables open under it
-    expect(where.querySelectorAll(".strip-chart .stap").length).toBeGreaterThan(5);
+    expect(where.querySelectorAll(".season-cols .scol").length).toBeGreaterThan(5);
     await openEveryWeek(where);
 
     // the next few weeks show, and the rest of the season opens on a tap
@@ -928,19 +928,26 @@ describe("a player's season on one strip", () => {
       where,
     );
 
-    const chart = where.querySelector(".strip-chart")!;
+    const chart = where.querySelector(".season-cols")!;
 
     expect(chart.querySelectorAll(".sbar.up").length).toBe(1);
     expect(chart.querySelectorAll(".sbar.down").length).toBe(1);
     expect(chart.querySelectorAll(".sbye").length).toBe(1);
     expect(chart.querySelectorAll(".sbox").length).toBe(2);
 
+    // every column says its number and its opponent, so nothing needs a tap to read
+    const columns = Array.from(chart.querySelectorAll(".scol"));
+
+    expect(columns.map((c) => c.querySelector(".sval")!.textContent))
+      .toEqual(["19.0", "3.0", "", "10.0", "10.0"]);
+    expect(columns.map((c) => c.querySelector(".sopp")!.textContent))
+      .toEqual(["AAA", "@BBB", "\u00a0", "DDD", "@EEE"]);
+
     // this week first, then the week tapped
     const says = () => where.querySelector(".sheet .wsay")!.textContent;
 
     expect(says()).toBe("wk 4 v DDD · proj 10.0 · 80% range 5–15");
-    (chart.querySelectorAll(".stap")[0] as SVGRectElement).dispatchEvent(
-      new MouseEvent("click", { bubbles: true }));
+    (columns[0] as HTMLButtonElement).click();
     await new Promise((settle) => setTimeout(settle, 0));
     expect(says()).toBe("wk 1 v AAA · 19.0 (+9.0 vs 10.0) · 88% snaps · 0 car · 9 tgt");
   });
