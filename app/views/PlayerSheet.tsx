@@ -7,7 +7,7 @@
  * open on a tap.
  */
 
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
 
 import type { Pays, Player } from "../lib/scoring.ts";
 import { payFor } from "../lib/scoring.ts";
@@ -18,6 +18,8 @@ import {
 } from "../lib/slate.ts";
 import { WeatherMark, weatherWords } from "./WeatherMark.tsx";
 import { lineOver, movedBy } from "../lib/statLine.ts";
+import { readOf } from "../lib/playerRead.ts";
+import { workOf } from "../lib/usage.ts";
 import { useSheet } from "./useSheet.ts";
 
 /** the week the slate covers, and his row on it if he has one */
@@ -289,135 +291,94 @@ function ComingWeeks({ rows, thisWeek }: { rows: WeekRow[]; thisWeek?: ThisWeek 
   );
 }
 
-/** one slot on the season strip: a week he played, missed, has to come, or his bye */
-type Slot =
-  | { w: number; kind: "bye" }
-  | { w: number; kind: "played" | "missed" | "coming"; row: WeekRow };
-
-/** the opponent as short as a column can hold: "NYG" at home, "@DAL" away */
+/** the opponent as short as a small label can hold: "NYG" at home, "@DAL" away */
 const shortOpp = (opp: string) => opp.replace(/^v\s+/, "").replace(/^@\s+/, "@");
 
+/** how many weeks back the form chart looks, and how many ahead the next row */
+const FORM_WEEKS = 5;
+const NEXT_WEEKS = 4;
+
 /**
- * His whole season as columns, a week each, wide enough to read: what he
- * scored on top of each played week, a bar of it green over his line or
- * amber under with the line across it; his line on top of each week to
- * come, over a box of his 50% range with its 80% whiskers; his bye and
- * his missed weeks where they fall. The weeks run sideways past the
- * sheet's edge, so the strip opens on this week with the last few played
- * to its left. This week is lit, and tapping a week says it in full
- * underneath.
+ * How he has done lately, the question behind most taps on a player: for
+ * each of his last few weeks, a grey bar of what he was projected beside
+ * a bar of what he scored, green over and amber under, each with its
+ * number on top. A missed week says so in place.
  */
-function SeasonStrip(
-  { slots, now, picked, onPick }: {
-    slots: Slot[]; now: number | null; picked: number | null;
-    onPick: (w: number) => void;
-  },
-) {
-  const strip = useRef<HTMLDivElement>(null);
-  const tallest = Math.max(1, ...slots.flatMap((slot) => slot.kind === "bye" ? [] : [
-    slot.row.got ?? 0, slot.kind === "coming" ? slot.row.band.high : slot.row.band.pts,
-  ]));
-  const at = (v: number) => (Math.max(0, v) / tallest) * 100 + "%";
-  const span = (from: number, to: number) => ((Math.max(0, to) - Math.max(0, from)) / tallest) * 100 + "%";
+function RecentForm({ rows }: { rows: WeekRow[] }) {
+  const recent = rows.slice(-FORM_WEEKS);
 
-  // open on this week, with the weeks just played to its left
-  useEffect(() => {
-    const box = strip.current;
-    const lit = slots.findIndex((slot) => slot.w === now);
-
-    if (box && lit >= 0) {
-      const column = box.children[lit] as HTMLElement | undefined;
-
-      box.scrollLeft = Math.max(0, (column?.offsetLeft ?? 0) - box.clientWidth * 0.62);
-    }
-  }, []);
-
-  return (
-    <div class="season-cols" ref={strip} role="list" aria-label="his season, a week to a column">
-      {slots.map((slot) => {
-        const classes = "scol " + slot.kind + (slot.w === now ? " now" : "") +
-          (slot.w === picked ? " picked" : "");
-
-        if (slot.kind === "bye") {
-          return (
-            <button key={slot.w} class={classes} role="listitem" onClick={() => onPick(slot.w)}>
-              <span class="sval" />
-              <span class="splot"><i class="sbye">bye</i></span>
-              <span class="swk">{slot.w}</span>
-              <span class="sopp">&nbsp;</span>
-            </button>
-          );
-        }
-
-        const { week, band, got } = slot.row;
-        const beat = (got ?? 0) >= band.pts;
-
-        return (
-          <button key={slot.w} class={classes} role="listitem" onClick={() => onPick(slot.w)}>
-            {slot.kind === "played" && (
-              <span class={"sval " + (beat ? "up" : "down")}>{(got ?? 0).toFixed(1)}</span>
-            )}
-            {slot.kind === "coming" && <span class="sval proj">{band.pts.toFixed(1)}</span>}
-            {slot.kind === "missed" && <span class="sval">–</span>}
-            <span class="splot">
-              {slot.kind === "played" && (
-                <>
-                  <i class={"sbar " + (beat ? "up" : "down")} style={{ height: at(got ?? 0) }} />
-                  <i class="stick" style={{ bottom: at(band.pts) }} />
-                </>
-              )}
-              {slot.kind === "coming" && (
-                <>
-                  <i class="swhisk" style={{ bottom: at(band.low), height: span(band.low, band.high) }} />
-                  <i class="sbox" style={{ bottom: at(band.q1), height: span(band.q1, band.q3) }} />
-                  <i class="stick" style={{ bottom: at(band.pts) }} />
-                </>
-              )}
-              {slot.kind === "missed" && <i class="sout">out</i>}
-            </span>
-            <span class="swk">{slot.w}</span>
-            <span class="sopp">{shortOpp(week.opp)}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/** the week a tap picked, in full, under the strip */
-function SlotSays({ slot }: { slot: Slot | undefined }) {
-  if (!slot) {
+  if (!recent.length) {
     return null;
   }
 
-  if (slot.kind === "bye") {
-    return <p class="wsay"><b>wk {slot.w}</b> · bye</p>;
-  }
-
-  const { week, band, got } = slot.row;
-
-  if (slot.kind === "missed") {
-    return <p class="wsay"><b>wk {slot.w}</b> {week.opp} · did not play</p>;
-  }
-
-  if (slot.kind === "coming") {
-    return (
-      <p class="wsay">
-        <b>wk {slot.w}</b> {week.opp} · proj <b>{band.pts.toFixed(1)}</b>
-        {" "}· 80% range {band.low.toFixed(0)}–{band.high.toFixed(0)}
-      </p>
-    );
-  }
-
-  const over = (got ?? 0) - band.pts;
-  const use = week.use;
+  const top = Math.max(1, ...recent.flatMap((r) => [r.got ?? 0, r.band.pts]));
+  const tall = (v: number) => Math.round((Math.max(0, v) / top) * 96) + "px";
 
   return (
-    <p class="wsay">
-      <b>wk {slot.w}</b> {week.opp} · <b class={over >= 0 ? "up" : "down"}>{(got ?? 0).toFixed(1)}</b>
-      {" "}({over >= 0 ? "+" : "−"}{Math.abs(over).toFixed(1)} vs {band.pts.toFixed(1)})
-      {use && <> · {use[0]}% snaps · {use[1]} car · {use[2]} tgt</>}
-    </p>
+    <>
+      <h2>last {recent.length === 1 ? "week" : `${recent.length} weeks`}</h2>
+      <div class="form" style={{ gridTemplateColumns: `repeat(${FORM_WEEKS}, minmax(0, 1fr))` }}>
+        {recent.map(({ week, band, got }) => (
+          <div class="fweek" key={week.w}>
+            <div class="fbars">
+              {got === null
+                ? <span class="fout">out</span>
+                : (
+                  <>
+                    <span class="fbar proj">
+                      <b>{band.pts.toFixed(1)}</b>
+                      <u style={{ height: tall(band.pts) }} />
+                    </span>
+                    <span class={"fbar got " + (got >= band.pts ? "up" : "down")}>
+                      <b>{got.toFixed(1)}</b>
+                      <u style={{ height: tall(got) }} />
+                    </span>
+                  </>
+                )}
+            </div>
+            <span class="fwk">wk {week.w}</span>
+            <span class="fopp">{shortOpp(week.opp)}</span>
+          </div>
+        ))}
+      </div>
+      <p class="pkey">
+        <span><i class="kseg k-box" />proj</span>
+        <span><i class="kseg k-won" /><i class="kseg k-under" />scored, over or under</span>
+      </p>
+    </>
+  );
+}
+
+/**
+ * What is ahead of him: the next few weeks after this one, each its line
+ * and its opponent, and his bye where it falls.
+ */
+function NextUp({ rows, from }: { rows: WeekRow[]; from: number }) {
+  const byWeek = new Map(rows.map((r) => [r.week.w, r]));
+  const last = Math.max(0, ...rows.map((r) => r.week.w));
+  const weeks = Array.from({ length: NEXT_WEEKS }, (_, i) => from + i).filter((w) => w <= last);
+
+  if (!weeks.length) {
+    return null;
+  }
+
+  return (
+    <>
+      <h2>next {weeks.length === 1 ? "week" : `${weeks.length} weeks`}</h2>
+      <div class="tiles next" style={{ gridTemplateColumns: `repeat(${NEXT_WEEKS}, minmax(0, 1fr))` }}>
+        {weeks.map((w) => {
+          const row = byWeek.get(w);
+
+          return (
+            <div class="tile" key={w}>
+              <i>wk {w}</i>
+              <b>{row ? row.band.pts.toFixed(1) : "bye"}</b>
+              <span>{row ? shortOpp(row.week.opp) : " "}</span>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -443,7 +404,7 @@ function Season({ p }: { p: Player }) {
 
   return (
     <>
-      <h2>season{p.games !== undefined ? ` · ${p.games.toFixed(1)} games` : ""}</h2>
+      <h2>this season{p.games !== undefined ? ` · ${p.games.toFixed(1)} games` : ""}</h2>
       {sim && <SeasonRange sim={sim} />}
       {line.length > 0 && (
         <div class="statline big">
@@ -533,7 +494,6 @@ function Why({ p, plus, minus }: { p: Player; plus: string[]; minus: string[] })
 
 export function PlayerSheet(props: Props) {
   const { p, teams } = props;
-  const [picked, setPicked] = useState<number | null>(null);
   const [every, setEvery] = useState(false);
   const rows = weekRowsOf(p, props.pays ?? {}, props.boardPerCatch, props.thisWeek);
   // a week before the one being played is behind him, scored or missed
@@ -545,22 +505,16 @@ export function PlayerSheet(props: Props) {
   const now = props.thisWeek
     ? coming.find((r) => r.week.w === props.thisWeek!.week)
     : undefined;
-  // every week of the season a slot, the bye where his schedule has no game
-  const lastWeek = Math.max(0, ...rows.map((r) => r.week.w));
-  const byWeek = new Map(rows.map((r) => [r.week.w, r]));
-  const slots: Slot[] = Array.from({ length: lastWeek }, (_, i): Slot => {
-    const w = i + 1;
-    const row = byWeek.get(w);
-
-    if (!row) {
-      return { w, kind: "bye" };
-    }
-
-    return { w, kind: row.got !== null ? "played" : gone(row) ? "missed" : "coming", row };
+  // the weeks after this one, or from the first still to come on draft night
+  const nextFrom = props.thisWeek ? props.thisWeek.week + 1 : (coming[0]?.week.w ?? 1);
+  // the read on him in a few phrases, each said only where it says something
+  const read = readOf({
+    played: played.map((r) => ({ got: r.got, pts: r.band.pts })),
+    next: rows.filter((r) => r.week.w >= nextFrom).slice(0, NEXT_WEEKS).map((r) => r.band.pts),
+    ...(p.ppg !== undefined ? { ppg: p.ppg } : {}),
+    work: workOf(p),
+    ...(p.sleeper ? { claim: p.sleeper.score } : {}),
   });
-  const nowWeek = props.thisWeek?.week ?? null;
-  const shownWeek = picked ?? nowWeek ??
-    [...slots].reverse().find((slot) => slot.kind === "played")?.w ?? slots[0]?.w ?? null;
 
   const sheet = useSheet(props.onClose);
 
@@ -577,20 +531,20 @@ export function PlayerSheet(props: Props) {
         </button>
         <h3>{p.name}</h3>
         <div class="sub">{p.position} &middot; {p.team ?? "no team"}</div>
+        {read.length > 0 && (
+          <div class="read" aria-label="the read">
+            {read.map((chip) => (
+              <span class={"rchip " + chip.tone} key={chip.says}>{chip.says}</span>
+            ))}
+          </div>
+        )}
 
         <KeyTiles p={p} teams={teams} now={now} thisWeek={props.thisWeek} />
+        <RecentForm rows={played} />
+        <NextUp rows={rows} from={nextFrom} />
 
-        {slots.length > 0 && (
+        {rows.length > 0 && (
           <>
-            <h2>his season</h2>
-            <SeasonStrip slots={slots} now={nowWeek} picked={shownWeek} onPick={setPicked} />
-            <SlotSays slot={slots.find((slot) => slot.w === shownWeek)} />
-            <p class="pkey">
-              <span><i class="kseg k-won" />beat proj</span>
-              <span><i class="kseg k-under" />under</span>
-              <span><i class="kseg k-box" />50% range</span>
-              <span><i class="ktick k-ink" />proj</span>
-            </p>
             <button class="fold" aria-expanded={every} onClick={() => setEvery((was) => !was)}>
               <h2>every week</h2>
             </button>
