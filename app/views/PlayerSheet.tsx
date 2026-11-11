@@ -220,9 +220,65 @@ function HisWork({ p }: { p: Player }) {
   );
 }
 
+/** a label's position along the season bar, and how near two may sit */
+const LABEL_ROOM = 14;
+
+/**
+ * His season over the simulations, as figures and one bar rather than
+ * sentences: what he is projected, the median season and the games he
+ * plays, then where eight seasons in ten land with the middle half
+ * darker and the median marked. The numbers sit at the edges they
+ * belong to, and an inner one too close to its neighbour is left off.
+ */
+function SeasonTotal({ sim }: { sim: Record<string, number> & { games?: number } }) {
+  const low = sim["low"] ?? 0;
+  const q1 = sim["q1"] ?? 0;
+  const mid = sim["mid"] ?? 0;
+  const q3 = sim["q3"] ?? 0;
+  const high = sim["high"] ?? 0;
+  const top = Math.max(high, 1);
+  const at = (v: number) => (Math.max(0, v) / top) * 100;
+  const roomy = (a: number, b: number) => Math.abs(at(a) - at(b)) >= LABEL_ROOM;
+
+  return (
+    <>
+      <h2>season total</h2>
+      <div class="tiles season">
+        <div class="tile"><i>proj</i><b>{Math.round(sim["ev"] ?? 0)}</b></div>
+        <div class="tile"><i>median</i><b>{Math.round(mid)}</b></div>
+        {sim.games !== undefined && (
+          <div class="tile"><i>games</i><b>{sim.games.toFixed(1)}</b></div>
+        )}
+      </div>
+      <div class="srange" role="img"
+        aria-label={`eight seasons in ten between ${low} and ${high}, the middle half ${q1} to ${q3}`}>
+        <span class="bar">
+          <u style={{ left: at(low) + "%", right: (100 - at(high)) + "%" }} />
+          <i style={{ left: at(q1) + "%", right: (100 - at(q3)) + "%" }} />
+          <b style={{ left: at(mid) + "%" }} />
+        </span>
+        <span class="ends" aria-hidden="true">
+          <span class="lo" style={{ left: at(low) + "%" }}>{Math.round(low)}</span>
+          {roomy(q1, low) && roomy(q1, q3) && (
+            <span class="in" style={{ left: at(q1) + "%" }}>{Math.round(q1)}</span>
+          )}
+          {roomy(q3, high) && roomy(q1, q3) && (
+            <span class="in" style={{ left: at(q3) + "%" }}>{Math.round(q3)}</span>
+          )}
+          <span class="hi" style={{ right: (100 - at(high)) + "%" }}>{Math.round(high)}</span>
+        </span>
+      </div>
+      <p class="pkey">
+        <span><i class="kseg k-range" />8 in 10 seasons</span>
+        <span><i class="kseg k-usual" />middle half</span>
+        <span><i class="ktick" />median</span>
+      </p>
+    </>
+  );
+}
+
 export function PlayerSheet(props: Props) {
   const { p, teams } = props;
-  const g = p.game;
   const sim = p.sim;
   const said = p.sleeper;
   const why = said ? reasonWords(said) : "";
@@ -237,23 +293,19 @@ export function PlayerSheet(props: Props) {
         aria-label={p.name} onClick={(e) => e.stopPropagation()}
       >
         <button class="close" aria-label="close" onClick={props.onClose}>
-          ×
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
         </button>
         <h3>{p.name}</h3>
         <div class="sub">
           {p.position} &middot; {p.team ?? ""}
-          {p.ppg !== undefined && (
-            <>
-              {" "}&middot; {p.ppg.toFixed(1)} a game
-              {g && ` (median ${g["mid"]!.toFixed(1)}, eight weeks in ten ` +
-                `${g["low"]!.toFixed(1)} to ${g["high"]!.toFixed(1)})`}
-            </>
-          )}
+          {p.ppg !== undefined && <>{" "}&middot; {p.ppg.toFixed(1)} a game</>}
           {p.adp
             ? <>
                 {" "}&middot; adp {asRound(p.adp, teams)}
                 {p.adpLow && p.adpHigh &&
-                  ` (${asRound(p.adpHigh, teams)} to ${asRound(p.adpLow, teams)})`}
+                  ` (${asRound(p.adpHigh, teams)}–${asRound(p.adpLow, teams)})`}
               </>
             : " · undrafted"}
         </div>
@@ -272,7 +324,7 @@ export function PlayerSheet(props: Props) {
 
         {p.games !== undefined && (
           <>
-            <h2>season outlook, over {p.games.toFixed(1)} projected games</h2>
+            <h2>season outlook · {p.games.toFixed(1)} games</h2>
             <div class="statline big">
               {lineOver(p.projected ?? p.simulated, p.position, p.games, movedBy(p))
                 .map((f) => (
@@ -284,15 +336,7 @@ export function PlayerSheet(props: Props) {
           </>
         )}
 
-        {sim && (
-          <>
-            <h2>season total, 2000 simulations</h2>
-            <div class="fact">expected <b>{sim["ev"]}</b> points, median <b>{sim["mid"]}</b></div>
-            <div class="fact">eight seasons in ten between <b>{sim["low"]}</b> and <b>{sim["high"]}</b></div>
-            <div class="fact">the middle half between <b>{sim["q1"]}</b> and <b>{sim["q3"]}</b></div>
-            <div class="fact">about {sim.games} games played</div>
-          </>
-        )}
+        {sim && <SeasonTotal sim={sim} />}
 
         {(props.plus.length > 0 || props.minus.length > 0) && (
           <>

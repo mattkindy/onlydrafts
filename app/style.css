@@ -496,11 +496,14 @@
     width: 100%; position: relative; }
   .sheet h3 { margin: 0; font-size: var(--t5); text-wrap: balance;
     padding-right: var(--tap); }
+  /* a drawn cross in a filled circle, so it reads at a glance on any sheet */
   .close { position: absolute; top: var(--s2); right: var(--s2);
-    min-width: var(--tap); min-height: var(--tap); border: none;
-    background: none; color: var(--muted); font-size: var(--t5);
-    line-height: 1; cursor: pointer; border-radius: 50%; }
-  .close:hover, .close:focus-visible { color: var(--ink); background: var(--chip); }
+    width: var(--tap); height: var(--tap); display: grid; place-items: center;
+    padding: 0; border: 1px solid var(--edge); background: var(--chip);
+    color: var(--ink); cursor: pointer; border-radius: 50%; }
+  .close svg { width: 20px; height: 20px; fill: none; stroke: currentColor;
+    stroke-width: 2.4; stroke-linecap: round; }
+  .close:hover, .close:focus-visible { background: var(--edge); }
   .sheet .sub { color: var(--faint); font-size: var(--t2);
     margin-bottom: var(--s3); }
   .wk { display: grid; grid-template-columns: 2.2rem 3.2rem 1fr 3.6rem;
@@ -549,6 +552,22 @@
   .statline .over { color: var(--faint); text-transform: uppercase;
     letter-spacing: .05em; font-size: var(--t1); align-self: center; }
   .statline.big { font-size: var(--t2); margin: .2rem 0 var(--s3); }
+  /* a season over the simulations: three figures, then one bar */
+  .tiles.season { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: var(--s3); }
+  .srange { position: relative; padding-bottom: 1.4rem; }
+  .srange .bar { display: block; position: relative; height: 12px;
+    background: var(--chip); border-radius: 999px; }
+  .srange .bar u, .srange .bar i, .srange .bar b { position: absolute; }
+  .srange .bar u { top: 0; bottom: 0; border-radius: 999px;
+    background: color-mix(in srgb, var(--go) 55%, var(--chip)); }
+  .srange .bar i { top: 3px; bottom: 3px; border-radius: 2px;
+    background: color-mix(in srgb, var(--go) 22%, var(--chip)); }
+  .srange .bar b { top: -3px; width: 3px; height: 18px; margin-left: -1px;
+    background: var(--mark); border-radius: 2px; box-shadow: 0 0 0 2px var(--panel); }
+  .srange .ends { position: absolute; left: 0; right: 0; top: 18px;
+    font-size: var(--t1); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .srange .ends span { position: absolute; white-space: nowrap; }
+  .srange .ends .in { transform: translateX(-50%); }
   /* the second way of counting him, under the one the list is sorted by */
   .big .then { display: block; font-style: normal; font-size: var(--t1);
     font-weight: 600; color: var(--faint); letter-spacing: .04em;
@@ -1362,8 +1381,7 @@
       height: 4px; border-radius: 2px; background: var(--edge);
       margin: 0 auto var(--s3); }
     #overlay .sheet .close { position: sticky; top: 0; float: right;
-      margin: calc(var(--s3) * -1) calc(var(--s2) * -1) 0 0;
-      background: var(--panel); z-index: 1; }
+      margin: calc(var(--s3) * -1) calc(var(--s2) * -1) 0 0; z-index: 1; }
     .wrap { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
     .hring { width: 72px; height: 72px; }
     .hside .pts { font-size: var(--t5); }
