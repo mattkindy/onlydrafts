@@ -546,22 +546,49 @@
   .claim { display: flex; flex-direction: column; gap: 2px; margin: var(--s2) 0;
     font-size: var(--t2); }
   .claim span { color: var(--muted); font-size: var(--t1); }
-  /* his season on one strip: a column a week, played as bars, to come as boxes */
-  .strip-chart { width: 100%; height: auto; display: block; overflow: visible;
-    margin-top: var(--s1); }
-  .strip-chart .sgrid { stroke: var(--edge); stroke-width: 1; }
-  .strip-chart .saxis { fill: var(--faint); font-size: 9px; font-variant-numeric: tabular-nums; }
-  .strip-chart .saxis.on { fill: var(--ink); font-weight: 700; }
-  .strip-chart .scol { fill: var(--chip); }
-  .strip-chart .scol.picked { stroke: var(--faint); stroke-width: 1; }
-  .strip-chart .sbar.up { fill: var(--go); }
-  .strip-chart .sbar.down { fill: var(--mark); }
-  .strip-chart .stick { stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; }
-  .strip-chart .swhisk { stroke: var(--muted); stroke-width: 1.5; }
-  .strip-chart .sbox { fill: color-mix(in srgb, var(--muted) 55%, var(--panel)); }
-  .strip-chart .sbye { fill: var(--faint); font-size: 8px; font-weight: 700; }
-  .strip-chart .smiss { stroke: var(--faint); stroke-width: 1.8; stroke-linecap: round; fill: none; }
-  .strip-chart .stap { fill: transparent; cursor: pointer; }
+  /*
+   * His season as columns, a week each, wide enough to read and running
+   * sideways past the sheet's edge, faded there so the rest reads as more.
+   */
+  .season-cols { display: flex; gap: 2px; overflow-x: auto; overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity; scrollbar-width: none;
+    margin: var(--s2) calc(var(--s3) * -1) 0; padding: 0 var(--s3);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--s3),
+      #000 calc(100% - var(--s4)), transparent);
+    mask-image: linear-gradient(90deg, transparent 0, #000 var(--s3),
+      #000 calc(100% - var(--s4)), transparent); }
+  .season-cols::-webkit-scrollbar { display: none; }
+  .scol { flex: 0 0 42px; display: flex; flex-direction: column; align-items: stretch;
+    gap: 4px; padding: 6px 0 8px; border: 1px solid transparent; border-radius: 10px;
+    background: none; font: inherit; color: inherit; cursor: pointer;
+    scroll-snap-align: start; }
+  .scol.now { background: var(--chip); }
+  .scol.picked { border-color: var(--faint); }
+  .scol .sval { height: 15px; font-size: 12px; font-weight: 800; text-align: center;
+    font-variant-numeric: tabular-nums; color: var(--faint); }
+  .scol .sval.up { color: var(--go); }
+  .scol .sval.down { color: var(--mark); }
+  .scol .sval.proj { color: var(--muted); font-weight: 700; }
+  .scol .splot { position: relative; height: 116px; }
+  .scol .splot::after { content: ""; position: absolute; left: 3px; right: 3px; bottom: 0;
+    height: 1px; background: var(--edge); }
+  .scol .splot i { position: absolute; left: 50%; font-style: normal; }
+  .scol .sbar { bottom: 0; width: 20px; margin-left: -10px; border-radius: 5px 5px 0 0; }
+  .scol .sbar.up { background: var(--go); }
+  .scol .sbar.down { background: var(--mark); }
+  .scol .swhisk { width: 2px; margin-left: -1px; background: var(--muted); border-radius: 1px; }
+  .scol .sbox { width: 18px; margin-left: -9px; border-radius: 4px;
+    background: color-mix(in srgb, var(--muted) 50%, var(--panel)); }
+  /* his line, across a bar or a box, edged so it reads over either */
+  .scol .stick { width: 28px; margin-left: -14px; height: 3px; margin-bottom: -1.5px;
+    background: var(--ink); border-radius: 2px; box-shadow: 0 0 0 1.5px var(--panel); }
+  .scol .sout, .scol .sbye { bottom: 6px; left: 0; right: 0; text-align: center;
+    font-size: 11px; font-weight: 700; color: var(--faint); }
+  .scol .swk { font-size: 13px; font-weight: 700; text-align: center; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .scol.now .swk, .scol.picked .swk { color: var(--ink); }
+  .scol .sopp { font-size: 11px; text-align: center; color: var(--faint); white-space: nowrap;
+    overflow: hidden; text-overflow: clip; }
   .wsay b.up { color: var(--go); }
   .wsay b.down { color: var(--mark); }
   .pkey .kseg.k-under { background: var(--mark); }
