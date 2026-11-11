@@ -216,7 +216,7 @@ function WhatNow({ chance, today }: { chance: number; today: number | null }) {
   );
 }
 
-/** the shares of seasons the two bands span: the middle half, and 8 in 10 */
+/** the shares of seasons the two bands span: the 80% range, and the 50% */
 const BANDS = [[0.1, 0.9], [0.25, 0.75]] as const;
 
 /** a way a week can leave you, worth a row only if 1 season in 100 goes that way */
@@ -228,7 +228,7 @@ const WORTH_A_ROW = 0.01;
  * which only moves when a picked game is played and ends on the chance
  * with every pick in. The dashed line is the median of the seasons
  * played out, with a darker band where half of them sit and a lighter
- * one for 8 in 10. Your own picked games are marked under their week.
+ * one for the 80% range. Your own picked games are marked under their week.
  * Tapping a week lists the records you can have by then, how often each
  * happens and what each leaves your chance at.
  */
@@ -281,8 +281,8 @@ function PathChart(
     <div class="path">
       <svg viewBox={`0 0 ${W} ${H}`} role="img"
         aria-label={`your playoff chance after week ${coming + last - 1}: ` +
-          `${pct(chance(last))}, median ${pct(median(last))}, 8 in 10 seasons between ` +
-          `${pct(share(last, 0.1))} and ${pct(share(last, 0.9))}`}>
+          `${pct(chance(last))}, median ${pct(median(last))}, 80% range ` +
+          `${pct(share(last, 0.1))} to ${pct(share(last, 0.9))}`}>
         {[0, 0.5, 1].map((g) => (
           <g key={g}>
             <line class="pgrid" x1={L} x2={W - R} y1={y(g)} y2={y(g)} />
@@ -324,15 +324,15 @@ function PathChart(
       <p class="pkey">
         <span><i class="kline" />chance</span>
         <span><i class="kline median" />median</span>
-        <span><i class="kband" />middle 50%</span>
-        <span><i class="kband wide" />middle 80%</span>
+        <span><i class="kband" />50% range</span>
+        <span><i class="kband wide" />80% range</span>
       </p>
       <p class="wsay">
         {picked
           ? <>
             <b>wk {coming + at - 1}</b> {pct(chance(at))}
             {" "}· median {pct(median(at))}
-            {" "}· 80% in {pct(share(at, 0.1))}–{pct(share(at, 0.9))}
+            {" "}· 80% range {pct(share(at, 0.1))}–{pct(share(at, 0.9))}
           </>
           : <><b>now</b> {pct(now)}</>}
       </p>

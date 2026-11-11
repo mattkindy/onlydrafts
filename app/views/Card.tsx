@@ -287,7 +287,7 @@ function Facts({ p, teams, costs, aside, slim }: {
       {p.par && (
         <span
           class="f"
-          title="points over a replacement-level player across a season. The range covers the middle 80% of his simulated seasons, and the small figure is the median."
+          title="points over a replacement-level player across a season: the 80% range of his simulated seasons, with the median small"
         >
           <i>over a season</i>
           {p.par.low.toFixed(0)} to {p.par.high.toFixed(0)}
