@@ -17,7 +17,7 @@ import {
   walkDrive, type DriveEnd, type FactorDrive, type Opening, type Unaimed,
 } from "./driveFromFactors.js";
 import { standardNormal } from "../sim/rng.js";
-import type { PlayerLine } from "./playerWeek.js";
+import type { StatLine } from "../scoring/fantasyPoints.js";
 import type { Call, PlayFactors } from "./playFactors.js";
 import type { EndingRules, ClockRules } from "./driveFromFactors.js";
 import type { FourthDown } from "../features/fitFourthDown.js";
@@ -25,6 +25,21 @@ import type { PlayClock } from "../features/fitPlayClock.js";
 import {
   DEFAULT_AFTER_TOUCHDOWN, type AfterTouchdown,
 } from "../features/afterTouchdown.js";
+
+/** one player's line out of a played game */
+export interface PlayerLine extends StatLine {
+  playerId: string;
+  played: boolean;
+  /**
+   * How often he got it. No league pays for these, and they are the
+   * steadiest thing about a player, so a walk that counts them can say
+   * whether a quiet week was fewer touches or less done with them.
+   */
+  carries?: number;
+  targets?: number;
+  passAtt?: number;
+  passCmp?: number;
+}
 
 /** one side of a game, and everything needed to walk its drives */
 export interface Side {

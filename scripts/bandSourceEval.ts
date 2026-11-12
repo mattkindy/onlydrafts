@@ -2,26 +2,26 @@
  * Where does a card's spread come from when the walk never dealt him a
  * game?
  *
- * The board takes a player's band from three places in turn: the games
- * the walk dealt him, then the role simulation (`fitRoles` with
- * `seasonSim`, the four situations), then the pooled residual band that
- * gives every player at a level the same range. Only the first is the
- * model the rest of the board is built from. The role simulation is the
- * last thing that keeps the four situations alive, and it only ever
- * speaks for the men outside the walk's cast.
+ * The board takes a player's band from the games the walk dealt him and,
+ * for a man outside every side's cast, from the pooled residual band
+ * that gives every player at a level the same range. Until the four
+ * situations were retired the role simulation (`fitRoles` with
+ * `seasonSim`) wrote the band for the uncast men it knew from last
+ * season, and this bench is what retired it: over 2023 to 2025 its 80%
+ * band held 86.9% of those men's weeks against 76.1% for the pooled one,
+ * and the pooled one's pinball loss was .031 lower with a standard error
+ * of .018. That arm is gone with the code; `scripts/README.md` has its
+ * numbers.
  *
- * So this asks, of exactly those men, whether the role simulation's
- * band is any better than the pooled one. Each is hung on the same
- * August level, as the board hangs them, and scored on the weeks he
- * really played: how often the 80% and the 50% bands held him, how wide
- * the 80% band was, and the pinball loss over the five quantiles the
- * card shows, which rewards a band for being right and narrow at once.
- * A third answer keeps to the walk: a man it never dealt a game borrows
- * the shape of the walk's men at his position nearest him in level.
- * The men neither source knows, mostly rookies, take the pooled band
- * today and are scored against the borrowed one too. The walk's own men
- * are scored the same way beside them, as a check that the instrument
- * can tell a better band from a worse one.
+ * What is left asks whether the uncast could do better than the pooled
+ * band by borrowing the shape of the walk's men at their position
+ * nearest them in level. Each band is hung on the same August level, as
+ * the board hangs them, and scored on the weeks the man really played:
+ * how often the 80% and the 50% bands held him, how wide the 80% band
+ * was, and the pinball loss over the five quantiles the card shows,
+ * which rewards a band for being right and narrow at once. The walk's
+ * own men are scored the same way beside them, as a check that the
+ * instrument can tell a better band from a worse one.
  *
  * A gap in pinball loss comes with its standard error, from resampling
  * the men, since a man's weeks are not independent of each other.
@@ -33,13 +33,10 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { buildPreseasonWorld } from "../src/features/preseason.js";
-import { fitRoles } from "../src/features/fitRoles.js";
-import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
 import { DEALT_WIDER } from "../src/features/walkWeek.js";
 import { outcomeQuantile } from "../src/backtest/intervals.js";
 import { fantasyPoints, presets } from "../src/scoring/fantasyPoints.js";
 import { seededRng } from "../src/sim/rng.js";
-import { normalDraw } from "../src/sim/normal.js";
 
 const SEASONS = (process.argv[2] ?? "2023,2024,2025").split(",").map(Number);
 const POSITIONS = ["QB", "RB", "WR", "TE"];
@@ -136,9 +133,7 @@ function gap(label: string, a: Tally, b: Tally): void {
   console.log(`  ${label.padEnd(44)} ${said >= 0 ? "+" : ""}${said.toFixed(4)}, se ${se.toFixed(4)}`);
 }
 
-const ARMS = [
-  "role", "pooled", "borrowed", "neitherPooled", "neitherBorrowed", "walk", "walkPooled",
-] as const;
+const ARMS = ["pooled", "borrowed", "walk", "walkPooled"] as const;
 type Arm = (typeof ARMS)[number];
 const tallies = () => Object.fromEntries(ARMS.map((a) => [a, blank()])) as Record<Arm, Tally>;
 const all = tallies();
@@ -166,16 +161,10 @@ function borrowedShape(
 }
 
 function report(label: string, tally: Record<Arm, Tally>): void {
-  console.log(`${label}, the men the walk never dealt a game, whose band the role simulation writes:`);
-  say("role simulation", tally.role);
+  console.log(`${label}, the men the walk never dealt a game:`);
   say("pooled band", tally.pooled);
   say("borrowed from the walk", tally.borrowed);
-  gap("pinball the pooled band saves on the role's", tally.role, tally.pooled);
-  gap("and borrowing saves on the pooled band's", tally.pooled, tally.borrowed);
-  console.log(" the men neither knows, who take the pooled band today:");
-  say("pooled band", tally.neitherPooled);
-  say("borrowed from the walk", tally.neitherBorrowed);
-  gap("pinball borrowing saves on the pooled band's", tally.neitherPooled, tally.neitherBorrowed);
+  gap("pinball borrowing saves on the pooled band's", tally.pooled, tally.borrowed);
   console.log(" the walk's own men, the same instrument:");
   say("walk's dealt games", tally.walk);
   say("pooled band", tally.walkPooled);
@@ -184,44 +173,7 @@ function report(label: string, tally: Record<Arm, Tally>): void {
 for (const season of SEASONS) {
   const world = await buildPreseasonWorld(season);
 
-  // the role simulation's shapes, built the way the board built them
-  const positions = new Map<string, string>();
-  const gamesLast = new Map<string, number>();
-
-  for (const row of await loadPlayerStats(season - 1)) {
-    positions.set(row.playerId, row.position);
-    gamesLast.set(row.playerId, (gamesLast.get(row.playerId) ?? 0) + 1);
-  }
-
-  const roleShape = new Map<string, Shape>();
-  const { byTeam, playsByTeam } = await fitRoles(season - 1, positions, gamesLast);
-  const rng = seededRng(29);
-  const draws = { uniform: rng, normal: () => normalDraw(rng) };
-
-  for (const [team, roster] of byTeam) {
-    const simulated = simulateSeason(
-      { plays: playsByTeam.get(team)! }, roster,
-      { ...DEFAULT_SEASON, runs: 400, roleDrift: 0, scoring: presets.ppr }, draws,
-    );
-
-    for (const player of simulated) {
-      const mean = player.weekly.mean;
-
-      if (mean <= 0) {
-        continue;
-      }
-
-      roleShape.set(player.playerId, {
-        0.1: player.weekly.p10 / mean,
-        0.25: player.weekly.p25 / mean,
-        0.5: player.weekly.median / mean,
-        0.75: player.weekly.p75 / mean,
-        0.9: player.weekly.p90 / mean,
-      });
-    }
-  }
-
-  // and the walk's, from the games it dealt him
+  // the walk's shapes, from the games it dealt him
   const walkShape = new Map<string, Shape>();
   const kept = JSON.parse(await readFile(
     join(import.meta.dirname, "..", "data", "kept", `played-${season}.json`), "utf8",
@@ -281,20 +233,14 @@ for (const season of SEASONS) {
     ])) as unknown as Shape;
 
     const walk = walkShape.get(p.playerId);
-    const role = roleShape.get(p.playerId);
-
     const borrowed = borrowedShape(p.position, p.projectedPpg, dealt);
 
     if (walk) {
       score(tally.walk, hung(walk), was);
       score(tally.walkPooled, pooled, was);
-    } else if (role && borrowed) {
-      score(tally.role, hung(role), was);
+    } else if (borrowed) {
       score(tally.pooled, pooled, was);
       score(tally.borrowed, hung(borrowed), was);
-    } else if (!role && borrowed) {
-      score(tally.neitherPooled, pooled, was);
-      score(tally.neitherBorrowed, hung(borrowed), was);
     }
   }
 

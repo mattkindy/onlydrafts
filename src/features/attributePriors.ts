@@ -1,9 +1,9 @@
 /**
  * What to expect of a player before he has done anything, from what he is.
  *
- * fitRoles shrinks a thin player toward the league: a catch rate of
- * .64, 10.4 yards a catch, 4.3 a carry, and the same swing for
- * everybody. Nobody is league average across the board, so every one of
+ * The four situation share model, since retired, shrank a thin player
+ * toward the league: a catch rate of .64, 10.4 yards a catch, 4.3 a
+ * carry, and the same swing for everybody. Nobody is league average across the board, so every one of
  * those is an error the moment it is applied to a particular player.
  *
  * He already has thirty four attributes. Guessing his rates from those
