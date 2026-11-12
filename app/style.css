@@ -1910,3 +1910,13 @@
 .tevenhead .seg, .tevenhead .seg button { flex: 0 0 auto; }
 .tevenhead .seg button { padding: 0 var(--s3); min-height: 2rem; font-size: var(--t1); }
 .tevens .tmoreevens { align-self: flex-start; }
+
+/* how value is worked out, folded away under the rosters */
+.tlearn { font-size: var(--t1); color: var(--muted); scroll-margin-top: var(--s5); }
+.tlearn summary { cursor: pointer; font-weight: 600; color: var(--muted); width: max-content; max-width: 100%; }
+.tlearn summary:hover { color: var(--ink); }
+.tlearn dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--s2) var(--s3);
+  margin: var(--s2) 0 0; max-width: 62ch; line-height: 1.45; }
+.tlearn dt { font-weight: 700; color: var(--ink); }
+.tlearn dd { margin: 0; }
+.tbalance .tlearnbtn { margin-left: auto; color: var(--faint); }
