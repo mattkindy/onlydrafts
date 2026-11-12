@@ -17,10 +17,15 @@ of these are in `scripts/README.md`.
   scores, so it is out.
 - Pluggable player-quality input beyond draft capital and snap counts:
   Approximate Value next, PFF grades behind a manual CSV import.
-- A downward direction in the stack. `teamState.ts` and `gameSize.ts`
-  know what a team is worth and the walk never hears it, which is why
-  the walk orders a side's points at about .15 against the betting
-  line's .39. See `src/README.md`.
+- More of a downward direction in the stack. The season the board
+  reads hears the line, as a lift of 0.7 on every play, and on whole
+  games that is too hard: at 0.7 a side's points are ordered .29
+  to .37 against the line's .36 to .42 and the margin is further off in
+  two seasons of three, where 0.3 is closer than no lift on every error
+  in every season. Played again at 0.3, the three past seasons want the
+  board, the walk column and `DEALT_WIDER` scored against 0.7, and the
+  board bench needs those seasons' draft boards on disk.
+  `teamState.ts` is read by nothing. See `src/README.md`.
 
 ## Leads left open
 

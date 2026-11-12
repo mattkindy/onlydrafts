@@ -21,7 +21,9 @@ Every row is the same three instruments:
   the mean of two WALK_SEED values, which takes the noise to about
   .004. Treat any weekly gap under .01 in the older rows as nothing.
 - **game** is scripts/scorePredictionEval.ts, points off the margin
-  over a season of fixtures, next to the betting line.
+  over a season of fixtures, next to the betting line, with the walk
+  knowing only the two sides. MARKET_LIFT hands it the line the way
+  the season the board reads has it; the sweep is at the bottom.
 
 ## Where it stands
 
@@ -1404,3 +1406,30 @@ own spread is right. It goes missing further down, in how a drive's
 snaps get shared out among the men on the field. The touchdown
 shortfall is the piece of it that this bench can see, and 3.5 points
 of drives on a 24.2% base is a seventh of all scoring.
+
+## The line handed to the walk, on whole games
+
+The season the board reads lifts every play a side makes by the line's
+read on its afternoon, to the power 0.7, and the game bench never did.
+Swept on the game bench, every regular season game of each year, the
+mean of two seeds:
+
+| | margin off | total off | a side off | a side ranked |
+|---|---|---|---|---|
+| 2023, off | 14.66 | 14.20 | 10.21 | .173 |
+| 2023, 0.3 | 14.42 | 14.04 | 10.06 | .249 |
+| 2023, 0.7 | 14.78 | 14.34 | 10.29 | .308 |
+| 2024, off | 14.39 | 13.68 | 9.93 | .152 |
+| 2024, 0.3 | 13.80 | 13.63 | 9.70 | .263 |
+| 2024, 0.7 | 13.51 | 13.68 | 9.62 | .368 |
+| 2025, off | 14.61 | 13.82 | 10.06 | .202 |
+| 2025, 0.3 | 14.20 | 13.66 | 9.85 | .283 |
+| 2025, 0.7 | 14.84 | 14.25 | 10.29 | .327 |
+
+The line on its own is 13.07, 12.61 and 12.27 off the margin and ranks
+a side at .358, .424 and .399. At 0.7 the walk orders the sides nearly
+as well as the line and misses the margin by more than with no lift in
+2023 and 2025. At 0.3 it is closer on every error, and orders better,
+in every season. The board was not rerun, so the season it reads stays
+at 0.7 until it has been asked; `scripts/README.md` has the single seed
+tables and what that needs.

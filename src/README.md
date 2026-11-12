@@ -116,8 +116,11 @@ through `matchupTable.ts`. A quarterback's ground habit is his own
 rather than won from anybody.
 
 **Downward** is a level constraining what happens beneath it, and
-there is still none. `teamState.ts` and `gameSize.ts` know things the
-walk never hears.
+there is one message so far. The season the board reads is played with
+every side's plays lifted by what the line says of its afternoon,
+`gameSize.ts`'s size to the power 0.7, in `playedSeason.ts`. The
+weekly walk scales a man's points by the same size after the game
+instead of handing it in, and `teamState.ts` is read by nothing.
 
 Played whole with the players in it, the simulation ordered the 2025
 skill players adp had priced at .55 where adp managed .41, and inside
@@ -125,10 +128,13 @@ picks 61 to 120 adp carried nothing at all, -.00 against .36. That is
 one season and a roster-based population, and it is the first version
 to beat the market on its own.
 
-Team games are another matter. The walk orders a side's points at
-about .15 where the betting line gets .39, and the line is not
-connected. What a team is worth is still known at the top and never
-reaches the plays.
+Team games are another matter. Knowing only the two sides, the walk
+orders a side's points at .14 to .21 where the betting line gets .36 to
+.42. Handed the line at 0.7 it gets .29 to .37 and picks the winner far
+more often, but the margin and the total come out further off in two
+seasons of three. At 0.3 it is closer than without the line on every
+error, and orders better, in every season. `scripts/README.md` has the
+sweep, and the board has not yet been asked which strength it wants.
 
 ## Rules the model follows
 

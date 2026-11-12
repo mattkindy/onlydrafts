@@ -3459,3 +3459,95 @@ A season by season. A correction that can find any combination and
 finds none worth a pair is the strongest form of the answer: how a
 player's role meets his game is already in what the ridge adds up, as
 far as anything known before kickoff can say. Nothing ships.
+
+# Handing the walk the line
+
+The backlog's downward message was that what a team is worth is known at
+the top and never reaches the plays, which is why the walk orders a
+side's points at about .15 where the line gets .39. Half of that is out
+of date. `playedSeason.ts`, which writes the season the board reads,
+already lifts every play a side makes by the size `gameSize.ts` reads
+off the line, to the power 0.7. The game bench never had it, so its .15
+is the walk playing every fixture knowing only the two sides.
+
+`scorePredictionEval.ts` now takes MARKET_LIFT, the same lift at any
+strength, and ranks each side's points against what it scored beside
+the points the line implies for it. The walk is fitted on the four
+seasons before the one scored, thirty runs a fixture, all 272 regular
+season games:
+
+```
+              margin off   total off   a side off   a side ranked   picked the winner
+2023, off       14.59        14.09       10.14          .180             58.5%
+      0.3       14.50        14.07       10.10          .245             58.5%
+      0.5       14.54        14.26       10.18          .272             58.8%
+      0.7       14.76        14.18       10.23          .322             64.3%
+      1         15.71        15.03       10.87          .330             64.3%
+      the line  13.07        13.13        9.26          .358             68.0%
+2024, off       14.49        13.69        9.97          .143             59.9%
+      0.3       14.02        13.72        9.81          .246             66.5%
+      0.5       13.66        13.66        9.66          .324             68.8%
+      0.7       13.30        13.59        9.51          .374             69.1%
+      1         14.23        14.13       10.03          .385             72.1%
+      the line  12.61        12.55        8.89          .424             71.3%
+2025, off       14.51        13.81       10.02          .214             58.3%
+      0.3       13.98        13.77        9.81          .285             61.3%
+      0.5       14.53        13.90       10.05          .291             62.7%
+      0.7       14.92        14.25       10.32          .319             65.3%
+      1         16.03        14.61       10.84          .351             62.4%
+      the line  12.27        13.19        9.01          .399             65.3%
+```
+
+And read again under GAME_SEED=1, the same games under other draws, at
+the three strengths that matter:
+
+```
+              margin off   total off   a side off   a side ranked   picked the winner
+2023, off       14.73        14.31       10.27          .165             56.3%
+      0.3       14.33        14.01       10.02          .252             57.0%
+      0.7       14.79        14.49       10.35          .294             59.2%
+2024, off       14.29        13.66        9.89          .161             59.6%
+      0.3       13.58        13.53        9.59          .279             65.4%
+      0.7       13.72        13.77        9.72          .361             69.5%
+2025, off       14.70        13.82       10.09          .190             56.8%
+      0.3       14.41        13.55        9.89          .281             61.3%
+      0.7       14.76        14.24       10.25          .334             63.1%
+```
+
+The order comes in at every strength in every season and under both
+seeds. Off, the walk ranks a side's points at .14 to .21; at 0.7 it is
+.29 to .37 against the line's .36 to .42, and it picks the winner 59%
+to 70% of the time where off it managed 56% to 60%.
+
+The points do not follow it. At 0.7 the margin is further off than with
+the lift off in 2023 and 2025 and the total further off in both, and at
+full strength the total and a side's own points are further off in every
+season. The likeliest reason is that a lift on a play's yards moves a
+side's points by more than the lift, since a longer gain is also a drive
+that finishes, so the line's size is the right message handed in too
+hard. That has not been measured on its own.
+
+Two readings of the same code move the margin by as much as .44, so one
+reading of a gap says little, and what holds is its sign. At 0.3 the
+walk is closer on the margin than with the lift off in every season
+under both seeds, by .25, .59 and .41 on the mean of the two, on a
+side's own points by .15, .23 and .21, and on the total by .16, .05 and
+.16, and it ranks the sides about a tenth better. It is the only
+strength better than off on every error and on the order in every
+season. At 0.7 the order is better again, .31 to .37, but the margin is
+better only in 2024 and the total no better anywhere.
+
+Nothing ships from this. The game bench is not on the board, and the
+season the board reads already plays at 0.7, which was chosen on the
+players' points rather than the sides'. Whether 0.3 is better there is
+a question for `boardShareEval.ts` and `walkBandEval.ts` with the
+2023 to 2025 seasons played again at both strengths, and the board
+bench needs those seasons' draft boards, which were not on disk where
+this was run. `teamState.ts` is still read by nothing.
+
+## What to try next
+
+`ALPHA` at 0.3 in `playedSeason.ts`, against 0.7 run at the same time:
+the three past seasons played again at each, the board and the walk
+column scored on both, and `DEALT_WIDER` swept again, since a weaker
+lift narrows the spread of a man's dealt games.
