@@ -142,7 +142,8 @@ export interface UpdateShape {
   /**
    * A rise counts only where two of the last three games are that far
    * over the share before. A man filling in for a hurt starter often has
-   * one big game and gives the job back; `inSeasonLevelEval.ts` marks it.
+   * a big game and gives the job back. The build ships it, with a rise
+   * breaking at thirty points where a drop breaks at twenty.
    */
   riseHeld?: boolean;
   roleCap: number;

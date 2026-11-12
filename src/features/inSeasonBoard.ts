@@ -53,12 +53,17 @@ const ROLE_SEASONS = 8;
 /**
  * Fitted over 2018 to 2025. Usage takes half its weight after two
  * games and points after five, which is the gap between how fast a
- * role settles and how fast scoring does. A snap share move of twenty
- * points counts as the role changing outright.
+ * role settles and how fast scoring does. A drop in snap share of
+ * twenty points counts as the role changing outright. A rise needs
+ * thirty, in two of his last three games: a man filling in for a hurt
+ * starter has a big game or two and hands the job back, and reading a
+ * rise like a drop held him .48 a game above what he went on to do.
  */
 export const SHIPPED_SHAPE: UpdateShape = {
   decay: 0.9,
-  breakGap: 0.2,
+  breakGap: 0.3,
+  dropGap: 0.2,
+  riseHeld: true,
   roleCap: 0.5,
   roleGames: 2,
   pointsCap: 0.6,
