@@ -1485,7 +1485,10 @@
   .with-title .ow { grid-column: 2; grid-row: 1; text-align: right; color: var(--muted);
     font-variant-numeric: tabular-nums; }
   .with-title .orec small { grid-column: 1 / span 2; grid-row: 2; }
-  .with-title .orow > b, .with-title .oodd, .with-title .obar { grid-row: 1 / span 2; }
+  /* the figures sit on the name's line, the record's baseline theirs */
+  .with-title .orow { align-items: baseline; }
+  .with-title .orow > b, .with-title .oodd, .with-title .obar { grid-row: 1; }
+  .with-title .obar { align-self: center; }
   .with-title .ohead > b { grid-row: auto; }
   /* on a phone the bar gives way: the figure beside it says the same */
   @media (max-width: 600px) {
