@@ -1314,6 +1314,11 @@ const ESPN_MISSING = new Set([400, 404]);
 
 /** what to say when ESPN turns a league down for a reason cookies will not fix */
 function espnTrouble(status: number, leagueId: string, season: number): Error {
+  // ESPN's answer to a request with no league id in it
+  if (status === 405 || !leagueId) {
+    return new Error(NO_ESPN_LEAGUE_ID);
+  }
+
   if (ESPN_MISSING.has(status)) {
     return new Error(`ESPN has no league ${leagueId} for season ${season}.`);
   }
@@ -1575,7 +1580,40 @@ const ESPN_TIEBREAK: Record<string, Tiebreak> = {
   TOTAL_POINTS_AGAINST: "paMost",
 };
 
-async function espnLeagues(leagueId: string, season: number): Promise<League[]> {
+/**
+ * The league id out of what was typed into the box: the number on its
+ * own, or the whole address of the league's page on espn.com, which has
+ * it after leagueId=. Nothing comes back for anything else.
+ *
+ * The box went to ESPN as it was. Left empty, which is easy after
+ * saving the cookies first, ESPN answers 405, "HTTP Method Not
+ * Supported", and the page said to try again in a minute.
+ */
+export function espnLeagueIdFrom(typed: string): string {
+  const named = typed.match(/leagueId=(\d+)/i);
+
+  if (named) {
+    return named[1]!;
+  }
+
+  const bare = typed.replace(/[\s#]/g, "");
+
+  return /^\d+$/.test(bare) ? bare : "";
+}
+
+/** what to say when there is no league id to look up */
+export const NO_ESPN_LEAGUE_ID =
+  "Put your ESPN league id in the box first. It is the number after " +
+  "leagueId= in the address of your league's page on espn.com, and the " +
+  "whole address works too.";
+
+async function espnLeagues(typed: string, season: number): Promise<League[]> {
+  const leagueId = espnLeagueIdFrom(typed);
+
+  if (!leagueId) {
+    throw new Error(NO_ESPN_LEAGUE_ID);
+  }
+
   const said = await espnAnswer(leagueId, season);
 
   if (!said?.teams) {

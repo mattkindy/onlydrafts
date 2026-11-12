@@ -724,8 +724,13 @@ function App() {
     reading.current = true;
     setRereading(true);
 
+    // an ESPN league is looked up by its own id, not by whatever the box
+    // says now, which may be empty or somebody's Sleeper name
     const found = await PROVIDERS[active.provider]!
-      .leaguesFor(who.trim(), season ?? active.season)
+      .leaguesFor(
+        active.provider === "espn" ? active.leagueId : who.trim(),
+        season ?? active.season,
+      )
       .catch(() => null);
     const again = found?.find((lg) => sameSlot(lg, active));
 
