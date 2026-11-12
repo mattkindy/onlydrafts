@@ -848,6 +848,100 @@
     align-items: baseline; gap: var(--s1) var(--s2); }
   .options li .optname .badge { margin-left: 0; }
   .options li .playername { flex: 0 1 auto; min-width: 0; }
+  /*
+   * The lineup as a list, a row a starter, headed once: the labels sit
+   * over the columns rather than over every figure, and each figure
+   * keeps to its named column however many a row has, so a row with a
+   * game under way lines up with one still to kick off. The bench, when
+   * open, keeps to the same columns.
+   */
+  .mcol.mine .lineup { --c-scored: 0px; --c-left: 0px; --c-proj: 3rem; --c-range: 6.25rem; }
+  .mcol.mine .lineup.has-scored { --c-scored: 3.25rem; }
+  .mcol.mine .lineup.has-left { --c-left: 3.75rem; }
+  .mcol.mine .stack { gap: 0; }
+  .mcol.mine .slot-head { display: grid; justify-items: end; align-items: end;
+    grid-template-columns: [name] minmax(0, 1fr) [scored] var(--c-scored)
+      [proj] var(--c-proj) [left] var(--c-left) [range] var(--c-range);
+    padding: 0 var(--s3) var(--s1); }
+  .mcol.mine .slot-head i { font-style: normal; font-size: .6rem; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .mcol.mine .c-scored { grid-column: scored; }
+  .mcol.mine .c-proj { grid-column: proj; }
+  .mcol.mine .c-left { grid-column: left; }
+  .mcol.mine .c-range { grid-column: range; }
+  .mcol.mine .stack > .slot-card { display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center; column-gap: var(--s3); padding: var(--s2) var(--s3);
+    margin: 0; border-radius: 0; }
+  .mcol.mine .stack > .slot-card + .slot-card { border-top-width: 0; }
+  .mcol.mine .stack > .slot-head + .slot-card { border-radius: 12px 12px 0 0; }
+  .mcol.mine .stack > .slot-card:last-child { border-radius: 0 0 12px 12px; }
+  .mcol.mine .stack > .slot-head + .slot-card:last-child { border-radius: 12px; }
+  .mcol.mine .stack > .slot-card h3 { margin: 0; }
+  /* what is wrong with him follows his name, not the far end of the row */
+  .mcol.mine .stack > .slot-card h3 .playername { flex: 0 1 auto; }
+  .mcol.mine .slot-figs,
+  .mcol.mine .benchrows .optfigs { display: grid; justify-items: end;
+    grid-template-columns: [scored] var(--c-scored) [proj] var(--c-proj)
+      [left] var(--c-left) [range] var(--c-range);
+    gap: 0; text-align: right; }
+  .mcol.mine .slot-figs .fig i,
+  .mcol.mine .benchrows .fig i { display: none; }
+  .mcol.mine .stack > .slot-card > :not(h3):not(.slot-figs) { grid-column: 1 / -1; }
+  .move .playername { flex: 0 1 auto; }
+
+  /*
+   * The one move a slot needs, under its starter: who to start or add and
+   * what it does to your chance this week. Green where it helps, amber
+   * where nobody on the bench or the wire does.
+   */
+  .lineup { display: flex; flex-direction: column; gap: var(--s3); }
+  .move { display: grid; align-items: baseline; column-gap: var(--s2); row-gap: 2px;
+    grid-template-columns: auto minmax(0, 1fr) auto 1.75rem;
+    grid-template-areas: "arrow who gain link";
+    margin-top: var(--s2); padding: var(--s2) var(--s3); border-radius: 8px;
+    background: color-mix(in srgb, var(--go) 11%, transparent); font-size: var(--t2); }
+  .move .marrow { grid-area: arrow; color: var(--go); font-weight: 800; }
+  .move .mwho { grid-area: who; min-width: 0; display: flex; flex-wrap: wrap;
+    align-items: baseline; gap: 2px var(--s2); }
+  .move .mverb { color: var(--muted); }
+  /* on a phone a move is one line: the verb says bench or free agent, and
+     his line is a tap away on his sheet; a wider screen has room for it */
+  .move .mwho i { display: none; font-style: normal; color: var(--faint); font-size: var(--t1); }
+  .move .golink .lk { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; }
+  /* the link keeps a finger-sized target without making its row taller */
+  .move .golink { min-width: 1.75rem; min-height: 0; justify-content: center;
+    padding: .55rem; margin: -.55rem; }
+  @media (min-width: 601px) {
+    .move .mwho i { display: inline; }
+    .move .golink .lk { position: static; width: auto; height: auto; clip: auto; }
+  }
+  .move .mgain { grid-area: gain; justify-self: end; color: var(--go); font-weight: 800;
+    font-variant-numeric: tabular-nums; }
+  .move .golink, .move .textbtn { grid-area: link; justify-self: end; font-size: var(--t1); }
+  .move.find { background: color-mix(in srgb, var(--mark) 12%, transparent); }
+  .move.find .marrow { color: var(--mark); }
+  .move.find .mwho { color: var(--muted); }
+  .benchrows .playername { flex: 0 1 auto; }
+  .slot-card h3 .nobody { font-weight: 600; color: var(--muted); }
+  /* how many moves, and what they do together */
+  .plan { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s3);
+    padding: var(--s2) var(--s3); border-radius: 10px; font-size: var(--t2); color: var(--muted);
+    background: color-mix(in srgb, var(--go) 10%, var(--panel)); border: 1px solid var(--edge); }
+  .plan b { color: var(--ink); }
+  .plan b.up { color: var(--go); }
+  /* the bench as a plain list under its fold */
+  .benchfold[aria-expanded="true"] { border-radius: 12px 12px 0 0; }
+  .benchrows { list-style: none; margin: 0; padding: 0 var(--s4); background: var(--panel);
+    border: 1px solid var(--edge); border-top: 0; border-radius: 0 0 12px 12px; }
+  .benchrows li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+    gap: var(--s3); padding: var(--s2) 0; border-top: 1px solid var(--edge); font-size: var(--t2); }
+  .benchrows li:first-child { border-top: 0; }
+  .benchrows .optname { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--s2); min-width: 0; }
+  .benchrows .optname .badge { margin-left: 0; }
+  .benchrows .optfigs { display: flex; gap: var(--s3); font-variant-numeric: tabular-nums; }
+  .benchrows li:not(:first-child) .fig i { display: none; }
+
   /* the column labels over a lineup laid out as rows, which only a wide
      screen does; a phone labels each figure where it stands */
   .slot-head { display: none; }
@@ -1451,70 +1545,13 @@
     .mcol > :first-child, .mcol.mine .lineuphead { margin-top: 0; }
     /* each starter a row, his figures in a column at the right, the rows
        joined into one list rather than a stack of separate cards */
-    /*
-     * The lineup as a list, a row a starter, headed once: the labels sit
-     * over the columns rather than over every figure, and each figure
-     * keeps to its named column however many a row has, so a row with a
-     * game under way lines up with one still to kick off.
-     */
-    .mcol.mine .stack { gap: 0; --c-scored: 0px; --c-left: 0px;
-      --c-proj: 4rem; --c-range: 7.5rem;
-      --o-proj: 3.5rem; --o-range: 7rem; --o-for: 0px; --o-out: 3.5rem; --o-win: 4rem; }
-    .mcol.mine .stack.has-scored { --c-scored: 4rem; }
-    .mcol.mine .stack.has-left { --c-left: 4.5rem; }
-    .mcol.mine .slot-card.bench { --o-for: 3rem; }
-    .mcol.mine .slot-head { display: grid; justify-items: end; align-items: end;
-      grid-template-columns: [name] minmax(0, 1fr) [scored] var(--c-scored)
-        [proj] var(--c-proj) [left] var(--c-left) [range] var(--c-range);
-      padding: 0 var(--s4) var(--s1); }
-    .mcol.mine .slot-head i { font-style: normal; font-size: .6rem; font-weight: 600;
-      letter-spacing: .06em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
-    .mcol.mine .c-name { grid-column: name; justify-self: start; }
-    .mcol.mine .c-scored { grid-column: scored; }
-    .mcol.mine .c-proj { grid-column: proj; }
-    .mcol.mine .c-left { grid-column: left; }
-    .mcol.mine .c-range { grid-column: range; }
-    .mcol.mine .c-for { grid-column: for; }
-    .mcol.mine .c-out { grid-column: out; }
-    .mcol.mine .c-win { grid-column: win; }
-    .mcol.mine .stack > .slot-card { display: grid; grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center; column-gap: var(--s4); padding: var(--s2) var(--s4);
-      margin: 0; border-radius: 0; }
-    .mcol.mine .stack > .slot-card + .slot-card { border-top-width: 0; }
-    .mcol.mine .stack > .slot-head + .slot-card { border-radius: 12px 12px 0 0; }
-    .mcol.mine .stack > .slot-card:last-child { border-radius: 0 0 12px 12px; }
-    .mcol.mine .stack > .slot-head + .slot-card:last-child { border-radius: 12px; }
-    .mcol.mine .stack > .slot-card h3 { margin: 0; }
-    /* what is wrong with him follows his name, not the far end of the row */
-    .mcol.mine .stack > .slot-card h3 .playername { flex: 0 1 auto; }
-    .mcol.mine .stack > .slot-card > .slot-figs { display: grid; justify-items: end;
-      grid-template-columns: [scored] var(--c-scored) [proj] var(--c-proj)
-        [left] var(--c-left) [range] var(--c-range);
-      gap: 0; text-align: right; }
-    .mcol.mine .stack > .slot-card > .slot-figs .fig i { display: none; }
-    .mcol.mine .stack > .slot-card > :not(h3):not(.slot-figs) { grid-column: 1 / -1; }
-    /* the bench, folded or open, stands apart from the starters over it */
-    .mcol.mine .stack > .slot-card.benchfold,
-    .mcol.mine .stack > .slot-card.bench { margin-top: var(--s3); border-top-width: 1px;
-      border-radius: 12px; }
-    .mcol.mine .stack > .slot-card.benchfold { display: flex; }
-    /* bench players as rows too, under a head of their own */
-    .mcol.mine .slot-head.opts,
-    .mcol.mine .options li { display: grid; align-items: center;
-      grid-template-columns: [name] minmax(0, 1fr) [proj] var(--o-proj) [left] var(--c-left)
-        [range] var(--o-range) [for] var(--o-for) [out] var(--o-out) [win] var(--o-win); }
-    .mcol.mine .slot-head.opts { padding: var(--s2) 0 var(--s1); }
-    .mcol.mine .slot-head.opts .c-name { font-size: var(--t1); letter-spacing: .05em; }
-    .mcol.mine .slot-card > .over { display: none; }
-    .mcol.mine .slot-card.bench > h3 { display: none; }
-    .mcol.mine .slot-card.bench > .slot-head.opts { grid-column: 1 / -1; padding-top: 0; }
-    .mcol.mine .options li { gap: 0; padding: var(--s1) 0; }
-    .mcol.mine .options .optfigs { display: contents; }
-    .mcol.mine .options .optname { grid-column: name; grid-row: 1; min-width: 0;
-      padding-right: var(--s3); }
-    .mcol.mine .options .fig { justify-self: end; text-align: right; grid-row: 1; }
-    .mcol.mine .options .fig i { display: none; }
-    .mcol.mine .options li > .why { grid-column: 1 / -1; grid-row: 2; }
+    /* a move on one line, its gain and its link each in a column of their own */
+    .mcol.mine .move { grid-template-columns: auto minmax(0, 1fr) 3.5rem 5.5rem;
+      grid-template-areas: "arrow who gain link"; }
+    /* the lineup's columns get room to breathe on a wide screen */
+    .mcol.mine .lineup { --c-proj: 4rem; --c-range: 7.5rem; }
+    .mcol.mine .lineup.has-scored { --c-scored: 4rem; }
+    .mcol.mine .lineup.has-left { --c-left: 4.5rem; }
 
     /* the playoff race and the what-if side by side, so a pick moves the
        list beside it rather than one a screen away */
