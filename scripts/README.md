@@ -3551,7 +3551,7 @@ this was run. `teamState.ts` is still read by nothing.
 the three past seasons played again at each, the board and the walk
 column scored on both, and `DEALT_WIDER` swept again, since a weaker
 lift narrows the spread of a man's dealt games.
-## How long a man ruled out stays out
+# How long a man ruled out stays out
 
 `outSpellEval.ts`. A man listed Out lost exactly the one game and was
 priced at his healthy rate, the board's games over seventeen, for every
@@ -3641,7 +3641,7 @@ DeVonta Smith was ruled out of week 8 of 2026 with a hamstring, on 12.8
 board games and a week 10 bye. The app had week 9 at .84 and 7.5 games
 left, and has .36 and 6.1 now. He sat week 9 as well.
 
-### The games after a short absence
+## The games after a short absence
 
 `RAMP` was measured on men back from four to seven games and is laid only
 on reserve. The same question for a short absence: one to three of his
@@ -3673,7 +3673,7 @@ standard error of .110, inside noise, so it does not ship. Nor does it look
 much like a ramp: the third and fourth games back are at .94 too, which
 reads more like a level that came down than one coming back up.
 
-### What to try next on this
+## What to try next on this
 
 Doubtful in the season pricing. Twelve of the 417 doubtful players in
 eight seasons played, and `playChance` prices his coming week near
@@ -3691,7 +3691,7 @@ The quarterback. A starter ruled out is back for his side's eighth game
 less than three times in five. Whether a backup who played well is the
 reason would take the depth chart, which the injury report does not carry.
 
-## Whether the update misses a role that is shrinking
+# Whether the update misses a role that is shrinking
 
 The question was whether a player losing his share of the snaps is held
 too high for too long, the way a rising one is caught. `inSeasonLevelEval.ts`
@@ -3775,7 +3775,7 @@ can mark them. More weight on the role term after a drop was not tried:
 under the one gap a drop is already held a little under what he did, and
 more weight on the role would push it further under.
 
-### What to try next on this
+## What to try next on this
 
 A rise. The one gap holds a man whose snaps rose twenty points .48 a game
 too high, and leaving a rise unbroken cuts the error on it but not by
