@@ -3301,14 +3301,15 @@ all    +.031, se .018
 ```
 
 The role simulation's band is too wide, holding 86.9% where it says 80
-and 59.5% where it says 50, and the pooled band too narrow by about as
-much at 80. On the loss that weighs both, the pooled band is the better
+and 59.5% where it says 50, and the pooled band too narrow, 76.1% and
+40.7%. On the loss that weighs both, the pooled band is the better
 of the two in two seasons and the worse in the third, and better over
 all three by a little under two standard errors. It is not the worse
 band, which is what the retirement needed. So those men take the pooled
 band now, as the uncast it had never seen already did, and the role
 simulation, `seasonSim.ts`, `situationalWeek.ts`, `fitRoles.ts`,
-`fitSwing.ts`, `situations.ts`, `aggregateSituations.ts` and
+`fitSwing.ts`, `situations.ts`, the older `teamWeek.ts` and
+`playerWeek.ts` beneath them, `aggregateSituations.ts` and
 `data/curated/situations.csv` have been deleted. The role arm went from
 the bench with them; the table above and the bench as it was first
 committed are the record of it.
@@ -3317,9 +3318,9 @@ The third row asks whether the walk could speak for the uncast too: a
 man it never dealt a game borrows the median shape of the twelve walk
 men at his position nearest him in level. It holds the 80% band best of
 the three and the 50% band worst, 34.3% inside where half belong. On
-pinball it saves .0045, standard error .0114, on these
-men and .0066, standard error .0158, on the 271 men neither source knew,
-so it is nothing and it does not ship.
+pinball it saves .0045, standard error .0114, on these men and .0066,
+standard error .0158, on the 271 men neither source knew, so it is
+nothing and it does not ship.
 
 What the bench shows on the way past is that the pooled band runs
 narrow everywhere. On the walk's own 973 men over the same seasons it
