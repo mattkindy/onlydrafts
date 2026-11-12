@@ -544,6 +544,7 @@ export function Trade(props: Props) {
           keys={mine.keys}
           picks={picks.filter((p) => p.owner === league.team)}
           away={picks.filter((p) => p.from === league.team && p.owner !== league.team)}
+          you={league.team}
           chosen={deal.give}
           chosenPicks={deal.givePicks}
           valueOf={valueOf}
@@ -561,6 +562,7 @@ export function Trade(props: Props) {
           keys={partner.keys}
           picks={picks.filter((p) => p.owner === deal.partner)}
           away={picks.filter((p) => p.from === deal.partner && p.owner !== deal.partner)}
+          you={league.team}
           chosen={deal.get}
           chosenPicks={deal.getPicks}
           valueOf={valueOf}
@@ -664,6 +666,8 @@ function TradeSide(
     picks: DraftPick[];
     /** the team's own picks someone else holds now */
     away: DraftPick[];
+    /** your team, so a pick of yours on their side says so */
+    you: string;
     chosen: string[];
     chosenPicks: string[];
     valueOf: (key: string) => number;
@@ -689,21 +693,25 @@ function TradeSide(
   const folded = all.length - all.filter(worth).length;
   // the picks as a draft board, a row a round and a column a season, so a
   // pick dealt away shows as a gap with who has it and one bought as a
-  // second pick in its square. The early rounds show; the rest fold away
-  // unless one of them is ticked.
+  // second pick in its square. The early rounds show, and down to the last
+  // round with a pick that changed hands; the rest fold away unless one of
+  // them is ticked.
   const every = [...props.picks, ...props.away];
   const seasons = [...new Set(every.map((p) => p.season))].sort((a, b) => a - b);
   const rounds = Math.max(0, ...every.map((p) => p.round));
   const [allRounds, setAllRounds] = useState(false);
+  const firstRounds = Math.max(FIRST_ROUNDS, ...props.away.map((p) => p.round),
+    ...props.picks.filter((p) => p.from !== props.owner).map((p) => p.round));
   const lateTicked = props.picks.some((p) =>
-    p.round > FIRST_ROUNDS && props.chosenPicks.includes(pickId(p)));
-  const folds = rounds > FIRST_ROUNDS + 1 && !lateTicked;
-  const roundsShown = folds && !allRounds ? FIRST_ROUNDS : rounds;
+    p.round > firstRounds && props.chosenPicks.includes(pickId(p)));
+  const folds = rounds > firstRounds + 1 && !lateTicked;
+  const roundsShown = folds && !allRounds ? firstRounds : rounds;
   const heldIn = (season: number, round: number) => props.picks
     .filter((p) => p.season === season && p.round === round)
     .sort((a, b) => Number(a.from !== props.owner) - Number(b.from !== props.owner));
   const goneIn = (season: number, round: number) =>
     props.away.find((p) => p.season === season && p.round === round);
+  const whoSays = (team: string) => (team === props.you ? "you" : team);
 
   return (
     <section class={"tside " + props.which}>
@@ -743,8 +751,9 @@ function TradeSide(
       </ul>
       {seasons.length > 0 && (
         <div class="tpicks" role="group" aria-label={`${props.owner}'s draft picks`}>
+          <p class="tpickof">{props.which === "send" ? "your picks" : `${props.owner}'s picks`}</p>
           <div class="tpickgrid" style={`--seasons: ${seasons.length}`}>
-            <span class="tpickhead">picks</span>
+            <span class="tpickhead" aria-hidden="true" />
             {seasons.map((season) => <span class="tpickhead" key={season}>{season}</span>)}
             {Array.from({ length: roundsShown }, (_, i) => i + 1).map((round) => [
               <span class="tround" key={`r${round}`}>{ordinal(round)}</span>,
@@ -770,13 +779,13 @@ function TradeSide(
                           onClick={() => props.onPick(id)}
                         >
                           <b>{worth}</b>
-                          {via && <i>{pick.from}</i>}
+                          {via && <i>{whoSays(pick.from)}</i>}
                         </button>
                       );
                     })}
                     {!held.length && (
                       <span class="tgone" title={gone ? `traded to ${gone.owner}` : undefined}>
-                        {gone ? `to ${gone.owner}` : "–"}
+                        {gone ? `to ${whoSays(gone.owner)}` : "–"}
                       </span>
                     )}
                   </div>
@@ -786,7 +795,7 @@ function TradeSide(
           </div>
           {folds && (
             <button class="tmore" aria-expanded={allRounds} onClick={() => setAllRounds((o) => !o)}>
-              {allRounds ? "fewer rounds" : `show rounds ${FIRST_ROUNDS + 1}–${rounds}`}
+              {allRounds ? "fewer rounds" : `show rounds ${firstRounds + 1}–${rounds}`}
             </button>
           )}
         </div>

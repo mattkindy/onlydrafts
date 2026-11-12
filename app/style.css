@@ -1378,6 +1378,8 @@
   .tsides.showing-send .tside.get, .tsides.showing-get .tside.send { display: none; }
   /* a side's picks as a draft board: a row a round, a column a season */
   .tpicks { margin-top: var(--s3); }
+  .tpickof { margin: 0 0 var(--s2); font-size: var(--t2); font-weight: 700; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tpickgrid { display: grid; grid-template-columns: 2.5rem repeat(var(--seasons, 1), minmax(0, 1fr));
     gap: var(--s1); align-items: stretch; }
   .tpickhead { font-size: var(--t1); font-weight: 700; color: var(--faint); text-align: center;

@@ -809,7 +809,9 @@ async function sleeperLeagues(username: string): Promise<League[]> {
     const [rosters, users, traded, drafts] = await Promise.all([
       ask("/league/" + lg["league_id"] + "/rosters"),
       ask("/league/" + lg["league_id"] + "/users"),
-      ask("/league/" + lg["league_id"] + "/traded_picks").catch(() => []),
+      // nothing rather than an empty list when it fails: a league whose
+      // trades did not arrive would credit every team with every pick
+      ask("/league/" + lg["league_id"] + "/traded_picks").catch(() => null),
       ask("/league/" + lg["league_id"] + "/drafts").catch(() => []),
     ]);
     const settings = (lg["settings"] ?? {}) as Record<string, number>;
@@ -819,7 +821,7 @@ async function sleeperLeagues(username: string): Promise<League[]> {
     const pickSeasons = seasonsOfPicks({ thisSeason, draftDone, type, traded: traded ?? [] });
     // picks are worth listing where the league keeps players, or where a
     // pick in a season to come has already changed hands
-    const tradesPicks = pickSeasons.length > 0;
+    const tradesPicks = pickSeasons.length > 0 && Array.isArray(traded);
     // a keeper is paid for out of the coming draft, which is next
     // season's once this season's has been made
     const rounds = roundsOfPicks({
