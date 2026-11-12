@@ -543,6 +543,8 @@ export function Trade(props: Props) {
           owner={league.team}
           keys={mine.keys}
           picks={picks.filter((p) => p.owner === league.team)}
+          away={picks.filter((p) => p.from === league.team && p.owner !== league.team)}
+          you={league.team}
           chosen={deal.give}
           chosenPicks={deal.givePicks}
           valueOf={valueOf}
@@ -559,6 +561,8 @@ export function Trade(props: Props) {
           owner={deal.partner}
           keys={partner.keys}
           picks={picks.filter((p) => p.owner === deal.partner)}
+          away={picks.filter((p) => p.from === deal.partner && p.owner !== deal.partner)}
+          you={league.team}
           chosen={deal.get}
           chosenPicks={deal.getPicks}
           valueOf={valueOf}
@@ -650,6 +654,9 @@ function OddsRow(
   );
 }
 
+/** the rounds of picks a side shows before the rest fold away */
+const FIRST_ROUNDS = 4;
+
 function TradeSide(
   props: {
     which: "send" | "get";
@@ -657,6 +664,10 @@ function TradeSide(
     owner: string;
     keys: { key: string; name: string; pos?: string | undefined; team?: string | undefined }[];
     picks: DraftPick[];
+    /** the team's own picks someone else holds now */
+    away: DraftPick[];
+    /** your team, so a pick of yours on their side says so */
+    you: string;
     chosen: string[];
     chosenPicks: string[];
     valueOf: (key: string) => number;
@@ -680,10 +691,27 @@ function TradeSide(
     Math.round(r.value) > 0 || Math.round(r.later ?? 0) > 0 || props.chosen.includes(r.p.key);
   const rows = open ? all : all.filter(worth);
   const folded = all.length - all.filter(worth).length;
-  // the picks by season and round; a team's own come before ones it bought
-  const picks = [...props.picks].sort((a, b) =>
-    a.season - b.season || a.round - b.round || Number(a.from !== props.owner) - Number(b.from !== props.owner));
-  const seasons = [...new Set(picks.map((p) => p.season))];
+  // the picks as a draft board, a row a round and a column a season, so a
+  // pick dealt away shows as a gap with who has it and one bought as a
+  // second pick in its square. The early rounds show, and down to the last
+  // round with a pick that changed hands; the rest fold away unless one of
+  // them is ticked.
+  const every = [...props.picks, ...props.away];
+  const seasons = [...new Set(every.map((p) => p.season))].sort((a, b) => a - b);
+  const rounds = Math.max(0, ...every.map((p) => p.round));
+  const [allRounds, setAllRounds] = useState(false);
+  const firstRounds = Math.max(FIRST_ROUNDS, ...props.away.map((p) => p.round),
+    ...props.picks.filter((p) => p.from !== props.owner).map((p) => p.round));
+  const lateTicked = props.picks.some((p) =>
+    p.round > firstRounds && props.chosenPicks.includes(pickId(p)));
+  const folds = rounds > firstRounds + 1 && !lateTicked;
+  const roundsShown = folds && !allRounds ? firstRounds : rounds;
+  const heldIn = (season: number, round: number) => props.picks
+    .filter((p) => p.season === season && p.round === round)
+    .sort((a, b) => Number(a.from !== props.owner) - Number(b.from !== props.owner));
+  const goneIn = (season: number, round: number) =>
+    props.away.find((p) => p.season === season && p.round === round);
+  const whoSays = (team: string) => (team === props.you ? "you" : team);
 
   return (
     <section class={"tside " + props.which}>
@@ -722,32 +750,54 @@ function TradeSide(
         )}
       </ul>
       {seasons.length > 0 && (
-        <div class="tpicks">
-          {seasons.map((season) => (
-            <div class="tpickrow" key={season}>
-              <span class="tseason">{season}</span>
-              <div class="tchips">
-                {picks.filter((p) => p.season === season).map((pick) => {
-                  const id = pickId(pick);
-                  const on = props.chosenPicks.includes(id);
+        <div class="tpicks" role="group" aria-label={`${props.owner}'s draft picks`}>
+          <p class="tpickof">{props.which === "send" ? "your picks" : `${props.owner}'s picks`}</p>
+          <div class="tpickgrid" style={`--seasons: ${seasons.length}`}>
+            <span class="tpickhead" aria-hidden="true" />
+            {seasons.map((season) => <span class="tpickhead" key={season}>{season}</span>)}
+            {Array.from({ length: roundsShown }, (_, i) => i + 1).map((round) => [
+              <span class="tround" key={`r${round}`}>{ordinal(round)}</span>,
+              ...seasons.map((season) => {
+                const held = heldIn(season, round);
+                const gone = goneIn(season, round);
 
-                  return (
-                    <button
-                      key={id}
-                      class={"tchip" + (on ? " on" : "")}
-                      aria-pressed={on}
-                      title={pick.from === props.owner ? "own pick" : `from ${pick.from}`}
-                      onClick={() => props.onPick(id)}
-                    >
-                      {ordinal(pick.round)}
-                      {pick.from !== props.owner && <i>{pick.from}</i>}
-                      <small>{valueSays(props.valueOfPick(pick))}</small>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+                return (
+                  <div class="tcell" key={`${season}:${round}`}>
+                    {held.map((pick) => {
+                      const id = pickId(pick);
+                      const on = props.chosenPicks.includes(id);
+                      const worth = valueSays(props.valueOfPick(pick));
+                      const via = pick.from !== props.owner;
+
+                      return (
+                        <button
+                          key={id}
+                          class={"tpick" + (on ? " on" : "")}
+                          aria-pressed={on}
+                          aria-label={`${season} ${ordinal(round)}${via ? ` from ${pick.from}` : ""}, worth ${worth}`}
+                          title={via ? `from ${pick.from}` : "own pick"}
+                          onClick={() => props.onPick(id)}
+                        >
+                          <b>{worth}</b>
+                          {via && <i>{whoSays(pick.from)}</i>}
+                        </button>
+                      );
+                    })}
+                    {!held.length && (
+                      <span class="tgone" title={gone ? `traded to ${gone.owner}` : undefined}>
+                        {gone ? `to ${whoSays(gone.owner)}` : "–"}
+                      </span>
+                    )}
+                  </div>
+                );
+              }),
+            ])}
+          </div>
+          {folds && (
+            <button class="tmore" aria-expanded={allRounds} onClick={() => setAllRounds((o) => !o)}>
+              {allRounds ? "fewer rounds" : `show rounds ${firstRounds + 1}–${rounds}`}
+            </button>
+          )}
         </div>
       )}
     </section>

@@ -833,10 +833,11 @@ describe("the picks a trade can move", () => {
     })).toEqual([2027]);
   });
 
-  it("runs as many rounds as the keeper league's draft, not Sleeper's shorter setting", () => {
-    expect(roundsOfPicks({ type: 1, draftRounds: 4, draftedRounds: 16, traded: [] })).toBe(16);
-    expect(roundsOfPicks({ type: 2, draftRounds: 4, draftedRounds: 30, traded: [] })).toBe(4);
-    expect(roundsOfPicks({ type: 2, draftRounds: 4, draftedRounds: 30, traded: [{ round: 5 }] })).toBe(5);
+  it("runs as many rounds as the league's draft, not Sleeper's shorter setting", () => {
+    expect(roundsOfPicks({ startup: false, draftRounds: 4, draftedRounds: 16, traded: [] })).toBe(16);
+    expect(roundsOfPicks({ startup: true, draftRounds: 4, draftedRounds: 30, traded: [] })).toBe(4);
+    expect(roundsOfPicks({ startup: true, draftRounds: 4, draftedRounds: 30, traded: [{ round: 5 }] })).toBe(5);
+    expect(roundsOfPicks({ startup: false, draftRounds: 4, draftedRounds: 5, traded: [] })).toBe(5);
   });
 
   it("lists every round of every team's picks with who holds each", () => {
