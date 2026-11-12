@@ -477,7 +477,7 @@ export function Trade(props: Props) {
         {carries && !boardLooksAhead && " · players' later seasons aren't on the board yet"}
       </p>
       <p class="hint tnote" title={HOW_ODDS_WORK_IN_FULL}>
-        odds: {SEASONS.toLocaleString()} seasons before and after, same draws · {HOW_ODDS_WORK}
+        Odds: {SEASONS.toLocaleString()} simulated seasons, before and after the trade. {HOW_ODDS_WORK}
       </p>
     </div>
   );

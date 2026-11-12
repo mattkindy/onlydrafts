@@ -750,7 +750,7 @@ export function Stats(props: Props) {
               })}
           </div>
           <p class="hint onote" title={HOW_ODDS_WORK_IN_FULL}>
-            {SEASONS.toLocaleString()} seasons simulated · {HOW_ODDS_WORK}
+            {SEASONS.toLocaleString()} simulated seasons. {HOW_ODDS_WORK}
           </p>
           </div>
 

@@ -188,18 +188,16 @@ export function chanceIn(p: Player | undefined, at: number, status: string | und
  */
 export const WIRE_RANK = 3;
 
-/** how a team's week is built, in a line, said the same wherever odds are shown */
+/** how the odds are worked out, in plain words, the same wherever odds are shown */
 export const HOW_ODDS_WORK =
-  "best lineup from the whole roster each week · each player at his chance to play · " +
-  "an empty slot takes a free agent";
+  "Every team starts its best lineup each week. Hurt players count by their odds " +
+  "of playing, and a bye counts as out. An empty spot gets filled off waivers.";
 
-/** the same at length, for a reader who hovers */
+/** the rest of it, for a reader who hovers */
 export const HOW_ODDS_WORK_IN_FULL =
-  "Each team plays the best lineup its whole roster allows every week, not the one " +
-  "its manager sets, each player at his points a game times his chance of playing " +
-  "that week: his bye, the injury report, a return from reserve. A slot nobody on " +
-  "the roster can fill takes the third best free agent. Scaled to what the league " +
-  "really scores, and each manager's start efficiency counts for half.";
+  "Best lineup means the best the roster allows, not the one the manager sets. " +
+  "Points are scaled to what your league actually scores, and a manager who leaves " +
+  "points on the bench gets docked a little.";
 
 export function weeklyStrengths(input: {
   rosters: { owner: string; keys: RosterPlayer[] }[];
