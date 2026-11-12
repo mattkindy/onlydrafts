@@ -15,10 +15,9 @@ import type { ComponentChildren } from "preact";
 import { useMemo, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
-import { leadFor, type Explanation } from "../lib/explain.ts";
 import {
-  alternativesFor, lineFor, linesFor, myGameIn, settledGames, standingFor,
-  starterState, type Alternative, type GameState, type Lines, type SlotChoice,
+  bestLineupFor, lineFor, linesFor, myGameIn, settledGames, standingFor,
+  starterState, type GameState, type Lines,
 } from "../lib/matchups.ts";
 import type { League, Matchup, Roster, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
@@ -27,7 +26,7 @@ import {
 } from "../lib/slate.ts";
 import { WeatherMark } from "./WeatherMark.tsx";
 import { WeekPicker } from "./WeekPicker.tsx";
-import { Advice, gainPct, nameOf, pct, WORTH_A_MOVE } from "./Advice.tsx";
+import { gainPct, nameOf, pct, WORTH_A_MOVE } from "./Advice.tsx";
 import { injuryBadge, WORRYING } from "./Draft.tsx";
 import { PlayerName } from "./PlayerName.tsx";
 import { Game } from "./Matchups.tsx";
@@ -74,11 +73,6 @@ interface Props {
   /** the league itself, for the links out to the provider's own pages */
   leagueOf?: League | null;
 }
-
-/** a swap's worth, with anything inside a point either way said as even */
-const signed = (gains: number) =>
-  Math.abs(gains) < WORTH_A_MOVE ? "even"
-    : gains > 0 ? gainPct(gains) : (100 * gains).toFixed(0) + "%";
 
 /** one figure with what it measures over it, so no number is bare */
 function Fig(
@@ -163,37 +157,6 @@ function Marks(
   );
 }
 
-/**
- * Where the swap's win probability comes from, shown only on the slots
- * a reader cannot settle from the two projections.
- *
- * These four add up to the swap, and most of them are a fraction of a
- * point, so this is the one place a tenth is worth printing.
- */
-function Why({ why }: { why: Explanation }) {
-  const part = (share: number) =>
-    (share > 0 ? "+" : "") + (100 * share).toFixed(1) + "%";
-  const pieces: [string, number][] = [
-    ["points", why.points],
-    ["range", why.spread],
-    ["their game", why.opponent],
-    ["your lineup", why.ownLineup],
-  ];
-
-  return (
-    <p class="why" title={leadFor(why)}>
-      {pieces.map(([said, worth]) => (
-        <span key={said} class="piece">
-          {said} <b>{part(worth)}</b>
-        </span>
-      ))}
-      <span class="piece">
-        net <b>{part(why.gains)}</b>
-      </span>
-    </p>
-  );
-}
-
 /** a player's line for the week and how much of his game is left to play */
 function lineAndLeft(
   key: string, slot: string | undefined, rows: Map<string, SlateRow>,
@@ -205,256 +168,282 @@ function lineAndLeft(
   return { line, left: state?.left ?? 1 };
 }
 
-/** each bench player's best swap, so the whole bench shows whether or not it helps */
-function bestSwaps(choices: SlotChoice[]) {
-  const best = new Map<string, { option: Alternative; choice: SlotChoice }>();
+/**
+ * The one thing to do about a slot, if anything: start somebody off your
+ * bench, add a free agent, or go and look for one. Each slot gets at most
+ * one, the one worth most, so the page says what to do once and where it
+ * applies rather than in a box of advice, a list under every slot and a
+ * bench table, which used to name the same swap three times.
+ */
+export type Move =
+  | { kind: "start"; key: string; name: string; says: string; gains: number }
+  | { kind: "add"; key: string; name: string; says: string; gains: number }
+  | { kind: "find"; position: string };
 
-  for (const choice of choices) {
-    for (const option of choice.options) {
-      const had = best.get(option.key);
+/** a slot's starter, or an empty slot by the key its worry gave it */
+export function movesFor(input: {
+  /** the bench swaps the best lineup makes, in the order it found them */
+  swaps: { starts: string; benches: string; gains: number }[];
+  /** starters who will not play, and an empty slot, each with its best free agent */
+  worries: { key: string; slot: string; how: "bad" | "warn"; fill?: Fill }[];
+  /** how a player reads beside his name: "10.0 @ NYJ" */
+  says: (key: string) => string;
+  nameOf: (key: string) => string;
+}): Map<string, Move> {
+  const moves = new Map<string, Move>();
 
-      if (!had || option.gains > had.option.gains) {
-        best.set(option.key, { option, choice });
-      }
+  for (const swap of input.swaps) {
+    if (swap.gains >= WORTH_A_MOVE && !moves.has(swap.benches)) {
+      moves.set(swap.benches, {
+        kind: "start", key: swap.starts, name: input.nameOf(swap.starts),
+        says: input.says(swap.starts), gains: swap.gains,
+      });
     }
   }
 
-  return [...best.values()].sort((a, b) => b.option.gains - a.option.gains);
-}
+  for (const worry of input.worries) {
+    // the bench covers him already, and moving nobody costs nothing
+    if (worry.how !== "bad" || moves.has(worry.key)) {
+      continue;
+    }
 
-function Bench(
-  { choices, rows, states, lines, listed, onMore }: {
-    choices: SlotChoice[];
-    rows: Map<string, SlateRow>;
-    states: Map<string, GameState>;
-    lines: Lines;
-    listed: Map<string, Listed>;
-    onMore?: ((key: string) => void) | undefined;
-  },
-) {
-  const swaps = bestSwaps(choices);
-  const helps = swaps.some(({ option }) => option.gains >= WORTH_A_MOVE);
-  const midway = swaps.some(({ option }) => {
-    const { left } = lineAndLeft(option.key, undefined, rows, states, lines);
-
-    return left > 0 && left < 1;
-  });
-  /**
-   * The whole bench is worth seeing when one of them would help. When
-   * none would, it is seven rows of minus signs, so it waits behind a
-   * line you can open.
-   */
-  const [open, setOpen] = useState(false);
-
-  if (swaps.length === 0) {
-    return null;
+    moves.set(worry.key, worry.fill
+      ? { kind: "add", key: worry.fill.key, name: worry.fill.name, says: worry.fill.says, gains: worry.fill.gains }
+      : { kind: "find", position: FIND_AT[worry.slot] ?? "ALL" });
   }
 
-  if (!helps && !open) {
+  return moves;
+}
+
+/** a player's line as it reads beside his name: points, then whom he plays */
+const lineSays = (key: string, rows: Map<string, SlateRow>, lines: Lines) => {
+  const row = rows.get(key);
+  const line = lineFor({ key }, rows, lines);
+
+  return line
+    ? `${line.blend.toFixed(1)}${row ? ` ${row.home ? "v" : "@"} ${row.opponent}` : ""}`
+    : "";
+};
+
+function MoveLine(
+  { move, onMore, onFind, players }: {
+    move: Move;
+    onMore?: ((key: string) => void) | undefined;
+    onFind?: ((position: string) => void) | undefined;
+    players?: { href: string; name: string } | undefined;
+  },
+) {
+  if (move.kind === "find") {
     return (
-      <button class="slot-card benchfold" onClick={() => setOpen(true)}>
-        <b>bench</b>
-        <span>{swaps.length} {swaps.length === 1 ? "player" : "players"}</span>
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor"
-            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
+      <div class="move find">
+        <span class="marrow" aria-hidden="true">→</span>
+        <span class="mwho">nobody on your bench helps</span>
+        {onFind && (
+          <button class="textbtn" onClick={() => onFind(move.position)}>
+            find a {move.position.toLowerCase()}
+          </button>
+        )}
+      </div>
     );
   }
 
   return (
-    <section class="slot-card bench">
-      <h3>bench</h3>
-      <div class="slot-head opts" aria-hidden="true">
-        <i class="c-name">bench</i>
-        <i class="c-proj">proj</i>
-        {midway && <i class="c-left">to come</i>}
-        <i class="c-range">floor to ceiling</i>
-        <i class="c-for">slot</i>
-        <i class="c-out">beats</i>
-        <i class="c-win">win %</i>
-      </div>
-      <ul class="options">
-        {swaps.map(({ option, choice }) => {
-          const his = lineAndLeft(option.key, undefined, rows, states, lines);
-
-          return (
-            <li key={option.key} class={option.locked ? "shut" : ""}>
-              <span class="optname">
-                <PlayerName
-                  name={nameOf(option.key, rows, lines, option.name)}
-                  team={his.line?.team}
-                  onOpen={onMore ? () => onMore(option.key) : undefined}
-                />
-                <Marks his={listed.get(option.key)} row={rows.get(option.key)} />
-                {option.locked && <span class="badge even">locked</span>}
-              </span>
-              <span class={"fig delta c-win" + (option.gains >= WORTH_A_MOVE ? " up" : "")}>
-                <i>win %</i>{signed(option.gains)}
-              </span>
-              <div class="optfigs">
-                <Numbers line={his.line} left={his.left} />
-                <Fig label={`instead of ${nameOf(
-                  choice.starter.key, rows, lines, choice.starter.name)}`} col="for">
-                  {choice.slot}
-                </Fig>
-                <Fig label="outscores him" col="out">{pct(option.outscores)}</Fig>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+    <div class={"move " + move.kind}>
+      <span class="marrow" aria-hidden="true">→</span>
+      <span class="mwho">
+        <span class="mverb">{move.kind === "start" ? "start" : "add"}</span>
+        <PlayerName name={move.name} onOpen={onMore ? () => onMore(move.key) : undefined} />
+        <i>{move.kind === "add" ? "free agent" : "bench"}{move.says ? ` · ${move.says}` : ""}</i>
+      </span>
+      <b class="mgain" title="what the move does to your chance of winning this week">
+        {gainPct(move.gains)}
+      </b>
+      {move.kind === "add" && players && (
+        <GoLink href={players.href}>{players.name}</GoLink>
+      )}
+    </div>
   );
 }
 
 function Slot(
-  { choice, rows, states, lines, listed, onMore }: {
-    choice: SlotChoice;
+  { slot, starter, rows, states, lines, listed, onMore, move, children }: {
+    slot: string;
+    starter: Side["starters"][number];
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
     listed: Map<string, Listed>;
     onMore?: ((key: string) => void) | undefined;
+    move?: Move | undefined;
+    children?: ComponentChildren;
   },
 ) {
-  const at = (key: string, slot?: string) =>
-    lineAndLeft(key, slot, rows, states, lines);
-  const his = at(choice.starter.key, choice.slot);
-  /**
-   * Only the swaps that gain you something. Listing the losing ones put
-   * the same five bench players under every running back slot, which is
-   * five screens of rows telling you to do nothing.
-   */
-  const better = choice.options.filter((option) => option.gains >= WORTH_A_MOVE);
+  const his = lineAndLeft(starter.key, slot, rows, states, lines);
+  const row = rows.get(starter.key);
+  const locked = starterState(starter, rows, states, lines)?.where !== "pre";
 
   return (
-    <section class="slot-card">
+    <section class={"slot-card" + (move ? " moved" : "")}>
       <h3>
-        <span class="chip">{choice.slot}</span>
+        <span class="chip">{slot}</span>
         <PlayerName
-          name={nameOf(
-            choice.starter.key, rows, lines, choice.starter.name)}
+          name={nameOf(starter.key, rows, lines, starter.name)}
           team={his.line?.team}
-          onOpen={onMore ? () => onMore(choice.starter.key) : undefined}
+          onOpen={onMore ? () => onMore(starter.key) : undefined}
         />
-        <Marks
-          his={listed.get(choice.starter.key)}
-          row={rows.get(choice.starter.key)}
-        />
-        {choice.locked && <span class="badge even lock">locked</span>}
+        {row?.bye && <span class="badge bad">bye</span>}
+        <Marks his={listed.get(starter.key)} row={row} />
+        {locked && <span class="badge even lock">locked</span>}
       </h3>
 
       <div class="slot-figs">
         {/* nothing is scored before kickoff, and a zero there reads as
             a player who went out and did nothing */}
         {his.left < 1 && (
-          <Fig label="scored" col="scored">{scoredSays(choice.starter.points)}</Fig>
+          <Fig label="scored" col="scored">{scoredSays(starter.points)}</Fig>
         )}
-        <Numbers line={his.line} left={his.left} />
+        {row?.bye ? <Fig label="proj" col="proj">–</Fig> : <Numbers line={his.line} left={his.left} />}
       </div>
-
-      {better.length > 0 && (
-        <>
-          <div class="over">bench</div>
-          <div class="slot-head opts" aria-hidden="true">
-            <i class="c-name">bench</i>
-            <i class="c-proj">proj</i>
-            <i class="c-range">floor to ceiling</i>
-            <i class="c-out">beats</i>
-            <i class="c-win">win %</i>
-          </div>
-          <ul class="options">
-            {better.map((option) => {
-              const other = at(option.key);
-
-              return (
-                <li key={option.key} class={option.locked ? "shut" : ""}>
-                  <span class="optname">
-                    <PlayerName
-                      name={nameOf(option.key, rows, lines, option.name)}
-                      team={other.line?.team}
-                      onOpen={onMore ? () => onMore(option.key) : undefined}
-                    />
-                    <Marks
-                      his={listed.get(option.key)}
-                      row={rows.get(option.key)}
-                    />
-                    {option.locked && <span class="badge even">locked</span>}
-                  </span>
-                  <span class="fig delta up c-win">
-                    <i>win %</i>{signed(option.gains)}
-                  </span>
-                  <div class="optfigs">
-                    <Numbers line={other.line} left={other.left} />
-                    <Fig label="outscores him" col="out">{pct(option.outscores)}</Fig>
-                  </div>
-                  {option.why && <Why why={option.why} />}
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
+      {children}
     </section>
   );
 }
 
-function Lineup(
-  { side, against, slots, rows, states, lines, remainder, listed, onMore }: {
+/**
+ * Your bench, plainly: who is on it and what each projects. Any of them
+ * worth starting is already named on the row of the starter he replaces,
+ * so this is a list to glance at, folded until opened.
+ */
+function BenchList(
+  { side, rows, states, lines, listed, onMore }: {
     side: Side;
-    against: Side;
-    slots: string[] | null;
     rows: Map<string, SlateRow>;
     states: Map<string, GameState>;
     lines: Lines;
-    remainder: Map<string, number[]> | null;
     listed: Map<string, Listed>;
     onMore?: ((key: string) => void) | undefined;
   },
 ) {
-  const choices = useMemo(
-    () => alternativesFor(side, against, slots, { rows, states, lines, remainder }),
-    [side, against, slots, rows, states, lines, remainder],
-  );
+  const [open, setOpen] = useState(false);
+  const bench = side.bench
+    .map((p) => ({ p, line: lineFor({ key: p.key }, rows, lines) }))
+    .sort((a, b) => (b.line?.blend ?? -1) - (a.line?.blend ?? -1));
 
-  // which columns any row fills, so a wide screen can head the rows once
-  // and keep every figure under its own label however many a row has
-  const started = choices.some((choice) =>
-    lineAndLeft(choice.starter.key, choice.slot, rows, states, lines).left < 1);
-  const midway = choices.some((choice) => [
-    lineAndLeft(choice.starter.key, choice.slot, rows, states, lines).left,
-    ...choice.options.map((option) => lineAndLeft(option.key, undefined, rows, states, lines).left),
-  ].some((left) => left > 0 && left < 1));
+  if (!bench.length) {
+    return null;
+  }
 
   return (
-    <div class={"stack" + (started ? " has-scored" : "") + (midway ? " has-left" : "")}>
+    <div class="benchlist">
+      <button class="slot-card benchfold" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <b>bench</b>
+        <span>{bench.length} {bench.length === 1 ? "player" : "players"}</span>
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"
+          style={open ? { transform: "rotate(180deg)" } : undefined}>
+          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <ul class="benchrows">
+          {bench.map(({ p, line }) => {
+            const row = rows.get(p.key);
+            const { left } = lineAndLeft(p.key, undefined, rows, states, lines);
+
+            return (
+              <li key={p.key}>
+                <span class="optname">
+                  <PlayerName
+                    name={nameOf(p.key, rows, lines, p.name)}
+                    team={line?.team}
+                    onOpen={onMore ? () => onMore(p.key) : undefined}
+                  />
+                  {row?.bye && <span class="badge bad">bye</span>}
+                  <Marks his={listed.get(p.key)} row={row} />
+                </span>
+                <span class="optfigs">
+                  {row?.bye ? <Fig label="proj" col="proj">–</Fig> : <Numbers line={line} left={left} />}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Lineup(
+  { side, slots, rows, states, lines, listed, onMore, moves, onFind, players, worries }: {
+    side: Side;
+    slots: string[] | null;
+    rows: Map<string, SlateRow>;
+    states: Map<string, GameState>;
+    lines: Lines;
+    listed: Map<string, Listed>;
+    onMore?: ((key: string) => void) | undefined;
+    moves: Map<string, Move>;
+    onFind?: ((position: string) => void) | undefined;
+    players?: { href: string; name: string } | undefined;
+    worries: Worry[];
+  },
+) {
+  // which columns any row fills, so a wide screen can head the rows once
+  // and keep every figure under its own label however many a row has
+  const lefts = [...side.starters, ...side.bench].map((p) =>
+    lineAndLeft(p.key, undefined, rows, states, lines).left);
+  const started = side.starters.some((p) => lineAndLeft(p.key, p.slot, rows, states, lines).left < 1);
+  const midway = lefts.some((left) => left > 0 && left < 1);
+  const empty = worries.filter((w) => w.name === "nobody");
+  // the starters in the order the league lists its slots
+  const order = (slots ?? []).filter((s) => !["BN", "IR", "TAXI"].includes(s));
+  const starters = [...side.starters].sort((a, b) => order.indexOf(a.slot) - order.indexOf(b.slot));
+
+  return (
+    <div class={"lineup" + (started ? " has-scored" : "") + (midway ? " has-left" : "")}>
+    <div class="stack">
       <div class="slot-head" aria-hidden="true">
         {started && <i class="c-scored">scored</i>}
         <i class="c-proj">proj</i>
         {midway && <i class="c-left">to come</i>}
-        <i class="c-range">floor to ceiling</i>
+        <i class="c-range" title="floor to ceiling: the middle 80% of how his week can go">range</i>
       </div>
-      {choices.map((choice, i) => (
-        <Slot
-          key={choice.starter.key + i}
-          choice={choice}
-          rows={rows}
-          states={states}
-          lines={lines}
-          listed={listed}
-          onMore={onMore}
-        />
-      ))}
-      <Bench
-        choices={choices}
-        rows={rows}
-        states={states}
-        lines={lines}
-        listed={listed}
-        onMore={onMore}
-      />
+      {starters.map((starter, i) => {
+        const move = moves.get(starter.key);
+
+        return (
+          <Slot
+            key={starter.key + i}
+            slot={starter.slot}
+            starter={starter}
+            rows={rows}
+            states={states}
+            lines={lines}
+            listed={listed}
+            onMore={onMore}
+            move={move}
+          >
+            {move && <MoveLine move={move} onMore={onMore} onFind={onFind} players={players} />}
+          </Slot>
+        );
+      })}
+      {empty.map((w) => {
+        const move = moves.get(w.key);
+
+        return (
+          <section class="slot-card moved" key={w.key}>
+            <h3>
+              <span class="chip">{w.slot}</span>
+              <b class="nobody">nobody</b>
+              <span class="badge bad">empty</span>
+            </h3>
+            <div class="slot-figs" />
+            {move && <MoveLine move={move} onMore={onMore} onFind={onFind} players={players} />}
+          </section>
+        );
+      })}
+    </div>
+      <BenchList side={side} rows={rows} states={states} lines={lines} listed={listed} onMore={onMore} />
     </div>
   );
 }
@@ -857,95 +846,6 @@ function worriesOf(
   return out.sort((a, b) => Number(a.how === "warn") - Number(b.how === "warn"));
 }
 
-function Worries(
-  { worries, onMore, onFind, players }: {
-    worries: Worry[];
-    onMore?: ((key: string) => void) | undefined;
-    onFind?: ((position: string) => void) | undefined;
-    /** the provider's free agents page, where an add is made */
-    players?: { href: string; name: string } | undefined;
-  },
-) {
-  if (worries.length === 0) {
-    return null;
-  }
-
-  const bad = worries.filter((w) => w.how === "bad").length;
-
-  return (
-    <section class={"worries" + (bad ? " bad" : "")}>
-      <h3>
-        {bad
-          ? `${bad} starter${bad === 1 ? "" : "s"} won't play`
-          : "worth a look before kickoff"}
-      </h3>
-      <ul>
-        {worries.map((w) => (
-          <li key={w.key} class={w.how}>
-            <div class="wrow">
-              <span class="chip">{w.slot}</span>
-              <span class="wwho">
-                <span class="wname">
-                  {w.name === "nobody"
-                    ? <b>nobody</b>
-                    : (
-                      <PlayerName
-                        name={w.name}
-                        onOpen={onMore ? () => onMore(w.key) : undefined}
-                      />
-                    )}
-                  {w.status && (
-                    <span class={"badge " + (w.how === "bad" ? "bad" : "warn")}>
-                      {w.status}
-                    </span>
-                  )}
-                </span>
-                {w.says && <i>{w.says}</i>}
-              </span>
-              {w.how === "bad" && onFind && !w.fill && (
-                <button
-                  class="quiet"
-                  onClick={() => onFind(FIND_AT[w.slot] ?? "ALL")}
-                >
-                  find a {FIND_AT[w.slot]?.toLowerCase() ?? "player"}
-                </button>
-              )}
-            </div>
-            {/* the one free agent worth adding for the slot, so the box
-                answers what to do about it rather than only saying it */}
-            {w.fill && (
-              <div class="fill">
-                <span class="over">best free agent</span>
-                <div class="fwho">
-                  <PlayerName
-                    name={w.fill.name}
-                    onOpen={onMore ? () => onMore(w.fill!.key) : undefined}
-                  />
-                  <i>{w.fill.says}</i>
-                  <b class="up">{gainPct(w.fill.gains)} to win</b>
-                </div>
-                <div class="facts">
-                  {players && (
-                    <GoLink href={players.href}>add in {players.name}</GoLink>
-                  )}
-                  {onFind && (
-                    <button
-                      class="textbtn"
-                      onClick={() => onFind(FIND_AT[w.slot] ?? "ALL")}
-                    >
-                      other {FIND_AT[w.slot] ?? "player"}s
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 export function MyMatchup(props: Props) {
   const { mine, mineId, rows, slots, slate, onMore } = props;
   const { states, remainder, trouble } = useLiveWeek(
@@ -998,6 +898,52 @@ export function MyMatchup(props: Props) {
       return fill && fill.gains >= WORTH_A_MOVE ? { ...worry, fill } : worry;
     });
   }, [ours, slots, rows, states, lines, props.listed, props.teams, odds, remainder]);
+  // the lineup the bench makes best, then the free agents for the slots
+  // it cannot fill, and what all of it together does to the week
+  const best = useMemo(
+    () => (ours && states
+      ? bestLineupFor(ours.side, ours.against, slots, { rows, states, lines, remainder })
+      : null),
+    [ours, slots, rows, states, lines, remainder],
+  );
+  const moves = useMemo(() => movesFor({
+    swaps: best?.swaps ?? [],
+    worries,
+    says: (key) => lineSays(key, rows, lines),
+    nameOf: (key) => nameOf(key, rows, lines, ours
+      ? [...ours.side.starters, ...ours.side.bench].find((p) => p.key === key)?.name
+      : undefined),
+  }), [best, worries, rows, lines, ours]);
+  const planned = useMemo(() => {
+    if (!ours || !states || !best || moves.size === 0) {
+      return null;
+    }
+
+    let starters = [...best.starters];
+
+    for (const [key, move] of moves) {
+      if (move.kind !== "add") {
+        continue;
+      }
+
+      const him = { key: move.key, name: move.name, slot: "", points: 0 };
+      const at = starters.findIndex((p) => p.key === key);
+
+      if (at >= 0) {
+        starters[at] = { ...him, slot: starters[at]!.slot };
+      } else {
+        const empty = worries.find((w) => w.key === key);
+
+        starters = [...starters, { ...him, slot: empty?.slot ?? "" }];
+      }
+    }
+
+    const side = { ...ours.side, starters };
+    const game: Matchup = { sides: ours.at === 0 ? [side, ours.against] : [ours.against, side] };
+
+    return standingFor(game, { rows, states, lines, remainder }).odds[ours.at]!;
+  }, [ours, states, best, moves, worries, rows, lines, remainder]);
+  const moveCount = [...moves.values()].filter((m) => m.kind !== "find").length;
   const league = props.leagueOf ?? null;
   const goPlayers = league
     ? { href: playersLink(league), name: PROVIDER_NAME[league.provider] }
@@ -1060,27 +1006,9 @@ export function MyMatchup(props: Props) {
               lock={nextLockIn(ours.side, rows, states, lines)}
             />
           )}
-          {/* on a wide screen what to do sits beside the lineup it is about;
-              on a phone the two follow each other as before */}
+          {/* on a wide screen the lineup sits beside the game it is in;
+              on a phone the two follow each other */}
           <div class="mcols rhythm">
-          <div class="mcol act rhythm">
-          <Worries
-            worries={worries} onMore={onMore} onFind={props.onFind}
-            players={goPlayers}
-          />
-          <Advice
-            side={ours.side}
-            against={ours.against}
-            slots={slots}
-            rows={rows}
-            states={states}
-            lines={lines}
-            odds={odds}
-            remainder={remainder}
-            onMore={onMore}
-            lean
-          />
-          </div>
           <div class="mcol mine rhythm">
           <div class="lineuphead">
             <h2>your lineup</h2>
@@ -1090,20 +1018,27 @@ export function MyMatchup(props: Props) {
               </GoLink>
             )}
           </div>
+          {odds !== undefined && moveCount > 0 && planned !== null && (
+            <p class="plan">
+              <b>{moveCount} {moveCount === 1 ? "move" : "moves"}</b>
+              <span>{pct(odds)} → <b class="up">{pct(planned)}</b> to win</span>
+            </p>
+          )}
           <Lineup
             side={ours.side}
-            against={ours.against}
             slots={slots}
             rows={rows}
             states={states}
             lines={lines}
-            remainder={remainder}
             listed={props.listed}
             onMore={onMore}
+            moves={moves}
+            onFind={props.onFind}
+            players={goPlayers}
+            worries={worries}
           />
           </div>
-          </div>
-
+          <div class="mcol act rhythm">
           <h2>head to head</h2>
           <Game
             game={ours.game}
@@ -1119,6 +1054,8 @@ export function MyMatchup(props: Props) {
               : undefined}
             withAdvice={false}
           />
+          </div>
+          </div>
         </>
       )}
 
