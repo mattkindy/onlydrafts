@@ -324,10 +324,12 @@ export interface Offer {
  * would send more and below it you would ask for more. Within one point
  * of each other, the one that leaves the other side a little ahead
  * comes first, since a trade they lose is a trade they turn down. Only
- * what brings the deal closer to even is offered, three at most.
+ * what brings the deal closer to even is offered, every one of them in
+ * order, so a page can show a few and step through the rest; `only`
+ * keeps to players or to picks, for a manager who won't part with one.
  */
 export function evenUp(
-  gap: number, offers: Offer[], room: number,
+  gap: number, offers: Offer[], room: number, only?: Offer["kind"],
 ): { offer: Offer; left: number }[] {
   if (Math.abs(gap) <= room) {
     return [];
@@ -337,7 +339,7 @@ export function evenUp(
   const sign = gap > 0 ? 1 : -1;
 
   return offers
-    .filter((o) => o.side === side && o.value > 0)
+    .filter((o) => o.side === side && o.value > 0 && (!only || o.kind === only))
     .map((offer) => ({ offer, left: gap - sign * offer.value }))
     .filter((o) => Math.abs(o.left) < Math.abs(gap))
     .sort((a, b) => {
@@ -345,8 +347,7 @@ export function evenUp(
 
       // a point either way is the same deal; then favour leaving them ahead
       return Math.abs(by) > 1 ? by : sign * (a.left - b.left) || by;
-    })
-    .slice(0, 3);
+    });
 }
 
 /** how far apart a deal can be and still read as even: a tenth of it, or three points */

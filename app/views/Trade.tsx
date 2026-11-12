@@ -23,7 +23,7 @@
  * nobody accepts, and finding one that helps you both is the job.
  */
 
-import { useMemo, useState } from "preact/hooks";
+import { useMemo, useRef, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
 import { readRules, rulesKey } from "../lib/playoffRules.ts";
@@ -86,9 +86,23 @@ export function Trade(props: Props) {
     keep(partnerKey, owner);
     setDeal(NO_DEAL(owner));
     setBalancing(false);
+    setEvenPage(0);
   };
-  // whether the ways to even the deal up are showing
+  // whether the ways to even the deal up are showing, kept to players or
+  // picks where you said, and how far through them you have stepped
   const [balancing, setBalancing] = useState(false);
+  const [evenWith, setEvenWith] = useState<Offer["kind"] | null>(null);
+  const [evenPage, setEvenPage] = useState(0);
+  // the note on how value is worked out, opened from beside the figures
+  const learnRef = useRef<HTMLDetailsElement>(null);
+  const explainValue = () => {
+    const note = learnRef.current;
+
+    if (note) {
+      note.open = true;
+      note.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
   const [shown, setShown] = useState<"send" | "get">("send");
   const toggle = (list: keyof Omit<Deal, "partner">, id: string) =>
     setDeal((d) => ({
@@ -290,11 +304,21 @@ export function Trade(props: Props) {
     ...picks.filter((p) => p.owner === deal.partner && !deal.getPicks.includes(pickId(p))).map((p): Offer =>
       ({ id: pickId(p), kind: "pick", side: "get", says: pickSays(p, deal.partner), value: valueOfPick(p) })),
   ];
-  const evens = balancing ? evenUp(gap, offers, evenWithin(giveWorth, getWorth)) : [];
-  const add = (o: Offer) => toggle(
-    o.side === "give" ? (o.kind === "pick" ? "givePicks" : "give") : (o.kind === "pick" ? "getPicks" : "get"),
-    o.id,
-  );
+  const allEvens = balancing
+    ? evenUp(gap, offers, evenWithin(giveWorth, getWorth), evenWith ?? undefined)
+    : [];
+  // three at a time, the next three a tap away, round to the start again
+  const SHOWN = 3;
+  const pages = Math.max(1, Math.ceil(allEvens.length / SHOWN));
+  const evens = allEvens.slice((evenPage % pages) * SHOWN, (evenPage % pages) * SHOWN + SHOWN);
+  const add = (o: Offer) => {
+    setEvenPage(0);
+    toggle(
+      o.side === "give" ? (o.kind === "pick" ? "givePicks" : "give") : (o.kind === "pick" ? "getPicks" : "get"),
+      o.id,
+    );
+  };
+  const anyPicksToOffer = offers.some((o) => o.kind === "pick");
 
   return (
     <div class="trade rhythm">
@@ -441,9 +465,25 @@ export function Trade(props: Props) {
                 {!evenEnough && !balancing && (
                   <button class="textbtn" onClick={() => setBalancing(true)}>even it up</button>
                 )}
+                <button class="textbtn tlearnbtn" onClick={explainValue}>how?</button>
                 {!evenEnough && balancing && (
                   <div class="tevens">
-                    <i>{gap > 0 ? "also send" : `also ask ${deal.partner} for`}</i>
+                    <div class="tevenhead">
+                      <i>{gap > 0 ? "also send" : `also ask ${deal.partner} for`}</i>
+                      {anyPicksToOffer && (
+                        <span class="seg">
+                          {([null, "player", "pick"] as const).map((kind) => (
+                            <button
+                              key={kind ?? "any"} class={evenWith === kind ? "on" : ""}
+                              aria-pressed={evenWith === kind}
+                              onClick={() => { setEvenWith(kind); setEvenPage(0); }}
+                            >
+                              {kind === null ? "either" : kind === "player" ? "players" : "picks"}
+                            </button>
+                          ))}
+                        </span>
+                      )}
+                    </div>
                     {evens.length
                       ? (
                         <div class="chips flow">
@@ -454,7 +494,17 @@ export function Trade(props: Props) {
                           ))}
                         </div>
                       )
-                      : <span>nothing on {gap > 0 ? "your" : "their"} side brings it closer on its own</span>}
+                      : (
+                        <span>
+                          no {evenWith === "pick" ? "pick" : evenWith === "player" ? "player" : "one thing"} on{" "}
+                          {gap > 0 ? "your" : "their"} side brings it closer on its own
+                        </span>
+                      )}
+                    {pages > 1 && (
+                      <button class="textbtn tmoreevens" onClick={() => setEvenPage((n) => n + 1)}>
+                        other ideas · {(evenPage % pages) + 1}/{pages}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -521,16 +571,53 @@ export function Trade(props: Props) {
         />
       </div>
 
-      <p class="hint tnote">
-        value: points over a replacement, rest of this season
-        {hasPicks ? " · a pick: its draft's season, at the spot its team is on course for" : ""}
-        {carries === "dynasty" && boardLooksAhead &&
-          ` · later: his next ${SEASONS_AHEAD} seasons, each worth ${SEASON_OUT} of the one before`}
-        {carries === "keeper" && boardLooksAhead &&
-          ` · next yr: next season over the pick he costs to keep${
-            Object.keys(costs).length ? "" : ", none priced yet so each is kept free"}; a team keeps its best ${perTeam}`}
-        {carries && !boardLooksAhead && " · players' later seasons aren't on the board yet"}
-      </p>
+      <details class="tlearn" ref={learnRef}>
+        <summary>how is value worked out?</summary>
+        <dl>
+          <dt>value</dt>
+          <dd>
+            How many more points a player should score than the last starter at his position
+            in a league your size, over the games he's expected to play the rest of this
+            season. Injuries and byes count. Below that line he's worth 0, since you could cut him.
+          </dd>
+          {carries === "dynasty" && (
+            <>
+              <dt>later</dt>
+              <dd>
+                {boardLooksAhead
+                  ? `The same for each of his next ${SEASONS_AHEAD} seasons, projected from his age, where he was drafted and his role. Each season further out counts ${Math.round(SEASON_OUT * 100)}% of the one before.`
+                  : "His next seasons, once the board projects them. It doesn't yet, so they're left out."}
+              </dd>
+            </>
+          )}
+          {carries === "keeper" && (
+            <>
+              <dt>next yr</dt>
+              <dd>
+                {boardLooksAhead
+                  ? `Next season's value, minus what the pick it costs to keep him is worth. Only a team's best ${perTeam} keepers count${Object.keys(costs).length ? "" : ". No keeper costs are set yet (the team tab takes them), so everyone counts as free to keep"}.`
+                  : "Next season's value, once the board projects it. It doesn't yet, so it's left out."}
+              </dd>
+            </>
+          )}
+          {hasPicks && (
+            <>
+              <dt>a pick</dt>
+              <dd>
+                What a player taken at that spot is usually worth over a season. Next year's pick
+                lands where its team is on pace to finish, worst first. One further out could land
+                anywhere, so it's priced at the average spot and counts {Math.round(SEASON_OUT * 100)}%
+                for each extra year.
+              </dd>
+            </>
+          )}
+          <dt>even</dt>
+          <dd>
+            Each side's value added up, this season and later. Within a tenth of each other, or 3
+            points, counts as even. The odds above are worked out separately, by playing the season out.
+          </dd>
+        </dl>
+      </details>
       <p class="hint tnote" title={HOW_ODDS_WORK_IN_FULL}>
         Odds: {SEASONS.toLocaleString()} simulated seasons, before and after the trade. {HOW_ODDS_WORK}
       </p>
