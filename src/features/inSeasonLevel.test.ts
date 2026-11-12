@@ -127,6 +127,17 @@ describe("gamesSinceBreak", () => {
     expect(gamesSinceBreak([...starter, ...backup], Infinity, 0.15, true))
       .toHaveLength(3);
   });
+
+  it("holds a rise to two games up when asked, so one fill-in game is not a promotion", () => {
+    const filledIn = [...backup, week({ week: 4, snapShare: 0.95 }),
+      week({ week: 5, snapShare: 0.1 }), week({ week: 6, snapShare: 0.1 })];
+    const tookOver = [...backup, week({ week: 4, snapShare: 0.1 }),
+      week({ week: 5, snapShare: 0.6 }), week({ week: 6, snapShare: 0.7 })];
+
+    expect(gamesSinceBreak(filledIn, 0.2, 0.2, false, true)).toHaveLength(6);
+    expect(gamesSinceBreak([...backup, ...starter], 0.3, 0.2, false, true)).toHaveLength(3);
+    expect(gamesSinceBreak(tookOver, 0.3, 0.2, false, true)).toHaveLength(3);
+  });
 });
 
 describe("updateLevel", () => {

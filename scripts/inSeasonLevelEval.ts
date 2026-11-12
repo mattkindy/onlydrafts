@@ -287,6 +287,9 @@ const ABLATIONS = {
  * scored on, so its number is in sample and flatters itself.
  */
 const SHIPPED = "shipped shape, in sample";
+/** the same constant reading a rise at .30, held two games */
+const SHIPPED_WARY = "shipped, rise .30 held, in sample";
+const WARY_RISE = { breakGap: 0.3, dropGap: 0.2, riseHeld: true } as const;
 
 /**
  * The update with a drop in snap share read apart from a rise: its own
@@ -339,6 +342,7 @@ const READERS = [
   ...Object.keys(RISES),
   ...Object.keys(DROPS),
   SHIPPED,
+  SHIPPED_WARY,
   "oracle",
 ];
 
@@ -527,6 +531,8 @@ async function main(): Promise<void> {
         into.said[SHIPPED]!.push(
           updateLevel({ role: fit.role, shape: SHIPPED_SHAPE }, row).ppg,
         );
+        into.said[SHIPPED_WARY]!.push(updateLevel(
+          { role: fit.role, shape: { ...SHIPPED_SHAPE, ...WARY_RISE } }, row).ppg);
         into.said["oracle"]!.push(row.restPpg);
 
         for (const [label, ablated] of without) {
@@ -544,7 +550,7 @@ async function main(): Promise<void> {
   }
 
   reportMoves([...marked.values()], [
-    UPDATE, ONE_GAP, DROP_ONLY, ...Object.keys(RISES), ...Object.keys(DROPS), SHIPPED,
+    UPDATE, ONE_GAP, DROP_ONLY, ...Object.keys(RISES), ...Object.keys(DROPS), SHIPPED, SHIPPED_WARY,
   ], "every cut pooled");
 
   for (const cut of CUTS.filter((c) => c > MOVE_WINDOW)) {
