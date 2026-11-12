@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { picksHeld, type League } from "./providers.ts";
 import type { Player } from "./scoring.ts";
 import {
-  draftCurve, dynastyValue, keeperGain, keptValue, NO_DEAL, overallPick, overTheLimit,
-  pickValue, restOfSeason, rostersAfter, SEASON_OUT, seasonsAhead, slotsFromWins, stageOf,
-  tradeVerdict,
+  draftCurve, dynastyValue, evenUp, evenWithin, keeperGain, keptValue, NO_DEAL, overallPick,
+  overTheLimit, pickValue, restOfSeason, rostersAfter, SEASON_OUT, seasonsAhead, slotsFromWins,
+  stageOf, tradeVerdict, type Offer,
 } from "./trade.ts";
 
 const player = (over: Partial<Player>): Player =>
@@ -166,5 +166,39 @@ describe("a player's seasons to come", () => {
   it("counts only the keepers a team can keep", () => {
     expect(keptValue([50, 10, 80, 0, 30], 2)).toBe(130);
     expect(keptValue([50, 10], 5)).toBe(60);
+  });
+});
+
+describe("evening a deal up", () => {
+  const offer = (id: string, side: Offer["side"], value: number): Offer =>
+    ({ id, kind: "player", side, says: id, value });
+  const offers = [
+    offer("big", "give", 60), offer("near", "give", 22), offer("small", "give", 8),
+    offer("theirs", "get", 20), offer("nothing", "give", 0),
+  ];
+
+  it("asks the side coming out ahead for more, closest to the gap first", () => {
+    expect(evenUp(20, offers, 3).map((o) => o.offer.id)).toEqual(["near", "small"]);
+    expect(evenUp(-18, offers, 3).map((o) => o.offer.id)).toEqual(["theirs"]);
+  });
+
+  it("offers only what brings it closer to even", () => {
+    // the 60 would leave them 40 ahead where you were 20 ahead
+    expect(evenUp(20, offers, 3).some((o) => o.offer.id === "big")).toBe(false);
+  });
+
+  it("leaves an even deal alone", () => {
+    expect(evenUp(2, offers, 3)).toEqual([]);
+  });
+
+  it("would rather leave them a little ahead than you", () => {
+    const close = [offer("over", "give", 10.5), offer("under", "give", 9.5)];
+
+    expect(evenUp(10, close, 3)[0]!.offer.id).toBe("over");
+  });
+
+  it("reads a tenth of the bigger side, or three points, as even", () => {
+    expect(evenWithin(10, 12)).toBe(3);
+    expect(evenWithin(200, 150)).toBe(20);
   });
 });
