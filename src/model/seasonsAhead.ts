@@ -8,7 +8,9 @@
  * position, taught on earlier seasons cut at the same week, and the two
  * multiplied are his season.
  *
- * What a player has done this season and last carries most of it. Age
+ * What a player has done this season and last carries most of it, with
+ * the square of it beside it, since how long a man lasts rises faster
+ * than his rate does. Age
  * moves it at every horizon, and draft capital moves a player in his
  * first three seasons, which is what a rookie taken third overall and
  * hurt in November is mostly made of. `scripts/README.md` has which terms
@@ -66,6 +68,7 @@ export const AHEAD_TERMS = [
   "points a game last season",
   "games last season",
   "points a game, this season and last",
+  "the same, squared",
   "age",
   "age, squared about 26",
   "seasons in the league",
@@ -130,6 +133,7 @@ export function aheadTerms(row: AheadRow): number[] {
   const pooled = row.games + LAST_SEASON_WEIGHT * lastGames;
   const age = row.age ?? UNKNOWN_AGE;
   const beforeGames = row.before?.games ?? 0;
+  const both = pooled > 0 ? (row.points + LAST_SEASON_WEIGHT * lastPoints) / pooled : 0;
 
   return [
     ppg,
@@ -137,7 +141,11 @@ export function aheadTerms(row: AheadRow): number[] {
     row.games,
     lastPpg,
     lastGames,
-    pooled > 0 ? (row.points + LAST_SEASON_WEIGHT * lastPoints) / pooled : 0,
+    both,
+    // a good player stays in the league and on the field, and a straight
+    // line through his rate cannot say so: without this a man scoring
+    // fourteen a game was held 23 points a season short three years on
+    both * both,
     age,
     (age - MIDDLE_AGE) ** 2,
     row.experience,

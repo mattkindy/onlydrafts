@@ -32,7 +32,7 @@ import {
 } from "../src/features/aheadRows.js";
 import {
   aheadTerms, AHEAD_TERMS, ageCurved, carriedForward, fitAgeCurve, fitAhead,
-  isRelevant, predictAhead, SHIPPED_TERMS,
+  isRelevant, ppgOf, predictAhead, SHIPPED_TERMS,
   type AheadOptions, type AheadTerm, type SeasonAhead,
 } from "../src/model/seasonsAhead.js";
 import { scoringRules, type ScoringFormat } from "../src/scoring/fantasyPoints.js";
@@ -256,6 +256,7 @@ const BREAKOUTS: [string, (row: AheadRow) => boolean][] = [
   ["first round rookie backs and receivers", (row) =>
     row.experience === 0 && row.drafted?.round === 1 &&
     (row.position === "RB" || row.position === "WR")],
+  ["fourteen a game or more so far", (row) => row.games >= 2 && ppgOf(row) >= 14],
 ];
 
 function printBreakouts(marked: Marked[], horizon: number): void {
@@ -291,7 +292,9 @@ const adding = (...more: AheadTerm[]): AheadOptions => ({
 });
 
 const VARIANTS: Record<string, AheadOptions> = {
-  "without this season and last together": without("points a game, this season and last"),
+  "without this season and last together":
+    without("points a game, this season and last", "the same, squared"),
+  "without the square of it": without("the same, squared"),
   "without last season": without("points a game last season", "games last season"),
   "without age": without("age", "age, squared about 26"),
   "without seasons in the league": without("seasons in the league", "rookie"),
@@ -414,7 +417,7 @@ function printCase(rowsBySeason: Map<number, AheadRow[]>): void {
   say("taken 40th", { ...him, drafted: { ...him.drafted!, round: 2, overall: 40 } });
   say("undrafted", { ...him, drafted: null });
   say("23 rather than 21", { ...him, age: (him.age ?? 21) + 2 });
-  say("all nine games at his first five's rate", {
+  say("every game his club played, at the same rate", {
     ...him, games: him.clubGames, points: him.points / Math.max(1, him.games) * him.clubGames,
   });
 
