@@ -46,6 +46,8 @@ interface Props {
   onKeeperChange?: () => void;
   /** who the injury report has listed, so a hurt player says so on his card */
   listed?: Map<string, Listed>;
+  /** opens the league's settings, for a trade deadline nobody has said */
+  onSettings?: () => void;
   /** the week coming up, so a player on bye in it is marked */
   week?: number | null;
   /** every player's line for that week, where it has loaded */
@@ -160,7 +162,10 @@ export function Roster(props: Props) {
       </div>
 
       {mode === "trade" && (
-        <Trade league={league} players={players} coming={props.week ?? 1} listed={props.listed ?? new Map()} />
+        <Trade
+          league={league} players={players} coming={props.week ?? 1}
+          listed={props.listed ?? new Map()} {...(props.onSettings ? { onSettings: props.onSettings } : {})}
+        />
       )}
 
       {mode !== "trade" && (<>

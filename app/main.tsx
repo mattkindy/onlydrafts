@@ -29,6 +29,10 @@ import { PlayerSheet } from "./views/PlayerSheet.tsx";
 import { Reading, Skeleton } from "./views/Reading.tsx";
 import { EspnSheet } from "./views/EspnSheet.tsx";
 import { Roster } from "./views/Roster.tsx";
+import { LeagueSettingsPanel } from "./views/LeagueSettings.tsx";
+import {
+  readSettings, settingsKey, withSettings, type LeagueSettings,
+} from "./lib/leagueSettings.ts";
 import { DraftRating, MyDraftPicks } from "./views/DraftRating.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
 import { MyMatchup } from "./views/Matchup.tsx";
@@ -273,7 +277,25 @@ function App() {
   const [season, setSeason] = useState<number | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [leagues, setLeagues] = useState<League[]>(() => stored<League[]>("leagues", []));
-  const [active, setActive] = useState<League | null>(() => stored<League | null>("active", null));
+  const [given, setActive] = useState<League | null>(() => stored<League | null>("active", null));
+  /**
+   * Your own settings for the open league, laid over what the provider
+   * sent, so every tab reads the same deadline and season. `given` is the
+   * league as the provider has it and is what is kept; `active` is what
+   * the tabs read.
+   */
+  const [settingsRev, setSettingsRev] = useState(0);
+  const settings = useMemo(
+    () => (given ? readSettings(stored(settingsKey(given), null)) : {}), [given, settingsRev]);
+  const active = useMemo(() => given && withSettings(given, settings), [given, settings]);
+  const saveSettings = (next: LeagueSettings) => {
+    if (given) {
+      keep(settingsKey(given), next);
+      setSettingsRev((n) => n + 1);
+    }
+  };
+  /** whether the league tab's settings are open */
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // a reload lands back on the tab you were on, in the league you had open
   const [view, setView] = useState<View>(() =>
     stored<League | null>("active", null) ? stored<View>("view", "leagues") : "leagues");
@@ -1168,6 +1190,7 @@ function App() {
               // lines of the week coming up, whatever week the matchup
               // tab was last left on
               rows={comingWeek ? slateRows : undefined}
+              onSettings={() => { setSettingsOpen(true); setView("league"); }}
             />
 
             {active.keepers === undefined || active.keepers === null
@@ -1293,6 +1316,27 @@ function App() {
               : <p class="hint">No week has been built yet.</p>}
             </div>
             </div>
+
+            <button
+              class="fold"
+              aria-expanded={settingsOpen}
+              onClick={() => setSettingsOpen((on) => !on)}
+            >
+              <h2>league settings</h2>
+              <svg
+                class={"chev" + (settingsOpen ? " open" : "")}
+                viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"
+              >
+                <path
+                  d="M4 6l4 4 4-4" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            {settingsOpen && given && (
+              <LeagueSettingsPanel league={given} settings={settings} onSettings={saveSettings} />
+            )}
 
             {/* open while the draft is fresh, and behind a tap once weeks
                 are being played: grading every draft is a second of work
