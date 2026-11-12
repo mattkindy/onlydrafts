@@ -190,8 +190,36 @@ export const BACK_BY = [0.5, 0.55, 0.6];
  * what he scored before. Against players of the same level who were never
  * hurt, a man back from four to seven games out scored 83% of his old
  * level for two games and 92% after that, settling by the fifth.
+ *
+ * It is not laid on a man back from one to three games. He scored 86% of
+ * his level in his first game back and 94% in his second, net of the same
+ * control, but a ramp fitted on 2018 to 2022 saved 0.13 points a game on
+ * 2023 to 2025 with a standard error of 0.11, which is inside noise.
  */
 export const RAMP = [0.83, 0.83, 0.92, 0.92];
+
+/**
+ * How likely a man ruled out of the coming game is to play each of his
+ * side's next four, the first one first.
+ *
+ * Out is the club's word for one game, and the app used to take that one
+ * game and price every week after it at his healthy rate. Over 2018 to
+ * 2025, of the QBs, RBs, WRs and TEs with a steady role, half the snaps or
+ * more over their last three games, who were ruled out, 36% played the
+ * next game, 56% the one after, 67% the third and 70% the fourth. The
+ * healthy rate had them at about three in four in every one. By the fifth
+ * they are back to it.
+ *
+ * How many games he had already missed in a row does not move these: the
+ * first game out and the third look alike. Splitting by the body part or
+ * by position wins on some seasons and loses on others, and a table read
+ * as a share of each man's own healthy rate does worse than the plain
+ * one. Fitted on 2018 to 2022 and scored by Brier score on 2023 to 2025
+ * over his next four games, this lands at 0.226 where the healthy rate
+ * scores 0.286, against a ceiling of 0.216. `scripts/outSpellEval.ts` has
+ * the measurement.
+ */
+export const OUT_BACK = [0.36, 0.56, 0.67, 0.70];
 
 /** The regular season runs this many weeks, and a side plays in all but one. */
 export const SEASON_WEEKS = 18;
@@ -253,12 +281,17 @@ function reserveGames(games: number): number[] {
  * share of it with them. A player the board already has below what the
  * list leaves him keeps the lower number, since the board knows something
  * the list does not say.
+ *
+ * A man on reserve or ruled out is the sum of his weeks instead. The four
+ * after an Out are the measured return whatever the board has him at:
+ * holding them under his healthy rate scored worse, since the games the
+ * board expects of a man do not say who comes back quickly.
  */
 export function gamesLeft(
   games: number | undefined, status: string | null | undefined,
   from = 1, bye?: number | null,
 ): number {
-  if (status === "IR") {
+  if (status === "IR" || status === "Out") {
     return playsByWeek(games, status, from, bye).reduce((sum, p) => sum + p, 0);
   }
 
@@ -278,6 +311,10 @@ export function gamesLeft(
  * and ramp, times the share of games the board expects of him healthy.
  * The ramp is a cut in points rather than in the chance he plays, folded
  * into the one number since a week is priced by what it is worth.
+ *
+ * So is a man ruled out of the coming game. He has nothing for it, the
+ * measured chance he is back for each of the four after it, and the share
+ * the board expects of him healthy from there.
  */
 export function playsByWeek(
   games: number | undefined, status: string | null | undefined,
@@ -285,12 +322,14 @@ export function playsByWeek(
 ): number[] {
   const weeks = gameWeeksFrom(from, bye);
   const worth = new Map<number, number>();
+  const healthy = Math.min(1, (games ?? SEASON_GAMES) / SEASON_GAMES);
 
   if (status === "IR") {
-    const healthy = Math.min(1, (games ?? SEASON_GAMES) / SEASON_GAMES);
-
     reserveGames(weeks.length)
       .forEach((share, i) => worth.set(weeks[i]!, share * healthy));
+  } else if (status === "Out") {
+    weeks.forEach((w, i) =>
+      worth.set(w, i === 0 ? 0 : OUT_BACK[i - 1] ?? healthy));
   } else {
     const playing = weeks.slice(gamesOutFor(status));
     const each = playing.length
