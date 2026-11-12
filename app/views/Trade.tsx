@@ -34,7 +34,7 @@ import {
   playoffOdds, playoffRounds, type PlayoffOdds, type Strength,
 } from "../lib/seasonStats.ts";
 import {
-  HOW_ODDS_WORK, splitAtPlayoffs, useSeasonSim, weeklyStrengths,
+  HOW_ODDS_WORK, HOW_ODDS_WORK_IN_FULL, splitAtPlayoffs, useSeasonSim, weeklyStrengths,
 } from "../lib/seasonSim.ts";
 import { keeperCosts } from "../lib/keepers.ts";
 import { keep, stored } from "../lib/store.ts";
@@ -476,9 +476,8 @@ export function Trade(props: Props) {
             Object.keys(costs).length ? "" : ", none priced yet so each is kept free"}; a team keeps its best ${perTeam}`}
         {carries && !boardLooksAhead && " · players' later seasons aren't on the board yet"}
       </p>
-      <p class="hint tnote">
-        Odds: the rest of the season played out {SEASONS.toLocaleString()} times before and
-        after, on the same draws. {HOW_ODDS_WORK}
+      <p class="hint tnote" title={HOW_ODDS_WORK_IN_FULL}>
+        odds: {SEASONS.toLocaleString()} seasons before and after, same draws · {HOW_ODDS_WORK}
       </p>
     </div>
   );

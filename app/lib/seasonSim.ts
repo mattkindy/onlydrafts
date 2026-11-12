@@ -188,8 +188,13 @@ export function chanceIn(p: Player | undefined, at: number, status: string | und
  */
 export const WIRE_RANK = 3;
 
-/** how a team's week is built, said the same wherever odds are shown */
+/** how a team's week is built, in a line, said the same wherever odds are shown */
 export const HOW_ODDS_WORK =
+  "best lineup from the whole roster each week · each player at his chance to play · " +
+  "an empty slot takes a free agent";
+
+/** the same at length, for a reader who hovers */
+export const HOW_ODDS_WORK_IN_FULL =
   "Each team plays the best lineup its whole roster allows every week, not the one " +
   "its manager sets, each player at his points a game times his chance of playing " +
   "that week: his bye, the injury report, a return from reserve. A slot nobody on " +

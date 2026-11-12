@@ -19,7 +19,9 @@ import {
   linesFor, settledGames, standingFor, type GameState,
 } from "../lib/matchups.ts";
 import type { League, Matchup } from "../lib/providers.ts";
-import { HOW_ODDS_WORK, splitAtPlayoffs, useSeasonSim } from "../lib/seasonSim.ts";
+import {
+  HOW_ODDS_WORK, HOW_ODDS_WORK_IN_FULL, splitAtPlayoffs, useSeasonSim,
+} from "../lib/seasonSim.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
   chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, playoffRounds, scenarioPath,
@@ -747,9 +749,8 @@ export function Stats(props: Props) {
                 );
               })}
           </div>
-          <p class="hint onote">
-            The rest of the season played out {SEASONS.toLocaleString()} times
-            {hasTitle ? ", the playoffs a round a week" : ""}. {HOW_ODDS_WORK}
+          <p class="hint onote" title={HOW_ODDS_WORK_IN_FULL}>
+            {SEASONS.toLocaleString()} seasons simulated · {HOW_ODDS_WORK}
           </p>
           </div>
 
