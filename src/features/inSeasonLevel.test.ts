@@ -101,6 +101,32 @@ describe("gamesSinceBreak", () => {
 
     expect(gamesSinceBreak(weeks, Infinity)).toHaveLength(6);
   });
+
+  /**
+   * A starter who loses the job and a backup who gets it are read alike
+   * by one gap. A drop can be given a gap of its own, which the in-season
+   * eval marks against the one gap the build ships.
+   */
+  it("reads a drop apart from a rise where it is given its own gap", () => {
+    const benched = [...starter, ...backup];
+
+    expect(gamesSinceBreak(benched, Infinity, 0.15)).toHaveLength(3);
+    expect(gamesSinceBreak([...backup, ...starter], Infinity, 0.15)).toHaveLength(6);
+  });
+
+  it("breaks a drop at the rise's gap when given none of its own", () => {
+    expect(gamesSinceBreak([...starter, ...backup], 0.2)).toHaveLength(3);
+  });
+
+  it("holds a drop to two games down when asked, so one hurt game is not a demotion", () => {
+    const leftHurt = [...starter, week({ week: 7, snapShare: 0.05 }),
+      week({ week: 8, snapShare: 0.9 }), week({ week: 9, snapShare: 0.9 })];
+
+    expect(gamesSinceBreak(leftHurt, Infinity, 0.15, true)).toHaveLength(6);
+    expect(gamesSinceBreak(leftHurt, Infinity, 0.15)).toHaveLength(3);
+    expect(gamesSinceBreak([...starter, ...backup], Infinity, 0.15, true))
+      .toHaveLength(3);
+  });
 });
 
 describe("updateLevel", () => {
@@ -181,5 +207,29 @@ describe("fitUpdateShape", () => {
     });
 
     expect(shape.roleCap).toBe(0);
+  });
+
+  /**
+   * Starters benched after three games, who go on to score what the
+   * smaller role pays. Only a break on the drop forgets the games before.
+   */
+  const benched: UpdateCase[] = Array.from({ length: 200 }, (_, i) => {
+    const was = (i % 4) + 9;
+    const now = (i % 3) + 1;
+    const weeks = [1, 2, 3, 4, 5, 6].map((w) => {
+      const targets = w <= 3 ? was : now;
+
+      return week({ week: w, targets, snapShare: targets / 12, airYards: targets * 10 });
+    });
+
+    return { position: "WR", anchor: was * 1.5, weeks, restPpg: now * 1.5 };
+  });
+
+  it("gives a drop a gap of its own only when asked", () => {
+    const role = fitRoleLevel(roleRows());
+
+    expect(fitUpdateShape(role, benched).dropGap).toBeUndefined();
+    expect(fitUpdateShape(role, benched, {}, { apart: true }).dropGap)
+      .toBeLessThan(Infinity);
   });
 });

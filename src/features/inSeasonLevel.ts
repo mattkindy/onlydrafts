@@ -126,6 +126,19 @@ export function roleLevel(
 export interface UpdateShape {
   decay: number;
   breakGap: number;
+  /**
+   * The move down that counts as a role changing, where it is not the
+   * move up. Absent, a drop breaks at `breakGap` the same as a rise.
+   */
+  dropGap?: number;
+  /**
+   * A drop counts only where two of the last three games are that far
+   * under the share before, so one game a man left hurt does not read
+   * as a demotion. The build ships neither of these two:
+   * `inSeasonLevelEval.ts` marks them against the one gap, and neither
+   * beats it at every cut.
+   */
+  dropHeld?: boolean;
   roleCap: number;
   roleGames: number;
   pointsCap: number;
@@ -151,8 +164,10 @@ const BREAK_WINDOW = 3;
 export function gamesSinceBreak(
   weeks: PlayedWeek[],
   breakGap: number,
+  dropGap = breakGap,
+  dropHeld = false,
 ): PlayedWeek[] {
-  if (weeks.length <= BREAK_WINDOW || !Number.isFinite(breakGap)) {
+  if (weeks.length <= BREAK_WINDOW) {
     return weeks;
   }
 
@@ -160,12 +175,20 @@ export function gamesSinceBreak(
   const earlier = weeks.slice(0, -BREAK_WINDOW);
   const mean = (some: PlayedWeek[]) =>
     some.reduce((sum, w) => sum + w.snapShare, 0) / some.length;
+  const before = mean(earlier);
+  const moved = mean(recent) - before;
 
-  if (Math.abs(mean(recent) - mean(earlier)) < breakGap) {
+  if (moved >= 0) {
+    return moved < breakGap ? weeks : recent;
+  }
+
+  if (-moved < dropGap) {
     return weeks;
   }
 
-  return recent;
+  const down = recent.filter((w) => before - w.snapShare >= dropGap).length;
+
+  return dropHeld && down < 2 ? weeks : recent;
 }
 
 export interface WindowSummary {
@@ -183,7 +206,8 @@ export function summarizeWindow(
   weeks: PlayedWeek[],
   shape: UpdateShape,
 ): WindowSummary {
-  const kept = gamesSinceBreak(weeks, shape.breakGap);
+  const kept = gamesSinceBreak(
+    weeks, shape.breakGap, shape.dropGap, shape.dropHeld);
   const last = kept.length - 1;
   const weights = kept.map((_, i) => shape.decay ** (last - i));
   const total = weights.reduce((sum, w) => sum + w, 0);
@@ -324,11 +348,10 @@ interface ReadCase {
 function readCases(
   role: RoleLevelFit,
   cases: UpdateCase[],
-  decay: number,
-  breakGap: number,
+  breaks: Pick<UpdateShape, "decay" | "breakGap" | "dropGap" | "dropHeld">,
 ): ReadCase[] {
   return cases.map((c) => {
-    const window = summarizeWindow(c.weeks, { ...BASE_SHAPE, decay, breakGap });
+    const window = summarizeWindow(c.weeks, { ...BASE_SHAPE, ...breaks });
 
     return {
       anchor: c.anchor,
@@ -400,11 +423,15 @@ function bestWeights(
  * are settled inside it one at a time over a few rounds. Anything
  * given in `fixed` is held there instead of searched, which is how a
  * caller marks one part of the update against the update without it.
+ *
+ * A drop breaks at the same gap as a rise unless `drops` says to search
+ * it apart, over the same gaps, with or without the two game hold.
  */
 export function fitUpdateShape(
   role: RoleLevelFit,
   cases: UpdateCase[],
   fixed: Partial<UpdateShape> = {},
+  drops: { apart?: boolean; held?: boolean } = {},
 ): UpdateShape {
   let best = { ...BASE_SHAPE, ...fixed };
   let bestError = Infinity;
@@ -413,13 +440,24 @@ export function fitUpdateShape(
     const gaps = fixed.breakGap === undefined ? BREAK_GAPS : [fixed.breakGap];
 
     for (const breakGap of gaps) {
-      const read = readCases(role, cases, decay, breakGap);
-      const start = { ...BASE_SHAPE, ...fixed, decay, breakGap };
-      const found = bestWeights(read, start, fixed);
+      const dropGaps: (number | undefined)[] =
+        fixed.dropGap !== undefined ? [fixed.dropGap]
+          : drops.apart ? BREAK_GAPS : [undefined];
 
-      if (found.error < bestError) {
-        bestError = found.error;
-        best = found.shape;
+      for (const dropGap of dropGaps) {
+        const breaks = {
+          decay, breakGap,
+          ...(dropGap === undefined ? {} : { dropGap }),
+          ...(drops.held ? { dropHeld: true } : {}),
+        };
+        const read = readCases(role, cases, breaks);
+        const start = { ...BASE_SHAPE, ...fixed, ...breaks };
+        const found = bestWeights(read, start, fixed);
+
+        if (found.error < bestError) {
+          bestError = found.error;
+          best = found.shape;
+        }
       }
     }
   }
