@@ -19,12 +19,12 @@ import {
   linesFor, settledGames, standingFor, type GameState,
 } from "../lib/matchups.ts";
 import type { League, Matchup } from "../lib/providers.ts";
-import { useSeasonSim } from "../lib/seasonSim.ts";
+import { splitAtPlayoffs, useSeasonSim } from "../lib/seasonSim.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
-  chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, scenarioPath,
+  chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, playoffRounds, scenarioPath,
   TIE, weekOfPair, winShare,
-  type PathOutcome, type PlayoffRun, type ScenarioPath, type TeamSeason,
+  type PathOutcome, type PlayoffRun, type ScenarioPath, type Strength, type TeamSeason,
 } from "../lib/seasonStats.ts";
 import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
 import { pct } from "./Advice.tsx";
@@ -380,7 +380,7 @@ function Picker(
 
 export function Stats(props: Props) {
   const { league, players, coming } = props;
-  const { weeks, trouble, played, season, strength, setup } = useSeasonSim({
+  const { weeks, trouble, played, season, strength, weekly, setup, lastRegular } = useSeasonSim({
     league, players, coming, listed: props.listed,
   });
 
@@ -431,27 +431,42 @@ export function Stats(props: Props) {
     .map((r) => [r.owner, r.division!])), [league]);
   const divisionCount = league.divisions?.length ?? 0;
 
+  /**
+   * Each week still to play, with whoever is expected to be fit for it,
+   * and the playoff rounds after them, which give the bye and the title.
+   */
+  const rounds = playoffRounds(rules.teams);
+  const { byWeek, bracket } = useMemo(
+    () => splitAtPlayoffs(weekly, coming, lastRegular, rounds),
+    [weekly, coming, lastRegular, rounds]);
+
   /** your team scoring what you think it will, everybody else as projected */
   const adjusted = useMemo(() => {
-    if (!nudge) {
-      return strength;
-    }
+    const nudged = (strengths: Map<string, Strength>) => {
+      const out = new Map(strengths);
+      const mine = out.get(league.team);
 
-    const out = new Map(strength);
-    const mine = out.get(league.team);
+      if (mine) {
+        out.set(league.team, { ...mine, mean: mine.mean * (1 + nudge) });
+      }
 
-    if (mine) {
-      out.set(league.team, { ...mine, mean: mine.mean * (1 + nudge) });
-    }
+      return out;
+    };
 
-    return out;
-  }, [strength, nudge, league.team]);
+    return nudge
+      ? { strength: nudged(strength), byWeek: byWeek.map(nudged), bracket: bracket.map(nudged) }
+      : { strength, byWeek, bracket };
+  }, [strength, byWeek, bracket, nudge, league.team]);
+  const asProjected = useMemo(
+    () => ({ strength, byWeek, bracket }), [strength, byWeek, bracket]);
 
   const playOut = (picks: Map<string, string>, draws: number, using = adjusted) => setup
     ? playoffOdds({
       table: setup.table,
       weeks: setup.toCome,
-      strength: using,
+      strength: using.strength,
+      byWeek: using.byWeek,
+      bracket: using.bracket,
       playoffTeams: rules.teams,
       rules,
       divisionOf,
@@ -488,10 +503,10 @@ export function Stats(props: Props) {
 
   /** your chance as things stand, with nothing picked and your scoring as projected */
   const today = useMemo(() => {
-    const as = playOut(new Map(), SEASONS, strength);
+    const as = playOut(new Map(), SEASONS, asProjected);
 
     return as?.odds.find((o) => o.owner === league.team)?.playoffs ?? null;
-  }, [setup, strength, league, thisWeek, rules, divisionOf]);
+  }, [setup, asProjected, league, thisWeek, rules, divisionOf]);
 
   /**
    * Your chance week by week as the tab would tell it if the season goes
@@ -556,6 +571,9 @@ export function Stats(props: Props) {
   const me = season.find((t) => t.owner === league.team);
   const myOdds = run?.odds.find((o) => o.owner === league.team);
   const playoffTeams = rules.teams;
+  // the bracket is played where the playoff weeks fall inside the season
+  const hasTitle = Boolean(run?.odds.some((o) => o.champion !== undefined));
+  const hasBye = Boolean(run?.odds.some((o) => o.bye !== undefined));
   const placed = [...season].sort((a, b) =>
     (b.wins + b.ties / 2) - (a.wins + a.ties / 2) || b.pf - a.pf);
   const medians = played.map(({ games }) => {
@@ -680,7 +698,15 @@ export function Stats(props: Props) {
               onDone={() => setShowRules(false)}
             />
           )}
-          <div class="odds-list">
+          <div class={"odds-list" + (hasTitle ? " with-title" : "") + (hasBye ? " with-bye" : "")}>
+            {hasTitle && (
+              <div class="orow ohead">
+                <span /><span /><span class="ospace" />
+                <b title="how often the team makes the playoffs">playoffs</b>
+                {hasBye && <b title="how often the team is a top seed and sits out the first round">bye</b>}
+                <b title="how often the team wins the playoffs, played a round a week with whoever is fit by then">title</b>
+              </div>
+            )}
             {[...run.odds].sort((a, b) => b.playoffs - a.playoffs || b.wins - a.wins)
               .map((o, i) => {
                 const team = season.find((t) => t.owner === o.owner);
@@ -695,7 +721,7 @@ export function Stats(props: Props) {
                   <div class={"orow" + (o.owner === league.team ? " on" : "")}>
                     <span class="onm">{o.owner}</span>
                     <span class="orec">
-                      {team ? recordSays(team) : "0-0"}
+                      <span class="ow">{team ? recordSays(team) : "0-0"}</span>
                       <small>
                         {o.wins.toFixed(1)} proj W
                         {o.division !== undefined && ` · div ${pct(o.division)}`}
@@ -705,6 +731,8 @@ export function Stats(props: Props) {
                       <u style={{ width: `${o.playoffs * 100}%` }} />
                     </span>
                     <b>{pct(o.playoffs)}</b>
+                    {hasBye && <span class="oodd">{pct(o.bye ?? 0)}</span>}
+                    {hasTitle && <span class="oodd">{pct(o.champion ?? 0)}</span>}
                   </div>
                   </Fragment>
                 );

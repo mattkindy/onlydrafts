@@ -10,9 +10,10 @@
 
 import { useEffect, useMemo, useState } from "preact/hooks";
 
-import type { Listed } from "./availability.ts";
+import { playChance, SEASON_WEEKS, statusOf, type Listed } from "./availability.ts";
 import { PROVIDERS, type League, type Matchup, type RosterPlayer } from "./providers.ts";
 import type { Player } from "./scoring.ts";
+import { forTheWeeksLeft, statusesOn } from "./waiversSeason.ts";
 import {
   bestLineupPoints, seasonOf, startingSlots, weeklySpread,
   type SeedRow, type Strength, type TeamSeason,
@@ -112,27 +113,108 @@ export function teamStrengths(input: {
   const base = input.scaleFrom
     ? input.scaleFrom.map((team) => lineupOf(team.keys))
     : [...projected.values()];
-  const weeksPlayed = input.season.flatMap((t) => t.weekly.filter((w): w is number => w !== null));
+  const level = leagueLevel(input.season, base);
+
+  return new Map<string, Strength>([...projected].map(([owner, mean]) => [
+    owner, { mean: mean * level.scale * level.coaching(owner), sd: level.sd },
+  ]));
+}
+
+/**
+ * What turns a roster's line into a team's week: the one scale that
+ * takes the league's projected lineups to what it really scores, the
+ * spread of a week, and each manager's own start efficiency.
+ */
+function leagueLevel(season: TeamSeason[], base: number[]) {
+  const weeksPlayed = season.flatMap((t) => t.weekly.filter((w): w is number => w !== null));
   const actual = weeksPlayed.length
     ? weeksPlayed.reduce((a, b) => a + b, 0) / weeksPlayed.length
     : null;
   const meanProjected = base.reduce((a, b) => a + b, 0) / Math.max(1, base.length);
   const scale = actual && meanProjected ? actual / meanProjected : 1;
-  const sd = weeklySpread(input.season, actual ?? meanProjected);
-  const started = input.season.reduce((sum, t) => sum + t.started, 0);
-  const best = input.season.reduce((sum, t) => sum + t.best, 0);
+  const sd = weeklySpread(season, actual ?? meanProjected);
+  const started = season.reduce((sum, t) => sum + t.started, 0);
+  const best = season.reduce((sum, t) => sum + t.best, 0);
   const leagueEff = best > 0 ? started / best : 1;
   const coaching = (owner: string) => {
-    const team = input.season.find((t) => t.owner === owner);
+    const team = season.find((t) => t.owner === owner);
 
     return team && team.best > 0
       ? 1 + 0.5 * (team.started / team.best / leagueEff - 1)
       : 1;
   };
 
-  return new Map<string, Strength>([...projected].map(([owner, mean]) => [
-    owner, { mean: mean * scale * coaching(owner), sd },
-  ]));
+  return { scale, sd, coaching };
+}
+
+/**
+ * His chance of playing in a week, `at` weeks after the coming one. The
+ * coming week is the injury report's: out is out and a questionable man
+ * plays about two times in three. Past it, his weeks left say, which
+ * carry his bye, a return from reserve and the board's games; a player
+ * with none is counted on unless a list keeps him out for weeks.
+ */
+export function chanceIn(p: Player | undefined, at: number, status: string | undefined): number {
+  if (!p) {
+    return 0;
+  }
+
+  const plays = p.weeksLeft?.plays[at];
+
+  if (at === 0) {
+    return plays === 0 ? 0 : playChance(status);
+  }
+
+  return plays ?? (GONE_A_WHILE.has(status ?? "") ? 0 : 1);
+}
+
+/**
+ * Each team's strength week by week from the coming one, `weeks` of them:
+ * the best lineup its roster can put out that week, each player at his
+ * points a game times his chance of playing it. A bye costs the week it
+ * falls in, and a starter back from reserve counts from the weeks he is
+ * expected back, the playoffs included, which a single strength for the
+ * whole run cannot say. The league's scale is taken over all the weeks
+ * together, from the rosters before any trade, so a week of byes reads
+ * lower than one without and a what-if moves only the two teams in it.
+ */
+export function weeklyStrengths(input: {
+  rosters: { owner: string; keys: RosterPlayer[] }[];
+  slots: string[] | null;
+  byKey: Map<string, Player>;
+  listed: Map<string, Listed>;
+  season: TeamSeason[];
+  weeks: number;
+  scaleFrom?: { owner: string; keys: RosterPlayer[] }[];
+}): Map<string, Strength>[] {
+  const starting = startingSlots(input.slots);
+  const statusOfKey = (key: string) => {
+    const his = input.listed.get(key);
+
+    return his ? statusOf(his) : undefined;
+  };
+  const lineupsOf = (keys: RosterPlayer[]) => Array.from({ length: input.weeks }, (_, at) =>
+    bestLineupPoints(
+      keys.map((p) => {
+        const his = input.byKey.get(p.key);
+
+        return {
+          points: (his?.ppg ?? 0) * chanceIn(his, at, statusOfKey(p.key)),
+          position: his?.position ?? p.pos,
+        };
+      }),
+      starting,
+    ));
+  const projected = input.rosters.map((team) => [team.owner, lineupsOf(team.keys)] as const);
+  const base = input.scaleFrom
+    ? input.scaleFrom.flatMap((team) => lineupsOf(team.keys))
+    : projected.flatMap(([, weeks]) => weeks);
+  const level = leagueLevel(input.season, base);
+
+  return Array.from({ length: input.weeks }, (_, at) => new Map<string, Strength>(
+    projected.map(([owner, weeks]) => [
+      owner, { mean: weeks[at]! * level.scale * level.coaching(owner), sd: level.sd },
+    ])));
 }
 
 /** the pairings of every week left, this one first, and the table now */
@@ -188,7 +270,10 @@ export function useSeasonSim(input: {
   const lastRegular = league.lastRegularWeek ?? 14;
   const through = Math.max(coming, lastRegular);
   const { weeks, trouble } = useWeeks(league, through);
-  const byKey = useMemo(() => new Map(players.map((p) => [p.key, p])), [players]);
+  // each player with his chance of playing each week left, report and all
+  const byKey = useMemo(() => new Map(
+    forTheWeeksLeft(players, coming, statusesOn(players, listed)).map((p) => [p.key, p])),
+  [players, coming, listed]);
   const positionOf = useMemo(() => {
     const fromRosters = new Map(
       [league.myRoster, ...league.allRosters.map((r) => r.keys)].flat()
@@ -215,9 +300,30 @@ export function useSeasonSim(input: {
     rosters: league.allRosters, slots: league.slots, byKey, listed, season,
   }), [league, byKey, season, listed]);
 
+  // the weeks left and the longest bracket after them, inside the season
+  const ahead = Math.max(0, Math.min(SEASON_WEEKS, lastRegular + MOST_ROUNDS) - coming + 1);
+  const weekly = useMemo(() => weeklyStrengths({
+    rosters: league.allRosters, slots: league.slots, byKey, listed, season, weeks: ahead,
+  }), [league, byKey, season, listed, ahead]);
+
   const setup = useMemo(() => seasonSetup({
     weeks, coming, lastRegular, season, owners: league.allRosters.map((r) => r.owner),
   }), [weeks, coming, lastRegular, season, league]);
 
-  return { weeks, trouble, byKey, played, season, strength, setup, lastRegular };
+  return { weeks, trouble, byKey, played, season, strength, weekly, setup, lastRegular };
+}
+
+/** a bracket of sixteen, the most a league runs */
+const MOST_ROUNDS = 4;
+
+/**
+ * Weekly strengths from the coming week split where the regular season
+ * ends: the weeks still to play, and the playoff rounds after them.
+ */
+export function splitAtPlayoffs(
+  weekly: Map<string, Strength>[], coming: number, lastRegular: number, rounds: number,
+): { byWeek: Map<string, Strength>[]; bracket: Map<string, Strength>[] } {
+  const regular = Math.max(0, lastRegular - coming + 1);
+
+  return { byWeek: weekly.slice(0, regular), bracket: weekly.slice(regular, regular + rounds) };
 }

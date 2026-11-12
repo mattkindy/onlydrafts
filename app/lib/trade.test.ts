@@ -4,7 +4,7 @@ import { picksHeld, type League } from "./providers.ts";
 import type { Player } from "./scoring.ts";
 import {
   draftCurve, NO_DEAL, overallPick, overTheLimit, pickValue, restOfSeason, rostersAfter,
-  SEASON_OUT, slotsFromWins,
+  SEASON_OUT, slotsFromWins, stageOf, tradeVerdict,
 } from "./trade.ts";
 
 const player = (over: Partial<Player>): Player =>
@@ -98,5 +98,33 @@ describe("the rosters after a deal", () => {
 
     expect(overTheLimit(league, deal, "mine")).toBe(0);
     expect(overTheLimit(league, { ...deal, get: ["c", "d"] }, "mine")).toBe(1);
+  });
+});
+
+describe("what the trade says", () => {
+  it("reads buying now with later as right for a contender and wrong for a long shot", () => {
+    const deal = { now: 0.04, theirs: -0.01, later: -60 };
+
+    expect(tradeVerdict({ ...deal, stage: "contender" }).tone).toBe("up");
+    expect(tradeVerdict({ ...deal, stage: "bubble" }).tone).toBe("flat");
+    expect(tradeVerdict({ ...deal, stage: "long shot" }).tone).toBe("down");
+  });
+
+  it("reads selling now for later the other way round", () => {
+    const deal = { now: -0.03, theirs: 0.02, later: 80 };
+
+    expect(tradeVerdict({ ...deal, stage: "out of it" }).says).toBe("sells a lost season for later");
+    expect(tradeVerdict({ ...deal, stage: "contender" }).tone).toBe("down");
+  });
+
+  it("calls under a point either way even", () => {
+    expect(tradeVerdict({ now: 0, theirs: 0, later: 0, stage: "bubble" }).says).toBe("about even");
+  });
+
+  it("places a team by its chance of the playoffs", () => {
+    expect(stageOf(0.9)).toBe("contender");
+    expect(stageOf(0.4)).toBe("bubble");
+    expect(stageOf(0.1)).toBe("long shot");
+    expect(stageOf(0.01)).toBe("out of it");
   });
 });

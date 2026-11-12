@@ -274,6 +274,34 @@ export interface PlayoffOdds {
   wins: number;
   /** how often it wins its division, where division winners get in */
   division?: number;
+  /** how often it wins the title, where the playoff weeks were handed in */
+  champion?: number;
+  /** how often it sits out the first round, where a short field gives byes */
+  bye?: number;
+}
+
+/**
+ * How many weeks a bracket of this many teams takes, one round a week:
+ * six teams is three, the top two sitting out the first.
+ */
+export const playoffRounds = (teams: number) =>
+  teams < 2 ? 0 : Math.ceil(Math.log2(teams));
+
+/**
+ * The seeds down a bracket of `size` places, top seed first, so that
+ * neighbours meet: 1 8 4 5 2 7 3 6. A seed past the teams that made it
+ * is a bye for whoever it was drawn against.
+ */
+export function bracketSlots(size: number): number[] {
+  let slots = [1];
+
+  while (slots.length < size) {
+    const n = slots.length * 2;
+
+    slots = slots.flatMap((s) => [s, n + 1 - s]);
+  }
+
+  return slots;
 }
 
 /** the key a forced result goes under: the week's place in the run and the pair */
@@ -389,12 +417,25 @@ const PLAIN_RULES: Pick<PlayoffRules, "seedBy" | "ties" | "divisions"> = {
  * its tiebreakers in order and a coin flip after them. Where division
  * winners get in, each division's best team does, and the best of the
  * rest fill the places left.
+ *
+ * With `byWeek`, each week is drawn from that week's strengths, so a bye
+ * or a starter back from reserve lands in the week it happens. With
+ * `bracket`, the teams that made it then play the playoffs a round a
+ * week, division winners seeded first, the top seeds sitting out the
+ * first round where the field is short of a full bracket. Those games
+ * are drawn from a stream of their own, a fixed number a season, so two
+ * versions of a league played out side by side still meet the same luck
+ * in the playoffs.
  */
 export function playoffOdds(input: {
   table: SeedRow[];
   /** the pairings of every week still to play, this one first */
   weeks: [string, string][][];
   strength: Map<string, Strength>;
+  /** each week's strengths, lined up with `weeks`; `strength` where a week has none */
+  byWeek?: Map<string, Strength>[];
+  /** each playoff round's strengths, the first round first */
+  bracket?: Map<string, Strength>[];
   playoffTeams: number;
   /** how the table is ranked; by record, then points for, without */
   rules?: Pick<PlayoffRules, "seedBy" | "ties" | "divisions">;
@@ -420,6 +461,8 @@ export function playoffOdds(input: {
   const firsts = new Array<number>(n).fill(0);
   const titles = new Array<number>(n).fill(0);
   const winsSum = new Array<number>(n).fill(0);
+  const champions = new Array<number>(n).fill(0);
+  const byes = new Array<number>(n).fill(0);
   const me = input.mine !== undefined ? at.get(input.mine) : undefined;
   let wonRuns = 0, wonMade = 0, lostRuns = 0, lostMade = 0;
   const next = seeded(n * 7919 + input.weeks.length * 104729 + draws);
@@ -462,8 +505,27 @@ export function playoffOdds(input: {
 
   // every game to come worked out once, so a season played out is only
   // numbers: who plays whom, a picked winner, or this week's known odds
-  const meanOf = owners.map((o) => input.strength.get(o)?.mean ?? 0);
-  const sdOf = owners.map((o) => input.strength.get(o)?.sd ?? 0);
+  const strengthAt = (w: number) => input.byWeek?.[w] ?? input.strength;
+  const meanAt = input.weeks.map((_, w) => owners.map((o) => strengthAt(w).get(o)?.mean ?? 0));
+  const sdAt = input.weeks.map((_, w) => owners.map((o) => strengthAt(w).get(o)?.sd ?? 0));
+
+  // the playoffs: each round's strengths, and the bracket the seeds fill
+  const rounds = input.bracket?.length ? playoffRounds(input.playoffTeams) : 0;
+  const roundMean = Array.from({ length: rounds }, (_, r) => {
+    const s = input.bracket![Math.min(r, input.bracket!.length - 1)]!;
+
+    return owners.map((o) => s.get(o)?.mean ?? 0);
+  });
+  const roundSd = Array.from({ length: rounds }, (_, r) => {
+    const s = input.bracket![Math.min(r, input.bracket!.length - 1)]!;
+
+    return owners.map((o) => s.get(o)?.sd ?? 0);
+  });
+  const slots = rounds ? bracketSlots(2 ** rounds) : [];
+  // the top seeds of a short field go straight to the second round
+  const byeCount = rounds ? 2 ** rounds - Math.min(input.playoffTeams, n) : 0;
+  const playoffDice = seeded(n * 31 + input.playoffTeams * 7 + draws);
+  const seeds: number[] = [];
   const plan = input.weeks.map((pairs, w) => pairs.flatMap(([a, b]) => {
     const ia = at.get(a);
     const ib = at.get(b);
@@ -613,15 +675,15 @@ export function playoffOdds(input: {
           // a picked game still scores toward points for: this week's
           // lineups where the game has them, and each side's usual otherwise
           resultA = picked;
-          sa = known ? known.pa : meanOf[ia]!;
-          sb = known ? known.pb : meanOf[ib]!;
+          sa = known ? known.pa : meanAt[w]![ia]!;
+          sb = known ? known.pb : meanAt[w]![ib]!;
         } else if (known) {
           resultA = next() < known.oddsA ? 1 : 0;
           sa = known.pa;
           sb = known.pb;
         } else {
-          sa = meanOf[ia]! + sdOf[ia]! * normal(next);
-          sb = meanOf[ib]! + sdOf[ib]! * normal(next);
+          sa = meanAt[w]![ia]! + sdAt[w]![ia]! * normal(next);
+          sb = meanAt[w]![ib]! + sdAt[w]![ib]! * normal(next);
           resultA = sa > sb ? 1 : 0;
         }
 
@@ -718,6 +780,7 @@ export function playoffOdds(input: {
 
     // who gets in: each division's best first where winners do, then the rest
     inIt.fill(0);
+    seeds.length = 0;
 
     if (byDivision) {
       const won = new Set<number>();
@@ -729,6 +792,7 @@ export function playoffOdds(input: {
           won.add(d);
           inIt[i] = 1;
           titles[i]!++;
+          seeds.push(i);
         }
       }
 
@@ -741,11 +805,43 @@ export function playoffOdds(input: {
 
         if (!inIt[i]) {
           inIt[i] = 1;
+          seeds.push(i);
           wild--;
         }
       }
     } else {
-      order.slice(0, input.playoffTeams).forEach((i) => { inIt[i] = 1; });
+      order.slice(0, input.playoffTeams).forEach((i) => { inIt[i] = 1; seeds.push(i); });
+    }
+
+    if (rounds) {
+      for (let k = 0; k < byeCount && k < seeds.length; k++) {
+        byes[seeds[k]!]!++;
+      }
+
+      // the bracket by seed, a seed nobody holds being a bye
+      let alive = slots.map((s) => seeds[s - 1] ?? -1);
+
+      for (let r = 0; r < rounds; r++) {
+        const on: number[] = [];
+
+        for (let k = 0; k < alive.length; k += 2) {
+          const a = alive[k]!;
+          const b = alive[k + 1]!;
+          // both scores drawn every time, byes too, so the stream stays in step
+          const da = normal(playoffDice);
+          const db = normal(playoffDice);
+          const sa = a < 0 ? 0 : roundMean[r]![a]! + roundSd[r]![a]! * da;
+          const sb = b < 0 ? 0 : roundMean[r]![b]! + roundSd[r]![b]! * db;
+
+          on.push(b < 0 ? a : a < 0 ? b : sa >= sb ? a : b);
+        }
+
+        alive = on;
+      }
+
+      if (alive[0]! >= 0) {
+        champions[alive[0]!]!++;
+      }
     }
 
     for (let i = 0; i < n; i++) {
@@ -784,6 +880,8 @@ export function playoffOdds(input: {
       first: firsts[i]! / draws,
       wins: winsSum[i]! / draws,
       ...(byDivision ? { division: titles[i]! / draws } : {}),
+      ...(rounds ? { champion: champions[i]! / draws } : {}),
+      ...(byeCount > 0 ? { bye: byes[i]! / draws } : {}),
     })),
     ifWin: wonRuns ? wonMade / wonRuns : null,
     ifLose: lostRuns ? lostMade / lostRuns : null,

@@ -1325,6 +1325,16 @@
     background: var(--chip); color: var(--muted); }
   .tverdict.up { background: color-mix(in srgb, var(--go) 18%, transparent); color: var(--go); }
   .tverdict.down { background: color-mix(in srgb, var(--no) 18%, transparent); color: var(--no); }
+  /* where each side stands and how long is left, under what moves */
+  .twindow { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); margin: 0;
+    font-size: var(--t1); color: var(--muted); }
+  .twindow i { font-style: normal; margin-right: .4em; font-size: .6rem; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .twindow .soon { color: var(--mark); font-weight: 700; }
+  /* each partner's chance of the playoffs, small beside the name */
+  .chips button .todds { margin-left: .4em; font-size: .7rem; font-weight: 600;
+    color: var(--faint); font-variant-numeric: tabular-nums; }
+  .chips button.on .todds { color: inherit; opacity: .7; }
   table.tgrid { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums;
     font-size: var(--t2); }
   table.tgrid th, table.tgrid td { padding: var(--s1) 0; text-align: right; white-space: nowrap; }
@@ -1460,6 +1470,32 @@
   .orow.on .obar { background: var(--panel); }
   .obar u { display: block; height: 100%; background: var(--go); border-radius: 0 4px 4px 0; }
   .orow > b { text-align: right; font-variant-numeric: tabular-nums; }
+  /* the bye and the title beside the playoffs, under a row of labels */
+  .with-title .orow { grid-template-columns: minmax(0, 1fr) auto 5rem 3rem 3rem; }
+  .with-title.with-bye .orow { grid-template-columns: minmax(0, 1fr) auto 5rem 3rem 3rem 3rem; }
+  .oodd { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .orow.ohead { padding-top: 0; padding-bottom: var(--s1); }
+  .orow.ohead b { font-size: .6rem; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--faint); cursor: help; }
+  /* with more figures a row, the name keeps the row's width: the record
+     beside it, the projection and the division under both */
+  .with-title .orow { row-gap: 0; }
+  .with-title .orec { display: contents; }
+  .with-title .onm { grid-column: 1; grid-row: 1; }
+  .with-title .ow { grid-column: 2; grid-row: 1; text-align: right; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .with-title .orec small { grid-column: 1 / span 2; grid-row: 2; }
+  /* the figures sit on the name's line, the record's baseline theirs */
+  .with-title .orow { align-items: baseline; }
+  .with-title .orow > b, .with-title .oodd, .with-title .obar { grid-row: 1; }
+  .with-title .obar { align-self: center; }
+  .with-title .ohead > b { grid-row: auto; }
+  /* on a phone the bar gives way: the figure beside it says the same */
+  @media (max-width: 600px) {
+    .with-title .orow { grid-template-columns: minmax(0, 1fr) auto 2.75rem 2.75rem; gap: var(--s2); }
+    .with-title.with-bye .orow { grid-template-columns: minmax(0, 1fr) auto 2.75rem 2.75rem 2.75rem; }
+    .with-title .obar, .with-title .ospace { display: none; }
+  }
   /* how the league decides its playoffs, opened from the playoff list */
   .headbtns { display: flex; align-items: center; gap: var(--s3); }
   .rules { display: flex; flex-direction: column; gap: var(--s3);
@@ -1482,6 +1518,14 @@
     color: var(--ink); cursor: pointer; }
   .stepper button:disabled { color: var(--faint); cursor: default; }
   .rfoot { display: flex; justify-content: flex-end; gap: var(--s4); }
+  /* the league's own settings: a stepper with a word beside it, and
+     where each value came from under it */
+  .rline { display: flex; align-items: center; gap: var(--s4); }
+  .rsrc { margin: 0; font-size: var(--t1); color: var(--faint); }
+  .lsettings .lsub { margin: 0; font-size: var(--t1); font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--faint); }
+  .lsettings { max-width: 34rem; }
+  .lsettings .rules { margin: 0; }
   /* the playoff line, between the last place in and the first out */
   .ocut { display: flex; align-items: center; gap: var(--s2); margin: 2px 0;
     font-size: var(--t1); color: var(--faint); }
@@ -1647,8 +1691,10 @@
     .tresult:not(.idle) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
       column-gap: var(--s5); align-items: start; }
     .tresult .tsum { flex-direction: column; align-items: flex-start; }
-    .tresult .tverdict { margin-left: 0; }
+    .tresult .tverdict { margin-left: 0; align-self: flex-start; }
     .tresult > .hint { grid-column: 1 / -1; }
+    .tresult .twindow { grid-column: 1; flex-direction: column; margin-top: var(--s3); }
+    .tresult .tgrid { grid-column: 2; grid-row: 1 / span 2; }
     /* the two rosters side by side, the result over both */
     .tsides { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
     .tsidetabs { display: none; }

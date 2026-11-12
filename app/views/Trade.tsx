@@ -2,11 +2,19 @@
  * Weigh a trade: choose who you deal with, tick what each side sends,
  * players and draft picks, and see what it does to both teams.
  *
- * The verdict is the playoff race played out twice, as it stands and with
- * the two rosters swapped, on the same draws so the difference is the
- * trade and not the dice. Beside it, each side's best weekly lineup, what
- * the players are worth for the rest of the season, and the picks, which
- * are what a team giving up on this season is buying.
+ * The verdict is the rest of the season played out twice, as it stands
+ * and with the two rosters swapped, on the same draws so the difference
+ * is the trade and not the dice: the regular season week by week with
+ * whoever is fit for each week, then the playoffs, so a starter back from
+ * reserve in December is worth what he is worth in December. Beside it,
+ * each side's best weekly lineup, what the players are worth for the rest
+ * of the season, and the picks, which are what a team giving up on this
+ * season is buying.
+ *
+ * Which of those matters depends on where a team stands. A contender is
+ * buying a title and a team out of the race is buying next year, so the
+ * same trade reads one way to one and the other way to the other. A
+ * league where nothing carries over has no next year to buy.
  *
  * Both sides are shown because a trade the other manager loses is a trade
  * nobody accepts, and finding one that helps you both is the job.
@@ -18,20 +26,20 @@ import type { Listed } from "../lib/availability.ts";
 import { readRules, rulesKey } from "../lib/playoffRules.ts";
 import type { DraftPick, League } from "../lib/providers.ts";
 import type { Player } from "../lib/scoring.ts";
-import { playoffOdds, type PlayoffOdds, type Strength } from "../lib/seasonStats.ts";
-import { teamStrengths, useSeasonSim } from "../lib/seasonSim.ts";
+import { SEASON_WEEKS } from "../lib/availability.ts";
+import {
+  playoffOdds, playoffRounds, type PlayoffOdds, type Strength,
+} from "../lib/seasonStats.ts";
+import { splitAtPlayoffs, useSeasonSim, weeklyStrengths } from "../lib/seasonSim.ts";
 import { keep, stored } from "../lib/store.ts";
 import {
   dealIsEmpty, draftCurve, NO_DEAL, overTheLimit, pickId, pickValue, restOfSeason,
-  rostersAfter, slotsFromWins, valueSays, type Deal,
+  rostersAfter, slotsFromWins, stageOf, tradeVerdict, valueSays, type Deal,
 } from "../lib/trade.ts";
 import { ordinal } from "./Standings.tsx";
 
 /** how often each version of the season is played out, as the stats tab does */
 const SEASONS = 5000;
-
-/** the fantasy playoffs most leagues run after the regular season */
-const PLAYOFF_WEEKS = 3;
 
 interface Props {
   league: League;
@@ -39,6 +47,8 @@ interface Props {
   /** the week coming up */
   coming: number;
   listed: Map<string, Listed>;
+  /** opens the league's settings, where a deadline nobody has said can be set */
+  onSettings?: () => void;
 }
 
 const signed = (n: number, places = 0) =>
@@ -72,17 +82,20 @@ export function Trade(props: Props) {
     }));
 
   const lastRegular = league.lastRegularWeek ?? 14;
-  const weeksLeft = Math.max(0, Math.min(17, lastRegular + PLAYOFF_WEEKS) - coming + 1);
   const rules = useMemo(() => readRules(stored(rulesKey(league), null), league), [league]);
+  const rounds = playoffRounds(rules.teams);
+  // a player is worth the weeks left to the final, the playoffs included
+  const weeksLeft = Math.max(0, Math.min(SEASON_WEEKS, lastRegular + rounds) - coming + 1);
   const divisionOf = useMemo(() => new Map(league.allRosters
     .filter((r) => typeof r.division === "number")
     .map((r) => [r.owner, r.division!])), [league]);
 
-  const playOut = (strength: Map<string, Strength>) => sim.setup
+  const playOut = (weekly: Map<string, Strength>[]) => sim.setup
     ? playoffOdds({
         table: sim.setup.table,
         weeks: sim.setup.toCome,
-        strength,
+        strength: sim.strength,
+        ...splitAtPlayoffs(weekly, coming, lastRegular, rounds),
         playoffTeams: rules.teams,
         rules,
         divisionOf,
@@ -91,19 +104,21 @@ export function Trade(props: Props) {
       }).odds
     : null;
 
-  const before = useMemo(() => playOut(sim.strength), [sim.setup, sim.strength, rules, divisionOf]);
+  const before = useMemo(
+    () => playOut(sim.weekly), [sim.setup, sim.weekly, rules, divisionOf, rounds]);
   const dealKey = JSON.stringify(deal);
-  const afterStrength = useMemo(() => teamStrengths({
+  const afterWeekly = useMemo(() => weeklyStrengths({
     rosters: rostersAfter(league, deal),
     slots: league.slots,
     byKey: sim.byKey,
     listed,
     season: sim.season,
+    weeks: sim.weekly.length,
     scaleFrom: league.allRosters,
-  }), [dealKey, league, sim.byKey, sim.season, listed]);
+  }), [dealKey, league, sim.byKey, sim.season, sim.weekly.length, listed]);
   const after = useMemo(
-    () => (dealIsEmpty(deal) ? before : playOut(afterStrength)),
-    [dealKey, afterStrength, before],
+    () => (dealIsEmpty(deal) ? before : playOut(afterWeekly)),
+    [dealKey, afterWeekly, before],
   );
 
   // where each team's pick falls in the coming draft: the fewest wins first
@@ -133,66 +148,59 @@ export function Trade(props: Props) {
   const givePicks = sum(deal.givePicks.map((id) => valueOfPick(pickById.get(id)!)));
   const getPicks = sum(deal.getPicks.map((id) => valueOfPick(pickById.get(id)!)));
   const oddsOf = (odds: PlayoffOdds[] | null, owner: string) =>
-    odds?.find((o) => o.owner === owner)?.playoffs ?? null;
-  const lineupOf = (strength: Map<string, Strength>, owner: string) => strength.get(owner)?.mean ?? 0;
-  const closed = league.tradeDeadline !== null && league.tradeDeadline !== undefined &&
-    coming > league.tradeDeadline;
+    odds?.find((o) => o.owner === owner) ?? null;
+  const { byWeek: regularBefore, bracket: playoffsBefore } =
+    splitAtPlayoffs(sim.weekly, coming, lastRegular, rounds);
+  const { byWeek: regularAfter, bracket: playoffsAfter } =
+    splitAtPlayoffs(afterWeekly, coming, lastRegular, rounds);
+  // a team's points a week over some weeks, as its lineups stand in them
+  const lineupOf = (weeks: Map<string, Strength>[], owner: string) =>
+    weeks.length ? weeks.reduce((sum, w) => sum + (w.get(owner)?.mean ?? 0), 0) / weeks.length : 0;
+  const deadline = league.tradeDeadline ?? null;
+  const closed = deadline !== null && coming > deadline;
 
   const side = (owner: string, give: boolean) => {
-    const now = { before: oddsOf(before, owner), after: oddsOf(after, owner) };
-    const lineup = lineupOf(afterStrength, owner) - lineupOf(sim.strength, owner);
+    const was = oddsOf(before, owner);
+    const will = oddsOf(after, owner);
+    const now = { before: was?.playoffs ?? null, after: will?.playoffs ?? null };
+    const title = { before: was?.champion ?? null, after: will?.champion ?? null };
+    const lineup = lineupOf(regularAfter, owner) - lineupOf(regularBefore, owner);
+    const playoffLineup = lineupOf(playoffsAfter, owner) - lineupOf(playoffsBefore, owner);
     const players = give ? getNow - giveNow : giveNow - getNow;
     const future = give ? getPicks - givePicks : givePicks - getPicks;
     const drop = overTheLimit(league, deal, give ? "mine" : "theirs");
+    const stage = was ? stageOf(was.playoffs) : null;
 
-    return { now, lineup, players, future, drop };
+    return { now, title, lineup, playoffLineup, players, future, drop, stage };
   };
   const you = side(league.team, true);
   const them = side(deal.partner, false);
   // the change as the two rounded figures beside it say it, so 22% → 27% reads +5
-  const delta = (s: typeof you) =>
-    s.now.before !== null && s.now.after !== null
-      ? (Math.round(s.now.after * 100) - Math.round(s.now.before * 100)) / 100
+  const change = (odds: { before: number | null; after: number | null }) =>
+    odds.before !== null && odds.after !== null
+      ? (Math.round(odds.after * 100) - Math.round(odds.before * 100)) / 100
       : null;
+  // what a trade does to a side this season: the title where the playoffs
+  // are played out, the race to them where the title does not move
+  const nowOf = (s: typeof you) => {
+    const title = change(s.title);
+    const race = change(s.now);
+
+    return title !== null && title !== 0 ? title : race;
+  };
   const verdict = (() => {
-    const a = delta(you);
-    const b = delta(them);
+    const a = nowOf(you);
+    const b = nowOf(them);
 
-    if (a === null || b === null || dealIsEmpty(deal)) {
-      return null;
-    }
-
-    // the picks pull the other way from the season, which is a choice
-    // between now and later rather than a winner
-    const later = you.future;
-
-    if (a > 0.01 && later < -0.5) {
-      return { says: "wins now, costs later", tone: "flat" };
-    }
-
-    if (a < -0.01 && later > 0.5) {
-      return { says: "costs now, pays later", tone: "flat" };
-    }
-
-    // a point either way is the dice, not the trade
-    if (a > 0.01 && b > -0.01) {
-      return { says: "helps you both", tone: "up" };
-    }
-
-    if (a > 0.01) {
-      return { says: "better for you", tone: "up" };
-    }
-
-    if (a < -0.01 && b > 0.01) {
-      return { says: "better for them", tone: "down" };
-    }
-
-    if (a < -0.01) {
-      return { says: "costs you", tone: "down" };
-    }
-
-    return { says: later > 0.5 ? "even now, pays later" : later < -0.5 ? "even now, costs later" : "about even", tone: "flat" };
+    return a === null || b === null || dealIsEmpty(deal)
+      ? null
+      : tradeVerdict({ now: a, theirs: b, later: you.future, stage: you.stage });
   })();
+  // whether anything a trade buys outlives this season: picks, or a
+  // league that keeps its players
+  const hasLater = Boolean(league.dynasty) || (league.picks?.length ?? 0) > 0;
+  const openWeeks = deadline !== null && !closed ? deadline - coming + 1 : null;
+  const regularLeft = Math.max(0, lastRegular - coming + 1);
   const hasPicks = picks.length > 0;
   const anyPicks = deal.givePicks.length + deal.getPicks.length > 0;
 
@@ -201,25 +209,35 @@ export function Trade(props: Props) {
       <div class="tpartner">
         <span class="tlabel">trade with</span>
         <div class="chips" role="tablist">
-          {others.map((r) => (
-            <button
-              key={r.owner}
-              role="tab"
-              aria-selected={r.owner === deal.partner}
-              class={r.owner === deal.partner ? "on" : ""}
-              onClick={() => choosePartner(r.owner)}
-            >
-              {r.owner}
-            </button>
-          ))}
+          {others.map((r) => {
+            // each team's chance of the playoffs, since a team out of the
+            // race is the one selling
+            const odds = oddsOf(before, r.owner)?.playoffs;
+
+            return (
+              <button
+                key={r.owner}
+                role="tab"
+                aria-selected={r.owner === deal.partner}
+                class={r.owner === deal.partner ? "on" : ""}
+                title={odds === undefined ? undefined : `${pctOf(odds)} to make the playoffs`}
+                onClick={() => choosePartner(r.owner)}
+              >
+                {r.owner}
+                {odds !== undefined && <small class="todds">{pctOf(odds)}</small>}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {league.tradeDeadline && (
-        <p class={"hint" + (closed ? " warn" : "")}>
-          {closed
-            ? `The trade deadline was week ${league.tradeDeadline}, so this is a what-if.`
-            : `Trades close after week ${league.tradeDeadline}.`}
+      {closed && (
+        <p class="hint warn">The trade deadline was week {deadline}, so this is a what-if.</p>
+      )}
+      {league.tradeDeadline === undefined && props.onSettings && (
+        <p class="hint">
+          The league doesn't say when trades close.{" "}
+          <button class="textbtn" onClick={props.onSettings}>set the deadline</button>
         </p>
       )}
 
@@ -239,36 +257,59 @@ export function Trade(props: Props) {
                 ].join(", ") || "nothing"}</span>
                 {verdict && <b class={"tverdict " + verdict.tone}>{verdict.says}</b>}
               </div>
+              <p class="twindow">
+                {you.stage && <span><i>you</i>{you.stage}</span>}
+                {them.stage && <span><i>{deal.partner}</i>{them.stage}</span>}
+                <span>
+                  <i>left</i>
+                  {regularLeft ? `${regularLeft} wk${regularLeft === 1 ? "" : "s"} + playoffs` : "playoffs"}
+                </span>
+                {openWeeks !== null && (
+                  <span class={openWeeks <= 1 ? "soon" : ""}>
+                    <i>deadline</i>{openWeeks <= 1 ? "this week" : `wk ${deadline}`}
+                  </span>
+                )}
+                {!hasLater && <span><i>after</i>nothing carries over</span>}
+              </p>
               <table class="tgrid">
                 <thead>
                   <tr><th /><th>you</th><th>{deal.partner}</th></tr>
                 </thead>
                 <tbody>
+                  {sim.setup && you.title.before !== null && (
+                    <OddsRow
+                      label="title"
+                      says="how often the team wins the playoffs, the rest of the season and the bracket played out 5,000 times"
+                      sides={[you.title, them.title]}
+                    />
+                  )}
                   {sim.setup && (
+                    <OddsRow
+                      label="playoffs"
+                      says="how often the team makes the playoffs, the rest of the season played out 5,000 times"
+                      sides={[you.now, them.now]}
+                    />
+                  )}
+                  {regularLeft > 0 && (
                     <tr>
-                      <th title="how often the team makes the playoffs, with the rest of the season played out 5,000 times">playoffs</th>
+                      <th title="points a week from the best lineup the roster can start, over the regular season left, with whoever is fit each week">lineup / wk</th>
                       {[you, them].map((s, i) => (
-                        <td key={i}>
-                          {s.now.before === null
-                            ? "…"
-                            : <>
-                                {pctOf(s.now.before)} → <b>{pctOf(s.now.after!)}</b>
-                                <em class={delta(s)! > 0.005 ? "up" : delta(s)! < -0.005 ? "down" : ""}>
-                                  {signed(Math.round(delta(s)! * 100))}
-                                </em>
-                              </>}
+                        <td key={i} class={s.lineup > 0.05 ? "up" : s.lineup < -0.05 ? "down" : ""}>
+                          {signed(s.lineup, 1)}
                         </td>
                       ))}
                     </tr>
                   )}
-                  <tr>
-                    <th title="points a week from the best lineup the roster can start">lineup / wk</th>
-                    {[you, them].map((s, i) => (
-                      <td key={i} class={s.lineup > 0.05 ? "up" : s.lineup < -0.05 ? "down" : ""}>
-                        {signed(s.lineup, 1)}
-                      </td>
-                    ))}
-                  </tr>
+                  {playoffsBefore.length > 0 && (
+                    <tr>
+                      <th title="points a week from the best lineup the roster can start in the playoff weeks, a player back from reserve by then included">playoff wks</th>
+                      {[you, them].map((s, i) => (
+                        <td key={i} class={s.playoffLineup > 0.05 ? "up" : s.playoffLineup < -0.05 ? "down" : ""}>
+                          {signed(s.playoffLineup, 1)}
+                        </td>
+                      ))}
+                    </tr>
+                  )}
                   <tr>
                     <th title="points over a replacement player, for the games left this season">value now</th>
                     {[you, them].map((s, i) => (
@@ -354,6 +395,31 @@ export function Trade(props: Props) {
         {league.dynasty ? " · players' later seasons not counted yet" : ""}
       </p>
     </div>
+  );
+}
+
+/** a chance before and after, and the change as the two rounded figures say it */
+function OddsRow(
+  props: { label: string; says: string; sides: { before: number | null; after: number | null }[] },
+) {
+  return (
+    <tr>
+      <th title={props.says}>{props.label}</th>
+      {props.sides.map((s, i) => {
+        if (s.before === null || s.after === null) {
+          return <td key={i}>…</td>;
+        }
+
+        const moved = Math.round(s.after * 100) - Math.round(s.before * 100);
+
+        return (
+          <td key={i}>
+            {pctOf(s.before)} → <b>{pctOf(s.after)}</b>
+            <em class={moved > 0 ? "up" : moved < 0 ? "down" : ""}>{signed(moved)}</em>
+          </td>
+        );
+      })}
+    </tr>
   );
 }
 

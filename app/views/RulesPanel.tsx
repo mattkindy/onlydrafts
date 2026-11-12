@@ -25,7 +25,8 @@ export function RulesPanel({ league, rules, onRules, onDone }: {
   league: LeagueSays;
   rules: PlayoffRules;
   onRules: (rules: PlayoffRules) => void;
-  onDone: () => void;
+  /** where the panel sits open on its own page, there is nothing to close */
+  onDone?: () => void;
 }) {
   const divisions = league.divisions?.length ?? 0;
   const own = leagueRules(league);
@@ -120,7 +121,7 @@ export function RulesPanel({ league, rules, onRules, onDone }: {
         {!isOwn && (
           <button class="textbtn" onClick={() => onRules(own)}>league's settings</button>
         )}
-        <button class="textbtn" onClick={onDone}>done</button>
+        {onDone && <button class="textbtn" onClick={onDone}>done</button>}
       </div>
     </section>
   );

@@ -177,3 +177,76 @@ export function overTheLimit(league: League, deal: Deal, side: "mine" | "theirs"
   // the provider still lists, so only what the deal adds is asked of it
   return Math.max(0, now + delta - room) - Math.max(0, now - room);
 }
+
+/**
+ * Where a team stands, by its chance of making the playoffs as things
+ * are: in it, on the bubble, a long shot, or out of it. The lines are
+ * round numbers, not fitted; they decide only how the verdict reads.
+ */
+export type Stage = "contender" | "bubble" | "long shot" | "out of it";
+
+export const stageOf = (playoffs: number): Stage =>
+  playoffs >= 0.75 ? "contender" : playoffs >= 0.25 ? "bubble" : playoffs >= 0.05 ? "long shot" : "out of it";
+
+export interface Verdict {
+  says: string;
+  tone: "up" | "down" | "flat";
+}
+
+/**
+ * The trade in a few words, for you. `now` and `theirs` are what it does
+ * to each side's season, in rounded points of chance, so anything under
+ * a point is the dice and reads as nothing. `later` is the picks, in
+ * points over a replacement, yours less theirs.
+ *
+ * Where the season and the picks pull opposite ways it is a choice
+ * between now and later, and where you stand makes it: a contender is
+ * buying a title and a team out of the race is buying next year, so
+ * the same trade is right for one and wrong for the other.
+ */
+export function tradeVerdict(input: {
+  now: number;
+  theirs: number;
+  later: number;
+  stage: Stage | null;
+}): Verdict {
+  const { now: a, theirs: b, later, stage } = input;
+
+  if (a > 0 && later < -0.5) {
+    return stage === "contender"
+      ? { says: "buys a title shot with later", tone: "up" }
+      : stage === "bubble" || stage === null
+        ? { says: "wins now, costs later", tone: "flat" }
+        : { says: "costs later for a long shot", tone: "down" };
+  }
+
+  if (a < 0 && later > 0.5) {
+    return stage === "contender"
+      ? { says: "costs your title shot for later", tone: "down" }
+      : stage === "bubble" || stage === null
+        ? { says: "costs now, pays later", tone: "flat" }
+        : { says: "sells a lost season for later", tone: "up" };
+  }
+
+  if (a > 0 && b >= 0) {
+    return { says: "helps you both", tone: "up" };
+  }
+
+  if (a > 0) {
+    return { says: "better for you", tone: "up" };
+  }
+
+  if (a < 0 && b > 0) {
+    return { says: "better for them", tone: "down" };
+  }
+
+  if (a < 0) {
+    return { says: "costs you", tone: "down" };
+  }
+
+  return later > 0.5
+    ? { says: "even now, pays later", tone: "flat" }
+    : later < -0.5
+      ? { says: "even now, costs later", tone: "flat" }
+      : { says: "about even", tone: "flat" };
+}
