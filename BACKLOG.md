@@ -21,8 +21,6 @@ of these are in `scripts/README.md`.
   know what a team is worth and the walk never hears it, which is why
   the walk orders a side's points at about .15 against the betting
   line's .39. See `src/README.md`.
-- Collapsing the duplicated layers: three drive walks, two share
-  models, two yardage models. Also in `src/README.md`.
 
 ## Leads left open
 
@@ -43,6 +41,18 @@ of these are in `scripts/README.md`.
   measure that carried over year to year was a defence's extra
   suppression of the opposing room leader, at .204 against .100 for its
   general suppression, and that has not been tried in the weekly model.
+  Letting the weekly ridge weigh a player's role against his side's
+  implied total, or a boosted correction find any combination it
+  likes, moves pair accuracy by nothing over 2024 to 2026, 66.08% and
+  66.56% against 66.58% as shipped, and nor does fitting it on this
+  season's played weeks. `scripts/README.md` has both.
+- **The pooled band runs narrow.** A card whose man the walk never
+  dealt a game takes the pooled residual band, and over 2023 to 2025 it
+  held 70% to 76% of the uncast men's weeks inside its 80% where the
+  walk's own bands hold 82.7%. Borrowing the walk's shape from the
+  nearest cast men fixes the 80% and breaks the 50%. A stretch fitted
+  the way `DEALT_WIDER` was is the next thing to try; the numbers are
+  in `scripts/README.md`.
 - **Same-team catcher pairs simulate at 0.07 correlation** where the
   data says 0. Needs a negative competition channel.
 - **Concentration is predictable and does not help.** A ridge ranks a

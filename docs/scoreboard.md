@@ -933,7 +933,9 @@ Each of these was built, measured and reverted or left switched off.
   and toward the share a draft price implies.
 - Per team drive rules, at every strength of shrinkage. The walk
   already carries a side through its players and the market lift, so
-  a third read off a thin sample only adds noise.
+  a third read off a thin sample only adds noise. The switch has been
+  deleted along with the drive rules' pool of yards; what was left of
+  them is `src/features/driveEndings.ts`, one set for the league.
 - Drawing the call from the formation. The pools already read how much
   a side runs off its own plays at those cells.
 - The level model calling the play. A call turns on sharp steps in the
@@ -958,6 +960,18 @@ Each of these was built, measured and reverted or left switched off.
 - Turning the state leaning off outright rather than shrinking it. The
   same play layer gain, but tight ends lose and the pooled draw is
   asked more often.
+- Fitting the weekly ridge on this season's played weeks as well as the
+  past seasons, once or three times over. Pair accuracy 66.59% and
+  66.57% against 66.58% over 2024 to 2026, every week from the fifth.
+- Letting the weekly ridge weigh a player's role against his side's
+  implied total, and a boosted correction on what it gets wrong. The
+  pooled ridge with the interactions reads 66.08% against 66.03%
+  without them, under the per position ridge's 66.58%, and the boosted
+  fix 66.56%. A fix that can find any combination and finds none worth
+  a pair says the combination is not there before kickoff.
+- A card's band borrowed from the walk's nearest men for a player it
+  never dealt a game. It holds the 80% band and breaks the 50%, and its
+  pinball loss is the pooled band's within a standard error.
 
 Nor do they help each other. Three pairs have been tried, the
 coverage lean with the look tilt, the whole snap chain with the
@@ -1068,7 +1082,8 @@ them. Team-level features will not beat the market.
 
 ### Penalties belong to the man
 
-The drive rules fit penalties per offence, so a defender who interferes
+The drive's flags are fitted for the league, and the per team rules
+that were tried fitted them per offence, so a defender who interferes
 every week is credited to whoever he played that day.
 
 A man's flag rate reads .520 from one season to the next over 2608
