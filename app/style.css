@@ -896,16 +896,26 @@
    */
   .lineup { display: flex; flex-direction: column; gap: var(--s3); }
   .move { display: grid; align-items: baseline; column-gap: var(--s2); row-gap: 2px;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas: "arrow who gain" "arrow who link";
+    grid-template-columns: auto minmax(0, 1fr) auto 1.75rem;
+    grid-template-areas: "arrow who gain link";
     margin-top: var(--s2); padding: var(--s2) var(--s3); border-radius: 8px;
     background: color-mix(in srgb, var(--go) 11%, transparent); font-size: var(--t2); }
   .move .marrow { grid-area: arrow; color: var(--go); font-weight: 800; }
   .move .mwho { grid-area: who; min-width: 0; display: flex; flex-wrap: wrap;
     align-items: baseline; gap: 2px var(--s2); }
   .move .mverb { color: var(--muted); }
-  /* what he is and whom he plays, under his name on a phone */
-  .move .mwho i { flex-basis: 100%; font-style: normal; color: var(--faint); font-size: var(--t1); }
+  /* on a phone a move is one line: the verb says bench or free agent, and
+     his line is a tap away on his sheet; a wider screen has room for it */
+  .move .mwho i { display: none; font-style: normal; color: var(--faint); font-size: var(--t1); }
+  .move .golink .lk { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; }
+  /* the link keeps a finger-sized target without making its row taller */
+  .move .golink { min-width: 1.75rem; min-height: 0; justify-content: center;
+    padding: .55rem; margin: -.55rem; }
+  @media (min-width: 601px) {
+    .move .mwho i { display: inline; }
+    .move .golink .lk { position: static; width: auto; height: auto; clip: auto; }
+  }
   .move .mgain { grid-area: gain; justify-self: end; color: var(--go); font-weight: 800;
     font-variant-numeric: tabular-nums; }
   .move .golink, .move .textbtn { grid-area: link; justify-self: end; font-size: var(--t1); }
@@ -1538,7 +1548,6 @@
     /* a move on one line, its gain and its link each in a column of their own */
     .mcol.mine .move { grid-template-columns: auto minmax(0, 1fr) 3.5rem 5.5rem;
       grid-template-areas: "arrow who gain link"; }
-    .mcol.mine .move .mwho i { flex-basis: auto; }
     /* the lineup's columns get room to breathe on a wide screen */
     .mcol.mine .lineup { --c-proj: 4rem; --c-range: 7.5rem; }
     .mcol.mine .lineup.has-scored { --c-scored: 4rem; }

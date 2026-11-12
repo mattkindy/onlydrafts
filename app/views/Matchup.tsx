@@ -259,7 +259,7 @@ function MoveLine(
         {gainPct(move.gains)}
       </b>
       {move.kind === "add" && players && (
-        <GoLink href={players.href}>{players.name}</GoLink>
+        <GoLink href={players.href}><span class="lk">add in {players.name}</span></GoLink>
       )}
     </div>
   );
