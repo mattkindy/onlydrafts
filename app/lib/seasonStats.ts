@@ -276,6 +276,8 @@ export interface PlayoffOdds {
   division?: number;
   /** how often it wins the title, where the playoff weeks were handed in */
   champion?: number;
+  /** how often it sits out the first round, where a short field gives byes */
+  bye?: number;
 }
 
 /**
@@ -460,6 +462,7 @@ export function playoffOdds(input: {
   const titles = new Array<number>(n).fill(0);
   const winsSum = new Array<number>(n).fill(0);
   const champions = new Array<number>(n).fill(0);
+  const byes = new Array<number>(n).fill(0);
   const me = input.mine !== undefined ? at.get(input.mine) : undefined;
   let wonRuns = 0, wonMade = 0, lostRuns = 0, lostMade = 0;
   const next = seeded(n * 7919 + input.weeks.length * 104729 + draws);
@@ -519,6 +522,8 @@ export function playoffOdds(input: {
     return owners.map((o) => s.get(o)?.sd ?? 0);
   });
   const slots = rounds ? bracketSlots(2 ** rounds) : [];
+  // the top seeds of a short field go straight to the second round
+  const byeCount = rounds ? 2 ** rounds - Math.min(input.playoffTeams, n) : 0;
   const playoffDice = seeded(n * 31 + input.playoffTeams * 7 + draws);
   const seeds: number[] = [];
   const plan = input.weeks.map((pairs, w) => pairs.flatMap(([a, b]) => {
@@ -809,6 +814,10 @@ export function playoffOdds(input: {
     }
 
     if (rounds) {
+      for (let k = 0; k < byeCount && k < seeds.length; k++) {
+        byes[seeds[k]!]!++;
+      }
+
       // the bracket by seed, a seed nobody holds being a bye
       let alive = slots.map((s) => seeds[s - 1] ?? -1);
 
@@ -872,6 +881,7 @@ export function playoffOdds(input: {
       wins: winsSum[i]! / draws,
       ...(byDivision ? { division: titles[i]! / draws } : {}),
       ...(rounds ? { champion: champions[i]! / draws } : {}),
+      ...(byeCount > 0 ? { bye: byes[i]! / draws } : {}),
     })),
     ifWin: wonRuns ? wonMade / wonRuns : null,
     ifLose: lostRuns ? lostMade / lostRuns : null,

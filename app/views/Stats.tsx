@@ -22,7 +22,7 @@ import type { League, Matchup } from "../lib/providers.ts";
 import { splitAtPlayoffs, useSeasonSim } from "../lib/seasonSim.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
-  chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, scenarioPath,
+  chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, playoffRounds, scenarioPath,
   TIE, weekOfPair, winShare,
   type PathOutcome, type PlayoffRun, type ScenarioPath, type Strength, type TeamSeason,
 } from "../lib/seasonStats.ts";
@@ -431,9 +431,14 @@ export function Stats(props: Props) {
     .map((r) => [r.owner, r.division!])), [league]);
   const divisionCount = league.divisions?.length ?? 0;
 
-  /** each week still to play, with whoever is expected to be fit for it */
-  const { byWeek } = useMemo(
-    () => splitAtPlayoffs(weekly, coming, lastRegular, 0), [weekly, coming, lastRegular]);
+  /**
+   * Each week still to play, with whoever is expected to be fit for it,
+   * and the playoff rounds after them, which give the bye and the title.
+   */
+  const rounds = playoffRounds(rules.teams);
+  const { byWeek, bracket } = useMemo(
+    () => splitAtPlayoffs(weekly, coming, lastRegular, rounds),
+    [weekly, coming, lastRegular, rounds]);
 
   /** your team scoring what you think it will, everybody else as projected */
   const adjusted = useMemo(() => {
@@ -449,10 +454,11 @@ export function Stats(props: Props) {
     };
 
     return nudge
-      ? { strength: nudged(strength), byWeek: byWeek.map(nudged) }
-      : { strength, byWeek };
-  }, [strength, byWeek, nudge, league.team]);
-  const asProjected = useMemo(() => ({ strength, byWeek }), [strength, byWeek]);
+      ? { strength: nudged(strength), byWeek: byWeek.map(nudged), bracket: bracket.map(nudged) }
+      : { strength, byWeek, bracket };
+  }, [strength, byWeek, bracket, nudge, league.team]);
+  const asProjected = useMemo(
+    () => ({ strength, byWeek, bracket }), [strength, byWeek, bracket]);
 
   const playOut = (picks: Map<string, string>, draws: number, using = adjusted) => setup
     ? playoffOdds({
@@ -460,6 +466,7 @@ export function Stats(props: Props) {
       weeks: setup.toCome,
       strength: using.strength,
       byWeek: using.byWeek,
+      bracket: using.bracket,
       playoffTeams: rules.teams,
       rules,
       divisionOf,
@@ -564,6 +571,9 @@ export function Stats(props: Props) {
   const me = season.find((t) => t.owner === league.team);
   const myOdds = run?.odds.find((o) => o.owner === league.team);
   const playoffTeams = rules.teams;
+  // the bracket is played where the playoff weeks fall inside the season
+  const hasTitle = Boolean(run?.odds.some((o) => o.champion !== undefined));
+  const hasBye = Boolean(run?.odds.some((o) => o.bye !== undefined));
   const placed = [...season].sort((a, b) =>
     (b.wins + b.ties / 2) - (a.wins + a.ties / 2) || b.pf - a.pf);
   const medians = played.map(({ games }) => {
@@ -688,7 +698,15 @@ export function Stats(props: Props) {
               onDone={() => setShowRules(false)}
             />
           )}
-          <div class="odds-list">
+          <div class={"odds-list" + (hasTitle ? " with-title" : "") + (hasBye ? " with-bye" : "")}>
+            {hasTitle && (
+              <div class="orow ohead">
+                <span /><span /><span class="ospace" />
+                <b title="how often the team makes the playoffs">playoffs</b>
+                {hasBye && <b title="how often the team is a top seed and sits out the first round">bye</b>}
+                <b title="how often the team wins the playoffs, played a round a week with whoever is fit by then">title</b>
+              </div>
+            )}
             {[...run.odds].sort((a, b) => b.playoffs - a.playoffs || b.wins - a.wins)
               .map((o, i) => {
                 const team = season.find((t) => t.owner === o.owner);
@@ -703,7 +721,7 @@ export function Stats(props: Props) {
                   <div class={"orow" + (o.owner === league.team ? " on" : "")}>
                     <span class="onm">{o.owner}</span>
                     <span class="orec">
-                      {team ? recordSays(team) : "0-0"}
+                      <span class="ow">{team ? recordSays(team) : "0-0"}</span>
                       <small>
                         {o.wins.toFixed(1)} proj W
                         {o.division !== undefined && ` · div ${pct(o.division)}`}
@@ -713,6 +731,8 @@ export function Stats(props: Props) {
                       <u style={{ width: `${o.playoffs * 100}%` }} />
                     </span>
                     <b>{pct(o.playoffs)}</b>
+                    {hasBye && <span class="oodd">{pct(o.bye ?? 0)}</span>}
+                    {hasTitle && <span class="oodd">{pct(o.champion ?? 0)}</span>}
                   </div>
                   </Fragment>
                 );

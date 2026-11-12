@@ -412,6 +412,8 @@ describe("the playoffs played out after the season", () => {
     // a coin flip a game: a quarter for a bye, an eighth without one
     expect(ann).toBeCloseTo(0.25, 1);
     expect(fy).toBeCloseTo(0.125, 1);
+    // a field of six hands out two byes a season
+    expect(run.odds.reduce((sum, o) => sum + (o.bye ?? 0), 0)).toBeCloseTo(2, 5);
   });
 
   it("draws each week from that week's strengths", () => {
