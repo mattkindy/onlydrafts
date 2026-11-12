@@ -1229,17 +1229,46 @@ async function throughTheWorker(leagueId: string, season: number, query: string)
   return said;
 }
 
+/** a SWID is a GUID, braces or not */
+const ESPN_GUID =
+  /[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}/i;
+
+/** espn_s2 runs to a couple of hundred characters; nothing else pasted does */
+const ESPN_S2_LEAST = 80;
+
+/** what an espn_s2 value is made of, URL-encoded or shown decoded */
+const ESPN_S2_CHARS = /^[A-Za-z0-9%_.+/=-]+$/;
+
 /**
- * Take the two cookies out of whatever was pasted. What arrives might
- * be the whole cookie line off the site, or the two values on their
- * own, and either is fine.
+ * Take the two cookies out of whatever was pasted. What arrives might be
+ * the whole cookie line off the site, a row copied out of the browser's
+ * cookie table, or the two values on their own, one after the other,
+ * which is what the steps ask for.
+ *
+ * The values used to need their names in front of them, so two values
+ * pasted on their own, the way the steps say, saved nothing and the box
+ * just emptied. A SWID copied without its braces, or URL-encoded as
+ * %7B...%7D, and an espn_s2 shown decoded, with + / and = where the
+ * cookie has %2B %2F and %3D, are all taken now. The decoded one is
+ * encoded back, since that is what ESPN set and expects to be sent.
  */
 export function espnCookiesFrom(pasted: string) {
-  const swid = pasted.match(/SWID=?\s*[:=]?\s*(\{[^;"\s]+\})/i) ??
-    pasted.match(/(\{[0-9A-F-]{30,}\})/i);
-  const s2 = pasted.match(/espn_s2=?\s*[:=]?\s*["']?([A-Za-z0-9%_.-]{80,})/i);
+  const guid = pasted.replace(/%7B/gi, "{").replace(/%7D/gi, "}")
+    .match(ESPN_GUID);
+  const swid = guid ? `{${guid[0]}}` : "";
+  const named = pasted.match(/espn_s2\s*[=:\s]\s*["']?([^\s;"',]+)/i)?.[1];
+  const s2 = named && named.length >= ESPN_S2_LEAST && ESPN_S2_CHARS.test(named)
+    ? named
+    : pasted.split(/[\s;"',]+/)
+      .map((one) => one.replace(/^espn_s2=/i, ""))
+      .filter((one) => one.length >= ESPN_S2_LEAST &&
+        ESPN_S2_CHARS.test(one) && !ESPN_GUID.test(one))
+      .sort((a, b) => b.length - a.length)[0] ?? "";
 
-  return { swid: swid?.[1] ?? "", s2: s2?.[1] ?? "" };
+  return {
+    swid,
+    s2: /[+/=]/.test(s2) && !s2.includes("%") ? encodeURIComponent(s2) : s2,
+  };
 }
 
 /**

@@ -17,7 +17,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { statsSay, type StatRecord } from "./boxScore.ts";
 import {
-  espnPays, espnPlayedOf, espnSlotsOf, listedPlayers, picksHeld, playerFileGoodFor,
+  espnCookiesFrom, espnPays, espnPlayedOf, espnSlotsOf, listedPlayers, picksHeld,
+  playerFileGoodFor,
   roundsOfPicks, seasonsOfPicks, sleeperOnBoard, sleeperPlayedOf, sleeperPointsOf,
   type EspnScoringItem, type EspnStatRecord, type League,
 } from "./providers.ts";
@@ -852,5 +853,52 @@ describe("the picks a trade can move", () => {
     expect(picks.filter((p) => p.owner === "team 1").map((p) => p.round))
       .toEqual([...Array.from({ length: 16 }, (_, i) => i + 1), 16]);
     expect(picks.filter((p) => p.owner === "team 2")).toHaveLength(15);
+  });
+});
+
+/**
+ * A friend pasted her two values the way the steps say, hit save, and the
+ * box went blank: espn_s2 was only found with its name in front of it, so
+ * nothing saved and nothing said so.
+ */
+describe("the two ESPN cookies out of whatever was pasted", () => {
+  const GUID = "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D";
+  // the shape of a real espn_s2: URL-encoded base64, a few hundred long
+  const S2 = "AEBk3n%2Fq9" + "Zx7Qw2Lm4Tr8".repeat(16) + "%2BVb%3D";
+  const S2_DECODED = decodeURIComponent(S2);
+
+  it("reads the whole cookie line off the site", () => {
+    expect(espnCookiesFrom(`SWID={${GUID}}; espn_s2=${S2}`))
+      .toEqual({ swid: `{${GUID}}`, s2: S2 });
+  });
+
+  it("reads the two values on their own, one after the other", () => {
+    expect(espnCookiesFrom(`{${GUID}}\n${S2}`))
+      .toEqual({ swid: `{${GUID}}`, s2: S2 });
+    expect(espnCookiesFrom(`${S2} {${GUID}}`))
+      .toEqual({ swid: `{${GUID}}`, s2: S2 });
+  });
+
+  it("reads rows copied out of the browser's cookie table", () => {
+    const rows = `SWID\t{${GUID}}\t.espn.com\t/\t2027-11-12T00:00:00.000Z\n` +
+      `espn_s2\t${S2}\t.espn.com\t/\t2027-11-12T00:00:00.000Z`;
+
+    expect(espnCookiesFrom(rows)).toEqual({ swid: `{${GUID}}`, s2: S2 });
+  });
+
+  it("puts back braces a SWID was copied without, or had encoded", () => {
+    expect(espnCookiesFrom(`${GUID} ${S2}`).swid).toBe(`{${GUID}}`);
+    expect(espnCookiesFrom(`%7B${GUID}%7D ${S2}`).swid).toBe(`{${GUID}}`);
+  });
+
+  it("encodes an espn_s2 the browser showed decoded", () => {
+    expect(S2_DECODED).toMatch(/[+/=]/);
+    expect(espnCookiesFrom(`{${GUID}} ${S2_DECODED}`).s2).toBe(S2);
+  });
+
+  it("finds nothing in a paste that has neither", () => {
+    expect(espnCookiesFrom("")).toEqual({ swid: "", s2: "" });
+    expect(espnCookiesFrom("espn_s2 is the long one")).toEqual({ swid: "", s2: "" });
+    expect(espnCookiesFrom(`{${GUID}}`)).toEqual({ swid: `{${GUID}}`, s2: "" });
   });
 });
