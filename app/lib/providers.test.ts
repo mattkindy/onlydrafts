@@ -17,8 +17,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { statsSay, type StatRecord } from "./boxScore.ts";
 import {
-  espnCookiesFrom, espnPays, espnPlayedOf, espnSlotsOf, listedPlayers, picksHeld,
-  playerFileGoodFor,
+  espnCookiesFrom, espnLeagueIdFrom, espnPays, espnPlayedOf, espnSlotsOf,
+  listedPlayers, picksHeld, playerFileGoodFor,
   roundsOfPicks, seasonsOfPicks, sleeperOnBoard, sleeperPlayedOf, sleeperPointsOf,
   type EspnScoringItem, type EspnStatRecord, type League,
 } from "./providers.ts";
@@ -676,8 +676,50 @@ describe("an ESPN league that will not open", () => {
 
     const { PROVIDERS } = await import("./providers.ts");
 
-    await expect(PROVIDERS["espn"]!.leaguesFor("abc", 2026))
-      .rejects.toThrow("ESPN has no league abc for season 2026.");
+    await expect(PROVIDERS["espn"]!.leaguesFor("77", 2026))
+      .rejects.toThrow("ESPN has no league 77 for season 2026.");
+  });
+
+  /**
+   * An empty box went to ESPN as an empty league id, and ESPN answers that
+   * with 405 "HTTP Method Not Supported", which the page called a passing
+   * error. A friend hit it after saving her cookies first.
+   */
+  it("says to fill in the league id, and asks ESPN nothing, when there is none", async () => {
+    let asked = 0;
+
+    globalThis.fetch = (() => {
+      asked++;
+
+      return Promise.resolve({ ok: false, status: 405, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+
+    const { PROVIDERS, NO_ESPN_LEAGUE_ID } = await import("./providers.ts");
+
+    for (const typed of ["", "   ", "madison", "https://fantasy.espn.com/football/"]) {
+      await expect(PROVIDERS["espn"]!.leaguesFor(typed, 2026))
+        .rejects.toThrow(NO_ESPN_LEAGUE_ID);
+    }
+
+    expect(asked).toBe(0);
+  });
+
+  it("reads the league id out of the league page's address", async () => {
+    const asked: string[] = [];
+
+    globalThis.fetch = ((url: string) => {
+      asked.push(String(url));
+
+      return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+
+    const { PROVIDERS } = await import("./providers.ts");
+
+    await expect(PROVIDERS["espn"]!.leaguesFor(
+      "https://fantasy.espn.com/football/league?leagueId=1234567&seasonId=2026",
+      2026,
+    )).rejects.toThrow("ESPN has no league 1234567 for season 2026.");
+    expect(asked[0]).toContain("/leagues/1234567?");
   });
 
   it("asks for cookies when ESPN refuses a private league", async () => {
@@ -900,5 +942,27 @@ describe("the two ESPN cookies out of whatever was pasted", () => {
     expect(espnCookiesFrom("")).toEqual({ swid: "", s2: "" });
     expect(espnCookiesFrom("espn_s2 is the long one")).toEqual({ swid: "", s2: "" });
     expect(espnCookiesFrom(`{${GUID}}`)).toEqual({ swid: `{${GUID}}`, s2: "" });
+  });
+});
+
+describe("an ESPN league id out of whatever was typed", () => {
+  it("takes the number on its own, spaces and all", () => {
+    expect(espnLeagueIdFrom("1234567")).toBe("1234567");
+    expect(espnLeagueIdFrom(" 1234567 ")).toBe("1234567");
+    expect(espnLeagueIdFrom("#1234567")).toBe("1234567");
+  });
+
+  it("takes it out of the league's address on espn.com", () => {
+    expect(espnLeagueIdFrom(
+      "https://fantasy.espn.com/football/team?leagueId=1234567&teamId=4&seasonId=2026",
+    )).toBe("1234567");
+    expect(espnLeagueIdFrom("fantasy.espn.com/football/league?leagueid=89")).toBe("89");
+  });
+
+  it("finds nothing in a name, an empty box, or an address without one", () => {
+    expect(espnLeagueIdFrom("")).toBe("");
+    expect(espnLeagueIdFrom("madison")).toBe("");
+    // the season in an address is not the league
+    expect(espnLeagueIdFrom("https://fantasy.espn.com/football/?seasonId=2026")).toBe("");
   });
 });
