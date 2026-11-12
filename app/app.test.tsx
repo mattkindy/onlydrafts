@@ -26,6 +26,8 @@ import { Waivers, weekBest } from "./views/Waivers.tsx";
 import type { Add } from "./lib/waivers.ts";
 import { pairedRows } from "./views/Matchups.tsx";
 import { nameOf } from "./views/Advice.tsx";
+import { EspnSheet } from "./views/EspnSheet.tsx";
+import { stored } from "./lib/store.ts";
 
 const DATA = join(import.meta.dirname, "..", "docs", "data");
 const file = JSON.parse(readFileSync(join(DATA, "board-2026.json"), "utf8")) as {
@@ -379,6 +381,47 @@ describe("the views", () => {
     }
 
     expect(headings(where)).not.toContain("sleepers");
+  });
+
+  /**
+   * The box used to empty itself on a paste it could not read, with only
+   * its faint placeholder changing, so a friend could not tell whether her
+   * private league's cookies had saved.
+   */
+  it("says what a paste of ESPN cookies is missing, and keeps it", async () => {
+    let kept = 0;
+
+    render(
+      <EspnSheet onClose={() => {}} onKept={() => { kept++; }} />, where,
+    );
+
+    const box = where.querySelector("textarea")!;
+    const save = Array.from(where.querySelectorAll("button"))
+      .find((b) => b.textContent === "save")!;
+    const paste = async (text: string) => {
+      box.value = text;
+      box.dispatchEvent(new Event("input"));
+      await new Promise((settle) => setTimeout(settle, 0));
+    };
+    const guid = "{A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D}";
+
+    await paste(guid);
+    save.click();
+    await new Promise((settle) => setTimeout(settle, 0));
+
+    expect(where.querySelector("[role=alert]")?.textContent)
+      .toContain("Found SWID but not espn_s2");
+    expect(box.value).toBe(guid);
+    expect(kept).toBe(0);
+
+    // the two values on their own, the way the steps say to paste them
+    await paste(`${guid}\n${"AEBk3n%2Fq9" + "Zx7Qw2Lm4Tr8".repeat(16)}`);
+    expect(where.querySelector("[role=alert]")).toBeNull();
+    save.click();
+
+    expect(kept).toBe(1);
+    expect(stored("espnSwid", "")).toBe(guid);
+    expect(stored("espnS2", "")).toMatch(/^AEBk3n%2Fq9/);
   });
 
   it("draws the draft board", async () => {

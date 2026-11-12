@@ -440,6 +440,8 @@
     font: inherit; font-size: var(--t2); padding: var(--s2); border-radius: 8px;
     border: 1px solid var(--edge); background: var(--bg); color: var(--ink);
     text-transform: none; letter-spacing: 0; }
+  /* a paste that would not save says why, where the eye already is */
+  .hint.missed { color: var(--mark); margin: var(--s1) 0 0; }
   #espnhelp { font: inherit; font-size: var(--t2); min-height: 34px;
     padding: 0 var(--s3); border-radius: 999px; border: 1px solid var(--edge);
     background: var(--chip); color: var(--muted); cursor: pointer; }
