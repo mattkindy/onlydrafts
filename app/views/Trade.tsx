@@ -86,9 +86,13 @@ export function Trade(props: Props) {
     keep(partnerKey, owner);
     setDeal(NO_DEAL(owner));
     setBalancing(false);
+    setEvenPage(0);
   };
-  // whether the ways to even the deal up are showing
+  // whether the ways to even the deal up are showing, kept to players or
+  // picks where you said, and how far through them you have stepped
   const [balancing, setBalancing] = useState(false);
+  const [evenWith, setEvenWith] = useState<Offer["kind"] | null>(null);
+  const [evenPage, setEvenPage] = useState(0);
   const [shown, setShown] = useState<"send" | "get">("send");
   const toggle = (list: keyof Omit<Deal, "partner">, id: string) =>
     setDeal((d) => ({
@@ -290,11 +294,21 @@ export function Trade(props: Props) {
     ...picks.filter((p) => p.owner === deal.partner && !deal.getPicks.includes(pickId(p))).map((p): Offer =>
       ({ id: pickId(p), kind: "pick", side: "get", says: pickSays(p, deal.partner), value: valueOfPick(p) })),
   ];
-  const evens = balancing ? evenUp(gap, offers, evenWithin(giveWorth, getWorth)) : [];
-  const add = (o: Offer) => toggle(
-    o.side === "give" ? (o.kind === "pick" ? "givePicks" : "give") : (o.kind === "pick" ? "getPicks" : "get"),
-    o.id,
-  );
+  const allEvens = balancing
+    ? evenUp(gap, offers, evenWithin(giveWorth, getWorth), evenWith ?? undefined)
+    : [];
+  // three at a time, the next three a tap away, round to the start again
+  const SHOWN = 3;
+  const pages = Math.max(1, Math.ceil(allEvens.length / SHOWN));
+  const evens = allEvens.slice((evenPage % pages) * SHOWN, (evenPage % pages) * SHOWN + SHOWN);
+  const add = (o: Offer) => {
+    setEvenPage(0);
+    toggle(
+      o.side === "give" ? (o.kind === "pick" ? "givePicks" : "give") : (o.kind === "pick" ? "getPicks" : "get"),
+      o.id,
+    );
+  };
+  const anyPicksToOffer = offers.some((o) => o.kind === "pick");
 
   return (
     <div class="trade rhythm">
@@ -443,7 +457,22 @@ export function Trade(props: Props) {
                 )}
                 {!evenEnough && balancing && (
                   <div class="tevens">
-                    <i>{gap > 0 ? "also send" : `also ask ${deal.partner} for`}</i>
+                    <div class="tevenhead">
+                      <i>{gap > 0 ? "also send" : `also ask ${deal.partner} for`}</i>
+                      {anyPicksToOffer && (
+                        <span class="seg">
+                          {([null, "player", "pick"] as const).map((kind) => (
+                            <button
+                              key={kind ?? "any"} class={evenWith === kind ? "on" : ""}
+                              aria-pressed={evenWith === kind}
+                              onClick={() => { setEvenWith(kind); setEvenPage(0); }}
+                            >
+                              {kind === null ? "either" : kind === "player" ? "players" : "picks"}
+                            </button>
+                          ))}
+                        </span>
+                      )}
+                    </div>
                     {evens.length
                       ? (
                         <div class="chips flow">
@@ -454,7 +483,17 @@ export function Trade(props: Props) {
                           ))}
                         </div>
                       )
-                      : <span>nothing on {gap > 0 ? "your" : "their"} side brings it closer on its own</span>}
+                      : (
+                        <span>
+                          no {evenWith === "pick" ? "pick" : evenWith === "player" ? "player" : "one thing"} on{" "}
+                          {gap > 0 ? "your" : "their"} side brings it closer on its own
+                        </span>
+                      )}
+                    {pages > 1 && (
+                      <button class="textbtn tmoreevens" onClick={() => setEvenPage((n) => n + 1)}>
+                        other ideas · {(evenPage % pages) + 1}/{pages}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

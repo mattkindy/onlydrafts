@@ -1900,6 +1900,13 @@
 .tbalance { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s3);
   padding-top: var(--s3); border-top: 1px solid var(--edge); font-size: var(--t2); color: var(--muted); }
 .tevens { flex-basis: 100%; display: flex; flex-direction: column; gap: var(--s2); }
-.tevens > i { font-style: normal; font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
+.tevenhead > i { font-style: normal; font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
   text-transform: uppercase; color: var(--faint); }
 .tevens .chips button small { margin-left: .4em; font-size: .7rem; font-weight: 600; color: var(--faint); }
+
+.tevenhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--s2); }
+/* a small switch beside the label, not a bar across the panel, phones included */
+.tevenhead .seg, .tevenhead .seg button { flex: 0 0 auto; }
+.tevenhead .seg button { padding: 0 var(--s3); min-height: 2rem; font-size: var(--t1); }
+.tevens .tmoreevens { align-self: flex-start; }

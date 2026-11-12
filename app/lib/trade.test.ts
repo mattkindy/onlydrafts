@@ -187,6 +187,14 @@ describe("evening a deal up", () => {
     expect(evenUp(20, offers, 3).some((o) => o.offer.id === "big")).toBe(false);
   });
 
+  it("keeps to players or to picks when asked", () => {
+    const mixed = [...offers, { id: "pick", kind: "pick", side: "give", says: "2027 2nd", value: 19 } as Offer];
+
+    expect(evenUp(20, mixed, 3)[0]!.offer.id).toBe("near");
+    expect(evenUp(20, mixed, 3, "pick").map((o) => o.offer.id)).toEqual(["pick"]);
+    expect(evenUp(20, mixed, 3, "player").some((o) => o.offer.kind === "pick")).toBe(false);
+  });
+
   it("leaves an even deal alone", () => {
     expect(evenUp(2, offers, 3)).toEqual([]);
   });
