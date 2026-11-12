@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import { picksHeld, type League } from "./providers.ts";
 import type { Player } from "./scoring.ts";
 import {
-  draftCurve, NO_DEAL, overallPick, overTheLimit, pickValue, restOfSeason, rostersAfter,
-  SEASON_OUT, slotsFromWins, stageOf, tradeVerdict,
+  draftCurve, dynastyValue, keeperGain, keptValue, NO_DEAL, overallPick, overTheLimit,
+  pickValue, restOfSeason, rostersAfter, SEASON_OUT, seasonsAhead, slotsFromWins, stageOf,
+  tradeVerdict,
 } from "./trade.ts";
 
 const player = (over: Partial<Player>): Player =>
@@ -126,5 +127,44 @@ describe("what the trade says", () => {
     expect(stageOf(0.4)).toBe("bubble");
     expect(stageOf(0.1)).toBe("long shot");
     expect(stageOf(0.01)).toBe("out of it");
+  });
+});
+
+describe("a player's seasons to come", () => {
+  // a rookie on 11 a game now, a 15 a game back next season
+  const rookie = player({
+    ppg: 11, replacementPpg: 9,
+    ahead: [{ of: 1.4, games: 14 }, { of: 1.5, games: 15 }, { of: 1.4, games: 14 }],
+  });
+
+  it("is what he beats this season's replacement by, over the games he is expected to play", () => {
+    expect(seasonsAhead(rookie)![0]).toBeCloseTo((11 * 1.4 - 9) * 14);
+  });
+
+  it("says nothing where the board says nothing of his next seasons", () => {
+    expect(seasonsAhead(player({ ppg: 11, replacementPpg: 9 }))).toBeNull();
+    expect(dynastyValue(player({ ppg: 11, replacementPpg: 9 }))).toBeNull();
+  });
+
+  it("is worth less a season further off, as a pick further off is", () => {
+    const [a, b, c] = seasonsAhead(rookie)!;
+
+    expect(dynastyValue(rookie)).toBeCloseTo(a! + b! * SEASON_OUT + c! * SEASON_OUT ** 2);
+  });
+
+  it("never falls below nothing, since a player below replacement can be cut", () => {
+    expect(seasonsAhead(player({ ppg: 5, replacementPpg: 9, ahead: [{ of: 1, games: 17 }] }))).toEqual([0]);
+  });
+
+  it("as a keeper, is next season less the pick he costs", () => {
+    const next = seasonsAhead(rookie)![0]!;
+
+    expect(keeperGain(rookie, 30)).toBeCloseTo(next - 30);
+    expect(keeperGain(rookie, 1000)).toBe(0);
+  });
+
+  it("counts only the keepers a team can keep", () => {
+    expect(keptValue([50, 10, 80, 0, 30], 2)).toBe(130);
+    expect(keptValue([50, 10], 5)).toBe(60);
   });
 });

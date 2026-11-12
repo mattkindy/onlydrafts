@@ -31,7 +31,7 @@ import { EspnSheet } from "./views/EspnSheet.tsx";
 import { Roster } from "./views/Roster.tsx";
 import { LeagueSettingsPanel } from "./views/LeagueSettings.tsx";
 import {
-  readSettings, settingsKey, withSettings, type LeagueSettings,
+  MOST_KEEPERS, readSettings, settingsKey, withSettings, type LeagueSettings,
 } from "./lib/leagueSettings.ts";
 import { DraftRating, MyDraftPicks } from "./views/DraftRating.tsx";
 import { DraftView, type DraftNow } from "./views/Draft.tsx";
@@ -301,8 +301,10 @@ function App() {
     stored<League | null>("active", null) ? stored<View>("view", "leagues") : "leagues");
   const [who, setWho] = useState(() => stored("username", ""));
   const [provider, setProvider] = useState(() => stored("provider", "sleeper"));
-  const [perTeamSaid, setPerTeam] = useState(() => stored("keepn", 3));
-  const perTeam = active?.keepersPerTeam ?? perTeamSaid;
+  // a team's keepers, as the provider or your settings say; before the
+  // settings held them, one count was kept for every league, so it is
+  // still read where neither says
+  const perTeam = active?.keepersPerTeam || stored("keepn", 3);
   const [posFilter, setPosFilter] = useState("ALL");
   /**
    * The players tab filters on its own. It shared the draft board's,
@@ -1009,15 +1011,18 @@ function App() {
           </>
         )}
 
-        {view === "draft" && keeperLeague && !active?.keepersPerTeam && (
+        {view === "draft" && keeperLeague && !given?.keepersPerTeam && (
           <label>
             keepers per team{" "}
             <input
-              type="number" min="0" max="6" style={{ width: "3.2rem" }}
-              value={perTeamSaid}
+              type="number" min="1" max={MOST_KEEPERS} style={{ width: "3.2rem" }}
+              value={perTeam}
               onInput={(e) => {
-                setPerTeam(Number(e.currentTarget.value));
-                keep("keepn", Number(e.currentTarget.value));
+                const n = Number(e.currentTarget.value);
+
+                if (Number.isInteger(n) && n >= 1 && n <= MOST_KEEPERS) {
+                  saveSettings({ ...settings, keepersPerTeam: n });
+                }
               }}
             />
           </label>

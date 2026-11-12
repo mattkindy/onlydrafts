@@ -7,11 +7,12 @@
  * draft picks that change hands, worth what a pick at that place in the
  * draft is worth, which is what a rebuilding team is buying.
  *
- * A player is valued for the rest of this season only: the points he
+ * A player is valued now for the rest of this season: the points he
  * scores over a replacement, for the games he is expected to play from
- * here. What he is worth in seasons to come needs his age, which the
- * board does not carry yet, so a dynasty league reads the players as a
- * one season rental and says so.
+ * here. Where players carry over he is worth his next seasons too, which
+ * the board projects from his age, where he was drafted and the work he
+ * has: all of them in a dynasty league, and next season in a keeper
+ * league, where only a team's best few are kept and each costs a pick.
  */
 
 import type { DraftPick, League, RosterPlayer } from "./providers.ts";
@@ -249,4 +250,59 @@ export function tradeVerdict(input: {
     : later < -0.5
       ? { says: "even now, costs later", tone: "flat" }
       : { says: "about even", tone: "flat" };
+}
+
+/** how many seasons past this one a player is counted for */
+export const SEASONS_AHEAD = 3;
+
+/**
+ * His points over a replacement in each of his next seasons, the coming
+ * one first: his points a game then, less what the last starter at his
+ * position scores now, over the games he is expected to play. Nothing
+ * where the board says nothing of his next seasons.
+ */
+export function seasonsAhead(p: Player | undefined): number[] | null {
+  if (!p?.ahead?.length || !p.ppg || p.replacementPpg === undefined) {
+    return null;
+  }
+
+  const { ppg, replacementPpg } = p;
+
+  return p.ahead.slice(0, SEASONS_AHEAD)
+    .map((s) => Math.max(0, ppg * s.of - replacementPpg) * s.games);
+}
+
+/**
+ * What he is worth past this season where every player carries over: each
+ * of his next seasons, one further off worth less as a pick further off
+ * is, since it is the same wait and the same unknowns.
+ */
+export function dynastyValue(p: Player | undefined): number | null {
+  const ahead = seasonsAhead(p);
+
+  return ahead ? ahead.reduce((sum, v, k) => sum + v * SEASON_OUT ** k, 0) : null;
+}
+
+/**
+ * What keeping him gains next season: what he beats a replacement by,
+ * less what the pick he costs would have bought. A keeper nobody has
+ * priced costs nothing, which flatters him, and the page says so.
+ */
+export function keeperGain(p: Player | undefined, costs: number): number | null {
+  const next = seasonsAhead(p)?.[0];
+
+  return next === undefined ? null : Math.max(0, next - costs);
+}
+
+/**
+ * What a roster's keepers are worth next season: the best few of what
+ * each gains over the pick he costs, since a team keeps only so many and
+ * a sixth good player is worth nothing to a team that keeps five.
+ */
+export function keptValue(gains: number[], perTeam: number): number {
+  return gains
+    .filter((g) => g > 0)
+    .sort((a, b) => b - a)
+    .slice(0, Math.max(0, perTeam))
+    .reduce((a, b) => a + b, 0);
 }

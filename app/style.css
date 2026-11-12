@@ -1882,3 +1882,14 @@
     .slot > .chip { min-width: 0; }
     .why .piece { white-space: normal; }
   }
+
+/* a second value beside each trade row where players carry over: his
+   seasons to come, quieter than this season's */
+.tside h3 .tvals { display: inline-flex; gap: var(--s3); }
+.tside h3 .tvals i { min-width: 2.5rem; text-align: right; }
+.trow2:has(.tval.later) { grid-template-columns: auto minmax(0, 1fr) 2.5rem 2.5rem; }
+.trow2 .tval { text-align: right; }
+.tval.later { color: var(--faint); }
+
+/* how the odds are worked out, under the list: small, out of the way */
+.onote { font-size: var(--t1); line-height: 1.45; max-width: 62ch; }

@@ -1,7 +1,8 @@
 /**
  * The league settings the app reads, set by hand where the provider did
  * not say or said it wrong: when the regular season ends, when trades
- * close, and whether anything carries over to next season.
+ * close, whether anything carries over to next season, and how many
+ * players each team keeps when some do.
  *
  * What is set here is laid over the league as the provider sent it, at
  * the one place every tab reads the league from, so the trade page, the
@@ -31,14 +32,19 @@ export interface LeagueSettings {
   /** the last week a trade can be made; null is no deadline */
   tradeDeadline?: number | null;
   kind?: LeagueKind;
+  /** how many players each team keeps, in a keeper league */
+  keepersPerTeam?: number;
 }
 
 /** where a league's settings are kept */
 export const settingsKey = (league: Pick<League, "provider" | "leagueId">) =>
   "settings." + league.provider + "." + league.leagueId;
 
-/** the earliest a regular season can end, and the latest a deadline can be */
+/** the earliest a regular season can end */
 const SHORTEST_SEASON = 8;
+
+/** the most keepers a team can be set to keep; past it a league is a dynasty */
+export const MOST_KEEPERS = 10;
 
 const week = (n: unknown, low: number, high: number) =>
   typeof n === "number" && Number.isInteger(n) && n >= low && n <= high ? n : undefined;
@@ -69,6 +75,12 @@ export function readSettings(saved: unknown): LeagueSettings {
 
   if (KINDS.includes(said["kind"] as LeagueKind)) {
     out.kind = said["kind"] as LeagueKind;
+  }
+
+  const keepers = week(said["keepersPerTeam"], 1, MOST_KEEPERS);
+
+  if (keepers !== undefined) {
+    out.keepersPerTeam = keepers;
   }
 
   return out;
@@ -104,6 +116,10 @@ export function withSettings(league: League, settings: LeagueSettings): League {
     out.keepers = settings.kind !== "redraft";
   }
 
+  if (settings.keepersPerTeam !== undefined) {
+    out.keepersPerTeam = settings.keepersPerTeam;
+  }
+
   return out;
 }
 
@@ -123,6 +139,7 @@ export function settingsSaid(league: League, settings: LeagueSettings): {
   lastRegularWeek: Said<number>;
   tradeDeadline: Said<number | null>;
   kind: Said<LeagueKind>;
+  keepersPerTeam: Said<number>;
 } {
   const kind = kindSaid(league);
 
@@ -145,6 +162,13 @@ export function settingsSaid(league: League, settings: LeagueSettings): {
       provider: kind,
       known: kind !== null,
       yours: settings.kind !== undefined,
+    },
+    keepersPerTeam: {
+      // three is what the draft page has always assumed when nobody said
+      value: settings.keepersPerTeam ?? league.keepersPerTeam ?? 3,
+      provider: league.keepersPerTeam ?? null,
+      known: typeof league.keepersPerTeam === "number" && league.keepersPerTeam > 0,
+      yours: settings.keepersPerTeam !== undefined,
     },
   };
 }
