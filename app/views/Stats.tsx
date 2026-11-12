@@ -18,12 +18,13 @@ import { keep, stored } from "../lib/store.ts";
 import {
   linesFor, settledGames, standingFor, type GameState,
 } from "../lib/matchups.ts";
-import { PROVIDERS, type League, type Matchup } from "../lib/providers.ts";
+import type { League, Matchup } from "../lib/providers.ts";
+import { useSeasonSim } from "../lib/seasonSim.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
-  bestLineupPoints, chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, scenarioPath,
-  seasonOf, startingSlots, TIE, weekOfPair, weeklySpread, winShare,
-  type PathOutcome, type PlayoffRun, type ScenarioPath, type Strength, type TeamSeason,
+  chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, scenarioPath,
+  TIE, weekOfPair, winShare,
+  type PathOutcome, type PlayoffRun, type ScenarioPath, type TeamSeason,
 } from "../lib/seasonStats.ts";
 import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
 import { pct } from "./Advice.tsx";
@@ -51,65 +52,11 @@ interface Props {
   listed: Map<string, Listed>;
 }
 
-/** weeks read this session, by league and week */
-const kept = new Map<string, Matchup[]>();
-
-/**
- * The statuses that keep a player out for weeks rather than days, whose
- * points a roster's projection should not count on.
- */
-const GONE_A_WHILE = new Set(["IR", "PUP", "NA", "Sus"]);
-
 /** how often the season is played out */
 const SEASONS = 5000;
 
 /** how many weeks ahead the path runs at most, which is the rest of most seasons */
 const PATH_WEEKS = 9;
-
-function useWeeks(league: League, through: number) {
-  const [weeks, setWeeks] = useState<Map<number, Matchup[]> | null>(null);
-  const [trouble, setTrouble] = useState("");
-
-  useEffect(() => {
-    const asks = PROVIDERS[league.provider]?.matchupsFor;
-
-    if (!asks) {
-      setTrouble(`${league.provider} does not share its weeks.`);
-
-      return;
-    }
-
-    let stale = false;
-    // Sleeper's own points settle a finished week, so its weekly stats,
-    // a large file a week, are not read for weeks already played
-    const quiet = league.provider === "sleeper" ? { ...league, pays: {} } : league;
-    const keyOf = (week: number) =>
-      [league.provider, league.leagueId, league.userId, week].join("/");
-    const wanted = Array.from({ length: through }, (_, i) => i + 1);
-
-    Promise.all(wanted.map(async (week) => {
-      const have = kept.get(keyOf(week));
-
-      if (have) {
-        return [week, have] as const;
-      }
-
-      const got = await asks(quiet, week).catch(() => [] as Matchup[]);
-
-      if (got.length) {
-        kept.set(keyOf(week), got);
-      }
-
-      return [week, got] as const;
-    }))
-      .then((all) => { if (!stale) { setWeeks(new Map(all)); } })
-      .catch((e: Error) => { if (!stale) { setTrouble(e.message); } });
-
-    return () => { stale = true; };
-  }, [league.provider, league.leagueId, league.userId, through]);
-
-  return { weeks, trouble };
-}
 
 /** a number of points, to one place */
 const pts = (n: number) => n.toFixed(1);
@@ -433,84 +380,9 @@ function Picker(
 
 export function Stats(props: Props) {
   const { league, players, coming } = props;
-  const lastRegular = league.lastRegularWeek ?? 14;
-  const through = Math.max(coming, lastRegular);
-  const { weeks, trouble } = useWeeks(league, through);
-  const byKey = useMemo(() => new Map(players.map((p) => [p.key, p])), [players]);
-  const positionOf = useMemo(() => {
-    const fromRosters = new Map(
-      [league.myRoster, ...league.allRosters.map((r) => r.keys)].flat()
-        .map((p) => [p.key, p.pos] as const));
-
-    return (key: string) => byKey.get(key)?.position ?? fromRosters.get(key);
-  }, [byKey, league]);
-
-  const played = useMemo(() => {
-    if (!weeks) {
-      return [];
-    }
-
-    return Array.from({ length: coming - 1 }, (_, i) => i + 1)
-      .map((week) => ({ week, games: weeks.get(week) ?? [] }));
-  }, [weeks, coming]);
-
-  const season = useMemo(
-    () => seasonOf(played, league.slots, positionOf),
-    [played, league.slots, positionOf],
-  );
-
-  /**
-   * Each team's weekly scoring for the simulation: the best lineup its
-   * roster can put out today, each player at his points a game in this
-   * league's scoring, leaving out anybody on a list that keeps him out
-   * for weeks. Points a game run high, since nobody plays every week, so
-   * every team is scaled by the same amount to the league's actual
-   * scoring.
-   *
-   * That alone assumes every manager sets the league's average lineup.
-   * Each team is moved toward its own start efficiency instead, halfway,
-   * since a few weeks of lineup calls are partly luck: a team that has
-   * started 95% of its best where the league starts 90% scores about 3%
-   * over its roster's line.
-   */
-  const strength = useMemo(() => {
-    const starting = startingSlots(league.slots);
-    const projected = new Map(league.allRosters.map((team) => [
-      team.owner,
-      bestLineupPoints(
-        team.keys
-          .filter((p) => !GONE_A_WHILE.has(props.listed.get(p.key)?.status ?? ""))
-          .map((p) => ({
-            points: byKey.get(p.key)?.ppg ?? 0,
-            position: byKey.get(p.key)?.position ?? p.pos,
-          })),
-        starting,
-      ),
-    ]));
-    const weeksPlayed = season.flatMap((t) => t.weekly.filter((w): w is number => w !== null));
-    const actual = weeksPlayed.length
-      ? weeksPlayed.reduce((a, b) => a + b, 0) / weeksPlayed.length
-      : null;
-    const projectedAll = [...projected.values()];
-    const meanProjected = projectedAll.reduce((a, b) => a + b, 0) /
-      Math.max(1, projectedAll.length);
-    const scale = actual && meanProjected ? actual / meanProjected : 1;
-    const sd = weeklySpread(season, actual ?? meanProjected);
-    const started = season.reduce((sum, t) => sum + t.started, 0);
-    const best = season.reduce((sum, t) => sum + t.best, 0);
-    const leagueEff = best > 0 ? started / best : 1;
-    const coaching = (owner: string) => {
-      const team = season.find((t) => t.owner === owner);
-
-      return team && team.best > 0
-        ? 1 + 0.5 * (team.started / team.best / leagueEff - 1)
-        : 1;
-    };
-
-    return new Map<string, Strength>([...projected].map(([owner, mean]) => [
-      owner, { mean: mean * scale * coaching(owner), sd },
-    ]));
-  }, [league, byKey, season, props.listed]);
+  const { weeks, trouble, played, season, strength, setup } = useSeasonSim({
+    league, players, coming, listed: props.listed,
+  });
 
   /** this week's games with their odds, where the week on screen is this one */
   const thisWeek = useMemo(() => {
@@ -558,38 +430,6 @@ export function Stats(props: Props) {
     .filter((r) => typeof r.division === "number")
     .map((r) => [r.owner, r.division!])), [league]);
   const divisionCount = league.divisions?.length ?? 0;
-
-  const setup = useMemo(() => {
-    if (!weeks || coming > lastRegular) {
-      return null;
-    }
-
-    const pairsOf = (week: number): [string, string][] =>
-      (weeks.get(week) ?? []).map((g) => [g.sides[0].owner, g.sides[1].owner]);
-    const toCome = Array.from(
-      { length: lastRegular - coming + 1 }, (_, i) => pairsOf(coming + i));
-    const owners = new Set([
-      ...league.allRosters.map((r) => r.owner), ...season.map((t) => t.owner),
-    ]);
-    const table = [...owners].map((owner) => {
-      const team = season.find((t) => t.owner === owner);
-
-      return {
-        owner,
-        wins: team?.wins ?? 0,
-        ties: team?.ties ?? 0,
-        pf: team?.pf ?? 0,
-        pa: team?.pa ?? 0,
-        allWins: team?.allWins ?? 0,
-        allLosses: team?.allLosses ?? 0,
-        allTies: team?.allTies ?? 0,
-        medianWins: team?.medianWins ?? 0,
-        versus: team?.versus ?? {},
-      };
-    });
-
-    return { toCome, table };
-  }, [weeks, coming, lastRegular, season, league]);
 
   /** your team scoring what you think it will, everybody else as projected */
   const adjusted = useMemo(() => {

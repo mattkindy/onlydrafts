@@ -45,6 +45,20 @@ export interface TeamRecord {
   pointsFor: number;
 }
 
+/**
+ * A draft pick still to be made, and who holds it. Where it falls in its
+ * round depends on how the team it came from finishes, which is not the
+ * team holding it once it has been traded.
+ */
+export interface DraftPick {
+  season: number;
+  round: number;
+  /** the team whose pick it was to begin with */
+  from: string;
+  /** the team holding it now */
+  owner: string;
+}
+
 export interface League {
   provider: "sleeper" | "espn";
   leagueId: string;
@@ -81,6 +95,17 @@ export interface League {
   medianGame?: boolean | null;
   /** the first thing the provider says breaks a tie in the standings */
   seedTiebreak?: Tiebreak | null;
+  /**
+   * Every pick still to be made that a trade can move, with who holds
+   * it: next season's, the two after in a dynasty league, and this
+   * season's while its draft is still to come. Nothing where the league
+   * does not trade picks or the provider does not say.
+   */
+  picks?: DraftPick[] | null;
+  /** the last week a trade can be made, when the league has a deadline */
+  tradeDeadline?: number | null;
+  /** whether players carry over from season to season, all of them */
+  dynasty?: boolean;
 }
 
 export interface Provider {
@@ -671,6 +696,37 @@ function roundsHeldBy(
 }
 
 /**
+ * Every pick a trade can move and who holds it. Sleeper lists a traded
+ * pick once, as it stands now, under the team it began with, so a pick
+ * with no entry is still its own team's.
+ */
+export function picksHeld(input: {
+  rosters: { roster_id: number }[];
+  traded: { season: string | number; round: number; roster_id: number; owner_id: number }[];
+  seasons: number[];
+  rounds: number;
+  ownerOf: (rosterId: number) => string;
+}): DraftPick[] {
+  const holder = new Map(input.traded.map((t) =>
+    [`${Number(t.season)}:${t.round}:${t.roster_id}`, t.owner_id]));
+  const out: DraftPick[] = [];
+
+  for (const season of input.seasons) {
+    for (let round = 1; round <= input.rounds; round++) {
+      for (const { roster_id } of input.rosters) {
+        out.push({
+          season, round,
+          from: input.ownerOf(roster_id),
+          owner: input.ownerOf(holder.get(`${season}:${round}:${roster_id}`) ?? roster_id),
+        });
+      }
+    }
+  }
+
+  return out;
+}
+
+/**
  * Whether Sleeper says this league keeps players. It says so three
  * ways: a keeper count, a league type of 2, or a roster that already
  * has somebody marked.
@@ -708,6 +764,20 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       ask("/league/" + lg["league_id"] + "/drafts").catch(() => []),
     ]);
     const held = roundsHeldBy(rosters, traded ?? [], String(lg["season"]));
+    const settings = (lg["settings"] ?? {}) as Record<string, number>;
+    const thisSeason = Number(lg["season"] ?? state.season);
+    const type = Number(settings["type"]) || 0;
+    // picks are worth listing where the league keeps players, or where a
+    // pick in a season to come has already changed hands
+    const tradesPicks = type > 0 ||
+      ((traded ?? []) as { season: string | number }[]).some((t) => Number(t.season) > thisSeason);
+    const draftDone = !drafts?.[0] || drafts[0].status === "complete";
+    const pickSeasons = [
+      ...(draftDone ? [] : [thisSeason]),
+      ...Array.from({ length: type === 2 ? 3 : 1 }, (_, i) => thisSeason + i + 1),
+    ];
+    const ownerOfRoster = new Map((rosters as SleeperRoster[]).map((r) =>
+      [r.roster_id, r.owner_id] as const));
     const mine = (rosters as SleeperRoster[])
       .find((r) => r.owner_id === user.user_id);
     const nameOf = new Map<string, string>(
@@ -743,6 +813,24 @@ async function sleeperLeagues(username: string): Promise<League[]> {
         : null,
       divisions: sleeperDivisions(lg),
       medianGame: Number(lg["settings"]?.["league_average_match"]) === 1,
+      picks: tradesPicks
+        ? picksHeld({
+            rosters: rosters as SleeperRoster[],
+            traded: traded ?? [],
+            seasons: pickSeasons,
+            rounds: Number(settings["draft_rounds"]) || ROUNDS,
+            ownerOf: (id) => {
+              const owner = ownerOfRoster.get(id) ?? String(id);
+
+              return nameOf.get(owner) ?? owner;
+            },
+          })
+        : null,
+      // Sleeper says 99 for a league with no deadline
+      tradeDeadline: Number(settings["trade_deadline"]) > 0 && Number(settings["trade_deadline"]) < 99
+        ? Number(settings["trade_deadline"])
+        : null,
+      dynasty: type === 2,
       allRosters: (rosters as SleeperRoster[]).map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
         picks: held(r.roster_id),
