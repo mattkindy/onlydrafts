@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Listed } from "./availability.ts";
 import type { RosterPlayer } from "./providers.ts";
 import type { Player } from "./scoring.ts";
-import { chanceIn, splitAtPlayoffs, weeklyStrengths } from "./seasonSim.ts";
+import { chanceIn, splitAtPlayoffs, weeklyStrengths, WIRE_RANK } from "./seasonSim.ts";
 
 const player = (over: Partial<Player>): Player =>
   ({ name: "x", key: "x", position: "RB", ppg: 10, ...over }) as Player;
@@ -63,5 +63,27 @@ describe("each team's strength week by week", () => {
     expect(byWeek).toHaveLength(3);
     expect(bracket).toHaveLength(3);
     expect(bracket[0]!.get("ann")!.mean).toBeCloseTo(20);
+  });
+});
+
+describe("a slot the roster cannot fill", () => {
+  const slots = ["RB"];
+  // four backs nobody has, the third best of them at 6
+  const free = [9, 7, 6, 3].map((ppg, i) => player({ key: `fa${i}`, ppg }));
+  const byKey = new Map<string, Player>([
+    ["mid", player({ key: "mid", ppg: 12, weeksLeft: { from: 12, plays: [1, 0] } })],
+    ...free.map((p) => [p.key, p] as [string, Player]),
+  ]);
+  const weekly = weeklyStrengths({
+    rosters: [{ owner: "bo", keys: [on("mid")] }], slots, byKey, listed: new Map(), season: [], weeks: 2,
+  });
+
+  it("takes a free agent off the wire rather than nothing", () => {
+    expect(WIRE_RANK).toBe(3);
+    expect(weekly[1]!.get("bo")!.mean).toBeCloseTo(6);
+  });
+
+  it("still starts his own man when he beats the wire", () => {
+    expect(weekly[0]!.get("bo")!.mean).toBeCloseTo(12);
   });
 });
