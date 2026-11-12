@@ -31,7 +31,11 @@ of these are in `scripts/README.md`.
   suspect: a man who gets an early target gets the next one, and a team
   that is behind throws to him all afternoon. Modelling that would thin
   the tails and fill the middle at once. The script that swept it has
-  been deleted; the numbers are in `docs/scoreboard.md`.
+  been deleted; the numbers are in `docs/scoreboard.md`. So has the
+  simulation, with the four situations. The walk draws a man's cut of
+  the touches once a game rather than once a snap, which is the first
+  half of this, and that is the change that first took it past a man's
+  own average.
 - **Nothing predicts which of a man's own weeks is the big one.** Over
   2025, the weekly model scores .624 across players and -.023 within
   one. The simulation told what game it was playing (opponent, spread,

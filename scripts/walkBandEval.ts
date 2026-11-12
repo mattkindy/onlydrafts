@@ -1,9 +1,10 @@
 /**
  * Are the walk's per game bands calibrated?
  *
- * The card is switching its spread from the role simulation's bands,
- * kept because an 80% band covered 79.6%, to the walk's own dealt
- * games. This asks the same question of the walk: over a played
+ * The card switched its spread from the role simulation's bands, kept
+ * because an 80% band covered 79.6%, to the walk's own dealt games, and
+ * the role simulation has since been deleted. This asks the same
+ * question of the walk: over a played
  * season, how many of a player's weeks as they were scored land inside
  * the 10th to 90th of the games the walk dealt him?
  *
