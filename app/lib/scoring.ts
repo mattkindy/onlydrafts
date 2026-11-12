@@ -103,10 +103,28 @@ export interface Player {
    * none, his weeks are drawn over the whole season at `games` in 17.
    */
   weeksLeft?: { from: number; plays: number[] };
+  /**
+   * His next seasons, the coming one first: his points a game when he
+   * plays, against his `ppg` now, and the games he is expected to play
+   * in 17, where out of the league counts as none. What a keeper or a
+   * dynasty league is buying when it trades for him.
+   */
+  ahead?: { of: number; games: number }[];
+  /** his age on the first of September of the board's season */
+  age?: number;
+  /** where he was drafted; null is a player nobody drafted */
+  drafted?: { season: number; round: number; overall: number } | null;
   /** worked out for the league in front of you */
   ppg?: number;
   vor?: number;
   perGameVor?: number;
+  /**
+   * What the last player his league starts at his position scores a game,
+   * the line every value over a replacement is drawn from. Kept on him
+   * because `perGameVor` is read off the board's curve and is no longer
+   * his own points less this.
+   */
+  replacementPpg?: number;
   /**
    * What his own projection says he is worth over a season, which is
    * not what the card leads with. The board leads with what a pick at

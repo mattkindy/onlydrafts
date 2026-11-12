@@ -1,15 +1,15 @@
 /**
  * The league's settings as the app reads them, each one settable by hand
  * where the provider did not say or said it wrong: what kind of league it
- * is, when the regular season ends, when trades close, and how the
- * playoffs are decided. Beside anything you set is what the provider
+ * is and how many each team keeps, when the regular season ends, when
+ * trades close, and how the playoffs are decided. Beside anything you set is what the provider
  * says, and a tap puts it back.
  */
 
 import { useState } from "preact/hooks";
 
 import {
-  KIND_SAYS, settingsSaid, type LeagueKind, type LeagueSettings, type Said,
+  KIND_SAYS, MOST_KEEPERS, settingsSaid, type LeagueKind, type LeagueSettings, type Said,
 } from "../lib/leagueSettings.ts";
 import { readRules, rulesKey, type PlayoffRules } from "../lib/playoffRules.ts";
 import type { League } from "../lib/providers.ts";
@@ -44,6 +44,7 @@ export function LeagueSettingsPanel({ league, settings, onSettings }: {
   };
   const last = said.lastRegularWeek.value;
   const deadline = said.tradeDeadline.value;
+  const keepers = said.keepersPerTeam.value;
 
   return (
     <div class="lsettings rhythm">
@@ -62,6 +63,27 @@ export function LeagueSettingsPanel({ league, settings, onSettings }: {
           </div>
           <Source said={said.kind} who={who} says={(k) => KIND_SAYS[k]} onReset={() => unset("kind")} />
         </div>
+
+        {said.kind.value === "keeper" && (
+          <div class="rrow">
+            <i>each team keeps</i>
+            <div class="stepper">
+              <button
+                aria-label="one fewer keeper" disabled={keepers <= 1}
+                onClick={() => set({ keepersPerTeam: keepers - 1 })}
+              >−</button>
+              <b>{keepers}</b>
+              <button
+                aria-label="one more keeper" disabled={keepers >= MOST_KEEPERS}
+                onClick={() => set({ keepersPerTeam: keepers + 1 })}
+              >+</button>
+            </div>
+            <Source
+              said={said.keepersPerTeam} who={who} says={(n) => `${n}`}
+              onReset={() => unset("keepersPerTeam")}
+            />
+          </div>
+        )}
 
         <div class="rrow">
           <i>regular season ends</i>

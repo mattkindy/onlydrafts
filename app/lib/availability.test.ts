@@ -6,8 +6,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  BACK_BY, gamesLeft, outThisWeek, playChance, playsByWeek, pricedDown, RAMP,
-  SEASON_OVER, seasonEnding, statusOf, WEEKS_OUT,
+  BACK_BY, gamesLeft, OUT_BACK, outThisWeek, playChance, playsByWeek,
+  pricedDown, RAMP, SEASON_OVER, seasonEnding, statusOf, WEEKS_OUT,
 } from "./availability.ts";
 
 describe("what a player on a list is expected to play", () => {
@@ -66,8 +66,18 @@ describe("the games left from a week in the season", () => {
     expect(gamesLeft(17, "IR", 4, 10)).toBeLessThan(14 - WEEKS_OUT);
   });
 
-  it("takes one game off a man ruled out of the coming one", () => {
-    expect(gamesLeft(17, "Out", 4, 10)).toBe(13);
+  /**
+   * Out is the club's word for one game, and the app took exactly that
+   * one. A man with a steady role ruled out plays the next game about a
+   * third of the time and is not back to his healthy rate until the fifth.
+   */
+  it("takes the coming game and most of the next few off a man ruled out", () => {
+    const back = OUT_BACK.reduce((sum, p) => sum + p, 0);
+
+    // weeks 4 to 18 with the bye in 10 are fourteen games: none, the four
+    // he is coming back over, and nine at full speed
+    expect(gamesLeft(17, "Out", 4, 10)).toBeCloseTo(back + 9, 10);
+    expect(gamesLeft(17, "Out", 4, 10)).toBeLessThan(12);
   });
 
   it("has nothing left for a man on reserve through the last week", () => {
@@ -97,7 +107,45 @@ describe("his chance of playing each week that is left", () => {
     const plays = playsByWeek(17, "Out", 4, 10);
 
     expect(plays[0]).toBe(0);
-    expect(plays[1]).toBe(1);
+    expect(plays[1]).toBeGreaterThan(0);
+    expect(playsByWeek(17, "Questionable", 4, 10)[0]).toBe(1);
+  });
+
+  it("brings a man ruled out back over four games, as men ruled out come back", () => {
+    const plays = playsByWeek(17, "Out", 4, 10);
+
+    // weeks 5 to 8 are the four games after the one he is out of
+    expect(plays.slice(1, 5)).toEqual(OUT_BACK);
+    expect(plays[1]!).toBeLessThan(0.4);
+    // week 9 is the fifth, and he is back to what the board expects
+    expect(plays[5]).toBe(1);
+  });
+
+  it("hands him back to the board's healthy rate after the four", () => {
+    const plays = playsByWeek(13.6, "Out", 4, 10);
+
+    expect(plays[5]).toBeCloseTo(0.8, 10);
+    expect(plays.at(-1)).toBeCloseTo(0.8, 10);
+  });
+
+  it("counts the four games past his bye rather than through it", () => {
+    // out in week 9 with the bye in 10: week 11 is the next game
+    const plays = playsByWeek(17, "Out", 9, 10);
+
+    expect(plays[1]).toBe(0);
+    expect(plays.slice(2, 6)).toEqual(OUT_BACK);
+  });
+
+  it("adds up to the games left for a man ruled out too", () => {
+    const plays = playsByWeek(12.5, "Out", 6, 7);
+    const total = plays.reduce((sum, p) => sum + p, 0);
+
+    expect(total).toBeCloseTo(gamesLeft(12.5, "Out", 6, 7), 10);
+  });
+
+  it("has only what is left of the four for a man ruled out late", () => {
+    // weeks 16, 17 and 18: out of the first, back over the two after
+    expect(playsByWeek(17, "Out", 16, 10)).toEqual([0, OUT_BACK[0], OUT_BACK[1]]);
   });
 
   it("adds up to the games left", () => {

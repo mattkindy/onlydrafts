@@ -1,5 +1,5 @@
 {
-  "//": "The scripts that reach into app, whose imports spell a .ts extension. NodeNext will not read those, so these three are checked under bundler resolution, the way tsx runs them.",
+  "//": "The scripts that reach into app, whose imports spell a .ts extension. NodeNext will not read those, so these are checked under bundler resolution, the way tsx runs them.",
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "module": "ESNext",
@@ -9,6 +9,7 @@
   },
   "include": [
     "scripts/buildSimTables.ts",
+    "scripts/outSpellEval.ts",
     "scripts/partialGameProbe.ts",
     "scripts/simAgreement.ts"
   ],

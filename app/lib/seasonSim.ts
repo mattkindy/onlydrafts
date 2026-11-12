@@ -177,7 +177,28 @@ export function chanceIn(p: Player | undefined, at: number, status: string | und
  * whole run cannot say. The league's scale is taken over all the weeks
  * together, from the rosters before any trade, so a week of byes reads
  * lower than one without and a what-if moves only the two teams in it.
+ *
+ * A slot the roster cannot fill that week, its only quarterback on a bye
+ * or a trade that leaves it a back short, takes a free agent rather than
+ * nothing, since that is what any manager does. The wire is priced at
+ * the third best free agent at each position that week, not the best:
+ * the best is often claimed before you, and a rostered player the board
+ * failed to match to his roster would otherwise be lent to every team.
+ * The third is a judgement, not fitted.
  */
+export const WIRE_RANK = 3;
+
+/** how the odds are worked out, in plain words, the same wherever odds are shown */
+export const HOW_ODDS_WORK =
+  "Every team starts its best lineup each week. Hurt players count by their odds " +
+  "of playing, and a bye counts as out. An empty spot gets filled off waivers.";
+
+/** the rest of it, for a reader who hovers */
+export const HOW_ODDS_WORK_IN_FULL =
+  "Best lineup means the best the roster allows, not the one the manager sets. " +
+  "Points are scaled to what your league actually scores, and a manager who leaves " +
+  "points on the bench gets docked a little.";
+
 export function weeklyStrengths(input: {
   rosters: { owner: string; keys: RosterPlayer[] }[];
   slots: string[] | null;
@@ -193,16 +214,20 @@ export function weeklyStrengths(input: {
 
     return his ? statusOf(his) : undefined;
   };
+  const wire = wireByWeek(input.rosters, input.byKey, input.weeks, statusOfKey);
   const lineupsOf = (keys: RosterPlayer[]) => Array.from({ length: input.weeks }, (_, at) =>
     bestLineupPoints(
-      keys.map((p) => {
-        const his = input.byKey.get(p.key);
+      [
+        ...keys.map((p) => {
+          const his = input.byKey.get(p.key);
 
-        return {
-          points: (his?.ppg ?? 0) * chanceIn(his, at, statusOfKey(p.key)),
-          position: his?.position ?? p.pos,
-        };
-      }),
+          return {
+            points: (his?.ppg ?? 0) * chanceIn(his, at, statusOfKey(p.key)),
+            position: his?.position ?? p.pos,
+          };
+        }),
+        ...wire[at]!,
+      ],
       starting,
     ));
   const projected = input.rosters.map((team) => [team.owner, lineupsOf(team.keys)] as const);
@@ -215,6 +240,43 @@ export function weeklyStrengths(input: {
     projected.map(([owner, weeks]) => [
       owner, { mean: weeks[at]! * level.scale * level.coaching(owner), sd: level.sd },
     ])));
+}
+
+/**
+ * The free agent a team could pick up at each position, each week: the
+ * one at `WIRE_RANK` among the players nobody has, at his points a game
+ * times his chance of playing that week. One a position a week, since a
+ * roster short two at once is rare and a second pickup is a worse one.
+ */
+export function wireByWeek(
+  rosters: { keys: RosterPlayer[] }[],
+  byKey: Map<string, Player>,
+  weeks: number,
+  statusOfKey: (key: string) => string | undefined,
+): { points: number; position: string }[][] {
+  const rostered = new Set(rosters.flatMap((t) => t.keys.map((p) => p.key)));
+  const free = [...byKey.values()].filter((p) => !rostered.has(p.key) && p.position);
+
+  return Array.from({ length: weeks }, (_, at) => {
+    const byPosition = new Map<string, number[]>();
+
+    for (const p of free) {
+      const points = (p.ppg ?? 0) * chanceIn(p, at, statusOfKey(p.key));
+
+      if (points > 0) {
+        const there = byPosition.get(p.position) ?? [];
+
+        there.push(points);
+        byPosition.set(p.position, there);
+      }
+    }
+
+    return [...byPosition].map(([position, points]) => {
+      const ranked = points.sort((a, b) => b - a);
+
+      return { points: ranked[Math.min(ranked.length, WIRE_RANK) - 1]!, position };
+    });
+  });
 }
 
 /** the pairings of every week left, this one first, and the table now */

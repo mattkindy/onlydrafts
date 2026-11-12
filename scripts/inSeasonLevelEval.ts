@@ -7,6 +7,10 @@
  * update, the update with one part switched off, and a reader who knew
  * the answer. Every fit is trained on seasons before the one predicted.
  *
+ * Then the error again by which way his snap share has just moved, down,
+ * steady or up, beside the shipped break and three ways of reading a drop
+ * apart from a rise, so a shrinking role can be checked on its own.
+ *
  * Run: npx tsx scripts/inSeasonLevelEval.ts
  */
 
@@ -193,6 +197,81 @@ interface Marked {
   was: number[];
   said: Record<string, number[]>;
   surprise: boolean[];
+  /** how far his snap share moved over his last three games, null under four */
+  move: (number | null)[];
+}
+
+/** games at the end of the window a move is read over, as the break reads it */
+const MOVE_WINDOW = 3;
+
+/**
+ * His snap share over his last three games less what it was over the
+ * games before them, the same reading the break takes. A player with
+ * three games or fewer has nothing before to read it against.
+ */
+function snapMove(weeks: PlayedWeek[]): number | null {
+  if (weeks.length <= MOVE_WINDOW) {
+    return null;
+  }
+
+  const mean = (some: PlayedWeek[]) =>
+    some.reduce((sum, w) => sum + w.snapShare, 0) / some.length;
+
+  return mean(weeks.slice(-MOVE_WINDOW)) - mean(weeks.slice(0, -MOVE_WINDOW));
+}
+
+/** the directions a move is split by, nested the way the question was asked */
+const MOVES: [string, (move: number | null) => boolean][] = [
+  ["dropped .20 or more", (m) => m !== null && m <= -0.2],
+  ["dropped .15 or more", (m) => m !== null && m <= -0.15],
+  ["steady, inside .15", (m) => m !== null && Math.abs(m) < 0.15],
+  ["rose .15 or more", (m) => m !== null && m >= 0.15],
+  ["rose .20 or more", (m) => m !== null && m >= 0.2],
+  ["three games or fewer", (m) => m === null],
+];
+
+/**
+ * The update's error by which way his snaps have just moved, signed as
+ * said less what happened, so a positive number is a player held above
+ * what he went on to do. Every cut is pooled, since a drop of twenty
+ * points is rare enough that one cut alone is a handful of players.
+ */
+function reportMoves(marked: Marked[], readers: string[], over: string): void {
+  console.log(
+    `\nby the move in his snap share over his last three games, ${over}: ` +
+      "players, then signed error (said less was) and MAE",
+  );
+  console.log(
+    "".padEnd(24) + "n     " +
+      readers.map((r) => r.slice(0, 26).padEnd(28)).join(""),
+  );
+
+  for (const [label, keep] of MOVES) {
+    let n = 0;
+    const signed = readers.map(() => 0);
+    const absolute = readers.map(() => 0);
+
+    for (const at of marked) {
+      at.was.forEach((was, i) => {
+        if (!keep(at.move[i]!)) {
+          return;
+        }
+
+        n++;
+        readers.forEach((reader, r) => {
+          const error = at.said[reader]![i]! - was;
+          signed[r]! += error;
+          absolute[r]! += Math.abs(error);
+        });
+      });
+    }
+
+    console.log(
+      label.padEnd(24) + String(n).padEnd(6) + readers.map((_, r) =>
+        `${(signed[r]! / Math.max(1, n)).toFixed(3).padStart(7)} ` +
+          `${(absolute[r]! / Math.max(1, n)).toFixed(3)}`.padEnd(28)).join(""),
+    );
+  }
 }
 
 const UPDATE = "the update";
@@ -209,11 +288,42 @@ const ABLATIONS = {
  */
 const SHIPPED = "shipped shape, in sample";
 
+/**
+ * The update with a drop in snap share read apart from a rise: its own
+ * break gap, searched over the same values, and the same with the drop
+ * counted only where two of the last three games are that far down. Each
+ * is fitted on the seasons before the one it marks, like the update.
+ */
+const DROPS = {
+  "a drop's own gap": { apart: true },
+  "a drop's own gap, held": { apart: true, held: true },
+} as const;
+
+/**
+ * The break the build ships, twenty points either way, with the weights
+ * fitted on earlier seasons the way the update's are. The update's own
+ * search never picks that break, so this is what the shipped constant
+ * looks like out of sample.
+ */
+const ONE_GAP = "one gap at .20, either way";
+
+/**
+ * The same on the one gap's own weights with a rise left unbroken, so
+ * the only thing that differs from it is that a rise no longer breaks.
+ * Refitting the weights instead moves the whole pool by up to a
+ * hundredth on its own, which is week 2 differing where no break can
+ * happen at all.
+ */
+const DROP_ONLY = "a drop at .20, a rise not";
+
 const READERS = [
   "preseason anchor",
   "season to date",
   UPDATE,
   ...Object.keys(ABLATIONS),
+  ONE_GAP,
+  DROP_ONLY,
+  ...Object.keys(DROPS),
   SHIPPED,
   "oracle",
 ];
@@ -226,7 +336,7 @@ function report(marked: Marked): void {
       `${surprised} of them with a changed role`,
   );
   console.log(
-    "".padEnd(26) + "MAE    corr    role changed: MAE    corr",
+    "".padEnd(32) + "MAE    corr    role changed: MAE    corr",
   );
 
   for (const reader of READERS) {
@@ -235,7 +345,7 @@ function report(marked: Marked): void {
     const keptWas = marked.was.filter((_, i) => marked.surprise[i]);
 
     console.log(
-      `${reader.padEnd(26)}${mae(said, marked.was).toFixed(3)}  ` +
+      `${reader.padEnd(32)}${mae(said, marked.was).toFixed(3)}  ` +
         `${correlation(said, marked.was).toFixed(3)}   ` +
         `${mae(keptSaid, keptWas).toFixed(3).padStart(15)}  ` +
         `${correlation(keptSaid, keptWas).toFixed(3)}`,
@@ -255,14 +365,15 @@ function surpriseOf(fit: InSeasonFit, row: Row): number {
 }
 
 function describe(shape: UpdateShape): string {
-  const gap = Number.isFinite(shape.breakGap)
-    ? shape.breakGap.toFixed(2)
-    : "off";
+  const gapOf = (gap: number) => Number.isFinite(gap) ? gap.toFixed(2) : "off";
+  const drop = shape.dropGap === undefined
+    ? ""
+    : `, drops ${gapOf(shape.dropGap)}${shape.dropHeld ? " held" : ""}`;
 
   return (
     `role ${shape.roleCap} at half by ${shape.roleGames}, ` +
     `points ${shape.pointsCap} at half by ${shape.pointsGames}, ` +
-    `decay ${shape.decay}, break ${gap}`
+    `decay ${shape.decay}, break ${gapOf(shape.breakGap)}${drop}`
   );
 }
 
@@ -318,6 +429,7 @@ async function main(): Promise<void> {
         was: [],
         said: Object.fromEntries(READERS.map((r) => [r, []])),
         surprise: [],
+        move: [],
       },
     ]),
   );
@@ -350,13 +462,38 @@ async function main(): Promise<void> {
      */
     const without = new Map<string, InSeasonFit>();
 
-    for (const [label, held] of year === LIVE ? [] : Object.entries(ABLATIONS)) {
+    // fitted for the live season too, which prints the gap a drop would
+    // ship at off every finished season
+    for (const [label, drops] of Object.entries(DROPS)) {
+      const shape = fitUpdateShape(fit.role, cases, {}, drops);
+
+      without.set(label, { role: fit.role, shape });
+      console.log(`  ${label}: ${describe(shape)}`);
+    }
+
+    // The live season is fitted for the table at the end and not marked.
+    // Its few weeks after a cut made a rest of season of two or three
+    // games, and since the parts switched off below were never fitted for
+    // it, they were marked on fewer players than the update was.
+    if (year === LIVE) {
+      continue;
+    }
+
+    for (const [label, held] of Object.entries(ABLATIONS)) {
       const fixed = { decay: fit.shape.decay, breakGap: fit.shape.breakGap, ...held };
       without.set(label, {
         role: fit.role,
         shape: fitUpdateShape(fit.role, cases, fixed),
       });
     }
+
+    const oneGap = fitUpdateShape(fit.role, cases, { breakGap: 0.2 });
+
+    without.set(ONE_GAP, { role: fit.role, shape: oneGap });
+    without.set(DROP_ONLY, {
+      role: fit.role,
+      shape: { ...oneGap, breakGap: Infinity, dropGap: oneGap.breakGap },
+    });
 
     for (const cut of CUTS) {
       const rows = rowsAt(built.get(year)!, year, cut);
@@ -379,12 +516,22 @@ async function main(): Promise<void> {
         }
 
         into.surprise.push(surprises[i]! >= line);
+        into.move.push(snapMove(row.weeks));
       });
     }
   }
 
   for (const cut of CUTS) {
     report(marked.get(cut)!);
+  }
+
+  reportMoves([...marked.values()], [
+    UPDATE, ONE_GAP, DROP_ONLY, ...Object.keys(DROPS), SHIPPED,
+  ], "every cut pooled");
+
+  for (const cut of CUTS.filter((c) => c > MOVE_WINDOW)) {
+    reportMoves(
+      [marked.get(cut)!], [UPDATE, ONE_GAP, DROP_ONLY], `after week ${cut} alone`);
   }
 
   await withSleeperNext(built, fits);

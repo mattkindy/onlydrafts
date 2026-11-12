@@ -165,6 +165,7 @@ export function Roster(props: Props) {
         <Trade
           league={league} players={players} coming={props.week ?? 1}
           listed={props.listed ?? new Map()} {...(props.onSettings ? { onSettings: props.onSettings } : {})}
+          keeperLeague={Boolean(props.keeperLeague)} perTeam={props.perTeam}
         />
       )}
 

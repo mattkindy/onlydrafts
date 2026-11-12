@@ -974,6 +974,19 @@ Each of these was built, measured and reverted or left switched off.
 - A card's band borrowed from the walk's nearest men for a player it
   never dealt a game. It holds the 80% band and breaks the 50%, and its
   pinball loss is the pooled band's within a standard error.
+- Reading a drop in snap share apart from a rise in the in-season
+  update: a gap of its own for a drop, a rise left unbroken, or a drop
+  counted only once it has held two games. The shipped gap of twenty
+  points either way already holds a man who lost twenty points of snaps
+  .15 a game under what he went on to score, where no break at all
+  holds him .69 over, and none of the three beats it at every cut. Its
+  miss is the other way, a rise held .48 over. scripts/README.md has
+  the tables, under the update missing a role that is shrinking.
+- A ramp on a man back from one to three games out. Net of players at
+  his level who were never listed, he scores 86% of it in his first
+  game back and 94% in his second, but the ramp saves .130 of MAE on
+  2023 to 2025 with a standard error of .110. The ramp for reserve
+  stays where it was measured, on four to seven games out.
 
 Nor do they help each other. Three pairs have been tried, the
 coverage lean with the look tilt, the whole snap chain with the

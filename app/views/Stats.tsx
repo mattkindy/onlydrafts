@@ -19,7 +19,9 @@ import {
   linesFor, settledGames, standingFor, type GameState,
 } from "../lib/matchups.ts";
 import type { League, Matchup } from "../lib/providers.ts";
-import { splitAtPlayoffs, useSeasonSim } from "../lib/seasonSim.ts";
+import {
+  HOW_ODDS_WORK, HOW_ODDS_WORK_IN_FULL, splitAtPlayoffs, useSeasonSim,
+} from "../lib/seasonSim.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
   chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, playoffRounds, scenarioPath,
@@ -677,6 +679,12 @@ export function Stats(props: Props) {
                 week: coming,
                 playoffTeams,
                 rule: rulesSay(rules, divisionCount),
+                ...(forced.size > 0 || nudge !== 0 ? {
+                  whatIf: [
+                    forced.size ? `${forced.size} pick${forced.size === 1 ? "" : "s"}` : "",
+                    nudge ? `you ${nudge > 0 ? "+" : ""}${Math.round(nudge * 100)}%` : "",
+                  ].filter(Boolean).join(", "),
+                } : {}),
                 teams: run.odds.map((o) => {
                   const team = season.find((t) => t.owner === o.owner);
 
@@ -685,6 +693,9 @@ export function Stats(props: Props) {
                     record: team ? recordSays(team) : "0-0",
                     wins: o.wins,
                     odds: o.playoffs,
+                    bye: hasBye ? o.bye : undefined,
+                    champion: hasTitle ? o.champion : undefined,
+                    division: o.division,
                     mine: o.owner === league.team,
                   };
                 }),
@@ -738,6 +749,9 @@ export function Stats(props: Props) {
                 );
               })}
           </div>
+          <p class="hint onote" title={HOW_ODDS_WORK_IN_FULL}>
+            {SEASONS.toLocaleString()} simulated seasons. {HOW_ODDS_WORK}
+          </p>
           </div>
 
           {setup && path && path.cols.length > 0 && (

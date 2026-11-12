@@ -54,7 +54,7 @@ says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `sleeperEval.ts`, `inheritanceProbe.ts`, `seasonShrinkEval.ts`,
 `inSeasonLevelEval.ts`,
 `kickerSeasonEval.ts`, `kickerWeekEval.ts`, `walkVolumeEval.ts`,
-`injuryStatusEval.ts`, `weatherEval.ts`, `simAgreement.ts`,
+`injuryStatusEval.ts`, `outSpellEval.ts`, `weatherEval.ts`, `simAgreement.ts`,
 `bandSourceEval.ts`, `inSeasonRowsEval.ts` and `weeklyInteractionEval.ts`.
 `inSeasonScorecard.ts` scores the slates the site shipped this season
 against the box scores, and is worth running again as weeks come in.
@@ -3551,3 +3551,237 @@ this was run. `teamState.ts` is still read by nothing.
 the three past seasons played again at each, the board and the walk
 column scored on both, and `DEALT_WIDER` swept again, since a weaker
 lift narrows the spread of a man's dealt games.
+# How long a man ruled out stays out
+
+`outSpellEval.ts`. A man listed Out lost exactly the one game and was
+priced at his healthy rate, the board's games over seventeen, for every
+week after it. A hamstring or a high ankle is often three weeks, and the
+club only ever rules him out of one at a time. Over 2018 to 2025 the eval
+takes every QB, RB, WR and TE whose final report for his side's game said
+Out, who was not on a reserve list that week, and who had a steady role:
+two or more games played and half the snaps or more over his last three.
+That is 963 listings. Whether he played each of his side's next games, a
+stat row or a snap, censored at the end of the season:
+
+| games missed in a row, this one included | listings | next | 2nd | 3rd | 4th | 5th | 6th | 8th | the app had the next at |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| one | 487 | .36 | .56 | .68 | .70 | .74 | .75 | .74 | .75 |
+| two | 269 | .38 | .58 | .66 | .71 | .73 | .71 | .79 | .75 |
+| three or more | 207 | .36 | .55 | .63 | .68 | .72 | .74 | .71 | .76 |
+
+He plays the next game about a third of the time where the app said
+three in four, the one after about half the time, and he is back at his
+healthy rate by the fifth. How long he has already sat does not move it:
+the third game out reads the same as the first.
+
+By what the report says is hurt, on the first game out:
+
+| | listings | next | 2nd | 3rd | 4th | 5th to 8th |
+| --- | --- | --- | --- | --- | --- | --- |
+| hamstring | 64 | .36 | .49 | .65 | .65 | .57 to .71 |
+| ankle | 71 | .23 | .56 | .77 | .74 | .81 to .92 |
+| knee | 65 | .27 | .47 | .59 | .75 | .61 to .68 |
+| concussion | 87 | .48 | .71 | .76 | .73 | .69 to .82 |
+| foot | 35 | .16 | .32 | .46 | .48 | .59 to .71 |
+| anything else | 165 | .42 | .59 | .69 | .72 | .77 to .80 |
+
+And by position, over every listing:
+
+| | listings | next | 2nd | 3rd | 4th | 5th to 8th |
+| --- | --- | --- | --- | --- | --- | --- |
+| QB | 170 | .25 | .38 | .46 | .54 | .57 to .60 |
+| RB | 138 | .36 | .59 | .77 | .83 | .90 to .93 |
+| WR | 478 | .41 | .60 | .68 | .69 | .72 to .77 |
+| TE | 177 | .36 | .59 | .71 | .74 | .67 to .75 |
+
+A foot is the slow one and a concussion the quick one. A quarterback ruled
+out is the worst bet here: a quarter play the next game and fewer than
+three in five are back by the eighth, which is a job lost as often as a
+body healing. A back who gets back stays back, .90 and over from the fifth.
+
+Rules for the next four games, fitted on 2018 to 2022 and scored by Brier
+score on 2023 to 2025, 356 listings. The first column is each rule fitted
+on four of the five fit seasons and scored on the fifth, in turn, so a
+rule can be picked without looking at the scored seasons:
+
+| rule | held out, 2018-2022 | next four, 2023-2025 | next | 2nd | 3rd | 4th |
+| --- | --- | --- | --- | --- | --- | --- |
+| the app as it was | .3064 | .2855 | .4068 | .2868 | .2169 | .2041 |
+| by games ahead | .2345 | .2259 | .2534 | .2437 | .2065 | .1911 |
+| and games missed in a row | .2361 | .2267 | .2543 | .2452 | .2069 | .1917 |
+| and the body part | .2390 | .2245 | .2467 | .2410 | .2112 | .1914 |
+| and both | .2363 | .2231 | .2483 | .2393 | .2064 | .1903 |
+| and the position | .2340 | .2217 | .2563 | .2340 | .1989 | .1878 |
+| as a share of his own healthy rate | .2454 | .2323 | .2526 | .2514 | .2146 | .2033 |
+| that, and the body part | .2497 | .2279 | .2438 | .2441 | .2142 | .2038 |
+| by games ahead, never above his healthy rate | .2332 | .2278 | .2534 | .2431 | .2098 | .1967 |
+| the app now, in sample | | .2200 | .2485 | .2394 | .1976 | .1853 |
+| ceiling: the scored seasons' own rates | | .2159 | .2443 | .2359 | .1928 | .1815 |
+
+Counting by games ahead takes .060 of the .070 between the app and the
+ceiling, and everything past it trades a few thousandths. Position wins
+the scored seasons by .004 and ties held out. Over every Out listing with
+no snap filter, 1,805 of them, it is the body part that wins held out and
+position that loses. Neither holds both ways, so neither ships, and the
+app needs only the word: no part, no position and no count of the games
+already missed. Reading the table as a share of each man's own healthy
+rate does worse than reading it straight, and so does capping it at his
+healthy rate. The board's games come off his history, and they do not say
+who comes back quickly.
+
+That holds past the fourth game too. Over the fifth to the eighth, one
+flat .71 for everybody scores .1762 where his healthy rate scores .1857.
+That is a lead rather than a change, and the app still hands him back to
+the board from the fifth.
+
+The app now has nothing for the coming game, .36, .56, .67 and .70 for the
+four after it, counted over 2018 to 2025, and his healthy rate from there.
+His games left are the sum of those weeks, the way a man on reserve's are.
+DeVonta Smith was ruled out of week 8 of 2026 with a hamstring, on 12.8
+board games and a week 10 bye. The app had week 9 at .84 and 7.5 games
+left, and has .36 and 6.1 now. He sat week 9 as well.
+
+## The games after a short absence
+
+`RAMP` was measured on men back from four to seven games and is laid only
+on reserve. The same question for a short absence: one to three of his
+side's games missed in a row, at least one of them on the report as Out or
+Doubtful, never on a reserve list, by a player averaging seven half PPR
+points before it. Each is set against players at the same level whose
+season never put them on the report, matched in bands from 7, 10 and 14
+points, so the fall a seven point cut builds in is netted out:
+
+| missed | returns | 1st back | 2nd | net 1st | net 2nd | net 3rd and 4th |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 135 | .880 | .907 | .927 | .952 | .997 |
+| 2 | 112 | .740 | .885 | .783 | .935 | .877 |
+| 3 | 65 | .824 | .892 | .875 | .944 | .943 |
+| 1 to 3 | 312 | .816 | .896 | .862 | .944 | .940 |
+
+Net of the control he scores 86% of his level in his first game back and
+94% in his second. A ramp for those two games, fitted at .883 on 2018 to
+2022 and scored by MAE on 2023 to 2025:
+
+| | games | no ramp | ramp | saved | se |
+| --- | --- | --- | --- | --- | --- |
+| back from one to three | 225 | 6.108 | 5.934 | .174 | .092 |
+| never listed | 685 | 6.156 | 6.112 | .044 | .060 |
+
+The control gains from the same discount, which is the skew in a fantasy
+week rewarding any discount at all. Net of it the ramp saves .130 with a
+standard error of .110, inside noise, so it does not ship. Nor does it look
+much like a ramp: the third and fourth games back are at .94 too, which
+reads more like a level that came down than one coming back up.
+
+## What to try next on this
+
+Doubtful in the season pricing. Twelve of the 417 doubtful players in
+eight seasons played, and `playChance` prices his coming week near
+nothing, but the waiver page's weeks still have a doubtful man playing it
+at his healthy rate. Over 181 doubtful listings of a steady role the four
+games after go .49, .69, .66 and .69, against a healthy rate of about
+three in four. `outSpellEval.ts --status Doubtful` prints it, and 72 of
+those listings in the scored seasons is thin.
+
+The weeks past the four. A flat rate beats the board's own for a man
+coming off an Out listing, which says the board's games are a season's
+question being asked of a week.
+
+The quarterback. A starter ruled out is back for his side's eighth game
+less than three times in five. Whether a backup who played well is the
+reason would take the depth chart, which the injury report does not carry.
+
+# Whether the update misses a role that is shrinking
+
+The question was whether a player losing his share of the snaps is held
+too high for too long, the way a rising one is caught. `inSeasonLevelEval.ts`
+now splits the update's error by which way his snap share moved over his
+last three games against the games before them, the same reading the break
+takes. A player needs four games to have a move at all, so this pools the
+cuts after weeks 4, 6, 8 and 10 over 2019 to 2025. Signed error is what the
+update said less what he went on to average, so a positive number is a
+player held too high.
+
+First a fix to the eval. It had been marking the live season beside the
+seven finished ones, where 2026's few weeks after a cut made a rest of
+season of two or three games. The parts switched off beside the update were
+never fitted for 2026 either, so they were marked on fewer players than the
+update was. The live season is now fitted for the table at the end and not
+marked. The update's error after weeks 2, 4 and 6 moves from 2.485, 2.499
+and 2.525 to 2.466, 2.475 and 2.484, and weeks 8 and 10 had no 2026 rows to
+lose.
+
+Each cell is the signed error, then the MAE:
+
+| his snaps over the last three | players | preseason anchor | the update | one gap at .20 | shipped, in sample |
+| --- | --- | --- | --- | --- | --- |
+| dropped .20 or more | 585 | +1.38, 3.362 | +.69, 3.009 | -.15, 2.784 | +.08, 2.800 |
+| dropped .15 or more | 908 | +1.01, 3.229 | +.54, 2.833 | +.03, 2.686 | +.15, 2.692 |
+| steady, inside .15 | 7220 | +.01, 3.105 | -.09, 2.464 | -.09, 2.457 | -.06, 2.439 |
+| rose .15 or more | 1322 | -.76, 3.140 | -.53, 2.735 | +.12, 2.765 | -.02, 2.693 |
+| rose .20 or more | 840 | -.92, 3.204 | -.59, 2.872 | +.48, 2.914 | +.21, 2.817 |
+
+The update as the eval fits it does hold a shrinking role too high, .69 a
+game after a drop of twenty points, and a growing one too low by nearly as
+much, .59. It is worse late in the season, and worse for the drop: after
+week 10 a drop is held 1.34 too high and a rise .93 too low. A drop of
+twenty is real and it sticks, since the preseason anchor has those players
+1.38 a game above what they go on to score.
+
+But that update has no break. Its own search turns the break off in every
+season from 2019 to 2025, and only the fit over 2018 to 2025 that the build
+ships picks twenty points. Pin the break at the shipped twenty and fit the
+rest on earlier seasons the same way, and a drop is held .15 under rather
+than .69 over, with the error on it down from 3.009 to 2.784. So the board
+as it ships does not miss a role that is shrinking. What it overreads is a
+rise: a man whose snaps went up twenty points is held .48 above what he did.
+
+The whole pool, MAE:
+
+| after week | the update | one gap at .20 | a drop at .20, a rise not | a drop's own gap | a drop held two games |
+| --- | --- | --- | --- | --- | --- |
+| 2 | 2.466 | 2.454 | 2.454 | 2.463 | 2.466 |
+| 4 | 2.475 | 2.470 | 2.463 | 2.472 | 2.471 |
+| 6 | 2.484 | 2.477 | 2.475 | 2.480 | 2.484 |
+| 8 | 2.505 | 2.490 | 2.487 | 2.487 | 2.493 |
+| 10 | 2.553 | 2.530 | 2.534 | 2.525 | 2.527 |
+
+Pinning the break at twenty beats the update's own search at every cut, by
+.012 at week 2 and .023 at week 10. Nobody has four games at week 2, so
+nothing can break there, and some of that is which weights the fit lands on
+rather than the break itself.
+
+Three ways of reading a drop apart from a rise, each fitted on the seasons
+before the one it marks:
+
+- A drop with a gap of its own, searched over the same values as the
+  rise's. The fit picks a drop gap every season, .15 to .30, and leaves a
+  rise unbroken every season. It beats the update at every cut and takes a
+  drop from .69 over to .12 under, but it loses to the one gap at weeks 2,
+  4 and 6, and on the drops themselves, 2.812 against 2.784.
+- The one gap's own weights with a rise left unbroken, so the rise is the
+  only thing that differs. A rise goes from .48 over to .77 under and its
+  error from 2.914 to 2.891. The pool is better at weeks 4, 6 and 8 by .002
+  to .007 and worse at week 10 by .004.
+- A drop counted only where two of his last three games are that far down,
+  so a game a man left hurt is not read as a demotion. It does worse than
+  counting every drop, .20 over on the drops against .12 under. The first
+  game of a smaller role and a game a man left hurt look the same in a snap
+  count, which is what dropping low snap games found as well.
+
+None beats the one gap at every cut, so the shape stays as it ships. The
+drop options are left in `inSeasonLevel.ts`, switched off, so the eval
+can mark them. More weight on the role term after a drop was not tried:
+under the one gap a drop is already held a little under what he did, and
+more weight on the role would push it further under.
+
+## What to try next on this
+
+A rise. The one gap holds a man whose snaps rose twenty points .48 a game
+too high, and leaving a rise unbroken cuts the error on it but not by
+enough to show in the pool at every cut. A rise breaking at a wider gap
+than a drop, or only once it has held two games, is the next thing to
+measure.
+
+Split the shrinkage by why a player's games are short, which the update's
+own section already asks for. Neither half of this touched it.

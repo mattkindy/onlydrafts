@@ -200,6 +200,8 @@ when you want to measure it again.
 | Game script being left out of the week's setting | `scripts/buildSite.ts` | deleted, see `docs/scoreboard.md` |
 | `PAID_BASE` and the two weights beside it, and a kicker's week being nearly flat | `features/kickerWeek.ts` | `scripts/kickerWeekEval.ts` |
 | `KICKER_GAMES` staying one number for every kicker | `scripts/buildSite.ts` | `scripts/kickerSeasonEval.ts` |
+| `OUT_BACK`, how likely a man ruled out is to play each of his side's next four games, and no ramp after a short absence | `app/lib/availability.ts` | `scripts/outSpellEval.ts` |
+| `SHIPPED_SHAPE` reading a drop in snap share the same as a rise | `features/inSeasonBoard.ts` | `scripts/inSeasonLevelEval.ts` |
 | The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
 | A card's spread outside the walk's cast being the pooled band | `scripts/buildSite.ts` | `scripts/bandSourceEval.ts` |
 | The weekly ridge fitted on past seasons alone, and adding its features up | `features/fitWeeklyByPosition.ts` | `scripts/inSeasonRowsEval.ts`, `scripts/weeklyInteractionEval.ts` |

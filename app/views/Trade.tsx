@@ -14,7 +14,10 @@
  * Which of those matters depends on where a team stands. A contender is
  * buying a title and a team out of the race is buying next year, so the
  * same trade reads one way to one and the other way to the other. A
- * league where nothing carries over has no next year to buy.
+ * league where nothing carries over has no next year to buy. Where
+ * players carry over, a player is worth his next seasons as well: all of
+ * them in a dynasty league, and in a keeper league next season's, over
+ * what he costs to keep, if he is one of the few his team would keep.
  *
  * Both sides are shown because a trade the other manager loses is a trade
  * nobody accepts, and finding one that helps you both is the job.
@@ -30,11 +33,15 @@ import { SEASON_WEEKS } from "../lib/availability.ts";
 import {
   playoffOdds, playoffRounds, type PlayoffOdds, type Strength,
 } from "../lib/seasonStats.ts";
-import { splitAtPlayoffs, useSeasonSim, weeklyStrengths } from "../lib/seasonSim.ts";
+import {
+  HOW_ODDS_WORK, HOW_ODDS_WORK_IN_FULL, splitAtPlayoffs, useSeasonSim, weeklyStrengths,
+} from "../lib/seasonSim.ts";
+import { keeperCosts } from "../lib/keepers.ts";
 import { keep, stored } from "../lib/store.ts";
 import {
-  dealIsEmpty, draftCurve, NO_DEAL, overTheLimit, pickId, pickValue, restOfSeason,
-  rostersAfter, slotsFromWins, stageOf, tradeVerdict, valueSays, type Deal,
+  dealIsEmpty, draftCurve, dynastyValue, keeperGain, keptValue, NO_DEAL, overallPick,
+  overTheLimit, pickId, pickValue, restOfSeason, rostersAfter, SEASON_OUT, SEASONS_AHEAD,
+  slotsFromWins, stageOf, tradeVerdict, valueSays, type Deal,
 } from "../lib/trade.ts";
 import { ordinal } from "./Standings.tsx";
 
@@ -49,6 +56,10 @@ interface Props {
   listed: Map<string, Listed>;
   /** opens the league's settings, where a deadline nobody has said can be set */
   onSettings?: () => void;
+  /** whether the league keeps players, as the page has it */
+  keeperLeague?: boolean;
+  /** how many each team keeps there */
+  perTeam?: number;
 }
 
 const signed = (n: number, places = 0) =>
@@ -134,6 +145,28 @@ export function Trade(props: Props) {
   });
   const valueOf = (key: string) => restOfSeason(sim.byKey.get(key), weeksLeft);
 
+  // what outlives this season: every player in a dynasty league, the few
+  // each team keeps in a keeper league, nobody in a redraft one
+  const carries = league.dynasty ? "dynasty" : props.keeperLeague ? "keeper" : null;
+  const perTeam = props.perTeam ?? 3;
+  const costs = useMemo(() => keeperCosts(league.leagueId), [league.leagueId]);
+  const teams = league.size || 12;
+  // a keeper costs the pick in the round he is kept for, at the middle of it
+  const costOf = (key: string) => {
+    const round = Number(costs[key]) || 0;
+
+    return round ? curve(overallPick(round, Math.ceil(teams / 2), teams, league.snake)) : 0;
+  };
+  const laterOf = (key: string): number | null => {
+    const p = sim.byKey.get(key);
+
+    return carries === "dynasty"
+      ? dynastyValue(p)
+      : carries === "keeper" ? keeperGain(p, costOf(key)) : null;
+  };
+  // whether the board projects anyone's next seasons yet
+  const boardLooksAhead = useMemo(() => players.some((p) => p.ahead?.length), [players]);
+
   const partner = league.allRosters.find((r) => r.owner === deal.partner);
   const mine = league.allRosters.find((r) => r.owner === league.team);
 
@@ -159,6 +192,28 @@ export function Trade(props: Props) {
   const deadline = league.tradeDeadline ?? null;
   const closed = deadline !== null && coming > deadline;
 
+  // what a side's players are worth past this season, after the trade
+  // against before: in a keeper league its best few keepers, before and
+  // after, since a player it would not keep is worth nothing to it then
+  const laterFor = (owner: string, give: boolean) => {
+    if (!carries || !boardLooksAhead) {
+      return 0;
+    }
+
+    if (carries === "dynasty") {
+      const worth = (keys: string[]) => sum(keys.map((k) => laterOf(k) ?? 0));
+
+      return give ? worth(deal.get) - worth(deal.give) : worth(deal.give) - worth(deal.get);
+    }
+
+    const kept = (keys: { key: string }[]) =>
+      keptValue(keys.map((p) => laterOf(p.key) ?? 0), perTeam);
+    const was = league.allRosters.find((r) => r.owner === owner)?.keys ?? [];
+    const will = rostersAfter(league, deal).find((r) => r.owner === owner)?.keys ?? [];
+
+    return kept(will) - kept(was);
+  };
+
   const side = (owner: string, give: boolean) => {
     const was = oddsOf(before, owner);
     const will = oddsOf(after, owner);
@@ -170,8 +225,9 @@ export function Trade(props: Props) {
     const future = give ? getPicks - givePicks : givePicks - getPicks;
     const drop = overTheLimit(league, deal, give ? "mine" : "theirs");
     const stage = was ? stageOf(was.playoffs) : null;
+    const later = laterFor(owner, give);
 
-    return { now, title, lineup, playoffLineup, players, future, drop, stage };
+    return { now, title, lineup, playoffLineup, players, future, later, drop, stage };
   };
   const you = side(league.team, true);
   const them = side(deal.partner, false);
@@ -194,11 +250,18 @@ export function Trade(props: Props) {
 
     return a === null || b === null || dealIsEmpty(deal)
       ? null
-      : tradeVerdict({ now: a, theirs: b, later: you.future, stage: you.stage });
+      : tradeVerdict({ now: a, theirs: b, later: you.future + you.later, stage: you.stage });
   })();
   // whether anything a trade buys outlives this season: picks, or a
   // league that keeps its players
-  const hasLater = Boolean(league.dynasty) || (league.picks?.length ?? 0) > 0;
+  const hasLater = carries !== null || (league.picks?.length ?? 0) > 0;
+  const anyPlayers = deal.give.length + deal.get.length > 0;
+  const laterSays = carries === "dynasty"
+    ? "later seasons"
+    : `keepers`;
+  const laterTip = carries === "dynasty"
+    ? `what the players are worth over their next ${SEASONS_AHEAD} seasons, in points over a replacement, a season further off worth ${SEASON_OUT} of the one before`
+    : `next season, what the team's best ${perTeam} keepers gain over the picks they cost, after the trade against before`;
   const openWeeks = deadline !== null && !closed ? deadline - coming + 1 : null;
   const regularLeft = Math.max(0, lastRegular - coming + 1);
   const hasPicks = picks.length > 0;
@@ -318,6 +381,16 @@ export function Trade(props: Props) {
                       </td>
                     ))}
                   </tr>
+                  {carries && anyPlayers && (
+                    <tr>
+                      <th title={laterTip}>{laterSays}</th>
+                      {[you, them].map((s, i) => (
+                        <td key={i} class={s.later > 0.5 ? "up" : s.later < -0.5 ? "down" : ""}>
+                          {boardLooksAhead ? signed(s.later) : "…"}
+                        </td>
+                      ))}
+                    </tr>
+                  )}
                   {anyPicks && (
                     <tr>
                       <th title="what the picks are worth, in points over a replacement across the season they are made in">picks</th>
@@ -368,6 +441,8 @@ export function Trade(props: Props) {
           chosen={deal.give}
           chosenPicks={deal.givePicks}
           valueOf={valueOf}
+          laterOf={carries && boardLooksAhead ? laterOf : null}
+          laterSays={carries === "dynasty" ? "later" : "next yr"}
           valueOfPick={valueOfPick}
           byKey={sim.byKey}
           onPlayer={(k) => toggle("give", k)}
@@ -382,6 +457,8 @@ export function Trade(props: Props) {
           chosen={deal.get}
           chosenPicks={deal.getPicks}
           valueOf={valueOf}
+          laterOf={carries && boardLooksAhead ? laterOf : null}
+          laterSays={carries === "dynasty" ? "later" : "next yr"}
           valueOfPick={valueOfPick}
           byKey={sim.byKey}
           onPlayer={(k) => toggle("get", k)}
@@ -392,7 +469,15 @@ export function Trade(props: Props) {
       <p class="hint tnote">
         value: points over a replacement, rest of this season
         {hasPicks ? " · a pick: its draft's season, at the spot its team is on course for" : ""}
-        {league.dynasty ? " · players' later seasons not counted yet" : ""}
+        {carries === "dynasty" && boardLooksAhead &&
+          ` · later: his next ${SEASONS_AHEAD} seasons, each worth ${SEASON_OUT} of the one before`}
+        {carries === "keeper" && boardLooksAhead &&
+          ` · next yr: next season over the pick he costs to keep${
+            Object.keys(costs).length ? "" : ", none priced yet so each is kept free"}; a team keeps its best ${perTeam}`}
+        {carries && !boardLooksAhead && " · players' later seasons aren't on the board yet"}
+      </p>
+      <p class="hint tnote" title={HOW_ODDS_WORK_IN_FULL}>
+        Odds: {SEASONS.toLocaleString()} simulated seasons, before and after the trade. {HOW_ODDS_WORK}
       </p>
     </div>
   );
@@ -433,6 +518,9 @@ function TradeSide(
     chosen: string[];
     chosenPicks: string[];
     valueOf: (key: string) => number;
+    /** what he is worth past this season, where anything is */
+    laterOf: ((key: string) => number | null) | null;
+    laterSays: string;
     valueOfPick: (p: DraftPick) => number;
     byKey: Map<string, Player>;
     onPlayer: (key: string) => void;
@@ -440,12 +528,14 @@ function TradeSide(
   },
 ) {
   const all = props.keys
-    .map((p) => ({ p, value: props.valueOf(p.key) }))
-    .sort((a, b) => b.value - a.value);
-  // the players worth nothing over a replacement now fold away, bar any
-  // already ticked, since a trade is rarely about them
+    .map((p) => ({ p, value: props.valueOf(p.key), later: props.laterOf?.(p.key) ?? null }))
+    .sort((a, b) => b.value + (b.later ?? 0) - a.value - (a.later ?? 0));
+  // the players worth nothing over a replacement now or later fold away,
+  // bar any already ticked, since a trade is rarely about them; a rookie
+  // on reserve is worth nothing now and the most of anyone later
   const [open, setOpen] = useState(false);
-  const worth = (r: (typeof all)[number]) => Math.round(r.value) > 0 || props.chosen.includes(r.p.key);
+  const worth = (r: (typeof all)[number]) =>
+    Math.round(r.value) > 0 || Math.round(r.later ?? 0) > 0 || props.chosen.includes(r.p.key);
   const rows = open ? all : all.filter(worth);
   const folded = all.length - all.filter(worth).length;
   // the picks by season and round; a team's own come before ones it bought
@@ -455,9 +545,15 @@ function TradeSide(
 
   return (
     <section class={"tside " + props.which}>
-      <h3><span>{props.title}</span><i title="points over a replacement player for the games left this season; a pick, over the season it is made in">value</i></h3>
+      <h3>
+        <span>{props.title}</span>
+        <span class="tvals">
+          <i title="points over a replacement player for the games left this season; a pick, over the season it is made in">value</i>
+          {props.laterOf && <i title="what he is worth past this season, in points over a replacement">{props.laterSays}</i>}
+        </span>
+      </h3>
       <ul class="tlistrows">
-        {rows.map(({ p, value }) => {
+        {rows.map(({ p, value, later }) => {
           const on = props.chosen.includes(p.key);
           const his = props.byKey.get(p.key);
 
@@ -470,6 +566,7 @@ function TradeSide(
                   <i>{his?.position ?? p.pos}{p.team ? ` · ${p.team}` : ""}</i>
                 </span>
                 <span class="tval">{valueSays(value)}</span>
+                {props.laterOf && <span class="tval later">{later === null ? "–" : valueSays(later)}</span>}
               </button>
             </li>
           );
@@ -477,7 +574,7 @@ function TradeSide(
         {folded > 0 && (
           <li>
             <button class="tmore" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-              {open ? "fewer" : `${folded} more worth nothing over a replacement now`}
+              {open ? "fewer" : `${folded} more worth nothing over a replacement${props.laterOf ? "" : " now"}`}
             </button>
           </li>
         )}

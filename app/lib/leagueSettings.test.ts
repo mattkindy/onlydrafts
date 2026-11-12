@@ -26,6 +26,17 @@ describe("league settings set by hand", () => {
     expect(lg.keepers).toBe(true);
   });
 
+  it("keeps a team's keepers where the provider says none", () => {
+    expect(readSettings({ keepersPerTeam: 0 })).toEqual({});
+    expect(readSettings({ keepersPerTeam: 2 })).toEqual({ keepersPerTeam: 2 });
+    expect(withSettings(league({ keepersPerTeam: null }), { keepersPerTeam: 2 }).keepersPerTeam).toBe(2);
+
+    const said = settingsSaid(league({ keepersPerTeam: 4 }), {}).keepersPerTeam;
+
+    expect(said).toMatchObject({ value: 4, known: true, yours: false });
+    expect(settingsSaid(league({}), {}).keepersPerTeam.known).toBe(false);
+  });
+
   it("leaves the league alone where nothing is set", () => {
     const lg = league({ tradeDeadline: 12 });
 

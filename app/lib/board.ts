@@ -187,6 +187,7 @@ function rescaleSpread(p: Player, pays: Pays): void {
 function priceAgainstReplacement(p: Player, bar: Record<string, number>): void {
   const plays = p.games!;
   const against = (bar[p.position] ?? 0) * plays;
+  p.replacementPpg = bar[p.position] ?? 0;
   p.perGameVor = Number(((p.ppg ?? 0) - (bar[p.position] ?? 0)).toFixed(1));
   p.vor = Number((plays * ((p.ppg ?? 0) - (bar[p.position] ?? 0))).toFixed(1));
   // kept aside, because the curve later replaces vor with what a pick at

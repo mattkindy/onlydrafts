@@ -25,6 +25,34 @@ describe("the playoff picture", () => {
     expect(picture.cut).toBe(picture.rows[2]!.y);
     expect(picture.subtitle).toBe("playoff chances, week 9");
   });
+
+  it("draws no bye or title where the bracket was not played out", () => {
+    expect(picture.hasTitle).toBe(false);
+    expect(picture.rows[0]!.title).toBeNull();
+  });
+});
+
+describe("the playoff picture with the bracket played out", () => {
+  const picture = layoutPlayoffs({
+    league: "Test League",
+    week: 9,
+    playoffTeams: 2,
+    whatIf: "2 picks",
+    teams: [
+      { name: "top", record: "7-1", wins: 11, odds: 0.99, bye: 0.8, champion: 0.4, division: 0.9, mine: false },
+      { name: "me", record: "4-4", wins: 7, odds: 0.5, bye: 0.1, champion: 0.08, division: 0.1, mine: true },
+    ],
+  });
+
+  it("carries the bye, the title and the division, as the page does", () => {
+    expect(picture.hasBye && picture.hasTitle).toBe(true);
+    expect(picture.rows.map((r) => [r.bye, r.title, r.division]))
+      .toEqual([["80%", "40%", "90%"], ["10%", "8%", "10%"]]);
+  });
+
+  it("says a what-if is one", () => {
+    expect(picture.subtitle).toBe("what if 2 picks, week 9");
+  });
 });
 
 describe("the season table picture", () => {
