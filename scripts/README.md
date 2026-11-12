@@ -55,7 +55,8 @@ says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `inSeasonLevelEval.ts`,
 `kickerSeasonEval.ts`, `kickerWeekEval.ts`, `walkVolumeEval.ts`,
 `injuryStatusEval.ts`, `outSpellEval.ts`, `weatherEval.ts`, `simAgreement.ts`,
-`bandSourceEval.ts`, `inSeasonRowsEval.ts` and `weeklyInteractionEval.ts`.
+`bandSourceEval.ts`, `inSeasonRowsEval.ts`, `weeklyInteractionEval.ts` and
+`seasonsAheadEval.ts`.
 `inSeasonScorecard.ts` scores the slates the site shipped this season
 against the box scores, and is worth running again as weeks come in.
 
@@ -3828,3 +3829,235 @@ once and a fill-in not at all.
 
 Split the shrinkage by why a player's games are short, which the update's
 own section already asks for. Neither half of this touched it.
+
+# What a player's next three seasons are worth to a keeper league
+
+The board prices a player for what is left of this season, and a keeper
+or a dynasty league is buying the next few as well. Jeremiyah Love is
+the case that started it: taken third overall by Arizona in 2026, his
+snaps ran 64, 45, 49 and 19 per cent in weeks 3, 4, 5 and 8, and he was
+on injured reserve by week 9. Priced off November he is a hurt backup,
+and most of what he is worth is in 2027 and after.
+
+`seasonsAheadEval.ts` stands at week 10 of a season, has three readers
+say every skill player's points a game when he plays and his games out
+of seventeen in each of his next three seasons, and marks each on the
+season total those make, in half PPR. It runs in about fifteen seconds;
+`--ablate` adds the term by term table, the penalty sweep and boosted
+trees, and takes two minutes. `--week` and `--scoring` move the cut and
+the rules.
+
+The readers:
+
+- **carried** is this season's points a game and his share of his
+  club's games, carried forward as they are, every season ahead.
+- **aged** is the same times what players of his age and position kept
+  of each a horizon on, a quadratic in age fitted per position to the
+  ratio of sums at each age. Games are counted over everybody, so leaving
+  the league is in the curve.
+- **the model** is `src/model/seasonsAhead.ts`, a ridge per position and
+  horizon for the rate and another for the games.
+
+Every reader is taught only on seasons that had finished by that week:
+a t+1 fit at 2023 is taught on cuts from 2021 and earlier, whose t+1 is
+2022 or before. The players marked are the ones a keeper league is
+choosing between, picked off the cut alone so nobody is marked on a set
+chosen by what happened: with his club or on its reserve list, and
+scoring five a game over two games or more this season, or over four
+last season, or in his first three seasons from the first three rounds.
+About 310 a season. A standard error resamples players, so a man who is
+in all three seasons goes in or out as one.
+
+Error is the mean absolute miss of the season total, in points:
+
+| horizon | marked on | carried | aged | the model | model against aged | rmse, aged / model | ordering, aged / model | bias, aged / model |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| t+1 | 2022 to 2024, 928 | 59.4 ± 2.0 | 51.4 ± 1.8 | 49.9 ± 1.6 | -1.5 ± 0.8 | 71.5 / 66.8 | .621 / .667 | -9.3 / -1.5 |
+| t+2 | 2022 and 2023, 633 | 68.9 ± 2.6 | 52.9 ± 2.4 | 51.4 ± 2.1 | -1.5 ± 0.9 | 73.4 / 69.3 | .550 / .617 | -11.4 / -2.5 |
+| t+3 | 2021 and 2022, 655 | 77.2 ± 2.9 | 48.7 ± 2.5 | 47.9 ± 2.1 | -0.8 ± 1.0 | 72.9 / 68.1 | .526 / .604 | -10.2 / -1.0 |
+
+Carrying the season forward is a long way behind both. It says every
+player keeps his job, his health and his rate, and it overshoots by 21
+points a season at t+1 and by 52 at t+3. The age curve is the honest
+baseline, and on absolute error alone it is closer than it looks: it
+runs nine to eleven points low at every horizon, and a reader that runs
+low gains on absolute error whenever the outcome has a long right tail,
+which a season total does. The model beats it on error at every horizon,
+by 1.5 points at t+1 and t+2, near two standard errors, and by 0.8 at
+t+3, under one. It beats it by a long way on the two things a dynasty
+price needs, the order and the level: it ranks the t+3 season at .604
+against .526, and its bias is one to two and a half points where the
+curve's is nine to eleven.
+
+By who, error with the bias beside it:
+
+| who | horizon | players | carried | aged | the model | model against aged |
+| --- | --- | --- | --- | --- | --- | --- |
+| rookies | t+1 | 123 | 49.9 (-8.2) | 51.4 (-8.7) | 45.8 (+1.3) | -5.6 ± 2.0 |
+| rookies | t+2 | 85 | 62.7 (-4.2) | 60.3 (-6.4) | 58.2 (-0.2) | -2.1 ± 2.3 |
+| rookies | t+3 | 80 | 60.3 (+1.2) | 54.5 (-7.3) | 58.8 (-0.7) | +4.2 ± 3.7 |
+| 23 and under | t+1 | 237 | 52.9 (-2.3) | 52.9 (-6.2) | 50.7 (+0.8) | -2.2 ± 1.6 |
+| 24 to 26 | t+1 | 340 | 56.3 (+21.2) | 50.1 (-7.8) | 48.9 (-2.3) | -1.2 ± 1.4 |
+| 27 to 29 | t+1 | 231 | 65.7 (+38.3) | 50.6 (-10.9) | 49.7 (-2.3) | -0.8 ± 1.7 |
+| 30 and over | t+1 | 120 | 68.8 (+35.2) | 54.1 (-16.9) | 52.0 (-2.4) | -2.0 ± 2.2 |
+| 23 and under | t+3 | 174 | 65.7 (+14.4) | 59.4 (-5.9) | 58.0 (-1.2) | -1.5 ± 2.5 |
+| 30 and over | t+3 | 81 | 102.3 (+84.4) | 46.7 (-1.6) | 47.0 (+11.2) | +0.4 ± 2.8 |
+| first round rookie backs and receivers | t+1 | 19 | 58.1 (-11.1) | 63.4 (-1.4) | 55.3 (+4.2) | -8.1 ± 4.8 |
+| first round rookie backs and receivers | t+2 | 12 | 107.2 (-54.8) | 107.1 (-42.5) | 106.7 (-36.2) | -0.4 ± 6.2 |
+| first round rookie backs and receivers | t+3 | 13 | 74.0 (-11.3) | 62.8 (-10.0) | 60.4 (-8.6) | -2.4 ± 8.5 |
+| fourteen a game or more so far | t+1 | 146 | 102.1 (+69.0) | 77.9 (-6.0) | 76.6 (-1.8) | -1.3 ± 3.1 |
+| fourteen a game or more so far | t+3 | 106 | 135.1 (+119.0) | 85.4 (-30.9) | 79.5 (-13.0) | -5.8 ± 3.9 |
+
+The rookies next season are where the model earns its place, five and
+a half points closer than the curve and unbiased where both baselines
+are eight low. A rookie's November is a thin read of him and his draft
+slot is most of what anyone knows. By t+3 the rookies are four points
+worse than the curve, inside the noise of eighty players.
+
+The first round rookie backs and receivers are few, and at t+2 every
+reader misses them by more than a hundred points a season and is 36 to
+55 short on average. That is the 2022 and 2023 classes, Bijan Robinson, Jahmyr Gibbs,
+Jaxon Smith-Njigba, Garrett Wilson and Chris Olave among them, two years
+on. Twelve players is not enough to fit a correction on, and nothing
+tried here closed it.
+
+## Which terms earned their place
+
+The terms were chosen on development seasons, 2016 to 2021 for t+1,
+2020 for t+2 and 2019 for t+3, each season marked by a fit taught on
+the others. None of those outcomes is one the held out seasons are
+marked on. Error against the shipped fit, a plus being worse:
+
+| change | t+1 | t+2 | t+3 | rookies, t+1 |
+| --- | --- | --- | --- | --- |
+| without this season and last together | +0.7 ± 0.2 | +0.9 ± 0.3 | +0.7 ± 0.3 | +1.6 |
+| without the square of it | +0.2 ± 0.1 | +0.6 ± 0.2 | +0.5 ± 0.2 | +0.2 |
+| without last season on its own | +0.2 ± 0.2 | -0.1 ± 0.1 | -0.0 ± 0.2 | -0.0 |
+| without age | +0.2 ± 0.1 | +0.1 ± 0.2 | +0.5 ± 0.2 | +0.0 |
+| without seasons in the league | +0.6 ± 0.1 | +0.2 ± 0.1 | +0.4 ± 0.2 | +0.8 |
+| without draft capital | +0.1 ± 0.3 | -0.0 ± 0.3 | +0.3 ± 0.3 | +2.0 |
+| without snap share and work share | -0.0 ± 0.1 | +0.2 ± 0.1 | +0.1 ± 0.1 | -0.0 |
+| with the trends in his snaps and share | -0.0 ± 0.1 | +0.2 ± 0.1 | +0.0 ± 0.2 | -0.1 |
+| with where he stands on the roster | +0.2 ± 0.1 | +0.3 ± 0.1 | +0.4 ± 0.1 | +0.1 |
+| with the room he plays in | -0.0 ± 0.1 | -0.1 ± 0.1 | +0.1 ± 0.1 | -0.1 |
+| with the season before last | +0.1 ± 0.1 | +0.3 ± 0.2 | +0.3 ± 0.2 | -0.1 |
+| with draft capital in every season | +0.2 ± 0.1 | +0.1 ± 0.1 | -0.2 ± 0.2 | +0.3 |
+| a penalty of 3 rather than 10 | -0.0 ± 0.0 | -0.1 ± 0.1 | -0.1 ± 0.1 | +0.1 |
+| a penalty of 30 | +0.1 ± 0.1 | +0.3 ± 0.1 | +0.3 ± 0.1 | +0.1 |
+| a penalty of 100 | +0.5 ± 0.1 | +0.9 ± 0.3 | +1.1 ± 0.3 | +0.7 |
+
+What ships: his points a game and games so far and his share of his
+club's games; last season's rate and games; this season and last pooled,
+last season at half weight, and the square of that; age and its square
+about 26; seasons in the league and a rookie flag; draft capital, the
+log of the pick, in his first three seasons only, and an undrafted flag;
+and his snap share and share of the work at his position. A back's work
+is his carries and targets over his club's backs', a receiver's or a
+tight end's his targets over his club's, a quarterback's his throws.
+
+Draft capital is worth little to the pool and two points a season to
+the rookies, which is what it is for. Read in every season it is worse at
+t+1 and t+2 and level at t+3: a veteran's draft slot says nothing his
+own seasons do not.
+
+The square of the pooled rate was found by looking at the held out
+calibration, which is a peek, and kept because it wins on the
+development seasons as well. Without it a player scoring fourteen a
+game or more was held 23 points a season short three years on, since a
+straight line through a rate cannot say that a good player stays in the
+league and on the field. With it that is 13, which is still short, and
+the next thing to fix.
+
+Snap share and work share were worth half a point at t+2 before the
+square went in and are worth a fifth of one after it. They stay.
+
+What lost:
+
+- **The trend in his snaps and his share**, the last three games against
+  the ones before. Level at t+1 and t+3 and worse at t+2. A role that is
+  shrinking already shows in the average.
+- **Where the roster file has him**, reserve, practice squad or off it.
+  Worse at every horizon. The games he has already missed say it first,
+  and a reserve list does not say which injury put him there.
+- **The room he plays in**, the busiest teammate's share and the
+  earliest pick among his young teammates. Level everywhere. A room is
+  remade every spring and the November one says little about the next.
+- **The season before last**. Slightly worse everywhere. Last season and
+  this one already carry it.
+- **Boosted trees** on the shipped terms, with the season model's
+  settings. Level with the ridge on error at t+1 and t+2, worse at t+3,
+  and seven to eleven points low at every horizon. The average of the
+  two is the closest reader on error, 49.2, 50.7 and 47.8 against the
+  ridge's 49.9, 51.4 and 47.9, but it is four and a half to seven points
+  low and its rmse is worse than the ridge's at t+2 and t+3. A dynasty price is a sum of expected seasons, so the reader
+  that is right on average ships, and the ridge alone is that.
+
+## Jeremiyah Love
+
+At week 10 of 2026: six games of nine at 8.0 a game, a snap share of .43
+falling by .11, 57% of Arizona's backs' work in the games he played, on
+reserve, age 21.3. The board has him at 11.1 a game for the rest of the
+season. The model, taught on every earlier season cut at week 10:
+
+| what changes | 2027 | 2028 | 2029 |
+| --- | --- | --- | --- |
+| him | 13.7 a game in 13.1 | 13.8 in 13.2 | 12.1 in 13.2 |
+| taken 40th | 11.1 in 11.5 | 10.8 in 10.9 | 9.9 in 9.6 |
+| undrafted | 8.9 in 9.9 | 8.5 in 9.0 | 8.5 in 6.7 |
+| 23 rather than 21 | 12.8 in 12.5 | 12.8 in 12.0 | 11.4 in 11.8 |
+| every game his club played, at the same rate | 14.0 in 15.2 | 14.0 in 14.9 | 12.1 in 14.6 |
+
+As the board writes it that is `of` 1.24, 1.24 and 1.09 on his 11.1,
+and 13.1, 13.2 and 13.2 games. The third pick is worth two and a half
+points a game a season against the fortieth and five against nobody's,
+and the games he has missed cost him one and a half to two games a
+season. Neither his
+falling snaps nor the reserve list moves him, because both terms lost.
+
+No back in the data looks like him at that week. Every rookie back taken
+in the top twelve since 2016, at week 10, and what came next:
+
+| who | season | pick | so far | games | said t+1 | was t+1 | said t+2 | was t+2 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Ezekiel Elliott | 2016 | 4 | 19.1 | 8 of 8 | | 19.0 in 10.6 | | 19.4 in 15.9 |
+| Christian McCaffrey | 2017 | 8 | 11.3 | 9 of 9 | | 20.8 in 17.0 | | 25.8 in 17.0 |
+| Leonard Fournette | 2017 | 4 | 20.4 | 6 of 8 | | 13.7 in 8.5 | | 14.8 in 15.9 |
+| Saquon Barkley | 2018 | 2 | 21.8 | 8 of 8 | 22.7 in 17.0 | 16.8 in 13.8 | | 6.2 in 2.1 |
+| Bijan Robinson | 2023 | 8 | 11.0 | 9 of 9 | 13.5 in 15.7 | 18.3 in 17.0 | 13.4 in 14.6 | 19.5 in 17.0 |
+| Jahmyr Gibbs | 2023 | 12 | 13.7 | 6 of 8 | 14.7 in 14.1 | 19.8 in 17.0 | 14.0 in 14.4 | 19.3 in 17.0 |
+| Ashton Jeanty | 2025 | 6 | 13.3 | 8 of 8 | 16.1 in 16.9 | | 14.3 in 16.4 | |
+| Jeremiyah Love | 2026 | 3 | 8.0 | 6 of 9 | 13.7 in 13.1 | | 13.8 in 13.2 | |
+
+The early ones have no fit, since nothing before them had finished.
+Bijan Robinson and Jahmyr Gibbs were held five points a game short of
+what they did next and Saquon Barkley six over. Three backs is not a
+correction, and neither is the first round table, which is four over at
+t+1 and well short at t+2.
+
+## What the numbers rest on
+
+Games are weeks with a stat row, the way `seasonSummary.ts` counts
+them. The board's in-season update also counts a week a man dressed and
+never touched the ball, which the roster file only marks reliably from
+about 2021, so a backup's rate here runs a little above the board's. Seasons
+before 2021 are put on seventeen games.
+
+The held out t+3 fits are taught on two and three seasons, 2016 to
+2018, and the build's on seven, so if anything the bench understates the
+build at the long horizon rather than flattering it.
+
+A man older than anybody in the data is read off the quadratic in age,
+so Aaron Rodgers at 42 comes out at sixteen a game in 2029, over three
+games. The games are what keep that from mattering.
+
+## What to try next
+
+Take the stars' remaining shortfall at t+3. A model of the chance he is
+still in the league, apart from the games he plays if he is, would say
+directly what the square of his rate says by accident.
+
+The first round rookies two years on, once there are enough classes to
+fit anything on.
+
+Fit every horizon at once, with how far ahead as a term, so the t+3 fit
+can borrow the seasons only t+1 has.
