@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Tiebreak } from "./playoffRules.ts";
 import type { Matchup, Side } from "./providers.ts";
 import {
-  bestLineupPoints, chanceAt, chanceOf, luckOf, pairKey, playoffOdds, scenarioPath, TIE,
-  type SeedRow, seasonOf, weeklySpread, winShare,
+  bestLineupPoints, bracketSlots, chanceAt, chanceOf, luckOf, pairKey, playoffOdds,
+  playoffRounds, scenarioPath, TIE, type SeedRow, seasonOf, type Strength, weeklySpread, winShare,
 } from "./seasonStats.ts";
 
 const POS: Record<string, string> = {
@@ -351,5 +351,81 @@ describe("a league's own playoff rules", () => {
     expect([of("ann"), of("bo"), of("cy"), of("di")].map((t) => t.medianWins)).toEqual([1, 0, 1, 0]);
     expect(of("ann").versus).toEqual({ bo: { won: 1, games: 1 } });
     expect(of("bo").versus).toEqual({ ann: { won: 0, games: 1 } });
+  });
+});
+
+describe("the playoffs played out after the season", () => {
+  const owners = ["ann", "bo", "cy", "di", "ed", "fy"];
+  // the table already settled: ann first down to fy last, two weeks left
+  const table = owners.map((owner, i) => ({ owner, wins: 10 - 2 * i, ties: 0, pf: 1000 - i }));
+  const weeks: [string, string][][] = Array.from({ length: 2 }, () => [
+    ["ann", "fy"], ["bo", "ed"], ["cy", "di"],
+  ]);
+  const even = new Map(owners.map((o) => [o, { mean: 100, sd: 20 }]));
+
+  it("takes a round a week, a short field's top seeds sitting the first out", () => {
+    expect(playoffRounds(6)).toBe(3);
+    expect(playoffRounds(4)).toBe(2);
+    expect(playoffRounds(8)).toBe(3);
+    expect(bracketSlots(8)).toEqual([1, 8, 4, 5, 2, 7, 3, 6]);
+  });
+
+  it("crowns one team a season, and only teams that made it", () => {
+    const run = playoffOdds({
+      table, weeks, strength: even, bracket: [even, even, even], playoffTeams: 4, draws: 3000,
+    });
+    const total = run.odds.reduce((sum, o) => sum + (o.champion ?? 0), 0);
+
+    expect(total).toBeCloseTo(1, 5);
+    // fy is four games behind the last place in with two to play
+    expect(run.odds.find((o) => o.owner === "fy")!.champion).toBe(0);
+  });
+
+  it("counts a team at its playoff strength, not its strength now", () => {
+    // di is ordinary through the season and back to full strength in December
+    const december = new Map(even);
+
+    december.set("di", { mean: 150, sd: 20 });
+
+    const run = playoffOdds({
+      table, weeks, strength: even, bracket: [december, december, december],
+      playoffTeams: 4, draws: 3000,
+    });
+    const plain = playoffOdds({
+      table, weeks, strength: even, bracket: [even, even, even], playoffTeams: 4, draws: 3000,
+    });
+    const di = (r: typeof run) => r.odds.find((o) => o.owner === "di")!;
+
+    expect(di(run).playoffs).toBeCloseTo(di(plain).playoffs, 5);
+    expect(di(run).champion!).toBeGreaterThan(di(plain).champion! + 0.3);
+  });
+
+  it("gives a bye to the top seeds of a short field", () => {
+    // with six in, ann and bo play two games to the title where the rest play three
+    const run = playoffOdds({
+      table: table.map((t) => ({ ...t, wins: 10 })), weeks: [],
+      strength: even, bracket: [even, even, even], playoffTeams: 6, draws: 4000,
+    });
+    const ann = run.odds.find((o) => o.owner === "ann")!.champion!;
+    const fy = run.odds.find((o) => o.owner === "fy")!.champion!;
+
+    // a coin flip a game: a quarter for a bye, an eighth without one
+    expect(ann).toBeCloseTo(0.25, 1);
+    expect(fy).toBeCloseTo(0.125, 1);
+  });
+
+  it("draws each week from that week's strengths", () => {
+    // bo is out the first week and ann wins it; the second week they are level
+    const hurt: Map<string, Strength> = new Map(even);
+
+    hurt.set("bo", { mean: 10, sd: 5 });
+
+    const run = playoffOdds({
+      table: owners.map((owner) => ({ owner, wins: 0, ties: 0, pf: 0 })),
+      weeks: [[["ann", "bo"]], [["ann", "bo"]]], strength: even, byWeek: [hurt, even],
+      playoffTeams: 1, draws: 3000,
+    });
+
+    expect(run.odds.find((o) => o.owner === "ann")!.wins).toBeCloseTo(1.5, 1);
   });
 });

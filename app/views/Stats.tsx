@@ -19,12 +19,12 @@ import {
   linesFor, settledGames, standingFor, type GameState,
 } from "../lib/matchups.ts";
 import type { League, Matchup } from "../lib/providers.ts";
-import { useSeasonSim } from "../lib/seasonSim.ts";
+import { splitAtPlayoffs, useSeasonSim } from "../lib/seasonSim.ts";
 import type { Player } from "../lib/scoring.ts";
 import {
   chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, scenarioPath,
   TIE, weekOfPair, winShare,
-  type PathOutcome, type PlayoffRun, type ScenarioPath, type TeamSeason,
+  type PathOutcome, type PlayoffRun, type ScenarioPath, type Strength, type TeamSeason,
 } from "../lib/seasonStats.ts";
 import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
 import { pct } from "./Advice.tsx";
@@ -380,7 +380,7 @@ function Picker(
 
 export function Stats(props: Props) {
   const { league, players, coming } = props;
-  const { weeks, trouble, played, season, strength, setup } = useSeasonSim({
+  const { weeks, trouble, played, season, strength, weekly, setup, lastRegular } = useSeasonSim({
     league, players, coming, listed: props.listed,
   });
 
@@ -431,27 +431,35 @@ export function Stats(props: Props) {
     .map((r) => [r.owner, r.division!])), [league]);
   const divisionCount = league.divisions?.length ?? 0;
 
+  /** each week still to play, with whoever is expected to be fit for it */
+  const { byWeek } = useMemo(
+    () => splitAtPlayoffs(weekly, coming, lastRegular, 0), [weekly, coming, lastRegular]);
+
   /** your team scoring what you think it will, everybody else as projected */
   const adjusted = useMemo(() => {
-    if (!nudge) {
-      return strength;
-    }
+    const nudged = (strengths: Map<string, Strength>) => {
+      const out = new Map(strengths);
+      const mine = out.get(league.team);
 
-    const out = new Map(strength);
-    const mine = out.get(league.team);
+      if (mine) {
+        out.set(league.team, { ...mine, mean: mine.mean * (1 + nudge) });
+      }
 
-    if (mine) {
-      out.set(league.team, { ...mine, mean: mine.mean * (1 + nudge) });
-    }
+      return out;
+    };
 
-    return out;
-  }, [strength, nudge, league.team]);
+    return nudge
+      ? { strength: nudged(strength), byWeek: byWeek.map(nudged) }
+      : { strength, byWeek };
+  }, [strength, byWeek, nudge, league.team]);
+  const asProjected = useMemo(() => ({ strength, byWeek }), [strength, byWeek]);
 
   const playOut = (picks: Map<string, string>, draws: number, using = adjusted) => setup
     ? playoffOdds({
       table: setup.table,
       weeks: setup.toCome,
-      strength: using,
+      strength: using.strength,
+      byWeek: using.byWeek,
       playoffTeams: rules.teams,
       rules,
       divisionOf,
@@ -488,10 +496,10 @@ export function Stats(props: Props) {
 
   /** your chance as things stand, with nothing picked and your scoring as projected */
   const today = useMemo(() => {
-    const as = playOut(new Map(), SEASONS, strength);
+    const as = playOut(new Map(), SEASONS, asProjected);
 
     return as?.odds.find((o) => o.owner === league.team)?.playoffs ?? null;
-  }, [setup, strength, league, thisWeek, rules, divisionOf]);
+  }, [setup, asProjected, league, thisWeek, rules, divisionOf]);
 
   /**
    * Your chance week by week as the tab would tell it if the season goes
