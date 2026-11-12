@@ -756,21 +756,21 @@ export function seasonsOfPicks(input: {
 
 /**
  * How many rounds the coming drafts run. Sleeper's own setting for it
- * can be shorter than the draft a keeper league actually holds, and
- * trusting it alone lost every pick after it, so the longest of it, the
- * league's draft and any pick already dealt wins. A dynasty league's
- * draft is its startup, far longer than the drafts that follow, so there
- * the setting is the word.
+ * can be shorter than the draft the league actually holds, and trusting
+ * it alone lost every pick after it, so the longest of it, the league's
+ * draft this season and any pick already dealt wins. A dynasty league's
+ * first draft is its startup, far longer than the drafts that follow, so
+ * that one says nothing.
  */
 export function roundsOfPicks(input: {
-  type: number;
+  startup: boolean;
   draftRounds: number;
   draftedRounds: number;
   traded: { round: number }[];
 }): number {
   return Math.max(
     input.draftRounds,
-    input.type === 2 ? 0 : input.draftedRounds,
+    input.startup ? 0 : input.draftedRounds,
     ...input.traded.map((t) => Number(t.round) || 0),
   ) || ROUNDS;
 }
@@ -823,7 +823,8 @@ async function sleeperLeagues(username: string): Promise<League[]> {
     // a keeper is paid for out of the coming draft, which is next
     // season's once this season's has been made
     const rounds = roundsOfPicks({
-      type,
+      // a dynasty league carried over from last season drafts rookies
+      startup: type === 2 && !lg["previous_league_id"],
       draftRounds: Number(settings["draft_rounds"]) || 0,
       draftedRounds: Number(drafts?.[0]?.settings?.rounds) || 0,
       traded: ((traded ?? []) as { season: string | number; round: number }[])

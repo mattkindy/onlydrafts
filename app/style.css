@@ -1376,21 +1376,28 @@
   .tsidetabs { align-self: flex-start; }
   .tsidetabs button { flex: 0 0 auto; padding: 0 var(--s4); }
   .tsides.showing-send .tside.get, .tsides.showing-get .tside.send { display: none; }
-  /* a side's picks, a row of chips a season, each with what it is worth */
-  .tpicks { display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s3); }
-  .tpickrow { display: grid; grid-template-columns: 3rem minmax(0, 1fr); align-items: start; gap: var(--s2); }
-  .tseason { font-size: var(--t1); font-weight: 700; color: var(--faint); padding-top: .55rem;
-    font-variant-numeric: tabular-nums; }
-  .tchips { display: flex; flex-wrap: wrap; gap: var(--s1); }
-  .tchip { display: inline-flex; align-items: center; gap: .35rem; min-height: 2.25rem;
-    padding: 0 var(--s3); border-radius: 999px; border: 1px solid var(--edge); background: var(--panel);
-    color: var(--ink); font: inherit; font-size: var(--t2); font-weight: 700; cursor: pointer; }
-  .tchip i { font-style: normal; font-weight: 500; font-size: var(--t1); color: var(--muted);
-    max-width: 7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tchip small { font-size: var(--t1); font-weight: 600; color: var(--faint); font-variant-numeric: tabular-nums; }
-  .tchip.on { background: color-mix(in srgb, var(--go) 18%, var(--panel)); border-color: var(--go); }
-  .tchip.on small { color: var(--go); }
-  .tchip:focus-visible { outline: 2px solid var(--go); outline-offset: 2px; }
+  /* a side's picks as a draft board: a row a round, a column a season */
+  .tpicks { margin-top: var(--s3); }
+  .tpickgrid { display: grid; grid-template-columns: 2.5rem repeat(var(--seasons, 1), minmax(0, 1fr));
+    gap: var(--s1); align-items: stretch; }
+  .tpickhead { font-size: var(--t1); font-weight: 700; color: var(--faint); text-align: center;
+    font-variant-numeric: tabular-nums; padding-bottom: 2px; }
+  .tpickhead:first-child { text-align: left; }
+  .tround { align-self: center; font-size: var(--t1); font-weight: 700; color: var(--muted); }
+  .tcell { display: flex; flex-direction: column; gap: var(--s1); min-width: 0; }
+  .tpick { display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 2.25rem; min-width: 0; padding: 2px var(--s2); border-radius: 8px;
+    border: 1px solid var(--edge); background: var(--panel); color: var(--ink); font: inherit; cursor: pointer; }
+  .tpick b { font-size: var(--t2); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .tpick i { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-style: normal; font-weight: 500; font-size: var(--t1); color: var(--muted); line-height: 1.2; }
+  .tpick.on { background: color-mix(in srgb, var(--go) 18%, var(--panel)); border-color: var(--go); }
+  .tpick.on b { color: var(--go); }
+  .tpick:focus-visible { outline: 2px solid var(--go); outline-offset: 2px; }
+  .tgone { display: block; min-height: 2.25rem; line-height: calc(2.25rem - 2px); padding: 0 var(--s2);
+    border: 1px dashed var(--edge); border-radius: 8px; text-align: center;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t1); color: var(--faint); }
+  .tpicks .tmore { padding: 0; }
 
   .tally { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2); }
   .tally span { background: var(--panel); border: 1px solid var(--edge);
