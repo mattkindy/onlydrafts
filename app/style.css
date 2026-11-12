@@ -1886,8 +1886,9 @@
 /* a second value beside each trade row where players carry over: his
    seasons to come, quieter than this season's */
 .tside h3 .tvals { display: inline-flex; gap: var(--s3); }
-.tside h3 .tvals i { min-width: 2.5rem; text-align: right; }
-.trow2:has(.tval.later) { grid-template-columns: auto minmax(0, 1fr) 2.5rem 2.5rem; }
+.tside h3 .tvals i { width: 2.5rem; text-align: right; white-space: nowrap; }
+.tside h3 .tvals i + i { width: 3rem; }
+.trow2:has(.tval.later) { grid-template-columns: auto minmax(0, 1fr) 2.5rem 3rem; }
 .trow2 .tval { text-align: right; }
 .tval.later { color: var(--faint); }
 

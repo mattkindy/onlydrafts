@@ -41,6 +41,9 @@ interface FileRow {
   game?: Record<string, number> | null;
   sim?: (Record<string, number> & { games: number }) | null;
   weeks?: Player["weeks"];
+  ahead?: Player["ahead"];
+  age?: number;
+  drafted?: Player["drafted"];
 }
 
 /** what the build paid a catch when it scored the board */
@@ -97,6 +100,10 @@ export async function loadBoard(season: number): Promise<Board> {
       game: row.game ?? null,
       sim: row.sim ?? null,
       ppg: row.ppg ?? 0,
+      // his seasons to come, which an older board does not carry
+      ...(row.ahead?.length ? { ahead: row.ahead } : {}),
+      ...(row.age !== undefined ? { age: row.age } : {}),
+      ...(row.drafted !== undefined ? { drafted: row.drafted } : {}),
     };
   });
 
