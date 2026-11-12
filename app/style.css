@@ -1695,6 +1695,7 @@
     .tresult > .hint { grid-column: 1 / -1; }
     .tresult .twindow { grid-column: 1; flex-direction: column; margin-top: var(--s3); }
     .tresult .tgrid { grid-column: 2; grid-row: 1 / span 2; }
+    .tresult .tbalance { grid-column: 2; margin-top: var(--s3); }
     /* the two rosters side by side, the result over both */
     .tsides { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
     .tsidetabs { display: none; }
@@ -1894,3 +1895,11 @@
 
 /* how the odds are worked out, under the list: small, out of the way */
 .onote { font-size: var(--t1); line-height: 1.45; max-width: 62ch; }
+
+/* where the deal stands on value, and one more thing that would even it */
+.tbalance { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s3);
+  padding-top: var(--s3); border-top: 1px solid var(--edge); font-size: var(--t2); color: var(--muted); }
+.tevens { flex-basis: 100%; display: flex; flex-direction: column; gap: var(--s2); }
+.tevens > i { font-style: normal; font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--faint); }
+.tevens .chips button small { margin-left: .4em; font-size: .7rem; font-weight: 600; color: var(--faint); }

@@ -39,9 +39,9 @@ import {
 import { keeperCosts } from "../lib/keepers.ts";
 import { keep, stored } from "../lib/store.ts";
 import {
-  dealIsEmpty, draftCurve, dynastyValue, keeperGain, keptValue, NO_DEAL, overallPick,
-  overTheLimit, pickId, pickValue, restOfSeason, rostersAfter, SEASON_OUT, SEASONS_AHEAD,
-  slotsFromWins, stageOf, tradeVerdict, valueSays, type Deal,
+  dealIsEmpty, draftCurve, dynastyValue, evenUp, evenWithin, keeperGain, keptValue, NO_DEAL,
+  overallPick, overTheLimit, pickId, pickValue, restOfSeason, rostersAfter, SEASON_OUT,
+  SEASONS_AHEAD, slotsFromWins, stageOf, tradeVerdict, valueSays, type Deal, type Offer,
 } from "../lib/trade.ts";
 import { ordinal } from "./Standings.tsx";
 
@@ -85,7 +85,10 @@ export function Trade(props: Props) {
   const choosePartner = (owner: string) => {
     keep(partnerKey, owner);
     setDeal(NO_DEAL(owner));
+    setBalancing(false);
   };
+  // whether the ways to even the deal up are showing
+  const [balancing, setBalancing] = useState(false);
   const [shown, setShown] = useState<"send" | "get">("send");
   const toggle = (list: keyof Omit<Deal, "partner">, id: string) =>
     setDeal((d) => ({
@@ -267,6 +270,32 @@ export function Trade(props: Props) {
   const hasPicks = picks.length > 0;
   const anyPicks = deal.givePicks.length + deal.getPicks.length > 0;
 
+  // the deal on value, this season and later together, and what one more
+  // thing from the side coming out ahead would even it up
+  const worthOf = (key: string) =>
+    valueOf(key) + (carries && boardLooksAhead ? laterOf(key) ?? 0 : 0);
+  const giveWorth = sum(deal.give.map(worthOf)) + givePicks;
+  const getWorth = sum(deal.get.map(worthOf)) + getPicks;
+  const gap = getWorth - giveWorth;
+  const evenEnough = Math.abs(gap) <= evenWithin(giveWorth, getWorth);
+  const nameOf = (owner: string, key: string) => sim.byKey.get(key)?.name ??
+    league.allRosters.find((r) => r.owner === owner)?.keys.find((p) => p.key === key)?.name ?? key;
+  const offers: Offer[] = [
+    ...mine.keys.filter((p) => !deal.give.includes(p.key)).map((p): Offer =>
+      ({ id: p.key, kind: "player", side: "give", says: nameOf(league.team, p.key), value: worthOf(p.key) })),
+    ...picks.filter((p) => p.owner === league.team && !deal.givePicks.includes(pickId(p))).map((p): Offer =>
+      ({ id: pickId(p), kind: "pick", side: "give", says: pickSays(p, league.team), value: valueOfPick(p) })),
+    ...partner.keys.filter((p) => !deal.get.includes(p.key)).map((p): Offer =>
+      ({ id: p.key, kind: "player", side: "get", says: nameOf(deal.partner, p.key), value: worthOf(p.key) })),
+    ...picks.filter((p) => p.owner === deal.partner && !deal.getPicks.includes(pickId(p))).map((p): Offer =>
+      ({ id: pickId(p), kind: "pick", side: "get", says: pickSays(p, deal.partner), value: valueOfPick(p) })),
+  ];
+  const evens = balancing ? evenUp(gap, offers, evenWithin(giveWorth, getWorth)) : [];
+  const add = (o: Offer) => toggle(
+    o.side === "give" ? (o.kind === "pick" ? "givePicks" : "give") : (o.kind === "pick" ? "getPicks" : "get"),
+    o.id,
+  );
+
   return (
     <div class="trade rhythm">
       <div class="tpartner">
@@ -403,6 +432,32 @@ export function Trade(props: Props) {
                   )}
                 </tbody>
               </table>
+              <div class="tbalance">
+                <span class="tgap">
+                  {evenEnough
+                    ? "even on value"
+                    : `on value you come out ${valueSays(Math.abs(gap))} ${gap > 0 ? "ahead" : "behind"}`}
+                </span>
+                {!evenEnough && !balancing && (
+                  <button class="textbtn" onClick={() => setBalancing(true)}>even it up</button>
+                )}
+                {!evenEnough && balancing && (
+                  <div class="tevens">
+                    <i>{gap > 0 ? "also send" : `also ask ${deal.partner} for`}</i>
+                    {evens.length
+                      ? (
+                        <div class="chips flow">
+                          {evens.map(({ offer }) => (
+                            <button key={offer.id} onClick={() => add(offer)}>
+                              {offer.says} <small>{valueSays(offer.value)}</small>
+                            </button>
+                          ))}
+                        </div>
+                      )
+                      : <span>nothing on {gap > 0 ? "your" : "their"} side brings it closer on its own</span>}
+                  </div>
+                )}
+              </div>
               {(you.drop > 0 || them.drop > 0) && (
                 <p class="hint">
                   {you.drop > 0 && `You'd drop ${you.drop} to make room. `}

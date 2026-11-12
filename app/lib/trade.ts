@@ -306,3 +306,49 @@ export function keptValue(gains: number[], perTeam: number): number {
     .slice(0, Math.max(0, perTeam))
     .reduce((a, b) => a + b, 0);
 }
+
+/** something either side could add to a deal, and what it is worth */
+export interface Offer {
+  id: string;
+  kind: "player" | "pick";
+  /** whose it is: yours to send, or theirs to ask for */
+  side: "give" | "get";
+  says: string;
+  value: number;
+}
+
+/**
+ * What would even a deal up: one more thing from the side coming out
+ * ahead, the closest to the gap first. `gap` is what you come out ahead
+ * by, in the same points as each offer's value, so above `room` you
+ * would send more and below it you would ask for more. Within one point
+ * of each other, the one that leaves the other side a little ahead
+ * comes first, since a trade they lose is a trade they turn down. Only
+ * what brings the deal closer to even is offered, three at most.
+ */
+export function evenUp(
+  gap: number, offers: Offer[], room: number,
+): { offer: Offer; left: number }[] {
+  if (Math.abs(gap) <= room) {
+    return [];
+  }
+
+  const side = gap > 0 ? "give" : "get";
+  const sign = gap > 0 ? 1 : -1;
+
+  return offers
+    .filter((o) => o.side === side && o.value > 0)
+    .map((offer) => ({ offer, left: gap - sign * offer.value }))
+    .filter((o) => Math.abs(o.left) < Math.abs(gap))
+    .sort((a, b) => {
+      const by = Math.abs(a.left) - Math.abs(b.left);
+
+      // a point either way is the same deal; then favour leaving them ahead
+      return Math.abs(by) > 1 ? by : sign * (a.left - b.left) || by;
+    })
+    .slice(0, 3);
+}
+
+/** how far apart a deal can be and still read as even: a tenth of it, or three points */
+export const evenWithin = (give: number, get: number) =>
+  Math.max(3, 0.1 * Math.max(give, get));
