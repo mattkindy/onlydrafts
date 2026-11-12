@@ -17,8 +17,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { statsSay, type StatRecord } from "./boxScore.ts";
 import {
-  espnPays, espnPlayedOf, espnSlotsOf, listedPlayers, playerFileGoodFor,
-  sleeperOnBoard, sleeperPlayedOf, sleeperPointsOf,
+  espnPays, espnPlayedOf, espnSlotsOf, listedPlayers, picksHeld, playerFileGoodFor,
+  roundsOfPicks, seasonsOfPicks, sleeperOnBoard, sleeperPlayedOf, sleeperPointsOf,
   type EspnScoringItem, type EspnStatRecord, type League,
 } from "./providers.ts";
 import { knownSlot, slotTakes, type Pays } from "./scoring.ts";
@@ -814,5 +814,42 @@ describe("how long a cached player file is good for", () => {
   it("pulls it again every three hours once the final report is out", () => {
     expect(hours("2026-09-18T10:00:00")).toBe(3);
     expect(hours("2026-09-19T10:00:00")).toBe(3);
+  });
+});
+
+describe("the picks a trade can move", () => {
+  it("opens three drafts in a keeper league, from the coming one", () => {
+    expect(seasonsOfPicks({ thisSeason: 2026, draftDone: true, type: 1, traded: [] }))
+      .toEqual([2027, 2028, 2029]);
+    expect(seasonsOfPicks({ thisSeason: 2026, draftDone: false, type: 2, traded: [] }))
+      .toEqual([2026, 2027, 2028]);
+  });
+
+  it("opens a redraft league's season only once a pick in it has been dealt", () => {
+    expect(seasonsOfPicks({ thisSeason: 2026, draftDone: true, type: 0, traded: [] })).toEqual([]);
+    expect(seasonsOfPicks({
+      thisSeason: 2026, draftDone: true, type: 0,
+      traded: [{ season: "2026" }, { season: "2027" }],
+    })).toEqual([2027]);
+  });
+
+  it("runs as many rounds as the keeper league's draft, not Sleeper's shorter setting", () => {
+    expect(roundsOfPicks({ type: 1, draftRounds: 4, draftedRounds: 16, traded: [] })).toBe(16);
+    expect(roundsOfPicks({ type: 2, draftRounds: 4, draftedRounds: 30, traded: [] })).toBe(4);
+    expect(roundsOfPicks({ type: 2, draftRounds: 4, draftedRounds: 30, traded: [{ round: 5 }] })).toBe(5);
+  });
+
+  it("lists every round of every team's picks with who holds each", () => {
+    const picks = picksHeld({
+      rosters: [{ roster_id: 1 }, { roster_id: 2 }],
+      traded: [{ season: "2027", round: 16, roster_id: 2, owner_id: 1 }],
+      seasons: [2027],
+      rounds: 16,
+      ownerOf: (id) => `team ${id}`,
+    });
+
+    expect(picks.filter((p) => p.owner === "team 1").map((p) => p.round))
+      .toEqual([...Array.from({ length: 16 }, (_, i) => i + 1), 16]);
+    expect(picks.filter((p) => p.owner === "team 2")).toHaveLength(15);
   });
 });
