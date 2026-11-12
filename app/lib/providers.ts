@@ -665,10 +665,11 @@ function roundsHeldBy(
   rosters: SleeperRoster[],
   traded: { season: string | number; round: number; roster_id: number; owner_id: number }[],
   season: string,
+  rounds: number,
 ) {
   const picksOf = new Map(rosters.map((r) => [
     r.roster_id,
-    new Map(Array.from({ length: ROUNDS }, (_, i) => [i + 1, 1])),
+    new Map(Array.from({ length: rounds }, (_, i) => [i + 1, 1])),
   ]));
 
   for (const pick of traded.filter((t) => String(t.season) === season)) {
@@ -727,6 +728,54 @@ export function picksHeld(input: {
 }
 
 /**
+ * The seasons whose picks a trade can move. Sleeper opens three drafts
+ * to trading in a league that keeps players, starting with the coming
+ * one: this season's until it is made, then the three after it. It
+ * cannot be set shorter. A season anyone has already dealt a pick in is
+ * open too, whatever the league, which is how a redraft league trades
+ * next year's.
+ */
+export function seasonsOfPicks(input: {
+  thisSeason: number;
+  draftDone: boolean;
+  /** Sleeper's league type: 0 redraft, 1 keeper, 2 dynasty */
+  type: number;
+  traded: { season: string | number }[];
+}): number[] {
+  const next = input.draftDone ? input.thisSeason + 1 : input.thisSeason;
+  const seasons = new Set(input.type > 0 ? [next, next + 1, next + 2] : []);
+
+  for (const t of input.traded) {
+    if (Number(t.season) >= next) {
+      seasons.add(Number(t.season));
+    }
+  }
+
+  return [...seasons].sort((a, b) => a - b);
+}
+
+/**
+ * How many rounds the coming drafts run. Sleeper's own setting for it
+ * can be shorter than the draft a keeper league actually holds, and
+ * trusting it alone lost every pick after it, so the longest of it, the
+ * league's draft and any pick already dealt wins. A dynasty league's
+ * draft is its startup, far longer than the drafts that follow, so there
+ * the setting is the word.
+ */
+export function roundsOfPicks(input: {
+  type: number;
+  draftRounds: number;
+  draftedRounds: number;
+  traded: { round: number }[];
+}): number {
+  return Math.max(
+    input.draftRounds,
+    input.type === 2 ? 0 : input.draftedRounds,
+    ...input.traded.map((t) => Number(t.round) || 0),
+  ) || ROUNDS;
+}
+
+/**
  * Whether Sleeper says this league keeps players. It says so three
  * ways: a keeper count, a league type of 2, or a roster that already
  * has somebody marked.
@@ -763,19 +812,26 @@ async function sleeperLeagues(username: string): Promise<League[]> {
       ask("/league/" + lg["league_id"] + "/traded_picks").catch(() => []),
       ask("/league/" + lg["league_id"] + "/drafts").catch(() => []),
     ]);
-    const held = roundsHeldBy(rosters, traded ?? [], String(lg["season"]));
     const settings = (lg["settings"] ?? {}) as Record<string, number>;
     const thisSeason = Number(lg["season"] ?? state.season);
     const type = Number(settings["type"]) || 0;
+    const draftDone = !drafts?.[0] || drafts[0].status === "complete";
+    const pickSeasons = seasonsOfPicks({ thisSeason, draftDone, type, traded: traded ?? [] });
     // picks are worth listing where the league keeps players, or where a
     // pick in a season to come has already changed hands
-    const tradesPicks = type > 0 ||
-      ((traded ?? []) as { season: string | number }[]).some((t) => Number(t.season) > thisSeason);
-    const draftDone = !drafts?.[0] || drafts[0].status === "complete";
-    const pickSeasons = [
-      ...(draftDone ? [] : [thisSeason]),
-      ...Array.from({ length: type === 2 ? 3 : 1 }, (_, i) => thisSeason + i + 1),
-    ];
+    const tradesPicks = pickSeasons.length > 0;
+    // a keeper is paid for out of the coming draft, which is next
+    // season's once this season's has been made
+    const rounds = roundsOfPicks({
+      type,
+      draftRounds: Number(settings["draft_rounds"]) || 0,
+      draftedRounds: Number(drafts?.[0]?.settings?.rounds) || 0,
+      traded: ((traded ?? []) as { season: string | number; round: number }[])
+        .filter((t) => pickSeasons.includes(Number(t.season))),
+    });
+    const held = roundsHeldBy(
+      rosters, traded ?? [], String(pickSeasons[0] ?? (draftDone ? thisSeason + 1 : thisSeason)), rounds,
+    );
     const ownerOfRoster = new Map((rosters as SleeperRoster[]).map((r) =>
       [r.roster_id, r.owner_id] as const));
     const mine = (rosters as SleeperRoster[])
@@ -818,7 +874,7 @@ async function sleeperLeagues(username: string): Promise<League[]> {
             rosters: rosters as SleeperRoster[],
             traded: traded ?? [],
             seasons: pickSeasons,
-            rounds: Number(settings["draft_rounds"]) || ROUNDS,
+            rounds,
             ownerOf: (id) => {
               const owner = ownerOfRoster.get(id) ?? String(id);
 

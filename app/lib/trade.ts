@@ -71,23 +71,29 @@ export function restOfSeason(p: Player | undefined, weeksLeft: number): number {
  * replacement across a season: what the board says a player taken there
  * is worth, smoothed over the picks either side, since one room's order
  * is noisier than the shape of the curve.
+ *
+ * An earlier pick is never worth less than a later one, since it could
+ * take whoever the later one takes. Kickers and defences go last and are
+ * still worth something over a replacement, which read a 15th rounder
+ * above a 9th.
  */
 export function draftCurve(players: Player[]): (overall: number) => number {
   const order = players
     .filter((p) => p.adpRank && p.vor !== undefined)
     .sort((a, b) => a.adpRank! - b.adpRank!)
     .map((p) => Math.max(0, p.vor!));
-
-  return (overall: number) => {
-    if (!order.length) {
-      return 0;
-    }
-
-    const at = Math.min(order.length - 1, Math.max(0, Math.round(overall) - 1));
+  const smooth = order.map((_, at) => {
     const near = order.slice(Math.max(0, at - 2), at + 3);
 
     return near.reduce((a, b) => a + b, 0) / near.length;
-  };
+  });
+
+  for (let at = smooth.length - 2; at >= 0; at--) {
+    smooth[at] = Math.max(smooth[at]!, smooth[at + 1]!);
+  }
+
+  return (overall: number) =>
+    smooth.length ? smooth[Math.min(smooth.length - 1, Math.max(0, Math.round(overall) - 1))]! : 0;
 }
 
 /** the overall pick a slot in a round is, snaking where the draft does */

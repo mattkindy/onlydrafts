@@ -38,6 +38,16 @@ describe("a draft pick", () => {
     expect(curve(12)).toBeGreaterThan(curve(60));
   });
 
+  it("is never worth less than a later pick, kickers going last or not", () => {
+    const late = draftCurve([
+      ...Array.from({ length: 100 }, (_, i) => player({ key: "s" + i, adpRank: i + 1, vor: Math.max(0, 50 - i) })),
+      ...Array.from({ length: 10 }, (_, i) => player({ key: "k" + i, adpRank: 101 + i, vor: 9 })),
+    ]);
+
+    expect(late(80)).toBeGreaterThanOrEqual(late(105));
+    expect(late(1)).toBeGreaterThan(late(40));
+  });
+
   it("falls where the team it came from finishes, worst picking first", () => {
     const slots = slotsFromWins([{ owner: "a", wins: 3 }, { owner: "b", wins: 10 }]);
     const from = (owner: string) => ({ season: 2027, round: 1, from: owner, owner: "me" });
