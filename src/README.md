@@ -95,6 +95,28 @@ A drafted player who never played is kept at zero rather than dropped.
 He is the pick somebody spent, and dropping him would make every price
 look better than it was. There are two or three a season.
 
+**A player's next seasons** are what a keeper or a dynasty league is
+buying, and the rest of the model says nothing past this one.
+`model/seasonsAhead.ts` says, for each of the next three, his points a
+game when he plays and his games out of seventeen, where a man out of
+the league plays none. Each is a ridge per position and horizon,
+taught on earlier seasons cut at the board's own week, so a November
+board is read the way earlier Novembers were. `features/aheadRows.ts`
+builds the rows: everything before the cut, and the seasons after it
+once they have finished. What carries it is this season and last, the
+two pooled and the square of that pool, since how long a good player
+lasts rises faster than his rate does. Age and seasons in the league
+move it at every horizon, and draft capital in a player's first three
+seasons, which is worth little to the pool and two points a season to
+the rookies. Where the roster has him, the trend in his snaps, the room
+he plays in and the season before last were all measured and lost.
+Against an age curve laid over this season it is 1.5, 1.5 and 0.8
+points a season closer at t+1, t+2 and t+3, ranks the seasons at .67,
+.62 and .60 against .62, .55 and .53, and is one to two and a half
+points low where the curve is nine to eleven. Jeremiyah Love, taken
+third in 2026 and on reserve by November, comes out at 13.7 a game over
+13.1 games in 2027 against the 11.1 the board has him at now.
+
 ## Which way things are passed
 
 Think of it as a stack that passes messages in three directions, since
@@ -205,6 +227,7 @@ when you want to measure it again.
 | The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
 | A card's spread outside the walk's cast being the pooled band | `scripts/buildSite.ts` | `scripts/bandSourceEval.ts` |
 | The weekly ridge fitted on past seasons alone, and adding its features up | `features/fitWeeklyByPosition.ts` | `scripts/inSeasonRowsEval.ts`, `scripts/weeklyInteractionEval.ts` |
+| `SHIPPED_TERMS` and `AHEAD_LAMBDA`, which terms the seasons ahead read and how hard they are pulled in | `model/seasonsAhead.ts` | `scripts/seasonsAheadEval.ts --ablate` |
 
 ## What the board says a player does in a game
 
@@ -223,6 +246,9 @@ fields look like the same claim. Only one of them is.
 | `weeks[].played` | `scripts/buildSite.ts` | the card's week chart, through `app/lib/scoring.ts` | what he actually did that week, in the same categories `projected` uses, so a reader's league scores it by its own rules. Null where the week has not been played. Empty where he dressed and never touched the ball, which the card shows as nothing scored rather than as no game. |
 | `blend` | `features/boardOrder.ts` | the file's default sort, then recomputed by the app | a place on the board, not a rate |
 | `sleeper` | `features/sleepersNow.ts`, through `scripts/buildSite.ts` | the waiver page's sleepers table and the player card | what he is worth against what he cost, as of the last week everybody finished. Absent until three weeks are played out, since before that the score sorts on noise and loses to the price alone. |
+| `ahead` | `model/seasonsAhead.ts`, through `features/aheadBoard.ts` and `scripts/buildSite.ts` | `app/lib/trade.ts`, for a keeper or a dynasty league | his next three seasons, the coming one first: `of` is his points a game when he plays as a multiple of `ppg`, so a league that pays differently rescores it, and `games` is out of seventeen, with a man out of the league at none. Quarterbacks, backs, receivers and tight ends only, and absent where `ppg` is under one or the build had no row for him at its week. |
+| `age` | `features/aheadRows.ts` | `app/lib/data.ts` loads it onto the player, and no page shows it yet | his age on the first of September of the board's season, to one decimal |
+| `drafted` | `features/aheadRows.ts`, from the players file and the draft picks file | the same: loaded, not yet shown | `{ season, round, overall }`, or null for a player nobody drafted. Absent where the players file does not know him. |
 
 `features/inSeasonBoard.ts` moves `projected` off a player's games, and
 a game is not only a week he has a stat row in. A week he was active for

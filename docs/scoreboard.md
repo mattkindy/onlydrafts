@@ -1446,3 +1446,33 @@ as well as the line and misses the margin by more than with no lift in
 in every season. The board was not rerun, so the season it reads stays
 at 0.7 until it has been asked; `scripts/README.md` has the single seed
 tables and what that needs.
+
+## A player's next three seasons
+
+A fourth instrument, for keeper and dynasty leagues: scripts/seasonsAheadEval.ts
+stands at week 10, says every skill player's next three seasons, and
+marks the season total in half PPR among the roughly 310 players a
+season a keeper league is choosing between. Fits are taught only on
+seasons that had finished by that week. Error in season points, then
+ordering and bias:
+
+| | t+1, 2022 to 2024 | t+2, 2022 and 2023 | t+3, 2021 and 2022 |
+|---|---|---|---|
+| this season carried forward | 59.4, .607, +21.3 | 68.9, .503, +35.1 | 77.2, .460, +51.7 |
+| that, aged by a curve | 51.4, .621, -9.3 | 52.9, .550, -11.4 | 48.7, .526, -10.2 |
+| model/seasonsAhead.ts, which ships | 49.9, .667, -1.5 | 51.4, .617, -2.5 | 47.9, .604, -1.0 |
+| the model against the curve | -1.5 ± 0.8 | -1.5 ± 0.9 | -0.8 ± 1.0 |
+
+The curve is closer than it looks on error because it runs ten points
+low and a season total has a long right tail. The model is level to a
+point or two and orders every horizon better, which is what a dynasty
+price is made of. Rookies at t+1 are where it pays most, 45.8 against
+51.4. Boosted trees and a half and half blend with them were tried; the
+blend is closer on error by under a point and five to seven points low,
+so the ridge ships. The term by term table and the misses that are
+left, the stars at t+3 and the first round rookies two years on, are in
+`scripts/README.md`.
+
+Jeremiyah Love, third pick in 2026 and on reserve at week 10, comes out
+at 13.7 a game in 13.1 games in 2027, 13.8 in 13.2 in 2028 and 12.1 in
+13.2 in 2029, against the 11.1 a game the board has him at now.

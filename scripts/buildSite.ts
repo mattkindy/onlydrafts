@@ -143,6 +143,7 @@ import {
   boardSlateRows, cardWeekOf, fixturesIn, slateRow,
   type BoardPlayer, type SlateRowShape,
 } from "./slateRows.js";
+import { aheadFields, seasonsAheadFor } from "../src/features/aheadBoard.js";
 
 /**
  * The site is the site, so it goes at the top rather than down a path
@@ -1627,6 +1628,17 @@ async function main(): Promise<void> {
     };
   };
 
+  /**
+   * His next three seasons, his age and his draft, for a keeper or a
+   * dynasty league. The fit is taught on every earlier season cut at the
+   * same week as this one, so a November board is read the way earlier
+   * Novembers were.
+   */
+  const ahead = await seasonsAheadFor(
+    season, weekAhead, scoring(),
+    new Map(world.players.map((p) => [p.playerId, p.position])),
+  );
+
   const board = world.players
     .map((p) => {
       const f = factors(p.playerId, p.projectedPpg);
@@ -1711,9 +1723,16 @@ async function main(): Promise<void> {
               ...blendAhead(p, w.week, of * p.projectedPpg),
             };
           }),
+        ...aheadFields(
+          { playerId: p.playerId, position: p.position, ppg: p.projectedPpg },
+          season, ahead,
+        ),
       };
     })
     .sort((a, b) => b.vor - a.vor);
+  console.log(
+    `seasons ahead: ${board.filter((p) => p.ahead).length} of ${board.length} ` +
+      `players, read at week ${weekAhead}`);
 
   /**
    * Kickers and defences, which the rest of the model has nothing to
