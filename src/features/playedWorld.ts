@@ -26,7 +26,7 @@ import {
   componentRates, componentUsage, emptyBox, historiesForWeek,
   positionRatePriors, type History,
 } from "./componentWeek.js";
-import { fitDriveRules, fitTeamDriveRules } from "./driveRules.js";
+import { fitDriveEndings, type DriveEndings } from "./driveEndings.js";
 import { fitPasserQuality } from "./passerQuality.js";
 import {
   ADP_DIR, loadAdp, mockBoardFile, type AdpEntry,
@@ -64,7 +64,8 @@ const DECIDED = ["run", "pass", "field_goal", "punt"];
 
 export interface PlayedWorld {
   sideFor: (team: string) => Side | undefined;
-  rules: Awaited<ReturnType<typeof fitDriveRules>>;
+  /** what ends a drive besides the factors, short of the kick */
+  rules: DriveEndings;
   kicking: Awaited<ReturnType<typeof fitEndings>>;
   fourth: ReturnType<typeof fitFourthDown>;
   ticking: ReturnType<typeof fitPlayClock>;
@@ -438,16 +439,12 @@ export async function buildWorld(
   }
 
   /**
-   * Plays teach a drive, drives teach a game, and in season the games
-   * already played teach the drive layer per team: its turnovers, its
-   * gains, how often it runs. This is where this year's form can
-   * express itself, which the play pools alone could not.
+   * The flags, giveaways and punts, over the training seasons and in
+   * season the weeks of this one already played.
    */
-  const teamDrives = await fitTeamDriveRules(
+  const rules = await fitDriveEndings(
     LEARN, live ? { season: SCORE_ON, beforeWeek: onlyWeek } : undefined,
   );
-  const rules = teamDrives.league;
-  const sidesOwnDrives = process.env["TEAM_DRIVES"] === "on";
   const passerWorth = await fitPasserQuality(LEARN);
   const kicking = await fitEndings(LEARN);
 
@@ -961,7 +958,6 @@ export async function buildWorld(
     return {
       team, factors, passer,
       passLift: passer ? passerWorth(passer) : 1,
-      drives: sidesOwnDrives ? teamDrives.byTeam.get(team) : undefined,
       among: [
         ...cast.map((p) => p.playerId),
         ...(passer ? [passer] : []),

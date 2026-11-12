@@ -116,8 +116,11 @@ through `matchupTable.ts`. A quarterback's ground habit is his own
 rather than won from anybody.
 
 **Downward** is a level constraining what happens beneath it, and
-there is still none. `teamState.ts` and `gameSize.ts` know things the
-walk never hears.
+there is one message so far. The season the board reads is played with
+every side's plays lifted by what the line says of its afternoon,
+`gameSize.ts`'s size to the power 0.7, in `playedSeason.ts`. The
+weekly walk scales a man's points by the same size after the game
+instead of handing it in, and `teamState.ts` is read by nothing.
 
 Played whole with the players in it, the simulation ordered the 2025
 skill players adp had priced at .55 where adp managed .41, and inside
@@ -125,10 +128,13 @@ picks 61 to 120 adp carried nothing at all, -.00 against .36. That is
 one season and a roster-based population, and it is the first version
 to beat the market on its own.
 
-Team games are another matter. The walk orders a side's points at
-about .15 where the betting line gets .39, and the line is not
-connected. What a team is worth is still known at the top and never
-reaches the plays.
+Team games are another matter. Knowing only the two sides, the walk
+orders a side's points at .14 to .21 where the betting line gets .36 to
+.42. Handed the line at 0.7 it gets .29 to .37 and picks the winner far
+more often, but the margin and the total come out further off in two
+seasons of three. At 0.3 it is closer than without the line on every
+error, and orders better, in every season. `scripts/README.md` has the
+sweep, and the board has not yet been asked which strength it wants.
 
 ## Rules the model follows
 
@@ -195,6 +201,8 @@ when you want to measure it again.
 | `PAID_BASE` and the two weights beside it, and a kicker's week being nearly flat | `features/kickerWeek.ts` | `scripts/kickerWeekEval.ts` |
 | `KICKER_GAMES` staying one number for every kicker | `scripts/buildSite.ts` | `scripts/kickerSeasonEval.ts` |
 | The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
+| A card's spread outside the walk's cast being the pooled band | `scripts/buildSite.ts` | `scripts/bandSourceEval.ts` |
+| The weekly ridge fitted on past seasons alone, and adding its features up | `features/fitWeeklyByPosition.ts` | `scripts/inSeasonRowsEval.ts`, `scripts/weeklyInteractionEval.ts` |
 
 ## What the board says a player does in a game
 
@@ -245,20 +253,44 @@ two.
 
 ## What is still doubled up
 
-Three drive walks exist. `drive.ts` came first and takes yards from a
-pool with no players in it. `playerDrive.ts` put the players in.
-`driveFromFactors.ts` with `gameFromDrives.ts` on top is the one that
-follows from the decomposition above, and the only one that plays
-whole games. The first two are superseded and the evals that use them
-are kept only as a comparison.
+Less than there was. Three drive walks, two share models and two
+yardage models are down to one of each.
 
-Two share models exist. `fitRoles.ts` divides a season into four
-situations, which is what the older walks want. `fitPlayFactors.ts`
-works off the state. The four situations lose real differences: a back
-takes 17% of the work on third and seven and 39% on third and twenty.
+`drive.ts` was the first drive walk and took yards from a pool with no
+players in it, and `playerDrive.ts` put the players in. Neither played a
+whole game or fed anything that ships, and both are gone, with
+`attribution.ts`, which credited the first one's plays to names. The
+walk is `driveFromFactors.ts` with `gameFromDrives.ts` on top.
 
-Two yardage models exist for the same reason, `driveRules.ts` for the
-older walks and `fitPlayFactors.ts` for the newer.
+`driveRules.ts` was the second yardage model: a pool of what a play
+gained by down, distance and spot, which only the older walks drew from.
+The newer walk took the rest of it, the defensive flag that hands over a
+first down, the flags that replay a down, the giveaway rate and the
+punt, and that part is `driveEndings.ts` now. The pool, its run rate,
+its fourth down book and its kick table went with the walks that read
+them; the kick comes from `fitEndings.ts` and the fourth down call from
+`fitFourthDown.ts` everywhere. Its per team version, switched off since
+it was measured, went too. Nothing the walk is handed moved: the
+endings come out the same to the last draw, the game bench reads the
+same before and after, and a season played on the old code and the new
+writes the same kept file byte for byte.
 
-None of this is a design. It is the older layers left standing while
-the newer ones were measured, and it should collapse to one of each.
+`fitRoles.ts` was the second share model, a season cut into four
+situations for the older walks and for the role simulation in
+`seasonSim.ts` and `situationalWeek.ts`. The four situations lost real
+differences: a back takes 17% of the work on third and seven and 39% on
+third and twenty. By the end its only job was the spread on the card of
+a man the walk never dealt a game, and over 2023
+to 2025 it was no better at that than the pooled residual band the rest
+of the uncast already took. `scripts/README.md` has the numbers. So
+those men take the pooled band, and the role simulation, the four
+situations and the table they were counted into are gone. A share comes
+from `fitPlayFactors.ts` and the state it is asked about, and a season's
+from `shareCompetition.ts`, which is a different level rather than a
+second answer.
+
+What is left beside the walk answers at other levels. The board's level
+comes from the season model, with the walk one voice at twenty percent
+in where a man is placed, and a week's line from the weekly ridge
+blended with Sleeper's. Those are blends that measured better than
+either half, not older layers left standing.

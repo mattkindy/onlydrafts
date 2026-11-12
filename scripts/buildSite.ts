@@ -115,9 +115,6 @@ import { simulatePlayerSeasons } from "../src/sim/playerSeason.js";
 import { seededRng } from "../src/sim/rng.js";
 import { loadAdp, loadSleeperAdp, type AdpFormat } from "../src/data/adp.js";
 import { mergeSiteIndex, readSiteIndex } from "../src/data/siteIndex.js";
-import { fitRoles } from "../src/features/fitRoles.js";
-import { simulateSeason, DEFAULT_SEASON } from "../src/model/seasonSim.js";
-import { normalDraw } from "../src/sim/normal.js";
 import { scoring } from "../src/scoring/active.js";
 import {
   preseasonWeekly, preseasonWeeklyExamples, preseasonWeeklyInput,
@@ -1433,75 +1430,25 @@ async function main(): Promise<void> {
   }
 
   /**
-   * The shape of a player's week, from the situational simulation.
+   * The shape of a player's week, from the games the walk dealt him.
    *
-   * The pooled residual model gives every player at a scoring level
-   * the same band, so two receivers projected the same got the same
-   * range whatever their roles. The simulation gives each his own,
-   * calibrated at 79.6% inside an 80% band against 80.1% for the
-   * pooled one and on a band 14% narrower.
+   * The pooled residual model gives every player at a scoring level the
+   * same band, so two receivers projected the same get the same range
+   * whatever their roles. The kept season file records every game the
+   * walk handed a player, so his band is his, from the same engine that
+   * made his projection, hung on the projection as a share of his mean.
    *
-   * It orders players worse than the season model, .72 against .788,
-   * so the level stays where it is and only the shape is taken. Each
-   * player's simulated spread is scaled to sit around his projection.
+   * A player the walk never dealt a game, outside every side's cast,
+   * takes the pooled band. The role simulation used to write his, off
+   * last season's four situations, and over 2023 to 2025 it did no
+   * better on the men it spoke for: its 80% band held 86.9% of their
+   * weeks against 76.1% for the pooled one, and the pooled one's
+   * pinball loss was .031 lower with a standard error of .018.
+   * `scripts/bandSourceEval.ts` has it.
    */
   const shapeOf = new Map<
     string, { q1: number; mid: number; q3: number; low: number; high: number }
   >();
-
-  try {
-    const positions = new Map<string, string>();
-    const gamesLast = new Map<string, number>();
-
-    for (const row of await loadPlayerStats(season - 1)) {
-      positions.set(row.playerId, row.position);
-      gamesLast.set(row.playerId, (gamesLast.get(row.playerId) ?? 0) + 1);
-    }
-
-    const { byTeam, playsByTeam } = await fitRoles(season - 1, positions, gamesLast);
-    const rng = seededRng(29);
-    const draws = { uniform: rng, normal: () => normalDraw(rng) };
-
-    for (const [team, roster] of byTeam) {
-      // No role drift: the card's middle half is about his weeks in the
-      // role he has, not our doubt about the role. Pooling role draws
-      // made a receiver's middle half twice as wide as it really is.
-      const simulated = simulateSeason(
-        { plays: playsByTeam.get(team)! }, roster,
-        { ...DEFAULT_SEASON, runs: 400, roleDrift: 0, scoring: scoring() }, draws,
-      );
-
-      for (const player of simulated) {
-        const mean = player.weekly.mean;
-
-        if (mean <= 0) {
-          continue;
-        }
-
-        // as a share of his own mean, since the projection it is hung
-        // on is a mean; a thin player's median can be a tenth of his mean
-        shapeOf.set(player.playerId, {
-          q1: player.weekly.p25 / mean,
-          mid: player.weekly.median / mean,
-          q3: player.weekly.p75 / mean,
-          low: player.weekly.p10 / mean,
-          high: player.weekly.p90 / mean,
-        });
-      }
-    }
-
-    console.log(`shapes from the simulation for ${shapeOf.size} players`);
-  } catch (error) {
-    console.warn("no simulated shapes, falling back to the pooled bands: " + error);
-  }
-
-  /**
-   * The walk's own spread wins over the role simulation's wherever
-   * the walk has dealt a player enough games: the kept season file
-   * records every game he was handed, so his band is his, from the
-   * same engine that made his projection. The role simulation stays
-   * for the players the walk never played.
-   */
   const dealtGames = new Map<string, number[]>();
 
   try {
@@ -1539,7 +1486,7 @@ async function main(): Promise<void> {
 
     console.log(`spreads from the walk's games for ${fromWalk} players`);
   } catch {
-    console.warn("no kept walk games, the role simulation's bands remain");
+    console.warn("no kept walk games, so every card takes the pooled band");
   }
 
   /**
@@ -1687,8 +1634,8 @@ async function main(): Promise<void> {
       const shape = shapeOf.get(p.playerId);
       const pooled = (q: number) =>
         Math.max(0, outcomeQuantile(world.residuals, p.position, p.projectedPpg, q));
-      // his own shape when the simulation knows him, the pooled band
-      // when it does not
+      // his own shape when the walk dealt him games, the pooled band
+      // when it did not
       const perGame = (q: number, from?: number) =>
         Number(
           (shape && from !== undefined

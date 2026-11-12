@@ -17,12 +17,15 @@ of these are in `scripts/README.md`.
   scores, so it is out.
 - Pluggable player-quality input beyond draft capital and snap counts:
   Approximate Value next, PFF grades behind a manual CSV import.
-- A downward direction in the stack. `teamState.ts` and `gameSize.ts`
-  know what a team is worth and the walk never hears it, which is why
-  the walk orders a side's points at about .15 against the betting
-  line's .39. See `src/README.md`.
-- Collapsing the duplicated layers: three drive walks, two share
-  models, two yardage models. Also in `src/README.md`.
+- More of a downward direction in the stack. The season the board
+  reads hears the line, as a lift of 0.7 on every play, and on whole
+  games that is too hard: at 0.7 a side's points are ordered .29
+  to .37 against the line's .36 to .42 and the margin is further off in
+  two seasons of three, where 0.3 is closer than no lift on every error
+  in every season. Played again at 0.3, the three past seasons want the
+  board, the walk column and `DEALT_WIDER` scored against 0.7, and the
+  board bench needs those seasons' draft boards on disk.
+  `teamState.ts` is read by nothing. See `src/README.md`.
 
 ## Leads left open
 
@@ -33,7 +36,11 @@ of these are in `scripts/README.md`.
   suspect: a man who gets an early target gets the next one, and a team
   that is behind throws to him all afternoon. Modelling that would thin
   the tails and fill the middle at once. The script that swept it has
-  been deleted; the numbers are in `docs/scoreboard.md`.
+  been deleted; the numbers are in `docs/scoreboard.md`. So has the
+  simulation, with the four situations. The walk draws a man's cut of
+  the touches once a game rather than once a snap, which is the first
+  half of this, and that is the change that first took it past a man's
+  own average.
 - **Nothing predicts which of a man's own weeks is the big one.** Over
   2025, the weekly model scores .624 across players and -.023 within
   one. The simulation told what game it was playing (opponent, spread,
@@ -43,6 +50,18 @@ of these are in `scripts/README.md`.
   measure that carried over year to year was a defence's extra
   suppression of the opposing room leader, at .204 against .100 for its
   general suppression, and that has not been tried in the weekly model.
+  Letting the weekly ridge weigh a player's role against his side's
+  implied total, or a boosted correction find any combination it
+  likes, moves pair accuracy by nothing over 2024 to 2026, 66.08% and
+  66.56% against 66.58% as shipped, and nor does fitting it on this
+  season's played weeks. `scripts/README.md` has both.
+- **The pooled band runs narrow.** A card whose man the walk never
+  dealt a game takes the pooled residual band, and over 2023 to 2025 it
+  held 70% to 76% of the uncast men's weeks inside its 80% where the
+  walk's own bands hold 82.7%. Borrowing the walk's shape from the
+  nearest cast men fixes the 80% and breaks the 50%. A stretch fitted
+  the way `DEALT_WIDER` was is the next thing to try; the numbers are
+  in `scripts/README.md`.
 - **Same-team catcher pairs simulate at 0.07 correlation** where the
   data says 0. Needs a negative competition channel.
 - **Concentration is predictable and does not help.** A ridge ranks a

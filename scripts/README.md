@@ -54,7 +54,10 @@ says which: `walkBandEval.ts`, `twoPointEval.ts`, `sourceCompare.ts`,
 `sleeperEval.ts`, `inheritanceProbe.ts`, `seasonShrinkEval.ts`,
 `inSeasonLevelEval.ts`,
 `kickerSeasonEval.ts`, `kickerWeekEval.ts`, `walkVolumeEval.ts`,
-`injuryStatusEval.ts`, `weatherEval.ts` and `simAgreement.ts`.
+`injuryStatusEval.ts`, `weatherEval.ts`, `simAgreement.ts`,
+`bandSourceEval.ts`, `inSeasonRowsEval.ts` and `weeklyInteractionEval.ts`.
+`inSeasonScorecard.ts` scores the slates the site shipped this season
+against the box scores, and is worth running again as weeks come in.
 
 The findings follow, in the order they were written.
 
@@ -3268,3 +3271,283 @@ the counting parts off the players on the roster now. Before a game is
 played the level is last season pulled to the middle, so the draft board's
 defences move toward each other as well. After week 7 of 2026 it moves
 Philadelphia from 7.4 a game to 5.2 and the Jets from 1.2 to 4.2.
+
+# Where a card's spread comes from outside the walk's cast
+
+The board took a player's band from three places in turn: the games the
+walk dealt him, then the role simulation, then the pooled residual band
+that gives every player at a level the same range. The role simulation
+was the last thing reading `fitRoles.ts` and its four situations, and
+it only ever spoke for the men outside every side's cast that it knew
+from last season, about sixty a season with four or more played weeks.
+`bandSourceEval.ts` scored exactly those men over 2023 to 2025, each
+band hung on the same August level as the board hangs it and scored on
+the weeks he really played. Pinball is the loss over the five quantiles
+the card shows, which rewards a band for being right and narrow at
+once, and its gap comes with a standard error from resampling the men:
+
+```
+the men the role simulation spoke for, 193 over 2058 weeks
+                         80% holds  50% holds  80% width  pinball
+role simulation            86.9%      59.5%      8.13     1.0637
+pooled band                76.1%      40.7%      7.69     1.0332
+borrowed from the walk     83.7%      34.3%      7.21     1.0286
+
+pinball the pooled band saves on the role's, by season
+2023   +.050, se .041
+2024   +.057, se .026
+2025   -.020, se .026
+all    +.031, se .018
+```
+
+The role simulation's band is too wide, holding 86.9% where it says 80
+and 59.5% where it says 50, and the pooled band too narrow, 76.1% and
+40.7%. On the loss that weighs both, the pooled band is the better
+of the two in two seasons and the worse in the third, and better over
+all three by a little under two standard errors. It is not the worse
+band, which is what the retirement needed. So those men take the pooled
+band now, as the uncast it had never seen already did, and the role
+simulation, `seasonSim.ts`, `situationalWeek.ts`, `fitRoles.ts`,
+`fitSwing.ts`, `situations.ts`, the older `teamWeek.ts` and
+`playerWeek.ts` beneath them, `aggregateSituations.ts` and
+`data/curated/situations.csv` have been deleted. The role arm went from
+the bench with them; the table above and the bench as it was first
+committed are the record of it.
+
+The third row asks whether the walk could speak for the uncast too: a
+man it never dealt a game borrows the median shape of the twelve walk
+men at his position nearest him in level. It holds the 80% band best of
+the three and the 50% band worst, 34.3% inside where half belong. On
+pinball it saves .0045, standard error .0114, on these men and .0066,
+standard error .0158, on the 271 men neither source knew, so it is
+nothing and it does not ship.
+
+What the bench shows on the way past is that the pooled band runs
+narrow everywhere. On the walk's own 973 men over the same seasons it
+holds 71.9% of their weeks inside its 80%, where the walk's dealt games
+hold 82.7%, and on the men neither source knew it holds 70.1%. Those
+are mostly rookies and men who did not play the season before, and
+their card's band says more than it knows.
+
+## What to try next
+
+Widen the pooled band for the uncast. The walk's bands came right when
+`DEALT_WIDER` stretched them around their middle, and the same stretch
+fitted on the pooled band, around the level rather than the median,
+would put the men with no walk games where the rest of the board is.
+
+# What the weeks of 2026 say about the weekly line
+
+Three benches were run once nine weeks of 2026 had been played. Two ask
+whether the weekly ridge could do better than it does, and one scores
+what actually went out. None of them ships a change.
+
+## The slates that went out
+
+Every other bench scores a model refitted on past seasons.
+`inSeasonScorecard.ts` scores the slates the site shipped, each week's
+file as it stood when its games kicked off, read out of the repository's
+history, against the box scores on the board. So it is the only bench
+that sees what a reader saw, injury news and Sleeper's number included.
+A row counts only if its slate was written before that row's own game
+kicked off, and only for a player with a blended line of five or more
+who dressed. Weeks 4 to 9, 883 player weeks:
+
+```
+line                   pairs all   0-2    2-5    5+    mae    bias, QB  RB    WR    TE
+ours                    63.3%   53.4%  62.7%  74.6%   5.40       -0.3 -0.2  -0.2   0.1
+sleeper                 63.6%   53.1%  61.9%  74.7%   5.37        1.1  0.2   0.3   0.3
+sleeper, qb bias off    63.6%   53.1%  61.9%  74.7%   5.34       -1.9  0.2   0.3   0.3
+shipped blend           63.6%   52.8%  62.6%  75.8%   5.32       -1.1 -0.0   0.1   0.2
+```
+
+The blend is level with Sleeper on pairs and has the smallest error of
+the four, which is what it was fitted to do, and the pairs more than
+five points apart are where it earns it, 75.8% against 74.6% for ours
+alone. Inside two points none of them beats a coin flip by more than
+three and a half points, as on 2024 and 2025.
+
+Taking `SLEEPER_QB_BIAS` off Sleeper's passers overshoots on these
+weeks: Sleeper read 1.1 points high on a quarterback, and with the bias
+off it reads 1.9 low, which leaves the shipped blend 1.1 low. That is
+158 quarterback weeks of one season, and the bias was fitted on two
+whole ones, so it stays where it is and is worth reading again when the
+season is out.
+
+The bands hold what they say:
+
+```
+share of weeks landing   80% range: below  inside  above    50% range: inside
+QB  (158)                           7.0%   81.6%  11.4%               51.9%
+RB  (244)                          11.1%   78.7%  10.2%               45.9%
+WR  (327)                          10.1%   79.5%  10.4%               49.2%
+TE  (154)                          14.9%   74.0%  11.0%               45.5%
+all (883)                          10.6%   78.7%  10.6%               48.1%
+```
+
+78.7% inside the 80% range with the miss split evenly either side, and
+48.1% inside the 50%. Tight ends are the one place a band runs short,
+landing under the floor 14.9% of the time where 10% is right.
+
+Sweeping the blend weight on these weeks alone runs from 63.3% all ours
+to 63.7% at 0.8, against 63.5% at the 0.5 that ships, and week by week
+it is ours in weeks 4, 6 and 9 and Sleeper in 5, 7 and 8. Two tenths of a
+point on six weeks is nothing to move a weight on.
+
+## Teaching the weekly ridge the season it is projecting
+
+The slate's ridge is fitted on every season from 2016 to the one before
+and never sees a week of the season it is asked about, so by week ten
+it has left nine weeks of the same players and schemes out.
+`inSeasonRowsEval.ts` walks forward over 2024, 2025 and 2026: for every
+week from the fifth, A is the ridge as shipped, B adds this season's
+rows from the weeks already played, and C adds them three times over.
+All three predict the same rows, built from the games before the week
+as the slate's are, scored on the players the shipped line puts at five
+or more by pair accuracy within a position in a week and by error.
+
+```
+                       2024 (2709)    2025 (2705)    2026 (919)     all (6333)
+                       pairs  mae     pairs  mae     pairs  mae     pairs  mae
+A shipped              66.92  5.526   66.29  5.607   67.17  5.533   66.58  5.562
+B + this season        66.89  5.524   66.31  5.606   67.17  5.533   66.59  5.560
+C + this season x3     66.85  5.524   66.31  5.605   67.18  5.534   66.57  5.560
+```
+
+Neither moves anything. The widest gap anywhere is seven hundredths of
+a pair, and B and C land either side of A from one season to the next.
+Weighting the season three times over takes 2024's bias from -0.449 to
+-0.391 and leaves pair accuracy, which is what a start and sit call
+turns on, where it was. A season's played weeks are a few thousand rows
+against eight or more seasons of them, and what the season has shown
+already reaches the ridge through its rows: the recent means, snap
+share and usage are read off the games before the week. The ridge stays
+fitted on past seasons.
+
+## How a player's role meets his game
+
+The ridge adds a side's implied total to every player alike, so a back
+on a quarter of his side's work and one on a twentieth get the same lift
+from a twenty eight point total. Scaling the touches by the total was
+tried in the component model and counted Vegas twice, since the total is
+already in the ridge. `weeklyInteractionEval.ts` asks it the other way
+round and lets the fit find how much of the total a player's role
+carries: R is one pooled ridge on the shipped features, the fair
+comparison for D, which is the same ridge with his recent points,
+targets, carries and snaps each times his side's implied total over the
+average and his recent points times the opponent. G is the shipped ridge
+with a small boosted correction, 120 trees of depth 3, fitted to what it
+gets wrong, which can find any such combination on its own. Fitted on
+the seasons before each one scored, every week from the fifth, players
+the shipped line puts at five or more:
+
+```
+                            2024 (2709)     2025 (2705)     2026 (919)      all (6333)
+                            pairs  mae      pairs  mae      pairs  mae      pairs   mae    bias
+A shipped                   66.92  5.526    66.29  5.607    67.17  5.533    66.58   5.562  -0.105
+R pooled ridge              66.30  5.592    65.89  5.624    66.34  5.603    66.03   5.607  -0.214
+D pooled + role x game      66.40  5.572    65.94  5.595    66.47  5.573    66.08   5.582  -0.246
+G shipped + boosted fix     66.84  5.519    66.32  5.587    67.11  5.519    66.56   5.548  -0.134
+```
+
+The interactions take the pooled ridge from 66.03% to 66.08% and the
+error from 5.607 to 5.582, and the pooled ridge is half a point behind
+the per position one that ships before they start, so D never reaches
+A. The boosted fix takes a hundredth and a half off the error and moves
+pair accuracy by nothing, 66.56% against 66.58%, a little either side of
+A season by season. A correction that can find any combination and
+finds none worth a pair is the strongest form of the answer: how a
+player's role meets his game is already in what the ridge adds up, as
+far as anything known before kickoff can say. Nothing ships.
+
+# Handing the walk the line
+
+The backlog's downward message was that what a team is worth is known at
+the top and never reaches the plays, which is why the walk orders a
+side's points at about .15 where the line gets .39. Half of that is out
+of date. `playedSeason.ts`, which writes the season the board reads,
+already lifts every play a side makes by the size `gameSize.ts` reads
+off the line, to the power 0.7. The game bench never had it, so its .15
+is the walk playing every fixture knowing only the two sides.
+
+`scorePredictionEval.ts` now takes MARKET_LIFT, the same lift at any
+strength, and ranks each side's points against what it scored beside
+the points the line implies for it. The walk is fitted on the four
+seasons before the one scored, thirty runs a fixture, all 272 regular
+season games:
+
+```
+              margin off   total off   a side off   a side ranked   picked the winner
+2023, off       14.59        14.09       10.14          .180             58.5%
+      0.3       14.50        14.07       10.10          .245             58.5%
+      0.5       14.54        14.26       10.18          .272             58.8%
+      0.7       14.76        14.18       10.23          .322             64.3%
+      1         15.71        15.03       10.87          .330             64.3%
+      the line  13.07        13.13        9.26          .358             68.0%
+2024, off       14.49        13.69        9.97          .143             59.9%
+      0.3       14.02        13.72        9.81          .246             66.5%
+      0.5       13.66        13.66        9.66          .324             68.8%
+      0.7       13.30        13.59        9.51          .374             69.1%
+      1         14.23        14.13       10.03          .385             72.1%
+      the line  12.61        12.55        8.89          .424             71.3%
+2025, off       14.51        13.81       10.02          .214             58.3%
+      0.3       13.98        13.77        9.81          .285             61.3%
+      0.5       14.53        13.90       10.05          .291             62.7%
+      0.7       14.92        14.25       10.32          .319             65.3%
+      1         16.03        14.61       10.84          .351             62.4%
+      the line  12.27        13.19        9.01          .399             65.3%
+```
+
+And read again under GAME_SEED=1, the same games under other draws, at
+the three strengths that matter:
+
+```
+              margin off   total off   a side off   a side ranked   picked the winner
+2023, off       14.73        14.31       10.27          .165             56.3%
+      0.3       14.33        14.01       10.02          .252             57.0%
+      0.7       14.79        14.49       10.35          .294             59.2%
+2024, off       14.29        13.66        9.89          .161             59.6%
+      0.3       13.58        13.53        9.59          .279             65.4%
+      0.7       13.72        13.77        9.72          .361             69.5%
+2025, off       14.70        13.82       10.09          .190             56.8%
+      0.3       14.41        13.55        9.89          .281             61.3%
+      0.7       14.76        14.24       10.25          .334             63.1%
+```
+
+The order comes in at every strength in every season and under both
+seeds. Off, the walk ranks a side's points at .14 to .21; at 0.7 it is
+.29 to .37 against the line's .36 to .42, and it picks the winner 59%
+to 70% of the time where off it managed 56% to 60%.
+
+The points do not follow it. At 0.7 the margin is further off than with
+the lift off in 2023 and 2025 and the total further off in both, and at
+full strength the total and a side's own points are further off in every
+season. The likeliest reason is that a lift on a play's yards moves a
+side's points by more than the lift, since a longer gain is also a drive
+that finishes, so the line's size is the right message handed in too
+hard. That has not been measured on its own.
+
+Two readings of the same code move the margin by as much as .44, so one
+reading of a gap says little, and what holds is its sign. At 0.3 the
+walk is closer on the margin than with the lift off in every season
+under both seeds, by .25, .59 and .41 on the mean of the two, on a
+side's own points by .15, .23 and .21, and on the total by .16, .05 and
+.16, and it ranks the sides about a tenth better. It is the only
+strength better than off on every error and on the order in every
+season. At 0.7 the order is better again, .31 to .37, but the margin is
+better only in 2024 and the total no better anywhere.
+
+Nothing ships from this. The game bench is not on the board, and the
+season the board reads already plays at 0.7, which was chosen on the
+players' points rather than the sides'. Whether 0.3 is better there is
+a question for `boardShareEval.ts` and `walkBandEval.ts` with the
+2023 to 2025 seasons played again at both strengths, and the board
+bench needs those seasons' draft boards, which were not on disk where
+this was run. `teamState.ts` is still read by nothing.
+
+## What to try next
+
+`ALPHA` at 0.3 in `playedSeason.ts`, against 0.7 run at the same time:
+the three past seasons played again at each, the board and the walk
+column scored on both, and `DEALT_WIDER` swept again, since a weaker
+lift narrows the spread of a man's dealt games.

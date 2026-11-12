@@ -12,7 +12,6 @@
  */
 
 import type { Call, PlayFactors, PlayState } from "./playFactors.js";
-import type { DriveEnd } from "./drive.js";
 import type { PlayClock } from "../features/fitPlayClock.js";
 import type { FourthDown } from "../features/fitFourthDown.js";
 
@@ -37,8 +36,8 @@ export interface EndingRules {
   /**
    * A defensive penalty that hands over a first down. It happens on 16%
    * of drives and is the one way a drive carries on without the offence
-   * doing anything. The older walks have it and this one was written
-   * without it, which is most of why it does not finish.
+   * doing anything. The older walks had it and this one was first
+   * written without it, which was most of why its drives did not finish.
    */
   penaltyFirstDown: number;
   penaltyYards: (uniform: () => number) => number;
@@ -133,6 +132,11 @@ const CLOCK_DEFAULTS: ClockRules = {
  * has to be able to tell the three apart.
  */
 export type Unaimed = "sack" | "away" | "flag";
+
+/** how a drive stops */
+export type DriveEnd =
+  | "touchdown" | "fieldGoal" | "missedKick"
+  | "punt" | "downs" | "turnover" | "clock";
 
 interface FactorPlay {
   state: PlayState;

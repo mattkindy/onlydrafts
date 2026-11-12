@@ -14,18 +14,32 @@
  */
 
 import {
-  walkDrive, type FactorDrive, type Opening, type Unaimed,
+  walkDrive, type DriveEnd, type FactorDrive, type Opening, type Unaimed,
 } from "./driveFromFactors.js";
 import { standardNormal } from "../sim/rng.js";
-import type { PlayerLine } from "./playerWeek.js";
+import type { StatLine } from "../scoring/fantasyPoints.js";
 import type { Call, PlayFactors } from "./playFactors.js";
 import type { EndingRules, ClockRules } from "./driveFromFactors.js";
-import type { DriveEnd } from "./drive.js";
 import type { FourthDown } from "../features/fitFourthDown.js";
 import type { PlayClock } from "../features/fitPlayClock.js";
 import {
   DEFAULT_AFTER_TOUCHDOWN, type AfterTouchdown,
 } from "../features/afterTouchdown.js";
+
+/** one player's line out of a played game */
+export interface PlayerLine extends StatLine {
+  playerId: string;
+  played: boolean;
+  /**
+   * How often he got it. No league pays for these, and they are the
+   * steadiest thing about a player, so a walk that counts them can say
+   * whether a quiet week was fewer touches or less done with them.
+   */
+  carries?: number;
+  targets?: number;
+  passAtt?: number;
+  passCmp?: number;
+}
 
 /** one side of a game, and everything needed to walk its drives */
 export interface Side {
@@ -39,12 +53,6 @@ export interface Side {
   lift?: number;
   /** what the player throwing it is worth, applied to throws alone */
   passLift?: number;
-  /**
-   * This side's own drive behaviour, fitted from its drives with the
-   * league behind it. The game's rules fill whatever this leaves out,
-   * so the kick and venue overrides pass through untouched.
-   */
-  drives?: Partial<EndingRules>;
 }
 
 interface GameRules {
@@ -449,11 +457,8 @@ export function playGame(
         };
     firstDown = undefined;
     firstToGo = undefined;
-    const itsOwnDrives = withBall.drives
-      ? { ...rules.rules, ...withBall.drives }
-      : rules.rules;
     const drive = walkDrive(
-      startAt, withBall.factors, itsOwnDrives, rules.fourth, withBall.among,
+      startAt, withBall.factors, rules.rules, rules.fourth, withBall.among,
       uniform, rules.clock,
       {
         offence: withBall.team, defence: against.team,

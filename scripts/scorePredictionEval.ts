@@ -6,6 +6,19 @@
  * say what the score will be. Vegas is the benchmark, because a line
  * is the best public guess there is and it is in the games file.
  *
+ * A side's points are also ranked against what it really scored, the
+ * walk's beside the points the line implies for it, since a margin can
+ * come out right with both sides wrong.
+ *
+ * MARKET_LIFT hands the walk the line's read on each side's afternoon
+ * as a lift on its plays, `gameSize.ts`'s size to that power, which is
+ * what `playedSeason.ts` does at 0.7 for the season the board reads.
+ * Off, as here by default, the walk plays every fixture knowing only
+ * the two sides.
+ *
+ * GAME_SEED draws the same games again under other seeds, for a second
+ * reading beside the first.
+ *
  * Run: npx tsx scripts/scorePredictionEval.ts [season]
  */
 
@@ -18,13 +31,15 @@ import { HOME } from "../src/features/climate.js";
 import { parseCsv } from "../src/data/csv.js";
 import { loadPlayerStats } from "../src/data/nflverse.js";
 import { seededRng } from "../src/sim/rng.js";
-import { rmse } from "../src/backtest/metrics.js";
+import { rmse, spearman } from "../src/backtest/metrics.js";
+import { impliedFor, sizeOf } from "../src/features/gameSize.js";
 import { acrossCores, myShare } from "../src/sim/acrossCores.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const SEASON = Number(process.env["SEASON"] ?? process.argv[2] ?? 2024);
 const RUNS = Number(process.env["RUNS"] ?? 30);
+const MARKET_LIFT = Number(process.env["MARKET_LIFT"] ?? 0);
 
 const positions = new Map<string, string>();
 
@@ -92,7 +107,10 @@ for (const r of rows) {
   });
 }
 
-const rng = seededRng(53 + Number(process.env["SHARE"] ?? 0));
+/** GAME_SEED reads the same games under other draws, for a second reading */
+const rng = seededRng(
+  53 + Number(process.env["SHARE"] ?? 0) + 1000 * Number(process.env["GAME_SEED"] ?? 0),
+);
 const said = new Map<number, { home: number; away: number }>();
 const mine = new Set(myShare(fixtures.map((_, i) => i)));
 
@@ -114,13 +132,22 @@ fixtures.forEach((f, i) => {
     return;
   }
 
-  const home = world.sideFor(f.home);
-  const away = world.sideFor(f.away);
+  const asked = { home: world.sideFor(f.home), away: world.sideFor(f.away) };
 
-  if (!home || !away) {
+  if (!asked.home || !asked.away) {
     return;
   }
 
+  const lifted = (side: Side, favouredBy: number): Side =>
+    MARKET_LIFT > 0 && f.line !== undefined && f.total !== undefined
+      ? {
+          ...side,
+          lift: (side.lift ?? 1) *
+            Math.pow(sizeOf({ total: f.total, favouredBy }), MARKET_LIFT),
+        }
+      : side;
+  const home = lifted(asked.home as Side, f.line ?? 0);
+  const away = lifted(asked.away as Side, -(f.line ?? 0));
   let homePoints = 0;
   let awayPoints = 0;
 
@@ -133,7 +160,7 @@ fixtures.forEach((f, i) => {
           temperature: climate.drawTemperature(f.home, f.week, f.hour, rng),
           wind: climate.drawWind(f.home, rng),
         };
-    const game = playGame(home as Side, away as Side, {
+    const game = playGame(home, away, {
       rules: {
         ...world.rules,
         kickSucceeds: world.kicking.kickSucceeds,
@@ -208,6 +235,27 @@ const rightSide = (of: (p: Pair) => number) =>
 
 console.log(`\n  picked the winner: the walk ${(100 * rightSide((p) => p.walk)).toFixed(1)}%, ` +
   `vegas ${(100 * rightSide((p) => p.vegas)).toFixed(1)}%`);
+
+/** each side on its own, which the margin and the total can both hide */
+const sides: { walk: number; vegas: number; was: number }[] = [];
+
+fixtures.forEach((f, i) => {
+  const mine = said.get(i);
+
+  if (!mine || f.line === undefined || f.total === undefined) {
+    return;
+  }
+
+  sides.push(
+    { walk: mine.home, vegas: impliedFor({ total: f.total, favouredBy: f.line }), was: f.homeScore },
+    { walk: mine.away, vegas: impliedFor({ total: f.total, favouredBy: -f.line }), was: f.awayScore },
+  );
+});
+
+console.log(`\n  a side's points, ranked: the walk ${spearman(sides.map((p) => p.walk), sides.map((p) => p.was)).toFixed(3)}, ` +
+  `vegas ${spearman(sides.map((p) => p.vegas), sides.map((p) => p.was)).toFixed(3)}, ` +
+  `off by ${rmse(sides.map((p) => p.walk), sides.map((p) => p.was)).toFixed(2)} ` +
+  `against ${rmse(sides.map((p) => p.vegas), sides.map((p) => p.was)).toFixed(2)}`);
 
 console.log(`\n  the walk's own level: ${level(totals.map((p) => p.walk)).toFixed(1)} points a game ` +
   `against ${level(totals.map((p) => p.was)).toFixed(1)} really scored`);
