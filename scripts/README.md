@@ -3775,13 +3775,56 @@ can mark them. More weight on the role term after a drop was not tried:
 under the one gap a drop is already held a little under what he did, and
 more weight on the role would push it further under.
 
+## A rise read more warily than a drop
+
+The one gap held a man whose snaps rose twenty points .48 a game too high,
+and leaving a rise unbroken swung him .77 under. A rise is often a man
+filling in for a hurt starter, who has a big game or two and hands the job
+back, so the eval now marks four warier readings of a rise, each on the one
+gap's own weights so the rise is the only thing that differs, every cut
+pooled:
+
+| players whose snaps rose .20 or more, 840 | signed error | MAE |
+| --- | --- | --- |
+| one gap at .20, either way | +.479 | 2.914 |
+| a rise not broken at all | -.772 | 2.891 |
+| a rise at .25 | +.224 | 2.917 |
+| a rise at .30 | +.044 | 2.892 |
+| a rise held two games | +.302 | 2.923 |
+| a rise at .30, held two games | -.043 | 2.874 |
+
+Held means two of his last three games are that far over the share
+before, so one game in a hurt starter's place is not read as the job. The
+whole pool, MAE:
+
+| after week | one gap | a rise not | a rise at .30, held | shipped | shipped with it, in sample |
+| --- | --- | --- | --- | --- | --- |
+| 2 | 2.454 | 2.454 | 2.454 | 2.462 | 2.462 |
+| 4 | 2.470 | 2.463 | 2.465 | 2.461 | 2.459 |
+| 6 | 2.477 | 2.475 | 2.476 | 2.459 | 2.460 |
+| 8 | 2.490 | 2.487 | 2.488 | 2.472 | 2.469 |
+| 10 | 2.530 | 2.534 | 2.524 | 2.524 | 2.518 |
+
+A rise at thirty, held, beats the one gap at every cut after week 2, where
+nobody has four games and nothing can break. Against a rise left unbroken
+it loses weeks 4 to 8 by a thousandth or two and wins week 10 by a
+hundredth, and it is the best of all of them on the mean over the cuts.
+The steady and the drops do not move. On the shipped constant it takes a
+rise from .21 over to .16 under and its error from 2.817 to 2.783, better
+at weeks 4, 8 and 10 and a thousandth worse at week 6. The build ships it:
+a drop breaks at twenty points, a rise at thirty in two of the last three
+games. The gains on the whole pool are small, since a rise of twenty is one
+row in ten; on the men it is about, the bias is gone.
+
+What did not help: a wider gap on its own (.25 is still .22 over) and the
+hold on its own (.30 over). Either half alone leaves most of the bias.
+
 ## What to try next on this
 
-A rise. The one gap holds a man whose snaps rose twenty points .48 a game
-too high, and leaving a rise unbroken cuts the error on it but not by
-enough to show in the pool at every cut. A rise breaking at a wider gap
-than a drop, or only once it has held two games, is the next thing to
-measure.
+Whether the rise came from a teammate at his position sitting out. A man
+filling in is the case this guards against, and the box score knows who
+was missing. Reading that directly could let a real promotion count at
+once and a fill-in not at all.
 
 Split the shrinkage by why a player's games are short, which the update's
 own section already asks for. Neither half of this touched it.

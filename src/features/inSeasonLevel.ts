@@ -139,6 +139,13 @@ export interface UpdateShape {
    * beats it at every cut.
    */
   dropHeld?: boolean;
+  /**
+   * A rise counts only where two of the last three games are that far
+   * over the share before. A man filling in for a hurt starter often has
+   * a big game and gives the job back. The build ships it, with a rise
+   * breaking at thirty points where a drop breaks at twenty.
+   */
+  riseHeld?: boolean;
   roleCap: number;
   roleGames: number;
   pointsCap: number;
@@ -166,6 +173,7 @@ export function gamesSinceBreak(
   breakGap: number,
   dropGap = breakGap,
   dropHeld = false,
+  riseHeld = false,
 ): PlayedWeek[] {
   if (weeks.length <= BREAK_WINDOW) {
     return weeks;
@@ -179,7 +187,13 @@ export function gamesSinceBreak(
   const moved = mean(recent) - before;
 
   if (moved >= 0) {
-    return moved < breakGap ? weeks : recent;
+    if (moved < breakGap) {
+      return weeks;
+    }
+
+    const up = recent.filter((w) => w.snapShare - before >= breakGap).length;
+
+    return riseHeld && up < 2 ? weeks : recent;
   }
 
   if (-moved < dropGap) {
@@ -207,7 +221,7 @@ export function summarizeWindow(
   shape: UpdateShape,
 ): WindowSummary {
   const kept = gamesSinceBreak(
-    weeks, shape.breakGap, shape.dropGap, shape.dropHeld);
+    weeks, shape.breakGap, shape.dropGap, shape.dropHeld, shape.riseHeld);
   const last = kept.length - 1;
   const weights = kept.map((_, i) => shape.decay ** (last - i));
   const total = weights.reduce((sum, w) => sum + w, 0);
