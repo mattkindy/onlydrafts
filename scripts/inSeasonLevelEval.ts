@@ -316,6 +316,19 @@ const ONE_GAP = "one gap at .20, either way";
  */
 const DROP_ONLY = "a drop at .20, a rise not";
 
+/**
+ * A rise read more warily than a drop, on the one gap's own weights so
+ * the rise is the only thing that differs: breaking at a wider move, or
+ * only once two of the last three games are that far up, or both. A man
+ * filling in for a hurt starter has one big game and hands the job back.
+ */
+const RISES = {
+  "a rise at .25": { breakGap: 0.25, dropGap: 0.2 },
+  "a rise at .30": { breakGap: 0.3, dropGap: 0.2 },
+  "a rise held two games": { breakGap: 0.2, dropGap: 0.2, riseHeld: true },
+  "a rise at .30, held": { breakGap: 0.3, dropGap: 0.2, riseHeld: true },
+} as const;
+
 const READERS = [
   "preseason anchor",
   "season to date",
@@ -323,6 +336,7 @@ const READERS = [
   ...Object.keys(ABLATIONS),
   ONE_GAP,
   DROP_ONLY,
+  ...Object.keys(RISES),
   ...Object.keys(DROPS),
   SHIPPED,
   "oracle",
@@ -495,6 +509,10 @@ async function main(): Promise<void> {
       shape: { ...oneGap, breakGap: Infinity, dropGap: oneGap.breakGap },
     });
 
+    for (const [label, rise] of Object.entries(RISES)) {
+      without.set(label, { role: fit.role, shape: { ...oneGap, ...rise } });
+    }
+
     for (const cut of CUTS) {
       const rows = rowsAt(built.get(year)!, year, cut);
       const surprises = rows.map((row) => surpriseOf(fit, row));
@@ -526,12 +544,12 @@ async function main(): Promise<void> {
   }
 
   reportMoves([...marked.values()], [
-    UPDATE, ONE_GAP, DROP_ONLY, ...Object.keys(DROPS), SHIPPED,
+    UPDATE, ONE_GAP, DROP_ONLY, ...Object.keys(RISES), ...Object.keys(DROPS), SHIPPED,
   ], "every cut pooled");
 
   for (const cut of CUTS.filter((c) => c > MOVE_WINDOW)) {
     reportMoves(
-      [marked.get(cut)!], [UPDATE, ONE_GAP, DROP_ONLY], `after week ${cut} alone`);
+      [marked.get(cut)!], [UPDATE, ONE_GAP, DROP_ONLY, ...Object.keys(RISES)], `after week ${cut} alone`);
   }
 
   await withSleeperNext(built, fits);
