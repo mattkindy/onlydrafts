@@ -1,7 +1,12 @@
 /**
- * Your team, by position, with what each player is projected to do.
+ * Your team, by position, read one of two ways. This week is what a
+ * manager checks before setting a lineup: who plays whom, his line and
+ * his range, and who is hurt or on bye. The season is what a trade or a
+ * keeper turns on: what he scores a game, how many games he plays, where
+ * he ranks at his position, and where the room drafted him. The two used
+ * to share one card, which answered neither question cleanly.
  *
- * In a keeper league what he is worth keeping for opens on his own card
+ * In a keeper league what he is worth keeping for opens on his own row
  * rather than in a second grid underneath. The two grids listed the same
  * twelve players, so every player on the page appeared twice.
  */
@@ -10,11 +15,13 @@ import type { Player } from "../lib/scoring.ts";
 import type { League } from "../lib/providers.ts";
 import type { Listed } from "../lib/availability.ts";
 import { hurtWord, type SlateRow } from "../lib/slate.ts";
-import { injuryBadge, WORRYING } from "./Draft.tsx";
+import { injuryBadge } from "./Draft.tsx";
 import { GoLink } from "./GoLink.tsx";
 import { lineupLink, PROVIDER_NAME } from "../lib/deepLinks.ts";
-import { SeasonCard, seasonScale } from "./Card.tsx";
 import { KeeperRow, keeperDraft, keeperRounds } from "./Keepers.tsx";
+import { asRound } from "../lib/picks.ts";
+import { keep, stored } from "../lib/store.ts";
+import { useState } from "preact/hooks";
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "other"];
 
@@ -44,27 +51,48 @@ interface Props {
   rows?: Map<string, SlateRow>;
 }
 
+type Mode = "week" | "season";
+
+const MODES: [Mode, string][] = [["week", "this week"], ["season", "season"]];
+
 export function Roster(props: Props) {
   const { league, marked, players } = props;
   const rowOf = (key: string) => props.rows?.get(key);
-  /**
-   * Once a week has loaded, each position reads in the order you would
-   * start it this week; before then, by what he is worth over the
-   * season. The two part ways for a player who is hurt or on bye, and
-   * that week is when the order matters.
-   */
   const weekly = Boolean(props.rows?.size);
+  // the season until a week has loaded, since a week with no lines in it
+  // is a page of blanks; after that whichever way you last read it
+  const [chosen, setChosen] = useState<Mode>(() => stored<Mode>("teamMode", "week"));
+  const mode: Mode = weekly ? chosen : "season";
+  const choose = (which: Mode) => {
+    setChosen(which);
+    keep("teamMode", which);
+  };
+  /**
+   * Read for the week, each position is in the order you would start it;
+   * read for the season, by what he is worth over it. The two part ways
+   * for a player who is hurt or on bye, and that week is when it matters.
+   */
   const mine = league.myRoster
     .map((r) => ({ r, p: props.byKey.get(r.key) ?? null }))
-    .sort((a, b) => weekly
+    .sort((a, b) => mode === "week"
       ? (rowOf(b.r.key)?.blend ?? -1) - (rowOf(a.r.key)?.blend ?? -1)
       : (b.p?.vor ?? -99) - (a.p?.vor ?? -99));
   const kept = Object.keys(marked).filter((k) => marked[k] === league.team).length;
-  const max = seasonScale(mine.map((x) => x.p).filter((p): p is Player => Boolean(p)));
+  const teams = league.size || 12;
   const draft = props.keeperLeague
     ? keeperDraft(league, props.byKey, props.perTeam)
     : null;
   const rounds = draft ? keeperRounds(players, mine, draft) : new Map<string, number>();
+  // where we have him at his position: RB12 says more in November than
+  // the overall pick he would have gone at in August
+  const positionRank = new Map<string, number>();
+
+  for (const position of new Set(players.map((p) => p.position))) {
+    players
+      .filter((p) => p.position === position && p.rank)
+      .sort((a, b) => a.rank! - b.rank!)
+      .forEach((p, i) => positionRank.set(p.key, i + 1));
+  }
 
   // the same word the matchup tab gives, so the two tabs never disagree
   // about who is out
@@ -81,6 +109,17 @@ export function Roster(props: Props) {
     byPosition.set(position, [...(byPosition.get(position) ?? []), entry]);
   }
 
+  const head = mode === "week"
+    ? <><i class="c-proj">proj</i><i class="c-range">range</i></>
+    : (
+      <>
+        <i class="c-ppg">pts/g</i>
+        <i class="c-games" title="games he is projected to play">games</i>
+        <i class="c-rank" title="where we rank him at his position">rank</i>
+        <i class="c-adp" title="average draft position, as round and pick">adp</i>
+      </>
+    );
+
   return (
     <>
       <div class="rosterhead">
@@ -94,6 +133,24 @@ export function Roster(props: Props) {
           >
             {props.rereading ? "refreshing..." : "refresh"}
           </button>
+        )}
+      </div>
+
+      <div class="rostermode">
+        {weekly && (
+          <span class="seg" role="tablist">
+            {MODES.map(([which, said]) => (
+              <button
+                key={which}
+                role="tab"
+                aria-selected={mode === which}
+                class={mode === which ? "on" : ""}
+                onClick={() => choose(which)}
+              >
+                {said}
+              </button>
+            ))}
+          </span>
         )}
         <GoLink href={lineupLink(league)}>
           open in {PROVIDER_NAME[league.provider]}
@@ -117,105 +174,102 @@ export function Roster(props: Props) {
         )}
       </div>
 
-      {props.keeperLeague && props.keepersSay && (
+      {props.keeperLeague && props.keepersSay && mode === "season" && (
         <p class="hint">{props.keepersSay}</p>
       )}
 
-      {POSITIONS.filter((where) => byPosition.has(where)).map((where) => (
-        <div key={where}>
-          <h2>{where}</h2>
-          <div class="cards">
+      <div class={"tlist " + mode}>
+        <div class="trow tcols" aria-hidden="true">
+          <i class="c-name" />
+          {head}
+        </div>
+        {POSITIONS.filter((where) => byPosition.has(where)).map((where) => (
+          <section class="tgroup" key={where}>
+            <h3>{where}</h3>
             {byPosition.get(where)!.map(({ r, p }) => {
               if (!p) {
                 return (
-                  <div class="card plain" key={r.key}>
-                    <div class="nm"><span class="who">{r.name}</span></div>
-                    <div class="sub">
-                      {/* he is on last season's roster and nobody has
-                          signed him for this one */}
-                      <span>no NFL team in {props.season}, so no projection</span>
-                    </div>
+                  <div class="trow" key={r.key}>
+                    <span class="tname"><span class="who">{r.name}</span></span>
+                    {/* he is on last season's roster and nobody has
+                        signed him for this one */}
+                    <span class="tmeta">no NFL team in {props.season}</span>
                   </div>
                 );
               }
 
-              const isKept = Boolean(marked[p.key]);
               const row = rowOf(p.key);
+              const isKept = Boolean(marked[p.key]);
+              const bye = onByeNow(p);
+              const his = hurtOf(p.key);
+              const badge = injuryBadge(his);
+              const part = his?.part;
+              const meta = [
+                `${p.position} · ${p.team ?? "FA"}`,
+                mode === "week" && row && !row.bye ? `${row.home ? "v" : "@"} ${row.opponent}` : "",
+                mode === "week" && bye ? "bye" : "",
+                part ? part.toLowerCase() : "",
+              ].filter(Boolean).join(" · ");
 
               return (
-                <SeasonCard
-                  key={p.key}
-                  p={p}
-                  max={max}
-                  slim
-                  teams={props.league.size || 12}
-                  kept={isKept}
-                  badge={isKept ? "keeper" : ""}
-                  onMore={() => props.onMore(p)}
-                  {...(row && !row.bye
-                    ? { thisWeek: { label: "proj", value: row.blend.toFixed(1) } }
-                    : {})}
-                >
-                  {row && !row.bye && (
-                    <div class="weekline">
-                      <span>week {props.week}</span>
-                      <span>{row.home ? "v" : "@"} {row.opponent}</span>
-                      {/* a range from nothing to nothing says less than
-                          the badge under it already does */}
-                      {row.ceiling > 0 && (
-                        <span>{row.floor.toFixed(1)} to {row.ceiling.toFixed(1)}</span>
-                      )}
+                <div class={"trow" + (isKept ? " kept" : "")} key={p.key}>
+                  <span class="tname">
+                    <button
+                      class="who link"
+                      onClick={(e) => { e.stopPropagation(); props.onMore(p); }}
+                    >
+                      {p.name}
+                    </button>
+                    {badge && (
+                      <span class={"badge " + badge.badgeHow} title={badge.badgeTitle}>
+                        {badge.badge}
+                      </span>
+                    )}
+                    {isKept && <span class="badge">keeper</span>}
+                  </span>
+                  <span class="tmeta">{meta}</span>
+                  {mode === "week"
+                    ? (
+                      <>
+                        <b class="c-proj">{!row || row.bye ? "–" : row.blend.toFixed(1)}</b>
+                        <span class="c-range">
+                          {row && !row.bye && row.ceiling > 0
+                            ? `${row.floor.toFixed(1)}–${row.ceiling.toFixed(1)}`
+                            : ""}
+                        </span>
+                      </>
+                    )
+                    : (
+                      <>
+                        <b class="c-ppg">{(p.game?.["ev"] ?? p.ppg ?? 0).toFixed(1)}</b>
+                        <span class="c-games">{p.games !== undefined ? p.games.toFixed(1) : "–"}</span>
+                        <span class="c-rank">
+                          {positionRank.has(p.key) ? `${p.position}${positionRank.get(p.key)}` : "–"}
+                        </span>
+                        <span class="c-adp">{p.adpRank ? asRound(p.adpRank, teams) : "–"}</span>
+                      </>
+                    )}
+                  {draft && mode === "season" && (
+                    <div class="tkeep">
+                      <KeeperRow
+                        players={players}
+                        p={p}
+                        league={league}
+                        perTeam={props.perTeam}
+                        round={rounds.get(p.key) ?? null}
+                        kept={isKept}
+                        onMark={() => props.onMark(p)}
+                        onChange={props.onKeeperChange ?? (() => {})}
+                      />
                     </div>
                   )}
-                  <Status his={hurtOf(p.key)} bye={onByeNow(p) ? props.week! : null} />
-                  {draft && (
-                    <KeeperRow
-                      players={players}
-                      p={p}
-                      league={league}
-                      perTeam={props.perTeam}
-                      round={rounds.get(p.key) ?? null}
-                      kept={isKept}
-                      onMark={() => props.onMark(p)}
-                      onChange={props.onKeeperChange ?? (() => {})}
-                    />
-                  )}
-                </SeasonCard>
+                </div>
               );
             })}
-          </div>
-        </div>
-      ))}
+          </section>
+        ))}
+      </div>
     </>
-  );
-}
-
-/** what is wrong with him this week, if anything, on one line of his card */
-function Status(
-  { his, bye }: {
-    his: { status: string; part?: string; note?: string } | undefined;
-    bye: number | null;
-  },
-) {
-  const badge = injuryBadge(his);
-
-  if (!badge && bye === null) {
-    return null;
-  }
-
-  return (
-    <div class="status">
-      {badge && (
-        <span class={"badge " + badge.badgeHow} title={badge.badgeTitle}>
-          {badge.badge}
-        </span>
-      )}
-      {his?.part && <span>{his.part.toLowerCase()}</span>}
-      {his && WORRYING.has(his.status) && his.note && (
-        <span class="note">{his.note}</span>
-      )}
-      {bye !== null && <span class="badge even">bye week {bye}</span>}
-    </div>
   );
 }
 

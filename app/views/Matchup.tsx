@@ -82,10 +82,15 @@ const signed = (gains: number) =>
 
 /** one figure with what it measures over it, so no number is bare */
 function Fig(
-  { label, children }: { label: string; children: ComponentChildren },
+  { label, col, children }: {
+    label: string;
+    /** which column the figure stands in when a lineup is laid out as rows */
+    col?: string;
+    children: ComponentChildren;
+  },
 ) {
   return (
-    <span class="fig">
+    <span class={col ? `fig c-${col}` : "fig"}>
       <i>{label}</i>
       {children}
     </span>
@@ -112,14 +117,14 @@ function Numbers(
 
   return (
     <>
-      <Fig label="proj">
+      <Fig label="proj" col="proj">
         {line.blend.toFixed(1)}
         {line.stock ? <small> stock</small> : null}
       </Fig>
       {left > 0 && left < 1 && (
-        <Fig label="still to come">{(line.blend * left).toFixed(1)}</Fig>
+        <Fig label="still to come" col="left">{(line.blend * left).toFixed(1)}</Fig>
       )}
-      <Fig label="floor to ceiling">
+      <Fig label="floor to ceiling" col="range">
         {line.spread.low.toFixed(1)} to {line.spread.high.toFixed(1)}
       </Fig>
     </>
@@ -229,6 +234,11 @@ function Bench(
 ) {
   const swaps = bestSwaps(choices);
   const helps = swaps.some(({ option }) => option.gains >= WORTH_A_MOVE);
+  const midway = swaps.some(({ option }) => {
+    const { left } = lineAndLeft(option.key, undefined, rows, states, lines);
+
+    return left > 0 && left < 1;
+  });
   /**
    * The whole bench is worth seeing when one of them would help. When
    * none would, it is seven rows of minus signs, so it waits behind a
@@ -254,31 +264,42 @@ function Bench(
   }
 
   return (
-    <section class="slot-card">
+    <section class="slot-card bench">
       <h3>bench</h3>
+      <div class="slot-head opts" aria-hidden="true">
+        <i class="c-name">bench</i>
+        <i class="c-proj">proj</i>
+        {midway && <i class="c-left">to come</i>}
+        <i class="c-range">floor to ceiling</i>
+        <i class="c-for">slot</i>
+        <i class="c-out">beats</i>
+        <i class="c-win">win %</i>
+      </div>
       <ul class="options">
         {swaps.map(({ option, choice }) => {
           const his = lineAndLeft(option.key, undefined, rows, states, lines);
 
           return (
             <li key={option.key} class={option.locked ? "shut" : ""}>
-              <PlayerName
-                name={nameOf(option.key, rows, lines, option.name)}
-                team={his.line?.team}
-                onOpen={onMore ? () => onMore(option.key) : undefined}
-              />
-              <span class={option.gains >= WORTH_A_MOVE ? "fig delta up" : "fig delta"}>
+              <span class="optname">
+                <PlayerName
+                  name={nameOf(option.key, rows, lines, option.name)}
+                  team={his.line?.team}
+                  onOpen={onMore ? () => onMore(option.key) : undefined}
+                />
+                <Marks his={listed.get(option.key)} row={rows.get(option.key)} />
+                {option.locked && <span class="badge even">locked</span>}
+              </span>
+              <span class={"fig delta c-win" + (option.gains >= WORTH_A_MOVE ? " up" : "")}>
                 <i>win %</i>{signed(option.gains)}
               </span>
               <div class="optfigs">
                 <Numbers line={his.line} left={his.left} />
                 <Fig label={`instead of ${nameOf(
-                  choice.starter.key, rows, lines, choice.starter.name)}`}>
+                  choice.starter.key, rows, lines, choice.starter.name)}`} col="for">
                   {choice.slot}
                 </Fig>
-                <Fig label="outscores him">{pct(option.outscores)}</Fig>
-                <Marks his={listed.get(option.key)} row={rows.get(option.key)} />
-                {option.locked && <span class="badge even">locked</span>}
+                <Fig label="outscores him" col="out">{pct(option.outscores)}</Fig>
               </div>
             </li>
           );
@@ -329,7 +350,7 @@ function Slot(
         {/* nothing is scored before kickoff, and a zero there reads as
             a player who went out and did nothing */}
         {his.left < 1 && (
-          <Fig label="scored">{scoredSays(choice.starter.points)}</Fig>
+          <Fig label="scored" col="scored">{scoredSays(choice.starter.points)}</Fig>
         )}
         <Numbers line={his.line} left={his.left} />
       </div>
@@ -337,28 +358,37 @@ function Slot(
       {better.length > 0 && (
         <>
           <div class="over">bench</div>
+          <div class="slot-head opts" aria-hidden="true">
+            <i class="c-name">bench</i>
+            <i class="c-proj">proj</i>
+            <i class="c-range">floor to ceiling</i>
+            <i class="c-out">beats</i>
+            <i class="c-win">win %</i>
+          </div>
           <ul class="options">
             {better.map((option) => {
               const other = at(option.key);
 
               return (
                 <li key={option.key} class={option.locked ? "shut" : ""}>
-                  <PlayerName
-                    name={nameOf(option.key, rows, lines, option.name)}
-                    team={other.line?.team}
-                    onOpen={onMore ? () => onMore(option.key) : undefined}
-                  />
-                  <span class="fig delta up">
-                    <i>win %</i>{signed(option.gains)}
-                  </span>
-                  <div class="optfigs">
-                    <Numbers line={other.line} left={other.left} />
-                    <Fig label="outscores him">{pct(option.outscores)}</Fig>
+                  <span class="optname">
+                    <PlayerName
+                      name={nameOf(option.key, rows, lines, option.name)}
+                      team={other.line?.team}
+                      onOpen={onMore ? () => onMore(option.key) : undefined}
+                    />
                     <Marks
                       his={listed.get(option.key)}
                       row={rows.get(option.key)}
                     />
                     {option.locked && <span class="badge even">locked</span>}
+                  </span>
+                  <span class="fig delta up c-win">
+                    <i>win %</i>{signed(option.gains)}
+                  </span>
+                  <div class="optfigs">
+                    <Numbers line={other.line} left={other.left} />
+                    <Fig label="outscores him" col="out">{pct(option.outscores)}</Fig>
                   </div>
                   {option.why && <Why why={option.why} />}
                 </li>
@@ -389,8 +419,23 @@ function Lineup(
     [side, against, slots, rows, states, lines, remainder],
   );
 
+  // which columns any row fills, so a wide screen can head the rows once
+  // and keep every figure under its own label however many a row has
+  const started = choices.some((choice) =>
+    lineAndLeft(choice.starter.key, choice.slot, rows, states, lines).left < 1);
+  const midway = choices.some((choice) => [
+    lineAndLeft(choice.starter.key, choice.slot, rows, states, lines).left,
+    ...choice.options.map((option) => lineAndLeft(option.key, undefined, rows, states, lines).left),
+  ].some((left) => left > 0 && left < 1));
+
   return (
-    <div class="stack">
+    <div class={"stack" + (started ? " has-scored" : "") + (midway ? " has-left" : "")}>
+      <div class="slot-head" aria-hidden="true">
+        {started && <i class="c-scored">scored</i>}
+        <i class="c-proj">proj</i>
+        {midway && <i class="c-left">to come</i>}
+        <i class="c-range">floor to ceiling</i>
+      </div>
       {choices.map((choice, i) => (
         <Slot
           key={choice.starter.key + i}
@@ -1015,6 +1060,10 @@ export function MyMatchup(props: Props) {
               lock={nextLockIn(ours.side, rows, states, lines)}
             />
           )}
+          {/* on a wide screen what to do sits beside the lineup it is about;
+              on a phone the two follow each other as before */}
+          <div class="mcols rhythm">
+          <div class="mcol act rhythm">
           <Worries
             worries={worries} onMore={onMore} onFind={props.onFind}
             players={goPlayers}
@@ -1031,6 +1080,8 @@ export function MyMatchup(props: Props) {
             onMore={onMore}
             lean
           />
+          </div>
+          <div class="mcol mine rhythm">
           <div class="lineuphead">
             <h2>your lineup</h2>
             {league && (
@@ -1050,6 +1101,8 @@ export function MyMatchup(props: Props) {
             listed={props.listed}
             onMore={onMore}
           />
+          </div>
+          </div>
 
           <h2>head to head</h2>
           <Game
