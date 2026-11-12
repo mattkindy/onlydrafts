@@ -3,9 +3,10 @@
  * drafted, for a keeper or a dynasty league to price him by.
  *
  * `scripts/buildSite.ts` writes these onto every quarterback, back,
- * receiver and tight end, and `app/lib/trade.ts` reads them: a season
- * ahead is worth his points a game then, which is `of` times his `ppg`
- * in the league in front of it, less the last starter's, over `games`.
+ * receiver and tight end, and `app/lib/trade.ts` reads the seasons
+ * ahead: one is worth his points a game then, which is `of` times his
+ * `ppg` in the league in front of it, less the last starter's, over
+ * `games`. The app loads the age and the draft and shows neither yet.
  */
 
 import {
