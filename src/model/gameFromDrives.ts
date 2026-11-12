@@ -14,13 +14,12 @@
  */
 
 import {
-  walkDrive, type FactorDrive, type Opening, type Unaimed,
+  walkDrive, type DriveEnd, type FactorDrive, type Opening, type Unaimed,
 } from "./driveFromFactors.js";
 import { standardNormal } from "../sim/rng.js";
 import type { PlayerLine } from "./playerWeek.js";
 import type { Call, PlayFactors } from "./playFactors.js";
 import type { EndingRules, ClockRules } from "./driveFromFactors.js";
-import type { DriveEnd } from "./drive.js";
 import type { FourthDown } from "../features/fitFourthDown.js";
 import type { PlayClock } from "../features/fitPlayClock.js";
 import {
@@ -39,12 +38,6 @@ export interface Side {
   lift?: number;
   /** what the player throwing it is worth, applied to throws alone */
   passLift?: number;
-  /**
-   * This side's own drive behaviour, fitted from its drives with the
-   * league behind it. The game's rules fill whatever this leaves out,
-   * so the kick and venue overrides pass through untouched.
-   */
-  drives?: Partial<EndingRules>;
 }
 
 interface GameRules {
@@ -449,11 +442,8 @@ export function playGame(
         };
     firstDown = undefined;
     firstToGo = undefined;
-    const itsOwnDrives = withBall.drives
-      ? { ...rules.rules, ...withBall.drives }
-      : rules.rules;
     const drive = walkDrive(
-      startAt, withBall.factors, itsOwnDrives, rules.fourth, withBall.among,
+      startAt, withBall.factors, rules.rules, rules.fourth, withBall.among,
       uniform, rules.clock,
       {
         offence: withBall.team, defence: against.team,
