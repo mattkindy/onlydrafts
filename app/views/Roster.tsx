@@ -22,6 +22,7 @@ import { KeeperRow, keeperDraft, keeperRounds } from "./Keepers.tsx";
 import { asRound } from "../lib/picks.ts";
 import { keep, stored } from "../lib/store.ts";
 import { useState } from "preact/hooks";
+import { Trade } from "./Trade.tsx";
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "other"];
 
@@ -51,9 +52,9 @@ interface Props {
   rows?: Map<string, SlateRow>;
 }
 
-type Mode = "week" | "season";
+type Mode = "week" | "season" | "trade";
 
-const MODES: [Mode, string][] = [["week", "this week"], ["season", "season"]];
+const MODES: [Mode, string][] = [["week", "this week"], ["season", "season"], ["trade", "trade"]];
 
 export function Roster(props: Props) {
   const { league, marked, players } = props;
@@ -62,7 +63,8 @@ export function Roster(props: Props) {
   // the season until a week has loaded, since a week with no lines in it
   // is a page of blanks; after that whichever way you last read it
   const [chosen, setChosen] = useState<Mode>(() => stored<Mode>("teamMode", "week"));
-  const mode: Mode = weekly ? chosen : "season";
+  const mode: Mode = !weekly && chosen === "week" ? "season" : chosen;
+  const modes = MODES.filter(([which]) => weekly || which !== "week");
   const choose = (which: Mode) => {
     setChosen(which);
     keep("teamMode", which);
@@ -137,9 +139,9 @@ export function Roster(props: Props) {
       </div>
 
       <div class="rostermode">
-        {weekly && (
+        {(
           <span class="seg" role="tablist">
-            {MODES.map(([which, said]) => (
+            {modes.map(([which, said]) => (
               <button
                 key={which}
                 role="tab"
@@ -157,6 +159,11 @@ export function Roster(props: Props) {
         </GoLink>
       </div>
 
+      {mode === "trade" && (
+        <Trade league={league} players={players} coming={props.week ?? 1} listed={props.listed ?? new Map()} />
+      )}
+
+      {mode !== "trade" && (<>
       {/* the roster in one line: how many, and how many of them are a
           problem this week, which is what a reader opens the tab to check */}
       <div class="tally">
@@ -269,6 +276,7 @@ export function Roster(props: Props) {
           </section>
         ))}
       </div>
+      </>)}
     </>
   );
 }
