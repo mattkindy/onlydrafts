@@ -159,7 +159,7 @@ describe("the views", () => {
       />,
       where,
     );
-    expect(where.querySelectorAll(".card").length).toBeGreaterThan(5);
+    expect(where.querySelectorAll(".trow:not(.tcols)").length).toBeGreaterThan(5);
   });
 
   /**
@@ -1729,7 +1729,7 @@ describe("my team lists each player once", () => {
   const byKey = new Map(players.map((p) => [p.key, p]));
 
   const namesOnScreen = () =>
-    Array.from(where.querySelectorAll(".card .nm .who"))
+    Array.from(where.querySelectorAll(".trow .tname .who"))
       .map((el) => el.textContent!.trim());
 
   it("draws no player card twice in a keeper league", () => {

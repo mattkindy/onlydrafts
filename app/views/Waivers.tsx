@@ -13,6 +13,7 @@
  * and something over a season, and only the pair of them says so.
  */
 
+import type { ComponentChildren } from "preact";
 import { useMemo, useState } from "preact/hooks";
 
 import { keep, normalizeName, stored } from "../lib/store.ts";
@@ -543,6 +544,20 @@ const GROUPS: [keyof WaiverGroups, string, string][] = [
 ];
 
 /**
+ * The page's controls and what they choose. On a phone the controls lead
+ * the page; on a wide screen they sit beside the results and stay in view
+ * as the results scroll, the way a filter does in any list.
+ */
+function Page({ controls, children }: { controls: ComponentChildren; children: ComponentChildren }) {
+  return (
+    <div class="wcols rhythm">
+      <div class="wside rhythm">{controls}</div>
+      <div class="wmain rhythm">{children}</div>
+    </div>
+  );
+}
+
+/**
  * The wire sorted into the questions a manager asks of it, above the
  * table that prices every add. A group with nobody in it is left out.
  */
@@ -792,42 +807,38 @@ export function Waivers(props: Props) {
 
   if (span === "ranks") {
     return (
-      <>
-        {controls}
+      <Page controls={controls}>
         <WeekRanks
           slate={props.slate}
           rows={rows}
           roster={props.roster}
           listed={props.listed}
         />
-      </>
+      </Page>
     );
   }
 
   if (working) {
     return (
-      <>
-        {controls}
+      <Page controls={controls}>
         <Reading>working out what each free agent adds to your team</Reading>
-      </>
+      </Page>
     );
   }
 
   if (!drops.length) {
     return (
-      <>
-        {controls}
+      <Page controls={controls}>
         <div class="empty">
           <b>Your roster is empty.</b> Once your league gives you a team,
           this page shows what each free agent would add.
         </div>
-      </>
+      </Page>
     );
   }
 
   return (
-    <>
-      {controls}
+    <Page controls={controls}>
 
       {span === "week" && missing && (missing.reading
         ? <Reading>{missing.says}</Reading>
@@ -959,6 +970,6 @@ export function Waivers(props: Props) {
         </tbody>
       </table>}
 
-    </>
+    </Page>
   );
 }

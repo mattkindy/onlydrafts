@@ -1263,8 +1263,9 @@ function App() {
 
         {board && active && view === "league" && (
           <>
-            <Standings league={active} />
-
+            <div class="lcols rhythm">
+            <div class="lstand rhythm"><Standings league={active} /></div>
+            <div class="lweekcol rhythm">
             <h2>around the league</h2>
             {week
               ? (
@@ -1290,6 +1291,8 @@ function App() {
                 />
               )
               : <p class="hint">No week has been built yet.</p>}
+            </div>
+            </div>
 
             {/* open while the draft is fresh, and behind a tap once weeks
                 are being played: grading every draft is a second of work

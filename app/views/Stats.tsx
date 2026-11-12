@@ -796,7 +796,8 @@ export function Stats(props: Props) {
       )}
 
       {run && (
-        <>
+        <div class="scols rhythm">
+          <div class="srace rhythm">
           {/* every table here goes to the league chat as a picture, since
               the playoff race is the one thing the whole league argues over */}
           <div class="sectionhead">
@@ -869,9 +870,10 @@ export function Stats(props: Props) {
                 );
               })}
           </div>
+          </div>
 
           {setup && path && path.cols.length > 0 && (
-            <>
+            <div class="swhatif rhythm">
               <div class="sectionhead">
                 <h2>what if</h2>
                 {(forced.size > 0 || nudge !== 0) && (
@@ -927,9 +929,9 @@ export function Stats(props: Props) {
                   return next;
                 })}
               />
-            </>
+            </div>
           )}
-        </>
+        </div>
       )}
 
       {mineOf.some(Boolean) && (

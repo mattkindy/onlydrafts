@@ -667,8 +667,12 @@
      on a phone, as many across as fit on a wide screen */
   .groups { display: grid; gap: var(--s2); margin: 0;
     grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+  /* each group's title, line and list on the rows of the grid, so the
+     lists across a row start level however the lines above them wrap */
   .group { background: var(--panel); border: 1px solid var(--edge);
-    border-radius: 12px; padding: var(--s3) var(--s4); }
+    border-radius: 12px; padding: var(--s3) var(--s4);
+    display: grid; grid-row: span 3; grid-template-rows: subgrid;
+    row-gap: 0; align-content: start; }
   .group h3 { margin: 0; font-size: var(--t2); text-transform: uppercase;
     letter-spacing: .06em; }
   .group .hint { margin: 0 0 var(--s1); font-size: var(--t1); }
@@ -840,7 +844,13 @@
     align-items: baseline; padding: var(--s2) 0;
     border-top: 1px solid var(--edge); font-size: var(--t2); }
   .options li.shut { opacity: .55; }
-  .options li .playername { flex: 1 1 0; min-width: 0; }
+  .options li .optname { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap;
+    align-items: baseline; gap: var(--s1) var(--s2); }
+  .options li .optname .badge { margin-left: 0; }
+  .options li .playername { flex: 0 1 auto; min-width: 0; }
+  /* the column labels over a lineup laid out as rows, which only a wide
+     screen does; a phone labels each figure where it stands */
+  .slot-head { display: none; }
   .options .delta { flex: 0 0 auto; font-weight: 700; color: var(--muted);
     font-variant-numeric: tabular-nums; text-align: right; }
   /* the label rides in front of the figure rather than over it */
@@ -1065,6 +1075,19 @@
     margin: var(--s4) 0 calc(var(--s1) * -1); }
   .sectionhead h2 { margin: 0; }
   /*
+   * A group of the view's sections, which a wide screen lays out side by
+   * side, keeps the view's own rhythm inside it, so a phone reads the same
+   * with the groups as without them.
+   */
+  .rhythm { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+  .rhythm > :not(h2):not(.fold) { margin-top: 0; margin-bottom: 0; }
+  .rhythm > h2, .rhythm > .fold { margin: var(--s4) 0 calc(var(--s1) * -1); }
+  .rhythm > .fold { padding-top: var(--s3); }
+  .rhythm > div.lineuphead { display: flex; align-items: baseline;
+    justify-content: space-between; gap: var(--s3); margin: var(--s4) 0 calc(var(--s1) * -1); }
+  .rhythm > div.sectionhead { display: flex; align-items: center;
+    justify-content: space-between; gap: var(--s3); margin: var(--s4) 0 calc(var(--s1) * -1); }
+  /*
    * The free agent who fills a slot, in a panel of its own under the
    * slot's row: who, his line, and what he does for you on one line, and
    * the two ways to act on it under that, with room between them.
@@ -1153,6 +1176,40 @@
   .review button.whole { margin-top: var(--s4); width: 100%; min-height: var(--tap); }
 
   /* the roster tab's one line: how many, and how many are a problem */
+  /*
+   * The roster as one list: a head that labels the columns once, the
+   * positions as quiet subheads, a player a row of two lines, his name
+   * level with his figures and what he is under it.
+   */
+  .rostermode { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2) var(--s3); }
+  .rostermode .seg { flex: 0 0 auto; }
+  .rostermode .seg button { flex: 0 0 auto; padding: 0 var(--s4); }
+  .rostermode .golink { margin-left: auto; }
+  .tlist.week { --cols: [name] minmax(0, 1fr) [proj] 3.25rem [range] 6.25rem; }
+  .tlist.season { --cols: [name] minmax(0, 1fr) [ppg] 2.75rem [games] 3rem [rank] 3rem [adp] 3rem; }
+  .trow { display: grid; grid-template-columns: var(--cols); column-gap: var(--s2);
+    align-items: baseline; padding: var(--s2) 0; border-top: 1px solid var(--edge); }
+  .trow.tcols { border-top: none; padding: 0 0 var(--s1); align-items: end; }
+  .trow.tcols i { font-style: normal; font-size: .6rem; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+  .tlist .c-name { grid-column: name; }
+  .tlist .c-proj { grid-column: proj; } .tlist .c-range { grid-column: range; }
+  .tlist .c-ppg { grid-column: ppg; } .tlist .c-games { grid-column: games; }
+  .tlist .c-rank { grid-column: rank; } .tlist .c-adp { grid-column: adp; }
+  .trow > [class^="c-"] { grid-row: 1; justify-self: end; text-align: right;
+    font-variant-numeric: tabular-nums; font-size: var(--t2); color: var(--muted); white-space: nowrap; }
+  .trow > b[class^="c-"] { color: var(--ink); font-weight: 700; }
+  .trow .tname { grid-column: name; grid-row: 1; min-width: 0; display: flex; flex-wrap: wrap;
+    align-items: baseline; gap: 2px var(--s2); font-size: var(--t2); font-weight: 600; }
+  .trow .tname .badge { margin-left: 0; }
+  .trow .tmeta { grid-column: name; grid-row: 2; font-size: var(--t1); color: var(--faint);
+    margin-top: 2px; }
+  .trow .tkeep { grid-column: 1 / -1; grid-row: 3; }
+  .trow .tkeep .keeprow { margin-top: var(--s2); }
+  .tgroup h3 { margin: var(--s4) 0 0; padding-bottom: var(--s1); font-size: var(--t1);
+    font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .tgroup:first-of-type h3 { margin-top: var(--s1); }
+
   .tally { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2); }
   .tally span { background: var(--panel); border: 1px solid var(--edge);
     border-radius: 999px; padding: .2rem var(--s3); font-size: var(--t2);
@@ -1347,7 +1404,7 @@
   .nudge { display: flex; flex-direction: column; gap: var(--s1);
     font-size: var(--t2); color: var(--muted); }
   .nudge b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .nudge input { width: 100%; accent-color: var(--ink); min-height: 32px; }
+  .nudge input { width: 100%; margin: 0; accent-color: var(--ink); min-height: 32px; }
 
   /* the games to come, tapped to pick who wins */
   .picker { display: flex; flex-direction: column; gap: var(--s2); }
@@ -1374,6 +1431,135 @@
 
   nav button.theme svg { display: block; }
 
+  /*
+   * A wide screen is a workspace rather than a long phone: what you act
+   * on sits beside what it acts on, the thing you came to read is the
+   * wide column, and a rail of controls or to-dos stays in view while the
+   * main column scrolls under the tabs. A phone keeps its single column.
+   */
+  .mcol.act:empty { display: none; }
+  @media (min-width: 1000px) {
+    :root { --rail-top: calc(var(--tap) + var(--s4)); }
+
+    /* the matchup: your lineup the wide column, what to fix beside it */
+    .mcols { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+      grid-template-areas: "mine act"; gap: var(--s5); align-items: start; }
+    .mcols:has(.mcol.act:empty) { grid-template-areas: "mine mine"; }
+    .mcol.mine { grid-area: mine; }
+    .mcol.act { grid-area: act; position: sticky; top: var(--rail-top);
+      display: flex; flex-direction: column; gap: var(--s3); }
+    .mcol > :first-child, .mcol.mine .lineuphead { margin-top: 0; }
+    /* each starter a row, his figures in a column at the right, the rows
+       joined into one list rather than a stack of separate cards */
+    /*
+     * The lineup as a list, a row a starter, headed once: the labels sit
+     * over the columns rather than over every figure, and each figure
+     * keeps to its named column however many a row has, so a row with a
+     * game under way lines up with one still to kick off.
+     */
+    .mcol.mine .stack { gap: 0; --c-scored: 0px; --c-left: 0px;
+      --c-proj: 4rem; --c-range: 7.5rem;
+      --o-proj: 3.5rem; --o-range: 7rem; --o-for: 0px; --o-out: 3.5rem; --o-win: 4rem; }
+    .mcol.mine .stack.has-scored { --c-scored: 4rem; }
+    .mcol.mine .stack.has-left { --c-left: 4.5rem; }
+    .mcol.mine .slot-card.bench { --o-for: 3rem; }
+    .mcol.mine .slot-head { display: grid; justify-items: end; align-items: end;
+      grid-template-columns: [name] minmax(0, 1fr) [scored] var(--c-scored)
+        [proj] var(--c-proj) [left] var(--c-left) [range] var(--c-range);
+      padding: 0 var(--s4) var(--s1); }
+    .mcol.mine .slot-head i { font-style: normal; font-size: .6rem; font-weight: 600;
+      letter-spacing: .06em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+    .mcol.mine .c-name { grid-column: name; justify-self: start; }
+    .mcol.mine .c-scored { grid-column: scored; }
+    .mcol.mine .c-proj { grid-column: proj; }
+    .mcol.mine .c-left { grid-column: left; }
+    .mcol.mine .c-range { grid-column: range; }
+    .mcol.mine .c-for { grid-column: for; }
+    .mcol.mine .c-out { grid-column: out; }
+    .mcol.mine .c-win { grid-column: win; }
+    .mcol.mine .stack > .slot-card { display: grid; grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center; column-gap: var(--s4); padding: var(--s2) var(--s4);
+      margin: 0; border-radius: 0; }
+    .mcol.mine .stack > .slot-card + .slot-card { border-top-width: 0; }
+    .mcol.mine .stack > .slot-head + .slot-card { border-radius: 12px 12px 0 0; }
+    .mcol.mine .stack > .slot-card:last-child { border-radius: 0 0 12px 12px; }
+    .mcol.mine .stack > .slot-head + .slot-card:last-child { border-radius: 12px; }
+    .mcol.mine .stack > .slot-card h3 { margin: 0; }
+    /* what is wrong with him follows his name, not the far end of the row */
+    .mcol.mine .stack > .slot-card h3 .playername { flex: 0 1 auto; }
+    .mcol.mine .stack > .slot-card > .slot-figs { display: grid; justify-items: end;
+      grid-template-columns: [scored] var(--c-scored) [proj] var(--c-proj)
+        [left] var(--c-left) [range] var(--c-range);
+      gap: 0; text-align: right; }
+    .mcol.mine .stack > .slot-card > .slot-figs .fig i { display: none; }
+    .mcol.mine .stack > .slot-card > :not(h3):not(.slot-figs) { grid-column: 1 / -1; }
+    /* the bench, folded or open, stands apart from the starters over it */
+    .mcol.mine .stack > .slot-card.benchfold,
+    .mcol.mine .stack > .slot-card.bench { margin-top: var(--s3); border-top-width: 1px;
+      border-radius: 12px; }
+    .mcol.mine .stack > .slot-card.benchfold { display: flex; }
+    /* bench players as rows too, under a head of their own */
+    .mcol.mine .slot-head.opts,
+    .mcol.mine .options li { display: grid; align-items: center;
+      grid-template-columns: [name] minmax(0, 1fr) [proj] var(--o-proj) [left] var(--c-left)
+        [range] var(--o-range) [for] var(--o-for) [out] var(--o-out) [win] var(--o-win); }
+    .mcol.mine .slot-head.opts { padding: var(--s2) 0 var(--s1); }
+    .mcol.mine .slot-head.opts .c-name { font-size: var(--t1); letter-spacing: .05em; }
+    .mcol.mine .slot-card > .over { display: none; }
+    .mcol.mine .slot-card.bench > h3 { display: none; }
+    .mcol.mine .slot-card.bench > .slot-head.opts { grid-column: 1 / -1; padding-top: 0; }
+    .mcol.mine .options li { gap: 0; padding: var(--s1) 0; }
+    .mcol.mine .options .optfigs { display: contents; }
+    .mcol.mine .options .optname { grid-column: name; grid-row: 1; min-width: 0;
+      padding-right: var(--s3); }
+    .mcol.mine .options .fig { justify-self: end; text-align: right; grid-row: 1; }
+    .mcol.mine .options .fig i { display: none; }
+    .mcol.mine .options li > .why { grid-column: 1 / -1; grid-row: 2; }
+
+    /* the playoff race and the what-if side by side, so a pick moves the
+       list beside it rather than one a screen away */
+    .scols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--s5); align-items: start; }
+    .swhatif { position: sticky; top: var(--rail-top); }
+    .srace > .sectionhead:first-child, .swhatif > .sectionhead:first-child { margin-top: 0; }
+
+    /* the free agents: the filters a sidebar that stays, the results the page */
+    .wcols { display: grid; grid-template-columns: 16.5rem minmax(0, 1fr);
+      gap: var(--s5); align-items: start; }
+    .wside { position: sticky; top: var(--rail-top); }
+    .wside .controls { flex-direction: column; align-items: stretch; margin: 0; }
+    /* the roster at a reading width, the columns near the names */
+    .tlist { max-width: 46rem; }
+    .tlist.week { --cols: [name] minmax(0, 1fr) [proj] 4.5rem [range] 7.5rem; }
+    .tlist.season { --cols: [name] minmax(0, 1fr) [ppg] 4rem [games] 4rem [rank] 4rem [adp] 4rem; }
+    .rostermode { max-width: 46rem; }
+
+    /* a week's bar stays a bar on a wide screen instead of a slab */
+    .wbar .col u { left: max(15%, calc(50% - 1.25rem)); right: max(15%, calc(50% - 1.25rem)); }
+
+    .wside .controls .chips { flex-wrap: wrap; overflow: visible; }
+    /* the span's three choices one above another, since side by side they
+       are wider than the sidebar */
+    .wside .controls .seg { display: flex; flex-direction: column; flex: 0 0 auto; }
+    .wside .controls .seg button { flex: 0 0 auto; text-align: left; padding: 0 var(--s3); }
+    .wside .controls input { width: 100%; }
+    .wmain .groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    table.pairs thead th:first-child, table.pairs td[data-label="player"] { text-align: left; }
+
+    /* the league: the table beside the week's games, which read one to a row */
+    .lcols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+      gap: var(--s5); align-items: start; }
+    .lstand { position: sticky; top: var(--rail-top); }
+    .lstand > :first-child, .lweekcol > h2:first-child { margin-top: 0; }
+    .lweekcol .cards.wide { grid-template-columns: minmax(0, 1fr); }
+
+    /* a player opens as a panel down the right, the list you came from
+       still in view beside it */
+    #overlay { justify-content: flex-end; align-items: stretch; padding: 0;
+      background: rgba(0, 0, 0, .35); }
+    #overlay .sheet { width: min(30rem, 100vw); max-width: none; height: 100vh;
+      overflow-y: auto; border-radius: 16px 0 0 16px; border-right: none; }
+  }
   @media (max-width: 600px) {
     .wrap { padding: var(--s3) var(--s3) 4rem; }
     .revrows { grid-template-columns: minmax(0, 1fr); }
