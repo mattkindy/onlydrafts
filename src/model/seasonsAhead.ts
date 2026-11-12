@@ -44,9 +44,9 @@ const MIDDLE_AGE = 26;
 const UNKNOWN_AGE = 26;
 
 /**
- * The penalty on every fit. Swept from 3 to 100 on the development
- * seasons; anywhere from 3 to 30 is the same to a tenth of a point, and
- * 100 starts to cost the rookies.
+ * The penalty on every fit. Swept on the development seasons: 3 and 10
+ * are the same to a tenth of a point, 30 costs two to four tenths of a
+ * season point and 100 costs one.
  */
 export const AHEAD_LAMBDA = 10;
 
