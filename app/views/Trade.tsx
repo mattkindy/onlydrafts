@@ -589,7 +589,7 @@ export function Trade(props: Props) {
               <dt>later</dt>
               <dd>
                 {boardLooksAhead
-                  ? `The same for each of his next ${SEASONS_AHEAD} seasons, projected from his age, where he was drafted and his role. Each season further out counts ${Math.round(SEASON_OUT * 100)}% of the one before.`
+                  ? `The same for each of his next ${SEASONS_AHEAD} seasons, projected from what he's scored this season and last, his age, where he was drafted and his share of the work. Each season further out counts ${Math.round(SEASON_OUT * 100)}% of the one before.`
                   : "His next seasons, once the board projects them. It doesn't yet, so they're left out."}
               </dd>
             </>
