@@ -1458,7 +1458,7 @@ ordering and bias:
 
 | | t+1, 2022 to 2024 | t+2, 2022 and 2023 | t+3, 2021 and 2022 |
 |---|---|---|---|
-| this season carried forward | 59.4, .607, +21.3 | 68.9, .503, +35.1 | 77.2, .460, +51.8 |
+| this season carried forward | 59.4, .607, +21.3 | 68.9, .503, +35.1 | 77.2, .460, +51.7 |
 | that, aged by a curve | 51.4, .621, -9.3 | 52.9, .550, -11.4 | 48.7, .526, -10.2 |
 | model/seasonsAhead.ts, which ships | 49.9, .667, -1.5 | 51.4, .617, -2.5 | 47.9, .604, -1.0 |
 | the model against the curve | -1.5 ± 0.8 | -1.5 ± 0.9 | -0.8 ± 1.0 |

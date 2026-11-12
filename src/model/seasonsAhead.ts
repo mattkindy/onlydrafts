@@ -293,11 +293,15 @@ export function fitSeasonsAhead(rows: AheadRow[], options: AheadOptions = {}): A
 
 /* ---------- the two readers the model has to beat ---------- */
 
-/** this season's rate and his share of the games, carried forward as they are */
+/**
+ * This season's rate and his share of the games, carried forward as they
+ * are. A man traded across two byes can have played more games than his
+ * new club has, so the share stops at all of them.
+ */
 export function carriedForward(row: AheadRow): SeasonAhead {
   return {
     ppg: ppgOf(row),
-    games: row.clubGames > 0 ? GAMES * row.games / row.clubGames : 0,
+    games: row.clubGames > 0 ? Math.min(GAMES, GAMES * row.games / row.clubGames) : 0,
   };
 }
 
