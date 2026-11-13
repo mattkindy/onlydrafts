@@ -10,7 +10,14 @@
  * It also prints how many games the kickers who started a season went
  * on to play, since the board hands every one of them the same 15.3.
  *
- * Run: npx tsx scripts/kickerSeasonEval.ts [--seasons 2024,2025]
+ * With `--rest` it asks the in-season question instead: standing at week
+ * 4, 6, 8 or 10, what a kicker goes on to score a game over the rest of
+ * the season, read off the model's preseason number, what he has scored
+ * so far, and the average kicker. That is the number a waiver pickup is
+ * priced by, and it says how far one kicker's number can be trusted over
+ * another's.
+ *
+ * Run: npx tsx scripts/kickerSeasonEval.ts [--seasons 2024,2025] [--rest]
  */
 
 import { readFile } from "node:fs/promises";
@@ -282,11 +289,176 @@ function sayTable(covered: Guess[], poolMean: number): void {
   }
 }
 
+/** the weeks a season is cut at for the rest of season question */
+const CUTS = [4, 6, 8, 10];
+/** games before the cut, and after it, before a kicker is counted */
+const BEFORE_GAMES = 2;
+const AFTER_GAMES = 3;
+
+interface RestRow {
+  season: number;
+  cut: number;
+  name: string;
+  model: number;
+  soFar: number;
+  rest: number;
+}
+
+async function restRowsFor(season: number): Promise<RestRow[]> {
+  const jobs = await jobsFor(season);
+  const weeks = await loadKickerWeeks(season);
+  const walk = await walkFor(season);
+  const gameRows = parseCsv(await readFile(join(RAW, "games.csv"), "utf8"));
+  const climate = fitClimate(readingsFrom(gameRows));
+  const where = fixturesFor(gameRows, season);
+  const out: RestRow[] = [];
+
+  for (const job of jobs.values()) {
+    const model = modelSays(job, walk, where.get(job.team) ?? [], climate);
+
+    if (model === null) {
+      continue;
+    }
+
+    const his = weeks.filter((w) => w.playerId === job.record.playerId);
+
+    for (const cut of CUTS) {
+      const before = his.filter((w) => w.week <= cut);
+      const after = his.filter((w) => w.week > cut);
+
+      if (before.length < BEFORE_GAMES || after.length < AFTER_GAMES) {
+        continue;
+      }
+
+      out.push({
+        season, cut, name: job.record.name, model,
+        soFar: pay(addUp(before)) / before.length,
+        rest: pay(addUp(after)) / after.length,
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Each reader as a move off the cut's average kicker, so a weight learnt
+ * under one ladder means the same under another: what a kicker goes on
+ * to score over the average, against how far the model and his season so
+ * far each have him over theirs.
+ */
+function centred(rows: RestRow[]): (RestRow & { dm: number; ds: number; dr: number; m0: number })[] {
+  const out: (RestRow & { dm: number; ds: number; dr: number; m0: number })[] = [];
+
+  for (const season of new Set(rows.map((r) => r.season))) {
+    for (const cut of CUTS) {
+      const at = rows.filter((r) => r.season === season && r.cut === cut);
+      const avg = (f: (r: RestRow) => number) =>
+        at.reduce((sum, r) => sum + f(r), 0) / Math.max(1, at.length);
+      const [mm, ms] = [avg((r) => r.model), avg((r) => r.soFar)];
+
+      for (const r of at) {
+        // the average a kicker has scored so far is the level a guess is
+        // made from; what he goes on to do is read against it
+        out.push({ ...r, dm: r.model - mm, ds: r.soFar - ms, dr: r.rest - ms, m0: ms });
+      }
+    }
+  }
+
+  return out;
+}
+
+/** least squares through the origin on the two moves */
+function fitMoves(rows: { dm: number; ds: number; dr: number }[]): [number, number] {
+  let mm = 0, ss = 0, ms = 0, mr = 0, sr = 0;
+
+  for (const r of rows) {
+    mm += r.dm * r.dm; ss += r.ds * r.ds; ms += r.dm * r.ds;
+    mr += r.dm * r.dr; sr += r.ds * r.dr;
+  }
+
+  const det = mm * ss - ms * ms;
+
+  return det > 0 ? [(mr * ss - sr * ms) / det, (sr * mm - mr * ms) / det] : [0, 0];
+}
+
+function fitOne(rows: { x: number; dr: number }[]): number {
+  const top = rows.reduce((s, r) => s + r.x * r.dr, 0);
+  const under = rows.reduce((s, r) => s + r.x * r.x, 0);
+
+  return under > 0 ? top / under : 0;
+}
+
+async function rest(seasons: number[]): Promise<void> {
+  const rows: RestRow[] = [];
+
+  for (const season of seasons) {
+    const his = await restRowsFor(season);
+    console.log(`${season}: ${his.length} kicker cuts`);
+    rows.push(...his);
+  }
+
+  const all = centred(rows);
+  const said = new Map<string, [number, number][]>();
+  const add = (what: string, pair: [number, number]) =>
+    said.set(what, [...(said.get(what) ?? []), pair]);
+
+  // each season read by weights the other seasons learnt
+  for (const season of seasons) {
+    const train = all.filter((r) => r.season !== season);
+    const [wm, ws] = fitMoves(train);
+    const onlyModel = fitOne(train.map((r) => ({ x: r.dm, dr: r.dr })));
+    const onlySoFar = fitOne(train.map((r) => ({ x: r.ds, dr: r.dr })));
+
+    for (const r of all.filter((x) => x.season === season)) {
+      add("the average kicker", [r.m0, r.rest]);
+      add("the model, as it is", [r.m0 + r.dm, r.rest]);
+      add("his season so far", [r.soFar, r.rest]);
+      add("the model, shrunk", [r.m0 + onlyModel * r.dm, r.rest]);
+      add("his season so far, shrunk", [r.m0 + onlySoFar * r.ds, r.rest]);
+      add("both, shrunk", [r.m0 + wm * r.dm + ws * r.ds, r.rest]);
+      add("an oracle", [r.rest, r.rest]);
+    }
+  }
+
+  const [wm, ws] = fitMoves(all);
+  console.log(`
+${all.length} kicker cuts at weeks ${CUTS.join(", ")}; ` +
+    `fitted on every season, a point over the average on the model is worth ` +
+    `${wm.toFixed(2)} and a point on his season so far ${ws.toFixed(2)}; ` +
+    `alone, the model ${fitOne(all.map((r) => ({ x: r.dm, dr: r.dr }))).toFixed(2)} ` +
+    `and his season so far ${fitOne(all.map((r) => ({ x: r.ds, dr: r.dr }))).toFixed(2)}\n`);
+  console.log("each season held out    MAE    corr   spread");
+
+  for (const [what, pairs] of said) {
+    const { mae, corr } = errors(pairs);
+    const xs = pairs.map(([n]) => n);
+    const mean = xs.reduce((s, n) => s + n, 0) / xs.length;
+    const spread = Math.sqrt(xs.reduce((s, n) => s + (n - mean) ** 2, 0) / xs.length);
+    console.log(`${what.padEnd(24)} ${mae.toFixed(2).padStart(5)}  ` +
+      `${corr.toFixed(3).padStart(6)}  ${spread.toFixed(2).padStart(5)}`);
+  }
+
+  const restSpread = (() => {
+    const xs = all.map((r) => r.dr);
+    const m = xs.reduce((s, n) => s + n, 0) / xs.length;
+    return Math.sqrt(xs.reduce((s, n) => s + (n - m) ** 2, 0) / xs.length);
+  })();
+  console.log(`
+what kickers went on to score spreads ${restSpread.toFixed(2)} a game around the average`);
+}
+
 async function main(): Promise<void> {
   const flag = process.argv.indexOf("--seasons");
   const seasons = flag === -1
     ? [2023, 2024, 2025]
     : process.argv[flag + 1]!.split(",").map(Number);
+
+  if (process.argv.includes("--rest")) {
+    await rest(seasons);
+    return;
+  }
+
   const guesses: Guess[] = [];
   const halves: [number, number][] = [];
   const games: Season[] = [];
