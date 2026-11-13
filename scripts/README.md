@@ -2785,6 +2785,39 @@ the column on its own reads -0.091 against what he goes on to kick. A
 drive that reaches the end zone pays him one and a drive that stalls in
 range pays him three.
 
+## Over the rest of a season
+
+`kickerSeasonEval.ts --rest` asks the waiver question: standing at week
+4, 6, 8 or 10, what does a kicker score a game over the rest of the
+season? It reads the model's preseason number, what he has scored so
+far, and the average kicker so far, each season held out from the
+weights the other two learnt. 295 kicker cuts over 2023 to 2025, on the
+ladder above:
+
+```
+each season held out       MAE    corr   spread
+the average kicker        1.63   0.070   0.23
+the model, as it is       1.50   0.358   0.90
+his season so far         2.04   0.200   1.88
+the model, shrunk         1.50   0.346   0.71
+his season so far, shrunk 1.64   0.131   0.44
+both, shrunk              1.51   0.329   0.74
+```
+
+What a kicker has scored so far is a worse guide to the rest of his
+season than calling every kicker average, 2.04 against 1.63. Fitted on
+every season, a point over the average on the model is worth 0.74 of a
+point to come and a point on his season so far 0.10, and the pair does
+no better than the model alone. So the preseason number stays as it is
+and the season so far is left out: a kicker who has run hot is mostly a
+kicker who has been lucky, and the kicks his side will set up are what
+carries over. In November 2026 Nick Folk had scored 6.6 a game to the
+model's 9.1, and Jason Sanders 9.7 to its 6.3; the fit's best guess for
+the rest of the season is 9.1 and 7.3.
+
+The miss is still a point and a half a game either way, so a kicker
+swap the model favours is a lean and not a lock.
+
 ## What the flat 15.3 games is doing
 
 Every kicker on the board is given 15.3 games. Over the same three
