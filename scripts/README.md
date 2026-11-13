@@ -4031,7 +4031,9 @@ say every skill player's points a game when he plays and his games out
 of seventeen in each of his next three seasons, and marks each on the
 season total those make, in half PPR. It runs in about fifteen seconds;
 `--ablate` adds the term by term table, the penalty sweep and boosted
-trees, and takes two minutes. `--week` and `--scoring` move the cut and
+trees, and takes two minutes. `--taught` and `--stars` add the two
+sections below on the stars three seasons out and on the games, about
+twenty seconds between them. `--week` and `--scoring` move the cut and
 the rules.
 
 The readers:
@@ -4152,8 +4154,9 @@ calibration, which is a peek, and kept because it wins on the
 development seasons as well. Without it a player scoring fourteen a
 game or more was held 23 points a season short three years on, since a
 straight line through a rate cannot say that a good player stays in the
-league and on the field. With it that is 13, which is still short, and
-the next thing to fix.
+league and on the field. With it that is 13, which is still short; how
+much of that is real, and what was tried for it, is in the section on
+the stars three seasons out.
 
 Snap share and work share were worth half a point at t+2 before the
 square went in and are worth a fifth of one after it. They stay.
@@ -4178,6 +4181,200 @@ What lost:
   ridge's 49.9, 51.4 and 47.9, but it is four and a half to seven points
   low and its rmse is worse than the ridge's at t+2 and t+3. A dynasty price is a sum of expected seasons, so the reader
   that is right on average ships, and the ridge alone is that.
+
+## The stars three seasons out
+
+A player scoring fourteen a game or more at the cut is held 1.8 season
+points short a season on, 0.6 two on and 13.0 three on. The held out
+t+3 fits are taught on two and three seasons and the build's on seven,
+so the first question is whether that is the bench. `--taught` marks
+every cut again with fits taught on every other season that has an
+outcome that far on, the later ones included. Nobody could have had
+that score on the day, so it is a diagnostic and not a held out number;
+it says only whether the shortfall shrinks once a fit has more seasons
+to learn from. The stars three seasons on, with the games said against
+played and the rate said against had over the games they played:
+
+| the stars at t+3 | players | bias | se | games | rate |
+| --- | --- | --- | --- | --- | --- |
+| held out cuts, taught on the seasons before them | 106 | -13.0 | 10.7 | 9.7 / 10.8 | 13.8 / 13.9 |
+| held out cuts, taught on every other season | 106 | -11.3 | 9.8 | 9.9 / 10.8 | 13.8 / 13.9 |
+| every cut, taught on every other season | 359 | -5.5 | 6.8 | 10.4 / 10.8 | 13.8 / 13.9 |
+| the held out backs, taught on the seasons before them | 30 | -46.0 | 16.9 | 8.9 / 10.5 | 9.4 / 12.4 |
+| the held out backs, taught on every other season | 30 | -31.6 | 16.6 | 8.9 / 10.5 | 10.9 / 12.4 |
+| the held out receivers, taught on the seasons before them | 23 | +28.3 | 13.2 | 11.7 / 12.4 | 13.7 / 10.7 |
+
+Six seasons taught rather than two or three moves the held out stars
+from 13.0 short to 11.3, so the short teaching is under two points of
+it. Most of the rest is those two cuts. Cut by cut, every other season
+taught, the stars three seasons on run from 30.6 short in 2017 to 14.7
+over in 2016, and over all seven cuts they are 5.5 short with a standard
+error of 6.8. On the development cuts, each left out in turn, they are
+4.9 short. The held out 13.0 has a standard error of 10.7. The same
+diagnostic has them 5.9 over a season on and 1.1 over two on.
+
+Two things in it hold up. The miss is the games, not the rate: over
+every cut the rate is right to a tenth of a point at every horizon, and
+the stars play four tenths of a game more three seasons on than the fit
+says, a game more on the held out cuts. And on the held out cuts it is
+the backs. Thirty of them are 46 short and 23 receivers 28 over;
+Christian McCaffrey, Derrick Henry, Saquon Barkley and Josh Jacobs had
+seasons in 2024 and 2025 that no earlier back of their age had, and with
+every other season taught those thirty are still 31.6 short. The stars
+who were stars last season too are 3.9 short on the held out cuts, and
+the ones who were not are 23.5 short.
+
+Each way of lifting them was chosen on the development seasons, the
+same ones the terms were, and checked on the held out ones, all in
+`--stars`. Error against the shipped fit, a plus being worse, then the
+stars' bias at t+1, t+2 and t+3. On the development seasons:
+
+| change | t+1 | t+2 | t+3 | stars |
+| --- | --- | --- | --- | --- |
+| the shipped fit | | | | +7.7 / +1.0 / -4.9 |
+| with his best season of the three | +0.1 ± 0.1 | +0.1 ± 0.1 | +0.2 ± 0.1 | +8.1 / +1.4 / -4.7 |
+| with three seasons pooled and its square | -0.2 ± 0.1 | -0.2 ± 0.1 | -0.0 ± 0.1 | +7.6 / +1.0 / -4.9 |
+| three seasons pooled in place of two | -0.2 ± 0.1 | -0.1 ± 0.1 | -0.0 ± 0.1 | +8.0 / +0.7 / -5.5 |
+| with how many of the three were at his position's star line | -0.1 ± 0.1 | +0.0 ± 0.1 | -0.1 ± 0.2 | +9.1 / +3.6 / -1.2 |
+| with the pooled rate times his age | -0.0 ± 0.1 | -0.1 ± 0.1 | -0.3 ± 0.2 | +8.0 / +0.9 / -5.1 |
+| a tenth of the penalty on the rate terms | -0.0 ± 0.0 | -0.1 ± 0.1 | +0.0 ± 0.1 | +8.1 / +2.1 / -3.1 |
+| the four positions in one fit | +0.6 ± 0.3 | +1.0 ± 0.5 | +1.2 ± 0.6 | +5.4 / -1.0 / -4.6 |
+| a straight line through the season totals | +0.9 ± 0.1 | +0.8 ± 0.1 | +0.9 ± 0.1 | +0.4 / -2.8 / -7.7 |
+
+On the held out seasons:
+
+| change | t+1 | t+2 | t+3 | stars |
+| --- | --- | --- | --- | --- |
+| the shipped fit | | | | -1.8 / -0.6 / -13.0 |
+| with his best season of the three | +0.1 ± 0.1 | +0.0 ± 0.1 | +0.4 ± 0.2 | -1.9 / -1.5 / -14.1 |
+| with three seasons pooled and its square | -0.1 ± 0.1 | -0.2 ± 0.1 | -0.2 ± 0.2 | -1.6 / -0.7 / -13.0 |
+| three seasons pooled in place of two | -0.2 ± 0.2 | -0.2 ± 0.2 | -0.2 ± 0.2 | -1.4 / -1.6 / -14.7 |
+| with how many of the three were at his position's star line | +0.0 ± 0.1 | -0.2 ± 0.2 | -0.3 ± 0.4 | +0.8 / +4.1 / -6.4 |
+| with the pooled rate times his age | +0.1 ± 0.1 | +0.1 ± 0.2 | +0.6 ± 0.4 | -2.7 / -3.4 / -17.4 |
+| a tenth of the penalty on the rate terms | +0.0 ± 0.1 | -0.0 ± 0.1 | +0.1 ± 0.3 | -1.4 / +0.5 / -10.2 |
+| the four positions in one fit | +1.2 ± 0.4 | +1.5 ± 0.7 | +1.4 ± 0.9 | -1.4 / +0.5 / -3.6 |
+| a straight line through the season totals | +0.8 ± 0.2 | +0.7 ± 0.1 | +1.7 ± 0.3 | -7.5 / -3.1 / -22.4 |
+
+The three seasons are this one, last and the one before, his best of
+them counting this season over four games or more and the others over
+six. The star line is eighteen a game for a quarterback, fourteen for a
+back or a receiver and eleven for a tight end. The pooled three are at
+weights of one, a half and a quarter.
+
+- **How many of his last three seasons were at the star line** is the
+  only one that moves the stars, and it moves them in the wrong place.
+  On the held out seasons it takes them from 13.0 short to 6.4 at t+3
+  with the error level, but the stars who were stars last season too go
+  from 3.9 short to 7.2 over while the ones who were not, where the
+  shortfall is, go from 23.5 short to 22.2. On the development seasons
+  it puts the stars a season and two on 9.1 and 3.6 over, against 7.7
+  and 1.0. It lifts the stars' level rather than finding the ones who
+  will last.
+- **Three seasons pooled**, beside the two or in place of them, is a
+  tenth or two of a point closer at t+1 and t+2 on both sets of seasons,
+  inside two standard errors, and leaves the stars where they were. The
+  season before last lost as terms of its own; pooled into the rate it
+  is level to a fifth better, which is not what was being fixed.
+- **His best season** and **the rate times his age** are worse at t+3,
+  the second by six tenths and with the stars 17.4 short.
+- **A tenth of the penalty on the rate terms** is level, and the stars
+  at t+3 are 10.2 short on the held out seasons rather than 13.0 and
+  3.1 on the development ones rather than 4.9. The penalty is not much
+  of what holds them.
+- **One fit for the four positions**, an offset for each, is a point a
+  season worse. A fit per position is what ships.
+- **A straight line through the season totals**, fitted on what the
+  model said of each training season with that season left out of its
+  teaching, is near a point worse or more at every horizon and holds
+  the stars shorter.
+
+So nothing ships for the stars. Two held out cuts' worth of backs who
+lasted is most of the 13, inside the noise of a hundred players, and
+what is left over every cut, four tenths of a game three seasons on, is
+the games fit's to say rather than a new term's.
+
+## The games in the later seasons
+
+Puka Nacua at week 10 of 2026 has played seven of nine games at 19.8 a
+game, this season and last pooled at 19.6, the highest of any receiver
+in the data. The games fit says 14.9, 17.3 and 17.4 games in his next
+three seasons, and the board writes 14.9, 17 and 17. `--stars` takes it
+apart, each term against an average receiver:
+
+| horizon | games said, before the cap | the share of his club's games adds | the square of the pooled rate adds | as a hurdle |
+| --- | --- | --- | --- | --- |
+| t+1 | 14.9 | +2.5 | -2.1 | 14.5 |
+| t+2 | 17.3 | +0.7 | +7.1 | 15.3 |
+| t+3 | 17.4 | -0.0 | +11.5 | 15.4 |
+
+A season on, the games fit leans on the share of his club's games he
+has played and bends down at the top of the rate. Two and three seasons
+on it bends up, because the low rates have left the league by then and
+a parabola through that bottom end climbs fast, and at his rate it
+climbs past seventeen. Nobody like him rises. What players went on to
+play, every cut whose three seasons have finished:
+
+| who at the cut | players | t+1 | t+2 | t+3 |
+| --- | --- | --- | --- | --- |
+| fourteen a game or more, had missed a fifth of his club's games or more | 56 | 11.7 | 11.1 | 10.2 |
+| fourteen a game or more, had missed none | 253 | 13.3 | 12.5 | 11.4 |
+| seventeen a game or more | 169 | 13.7 | 12.9 | 11.6 |
+
+So the shape is wrong, and it is the square's: his later seasons should
+come down from his next one, not climb to the cap.
+
+The heaviest users, every game his club played but one on three snaps
+in four or more, are right on average on the development seasons, 11.1
+games said against 11.2 played at t+2 and 9.3 against 9.6 at t+3, and
+short on the held out ones, 11.0 against 11.9 and 9.5 against 10.8,
+which is the later seasons playing more games than the earlier ones the
+fits were taught on. The top is high everywhere: the men said to play
+fifteen or more at t+2 played 13.8 on the development seasons and 14.4
+on the held out ones, against 16.2 and 16.3 said. The cap does real
+work. On the development seasons it stops 19, 16 and 11 men at the
+three horizons, said 18.0, 18.5 and 19.0 before it and playing 14.1,
+14.0 and 12.1, and taking it away costs two tenths of a point a season
+at every horizon.
+
+What was tried for the games, error against the shipped fit at t+1, t+2
+and t+3, then on the held out seasons the bias, the stars', the
+rookies' and the ordering. The shipped fit there is -1.5 / -2.5 / -1.0,
+-1.8 / -0.6 / -13.0, +1.3 / -0.2 / -0.7 and .667 / .617 / .604:
+
+| change | development | held out | bias | stars | rookies | ordering |
+| --- | --- | --- | --- | --- | --- | --- |
+| stopped at sixteen | -0.2 ± 0.1, -0.1 ± 0.0, -0.1 ± 0.0 | -0.2 ± 0.0, -0.1 ± 0.1, -0.0 ± 0.0 | -1.7 / -2.8 / -1.1 | -2.8 / -2.3 / -13.5 | +0.7 / -0.7 / -0.9 | .667 / .617 / .604 |
+| stopped at fifteen | -0.3 ± 0.1, -0.2 ± 0.1, -0.2 ± 0.1 | -0.4 ± 0.1, -0.1 ± 0.2, -0.1 ± 0.1 | -2.3 / -3.2 / -1.3 | -5.6 / -4.9 / -14.3 | -0.5 / -1.5 / -1.2 | .667 / .618 / .604 |
+| a logistic out of seventeen | -0.4 ± 0.2, -0.7 ± 0.2, -1.1 ± 0.3 | -0.1 ± 0.2, -0.6 ± 0.3, -0.5 ± 0.5 | -0.8 / -1.8 / +0.4 | -3.3 / -2.2 / -12.3 | +5.0 / +4.3 / +8.9 | .661 / .615 / .592 |
+| the chance he plays times his games if he does | -0.4 ± 0.2, -0.4 ± 0.2, -0.8 ± 0.3 | -0.4 ± 0.2, -0.8 ± 0.3, -0.4 ± 0.4 | -1.2 / -2.1 / +0.1 | -2.8 / -3.7 / -18.3 | +1.0 / +0.7 / +6.4 | .666 / .623 / .605 |
+
+- **A lower cap** gains on error only by running low. Each step down
+  takes a tenth or two off the error and puts the bias lower, the way a
+  reader that runs low always gains on absolute error when the outcome
+  has a long right tail.
+- **A logistic out of seventeen**, the games as seventeen tries each
+  played with a chance logistic in the terms, is the closest on the
+  development seasons and nearer nought in bias everywhere. On the held
+  out seasons it orders worse at t+1 and t+3, by .006 and .012, and puts
+  the rookies five to nine points over where the shipped fit has them
+  level.
+- **The chance he plays at all, times his games if he does**, a
+  logistic for the first and a logistic out of sixteen past the first
+  game for the second, is the best games reading measured here. It is
+  closer at every horizon on both sets of seasons, orders level or
+  better, is nearer nought in bias, and nobody reaches the cap: Puka
+  Nacua is 14.5, 15.3 and 15.4, still rising a little but not to
+  seventeen, and Bijan Robinson 14.0, 13.7 and 12.2 against 14.7, 13.1
+  and 10.7. It does not ship because on the held out seasons it holds
+  the stars at t+3 18.3 short against 13.0, the number the section above
+  set out to shrink. That is the short teaching: in `--taught`, taught
+  on every other season, it has them 5.4 short against the shipped fit's
+  5.5. A logistic for the chance a star leaves the league needs more
+  than two or three seasons of stars leaving to learn it.
+
+So the shape is not right and nothing ships for it either. The cap at
+seventeen stays, since it is doing real work, and the hurdle waits for a
+t+3 bench that can teach it on more seasons.
 
 ## Jeremiyah Love
 
@@ -4231,7 +4428,10 @@ before 2021 are put on seventeen games.
 
 The held out t+3 fits are taught on two and three seasons, 2016 to
 2018, and the build's on seven, so if anything the bench understates the
-build at the long horizon rather than flattering it.
+build at the long horizon rather than flattering it. For the shipped fit
+`--taught` says by how little: taught on every other season, the stars
+on the held out cuts are 11.3 short rather than 13.0. A fit with more to
+learn, like the hurdle for the games, can lean on it much harder.
 
 A man older than anybody in the data is read off the quadratic in age,
 so Aaron Rodgers at 42 comes out at sixteen a game in 2029, over three
@@ -4239,12 +4439,17 @@ games. The games are what keep that from mattering.
 
 ## What to try next
 
-Take the stars' remaining shortfall at t+3. A model of the chance he is
-still in the league, apart from the games he plays if he is, would say
-directly what the square of his rate says by accident.
+The games as the chance he plays times his games if he does. It is the
+model of the chance he is still in the league that the square of his
+rate stands in for by accident, it is closer at every horizon, and it
+keeps Puka Nacua's later seasons off the cap, but taught on two and
+three seasons it holds the stars at t+3 five points shorter. The 2023
+cut's t+3 finishes with 2026, and a third held out cut taught on four
+seasons will say whether that holds.
 
 The first round rookies two years on, once there are enough classes to
 fit anything on.
 
 Fit every horizon at once, with how far ahead as a term, so the t+3 fit
-can borrow the seasons only t+1 has.
+can borrow the seasons only t+1 has. That is the other way to give the
+hurdle more to learn from.
