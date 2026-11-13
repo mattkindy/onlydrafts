@@ -17,8 +17,12 @@
  * with the plain league page, sleeper.app, three sleeper:// addresses
  * and two intent links, all eight landing on the home screen. A link
  * addressed to the app with a web fallback once sent a reader to the
- * Play Store instead. So every link is the plain web page, which opens
- * Sleeper's app where it is installed and the page where it is not.
+ * Play Store instead. ESPN's Android app, tried the same way with the
+ * team, free agents, matchup and league pages, opens on the league's
+ * home page for every one of them. So every link is the plain web page:
+ * on a computer it is the page itself, and on a phone the provider's app
+ * opens where it is installed, Sleeper's on its home screen and ESPN's
+ * on the league.
  */
 
 import type { League } from "./providers.ts";
