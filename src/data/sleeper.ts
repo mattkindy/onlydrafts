@@ -112,6 +112,38 @@ export async function freshOrCached(
   }
 }
 
+/** where Sleeper has a kicker now, null for one nobody has signed */
+export interface KickerClub {
+  team: string | null;
+  name: string;
+}
+
+/**
+ * gsis id -> the club Sleeper has each kicker on. This reads the copy on
+ * disk, which the refresh downloads again before the site is built, so it
+ * knows of a release the day it happens where the roster file can take a
+ * week.
+ */
+export async function sleeperKickerClubs(): Promise<Map<string, KickerClub>> {
+  const raw = JSON.parse(await readFile(PLAYER_FILE, "utf8")) as
+    Record<string, RawSleeperPlayer>;
+  const ids = await gsisIdsFrom(raw);
+  const clubs = new Map<string, KickerClub>();
+
+  for (const [id, p] of Object.entries(raw)) {
+    const gsisId = ids.get(id);
+
+    if (p.position !== "K" || !gsisId) {
+      continue;
+    }
+
+    const team = p.team?.trim();
+    clubs.set(gsisId, { team: team ? canonicalTeam(team) : null, name: p.full_name ?? "" });
+  }
+
+  return clubs;
+}
+
 let crosswalkThisRun: Promise<Record<string, string>[]> | undefined;
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { historyOf, kickerJobs, recordsFrom } from "./kickerJobs.js";
+import { accuracyOf, historyOf, kickerJobs, recordsFrom } from "./kickerJobs.js";
 import type { KickerWeek } from "../data/nflverse.js";
 
 const week = (
@@ -77,12 +77,59 @@ describe("kickerJobs", () => {
     expect(jobs.get("GB")?.record.games).toBe(0);
   });
 
+  it("takes the job off a kicker Sleeper says the club released", () => {
+    const jobs = kickerJobs({
+      lastSeason: [
+        ...season("cut", "ATL", 16, { fgm: 2, xpm: 2 }),
+        ...season("signed", "BAL", 16, { fgm: 2, xpm: 2 }),
+      ],
+      soFar: [
+        week("cut", "ATL", 9, { fgm: 1 }),
+        week("signed", "BAL", 9, { fgm: 2 }),
+      ],
+      onRoster: new Map([["cut", "ATL"], ["signed", "BAL"]]),
+      clubNow: new Map([
+        ["cut", { team: null, name: "cut" }],
+        ["signed", { team: "ATL", name: "signed" }],
+      ]),
+    });
+
+    expect(jobs.get("ATL")?.record.playerId).toBe("signed");
+    expect(jobs.get("ATL")?.thisSeason?.games).toBe(1);
+    expect(jobs.has("BAL")).toBe(false);
+  });
+
+  it("leaves a kicker Sleeper does not know where he kicked", () => {
+    const jobs = kickerJobs({
+      lastSeason: season("him", "KC", 16, { fgm: 2 }),
+      soFar: [week("him", "KC", 9, { fgm: 1 })],
+      onRoster: new Map([["him", "KC"]]),
+      clubNow: new Map([["someone", { team: "BUF", name: "someone" }]]),
+    });
+
+    expect(jobs.get("KC")?.record.playerId).toBe("him");
+  });
+
   it("reads a whole season with nothing on disk as nobody having a job", () => {
     expect(kickerJobs({
       lastSeason: [],
       soFar: [],
       onRoster: new Map([["him", "BUF"]]),
     }).size).toBe(0);
+  });
+});
+
+describe("accuracyOf", () => {
+  it("counts the kicks he has missed this season beside last season's", () => {
+    const jobs = kickerJobs({
+      lastSeason: season("him", "ATL", 10, { fgm_50_59: 1 }),
+      soFar: season("him", "ATL", 5, { fgmiss_50_59: 1 }),
+      onRoster: new Map([["him", "ATL"]]),
+    });
+    const job = jobs.get("ATL")!;
+
+    expect(historyOf(job.record).byBand[4]).toEqual({ attempts: 10, made: 10 });
+    expect(accuracyOf(job).byBand[4]).toEqual({ attempts: 15, made: 10 });
   });
 });
 

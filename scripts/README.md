@@ -2818,6 +2818,67 @@ the rest of the season is 9.1 and 7.3.
 The miss is still a point and a half a game either way, so a kicker
 swap the model favours is a lean and not a lock.
 
+That bench only counts a kicker who went on to play three more games,
+so a kicker who was cut never reached it, and being cut is most of what
+his misses cost him. Folk was released the week after it was written.
+The next section counts him.
+
+## What a kicker's misses cost him
+
+`kickerMissesEval.ts` cuts every season from 2016 to 2025 at week 4, 6,
+8 and 10 and takes whoever kicked for each club last, 1193 kicker cuts.
+His accuracy is read as makes over expected: each attempt against what
+every kicker makes from that band, so a miss from 55 costs him 0.68 of
+a kick and a miss from 25 costs him 0.97. What he goes on to score is
+counted over every game his club has left, nothing for the ones somebody
+else kicks in, since that is what the manager holding him gets.
+
+```
+makes over expected so far   cuts   made so far   made after   kicked the club's games left   pts a club game after
+3 or more under                 9        66%          87%                61%                          5.06
+2 to 3 under                   56        70%          85%                80%                          5.56
+1 to 2 under                  163        76%          85%                82%                          6.14
+within 1                      756        88%          87%                91%                          7.08
+1 or more over                209        96%          87%                95%                          7.77
+```
+
+His accuracy barely carries: whatever he made so far, he makes about
+what the distances say afterwards, and accuracy over expected so far
+correlates .12 with the same thing after. His job does carry. A kicker
+two or more under keeps it for about four games in five of what is left,
+one within a kick of expected for nine in ten, and the board was giving
+all of them the same nine in ten. Counted that way what he has scored so
+far correlates .27 with what a manager goes on to get, where the bench
+above, which never saw a kicker lose his job, put it at .20.
+
+The walk's own number over the same cuts for 2023 to 2025, the seasons
+with a walk on disk, each season held out of the keep fit and of the
+level, 308 cuts:
+
+```
+each season held out                         MAE    corr
+the average kicker                            2.26  -0.021
+his season so far                             2.47   0.130
+the walk as the board had it                  2.18   0.251
+with this season's kicks in his accuracy      2.17   0.278
+as it was, with the job at risk               2.14   0.345
+with both                                     2.13   0.354
+```
+
+Both ship. His rates are read from last season and this one together,
+and his games are 17 times the chance he keeps the job, a logistic in
+his makes over expected so far: 2.233 + 0.433 a kick, which is the 15.3
+the board always gave a kicker who has not kicked, 72% at three under
+and 96% at two over. Folk had made 13 of 18, 2.5 under, and read 76%.
+
+Whoever kicked for a club last also stopped being the club's kicker on
+the board only when somebody else kicked for it, and nflverse's roster
+file still had Folk active at Atlanta four days after he was let go.
+Sleeper's player file had him unsigned and Jake Moody at Atlanta the
+afternoon it happened. The refresh downloads it before every build, so
+the job read now takes a kicker Sleeper has elsewhere or nowhere off his
+club and gives the job to the kicker Sleeper has there.
+
 ## What the flat 15.3 games is doing
 
 Every kicker on the board is given 15.3 games. Over the same three
