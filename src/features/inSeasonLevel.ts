@@ -116,6 +116,35 @@ export function roleLevel(
 }
 
 /**
+ * Why a player's snaps went up. A promotion is the man who lost them
+ * gone for good or for long: a reserve list, released, traded. A
+ * fill-in is that man out short term and still on the roster, or back
+ * already. A depth change is nobody at his position missing.
+ */
+export type RiseReason = "promotion" | "fill-in" | "depth";
+
+export interface RiseCause {
+  reason: RiseReason;
+  /** the first of his last three games his share rose in */
+  fromWeek: number;
+}
+
+/**
+ * Which games a rise is read over once its reason is known. `since` is
+ * only the games from the first one he rose in, however few. `whole`
+ * is every game, so the rise never breaks. `before` is the games before
+ * he rose, as if it had not happened. `break` is the break any rise
+ * takes, at its own gap and hold. `toward` hands that share of the
+ * season's weight back to the anchor.
+ */
+export interface RiseRead {
+  games: "since" | "whole" | "before" | "break";
+  gap?: number;
+  held?: boolean;
+  toward?: number;
+}
+
+/**
  * The knobs the combiner fits. `decay` weights the latest game against
  * the one before it. `breakGap` is the snap share move that counts as
  * a role changing outright, above which only the games since the move
@@ -146,6 +175,12 @@ export interface UpdateShape {
    * breaking at thirty points where a drop breaks at twenty.
    */
   riseHeld?: boolean;
+  /**
+   * How a rise is read once it is known why his snaps went up, which
+   * `riseReason.ts` reads off his club's roster. A reason with no entry
+   * here, and a player with no reason, is read as any rise is above.
+   */
+  riseBy?: Partial<Record<RiseReason, RiseRead>>;
   roleCap: number;
   roleGames: number;
   pointsCap: number;
@@ -205,6 +240,63 @@ export function gamesSinceBreak(
   return dropHeld && down < 2 ? weeks : recent;
 }
 
+/**
+ * The read a rise takes from its reason, where the shape gives that
+ * reason one and his snaps did go up on the whole. A man who rose one
+ * game and fell further the next is read as a drop.
+ */
+export function riseReadFor(
+  weeks: PlayedWeek[],
+  shape: UpdateShape,
+  rise: RiseCause | undefined,
+): RiseRead | undefined {
+  const read = rise && shape.riseBy?.[rise.reason];
+
+  if (!read || weeks.length <= BREAK_WINDOW) {
+    return undefined;
+  }
+
+  const mean = (some: PlayedWeek[]) =>
+    some.reduce((sum, w) => sum + w.snapShare, 0) / some.length;
+  const moved =
+    mean(weeks.slice(-BREAK_WINDOW)) - mean(weeks.slice(0, -BREAK_WINDOW));
+
+  return moved >= 0 ? read : undefined;
+}
+
+/** the games the window is read over, the break or the rise's reason */
+export function gamesRead(
+  weeks: PlayedWeek[],
+  shape: UpdateShape,
+  rise?: RiseCause,
+): PlayedWeek[] {
+  const read = riseReadFor(weeks, shape, rise);
+
+  if (!read || !rise) {
+    return gamesSinceBreak(
+      weeks, shape.breakGap, shape.dropGap, shape.dropHeld, shape.riseHeld);
+  }
+
+  switch (read.games) {
+    case "since": {
+      const since = weeks.filter((w) => w.week >= rise.fromWeek);
+
+      return since.length > 0 ? since : weeks;
+    }
+    case "whole":
+      return weeks;
+    case "before": {
+      const before = weeks.filter((w) => w.week < rise.fromWeek);
+
+      return before.length > 0 ? before : weeks;
+    }
+    case "break":
+      return gamesSinceBreak(
+        weeks, read.gap ?? shape.breakGap, shape.dropGap, shape.dropHeld,
+        read.held ?? shape.riseHeld);
+  }
+}
+
 export interface WindowSummary {
   usage: UsagePerGame;
   toDatePpg: number;
@@ -219,9 +311,9 @@ export interface WindowSummary {
 export function summarizeWindow(
   weeks: PlayedWeek[],
   shape: UpdateShape,
+  rise?: RiseCause,
 ): WindowSummary {
-  const kept = gamesSinceBreak(
-    weeks, shape.breakGap, shape.dropGap, shape.dropHeld, shape.riseHeld);
+  const kept = gamesRead(weeks, shape, rise);
   const last = kept.length - 1;
   const weights = kept.map((_, i) => shape.decay ** (last - i));
   const total = weights.reduce((sum, w) => sum + w, 0);
@@ -248,6 +340,8 @@ export interface UpdateInput {
   position: string;
   /** the games he has played this season, earliest first */
   weeks: PlayedWeek[];
+  /** why his snaps went up, where they did and his club says why */
+  rise?: RiseCause;
 }
 
 export interface UpdatedLevel {
@@ -302,12 +396,12 @@ export function updateLevel(
     };
   }
 
-  const window = summarizeWindow(input.weeks, fit.shape);
+  const window = summarizeWindow(input.weeks, fit.shape, input.rise);
   const level = roleLevel(fit.role, input.position, window.usage);
-  const { onRole, onPoints } = sourceWeights(
-    window.effectiveGames,
-    fit.shape,
-  );
+  const weights = sourceWeights(window.effectiveGames, fit.shape);
+  const kept = 1 - (riseReadFor(input.weeks, fit.shape, input.rise)?.toward ?? 0);
+  const onRole = weights.onRole * kept;
+  const onPoints = weights.onPoints * kept;
 
   return {
     ppg: Math.max(
