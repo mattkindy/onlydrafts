@@ -76,8 +76,9 @@ import { DEALT_WIDER } from "../src/features/walkWeek.js";
 import { kickerParts, BANDS } from "../src/features/kickerFromWalk.js";
 import { kickerSeason, type Fixture } from "../src/features/kickerSeason.js";
 import {
-  historyOf, loadKickerJobs, type KickerJob,
+  accuracyOf, loadKickerJobs, type KickerJob,
 } from "../src/features/kickerJobs.js";
+import { keepsTheJob, madeOverExpected } from "../src/features/kickerKeep.js";
 import {
   drawKickerWeeks,
   KICKER_PARTS,
@@ -1863,18 +1864,15 @@ async function main(): Promise<void> {
   const runsOver = walkWeeks * walkRuns;
 
   /**
-   * What a kicker who keeps the job plays. Three seasons of them come
-   * out at a shade over fifteen, and giving him a full seventeen while
-   * every skill player is cut to his own availability made a kicker's
-   * season look worth more than it is.
-   *
-   * The kickerSeasonEval bench found nothing in the spring that picks
-   * out the kicker who will lose the job: last season's accuracy moves
-   * games played by a game and a bit, so one number for all of them is
-   * as good as it gets. What did matter was leaving out the kicker
-   * nobody has signed, which the job read now does.
+   * What a kicker plays out of seventeen. In the spring it is 15.3 for
+   * all of them, since the kickerSeasonEval bench found nothing then
+   * that picks out the kicker who will lose the job. Once he has kicked
+   * it is what kickerMissesEval found: a kicker three under what an
+   * average kicker makes from his distances goes on to kick 72% of his
+   * club's games, one two over 96%.
    */
-  const KICKER_GAMES = 15.3;
+  const kickerGames = (job: KickerJob) =>
+    17 * keepsTheJob(madeOverExpected(job.thisSeason?.parts ?? {}));
   // read through the coming week, so a kicker who lost the job in
   // September stops being the club's kicker on the board too
   const kickerJobs = await loadKickerJobs(season, comingWeek(games, season));
@@ -1900,7 +1898,8 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const asHim = historyOf(his);
+    // last season and this one, so the kicks he has missed this year count
+    const asHim = accuracyOf(job);
     // his season played out game by game, so his card gets a spread and
     // a season total like anybody else's
     const walked = its
@@ -1909,7 +1908,7 @@ async function main(): Promise<void> {
           its.from.map((yardline) => yardline + 17),
           its.conversions * walkRuns,
           runsOver,
-          KICKER_GAMES,
+          kickerGames(job),
           // the weeks are read one against another, and at 2000 the
           // sampling alone moved them 9%, which is a third of what the
           // weather does. This puts the noise under 2%.

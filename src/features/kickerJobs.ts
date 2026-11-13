@@ -10,11 +10,19 @@
  *
  * Asking only the last of those put Matt Prater on Buffalo and Brandon
  * McManus on Green Bay for 2026, neither of whom is on an NFL roster.
+ *
+ * Whoever kicked last only says who has the job until the club cuts him.
+ * Atlanta released Nick Folk on a Tuesday in November 2026 and he went on
+ * holding its job on the board, since nobody else had kicked for it yet
+ * and the roster file still had him active. Sleeper's player file had him
+ * unsigned and Jake Moody on Atlanta the same afternoon, and it is
+ * downloaded fresh before every build, so it has the last word.
  */
 
 import {
   loadKickerWeeks, loadWeeklyRosters, type KickerWeek,
 } from "../data/nflverse.js";
+import { sleeperKickerClubs, type KickerClub } from "../data/sleeper.js";
 import { alsoCounted, BANDS, type KickerHistory } from "./kickerFromWalk.js";
 
 /** a player's kicking over however many games are being added up */
@@ -97,8 +105,10 @@ const volumeOf = (record: KickerRecord) =>
   (record.parts["xpm"] ?? 0);
 
 export interface KickerJob {
-  /** last season's record, which is what his rates are read from */
+  /** last season's record */
   record: KickerRecord;
+  /** and this season's so far, for any club, which his rates also read */
+  thisSeason: KickerRecord | null;
   team: string;
   /** true once he has kicked for the club this season */
   confirmed: boolean;
@@ -111,6 +121,8 @@ interface JobsRead {
   soFar: KickerWeek[];
   /** the club each kicker is on now, from the roster file */
   onRoster: Map<string, string>;
+  /** and from Sleeper's player file, which hears of a release first */
+  clubNow?: Map<string, KickerClub>;
 }
 
 /**
@@ -149,6 +161,7 @@ export async function kickerRosterSpots(
  */
 export function kickerJobs(read: JobsRead): Map<string, KickerJob> {
   const records = recordsFrom(read.lastSeason);
+  const soFar = recordsFrom(read.soFar);
   const jobs = new Map<string, KickerJob>();
 
   for (const record of records.values()) {
@@ -162,7 +175,10 @@ export function kickerJobs(read: JobsRead): Map<string, KickerJob> {
     const holder = jobs.get(at);
 
     if (!holder || volumeOf(record) > volumeOf(holder.record)) {
-      jobs.set(at, { record, team: at, confirmed: false });
+      jobs.set(at, {
+        record, thisSeason: soFar.get(record.playerId) ?? null,
+        team: at, confirmed: false,
+      });
     }
   }
 
@@ -193,12 +209,81 @@ export function kickerJobs(read: JobsRead): Map<string, KickerJob> {
         games: 0,
         parts: {},
       },
+      thisSeason: soFar.get(his.playerId) ?? null,
       team,
       confirmed: true,
     });
   }
 
+  if (read.clubNow && read.clubNow.size > 0) {
+    handOnReleased(jobs, read.clubNow, records, soFar);
+  }
+
   return jobs;
+}
+
+/**
+ * A kicker Sleeper has somewhere else, or nowhere, loses the club's job
+ * to the kicker Sleeper has there. A club Sleeper has no kicker on is
+ * left off until somebody kicks for it, rather than kept by the man it
+ * let go. A kicker Sleeper does not know is left where he is.
+ */
+function handOnReleased(
+  jobs: Map<string, KickerJob>,
+  clubNow: Map<string, KickerClub>,
+  records: Map<string, KickerRecord>,
+  soFar: Map<string, KickerRecord>,
+): void {
+  const volume = (id: string) =>
+    [records.get(id), soFar.get(id)].reduce(
+      (sum, r) => sum + (r ? volumeOf(r) : 0), 0);
+
+  for (const [team, job] of [...jobs]) {
+    const now = clubNow.get(job.record.playerId);
+
+    if (!now || now.team === team) {
+      continue;
+    }
+
+    const heir = [...clubNow]
+      .filter(([, his]) => his.team === team)
+      .sort(([a], [b]) => volume(b) - volume(a))[0];
+
+    if (!heir) {
+      jobs.delete(team);
+      continue;
+    }
+
+    const [playerId, his] = heir;
+
+    jobs.set(team, {
+      record: records.get(playerId) ?? {
+        playerId, name: his.name, team, games: 0, parts: {},
+      },
+      thisSeason: soFar.get(playerId) ?? null,
+      team,
+      confirmed: false,
+    });
+  }
+}
+
+/**
+ * His accuracy over last season and this one together. Reading last
+ * season alone left a kicker who had missed eight this year rated as he
+ * was in the spring.
+ */
+export function accuracyOf(job: KickerJob): KickerHistory {
+  const parts: Record<string, number> = { ...job.record.parts };
+
+  for (const [part, n] of Object.entries(job.thisSeason?.parts ?? {})) {
+    parts[part] = (parts[part] ?? 0) + n;
+  }
+
+  return historyOf({
+    ...job.record,
+    games: job.record.games + (job.thisSeason?.games ?? 0),
+    parts,
+  });
 }
 
 /** the jobs for a season, reading every file they come from */
@@ -209,5 +294,7 @@ export async function loadKickerJobs(
     lastSeason: await loadKickerWeeks(season - 1),
     soFar: (await loadKickerWeeks(season)).filter((w) => w.week < throughWeek),
     onRoster: await kickerRosterSpots(season),
+    // a build with no Sleeper file on disk goes on what nflverse says
+    clubNow: await sleeperKickerClubs().catch(() => new Map()),
   });
 }
