@@ -41,10 +41,19 @@ import {
   updateLevel,
   type InSeasonFit,
   type PlayedWeek,
+  type RiseRead,
+  type RiseReason,
   type RoleLevelRow,
   type UpdateCase,
   type UpdateShape,
 } from "../src/features/inSeasonLevel.js";
+import {
+  readRise,
+  readRooms,
+  type ReadRise,
+  type RiseDetail,
+  type Rooms,
+} from "../src/features/riseReason.js";
 
 const FIRST_DATA = 2015;
 /** the first season a transition can be built for */
@@ -72,6 +81,8 @@ interface Season {
   anchors: Map<string, Anchor>;
   weeks: Map<string, PlayedWeek[]>;
   roleRows: RoleLevelRow[];
+  /** the rosters a rise is read off, for the seasons that are marked */
+  rooms?: Rooms;
 }
 
 function seasons(from: number, to: number): number[] {
@@ -199,6 +210,11 @@ interface Marked {
   surprise: boolean[];
   /** how far his snap share moved over his last three games, null under four */
   move: (number | null)[];
+  /** who each row is, so a bootstrap can draw whole players */
+  who: string[];
+  season: number[];
+  /** why his snaps went up, where they went up in one of his last three */
+  rise: (ReadRise | undefined)[];
 }
 
 /** games at the end of the window a move is read over, as the break reads it */
@@ -237,23 +253,41 @@ const MOVES: [string, (move: number | null) => boolean][] = [
  * points is rare enough that one cut alone is a handful of players.
  */
 function reportMoves(marked: Marked[], readers: string[], over: string): void {
+  reportSplit(
+    marked, readers,
+    `by the move in his snap share over his last three games, ${over}`,
+    MOVES.map(([label, keep]) => [label, (at, i) => keep(at.move[i]!)]),
+  );
+}
+
+/** which rows a line of a split table counts */
+type Keep = (at: Marked, i: number) => boolean;
+
+/** signed error and MAE for each reader over each set of rows, pooled */
+function reportSplit(
+  marked: Marked[], readers: string[], title: string, splits: [string, Keep][],
+  /** short names for the columns, and how wide each is */
+  heads: { name: (reader: string) => string; column: number } =
+    { name: (r) => r.slice(0, 26), column: 28 },
+): void {
+  const width = Math.max(24, ...splits.map(([label]) => label.length + 2));
+
   console.log(
-    `\nby the move in his snap share over his last three games, ${over}: ` +
-      "players, then signed error (said less was) and MAE",
+    `\n${title}: players, then signed error (said less was) and MAE`,
   );
   console.log(
-    "".padEnd(24) + "n     " +
-      readers.map((r) => r.slice(0, 26).padEnd(28)).join(""),
+    "".padEnd(width) + "n     " +
+      readers.map((r) => heads.name(r).padEnd(heads.column)).join(""),
   );
 
-  for (const [label, keep] of MOVES) {
+  for (const [label, keep] of splits) {
     let n = 0;
     const signed = readers.map(() => 0);
     const absolute = readers.map(() => 0);
 
     for (const at of marked) {
       at.was.forEach((was, i) => {
-        if (!keep(at.move[i]!)) {
+        if (!keep(at, i)) {
           return;
         }
 
@@ -267,11 +301,77 @@ function reportMoves(marked: Marked[], readers: string[], over: string): void {
     }
 
     console.log(
-      label.padEnd(24) + String(n).padEnd(6) + readers.map((_, r) =>
-        `${(signed[r]! / Math.max(1, n)).toFixed(3).padStart(7)} ` +
-          `${(absolute[r]! / Math.max(1, n)).toFixed(3)}`.padEnd(28)).join(""),
+      label.padEnd(width) + String(n).padEnd(6) + readers.map((_, r) =>
+        (`${(signed[r]! / Math.max(1, n)).toFixed(3).padStart(7)} ` +
+          `${(absolute[r]! / Math.max(1, n)).toFixed(3)}`).padEnd(heads.column)).join(""),
     );
   }
+}
+
+/** a run of draws that comes out the same every time the bench runs */
+function seeded(seed: number): () => number {
+  let state = seed >>> 0;
+
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const DRAWS = 2000;
+
+/**
+ * The difference in MAE between two readers on the same rows, a less b,
+ * and its standard error by a paired bootstrap that draws whole players:
+ * one man is in the pool at every cut of a season and in several seasons,
+ * and his errors at those are not separate pieces of evidence.
+ */
+function pairedDifference(
+  marked: Marked[], a: string, b: string, keep: Keep, draws = DRAWS,
+): { diff: number; se: number; rows: number; players: number } {
+  const byPlayer = new Map<string, { sum: number; n: number }>();
+
+  for (const at of marked) {
+    at.was.forEach((was, i) => {
+      if (!keep(at, i)) {
+        return;
+      }
+
+      const his = byPlayer.get(at.who[i]!) ?? { sum: 0, n: 0 };
+      his.sum += Math.abs(at.said[a]![i]! - was) - Math.abs(at.said[b]![i]! - was);
+      his.n++;
+      byPlayer.set(at.who[i]!, his);
+    });
+  }
+
+  const units = [...byPlayer.values()];
+  const rows = units.reduce((s, u) => s + u.n, 0);
+  const diff = units.reduce((s, u) => s + u.sum, 0) / Math.max(1, rows);
+  const draw = seeded(20261113);
+  const means: number[] = [];
+
+  for (let d = 0; d < draws; d++) {
+    let sum = 0;
+    let n = 0;
+
+    for (let k = 0; k < units.length; k++) {
+      const unit = units[Math.floor(draw() * units.length)]!;
+      sum += unit.sum;
+      n += unit.n;
+    }
+
+    means.push(sum / Math.max(1, n));
+  }
+
+  const centre = means.reduce((s, m) => s + m, 0) / Math.max(1, means.length);
+  const se = Math.sqrt(
+    means.reduce((s, m) => s + (m - centre) ** 2, 0) / Math.max(1, means.length - 1));
+
+  return { diff, se, rows, players: units.length };
 }
 
 const UPDATE = "the update";
@@ -332,6 +432,58 @@ const RISES = {
   "a rise at .30, held": { breakGap: 0.3, dropGap: 0.2, riseHeld: true },
 } as const;
 
+/** the wary rise the build ships, on the one gap's own weights */
+const WARY = "a rise at .30, held";
+
+const AT_ONCE: RiseRead = { games: "since" };
+const WHOLE: RiseRead = { games: "whole" };
+const AT_TWENTY: RiseRead = { games: "break", gap: 0.2, held: false };
+
+/**
+ * A rise read by why his snaps went up, which `riseReason.ts` reads off
+ * his club's roster at the cut: the teammate at his position who lost
+ * the snaps gone for long, out short term or back, or nobody missing.
+ * Each is laid over the wary rise, so a reason with no entry, and a man
+ * whose club does not say, is read as the wary rise reads him. "At once"
+ * keeps only the games from the first he rose in, however few.
+ */
+const WHY: Record<string, Partial<Record<RiseReason, RiseRead>>> = {
+  "why A: promotion at once, fill-in whole": { promotion: AT_ONCE, "fill-in": WHOLE },
+  "why B: promotion at .20, fill-in whole": { promotion: AT_TWENTY, "fill-in": WHOLE },
+  "why C: A, a depth change at once": {
+    promotion: AT_ONCE, "fill-in": WHOLE, depth: AT_ONCE,
+  },
+  "why D: A, a depth change at .20": {
+    promotion: AT_ONCE, "fill-in": WHOLE, depth: AT_TWENTY,
+  },
+  "why E: A, fill-in on games before": {
+    promotion: AT_ONCE, "fill-in": { games: "before" },
+  },
+  "why F: A, fill-in half to anchor": {
+    promotion: AT_ONCE, "fill-in": { games: "whole", toward: 0.5 },
+  },
+  "why G: a promotion at once alone": { promotion: AT_ONCE },
+  "why H: a fill-in whole alone": { "fill-in": WHOLE },
+  "why I: a depth change at .20 alone": { depth: AT_TWENTY },
+  "why J: fill-in whole, depth at .20": { "fill-in": WHOLE, depth: AT_TWENTY },
+  "why K: fill-in whole, depth at once": { "fill-in": WHOLE, depth: AT_ONCE },
+  "why L: J, a promotion whole": {
+    promotion: WHOLE, "fill-in": WHOLE, depth: AT_TWENTY,
+  },
+  "why M: J, a depth change at .25": {
+    "fill-in": WHOLE, depth: { games: "break", gap: 0.25, held: false },
+  },
+  "why N: J, a depth change held": {
+    "fill-in": WHOLE, depth: { games: "break", gap: 0.2, held: true },
+  },
+};
+
+/** the letter each reading of a rise by its reason goes by in the wide tables */
+const tagOf = (reader: string) => /^why ([A-Z]):/.exec(reader)?.[1] ?? reader;
+
+/** the same laid over the shipped constant, so in sample like it */
+const inSample = (label: string) => `${label}, in sample`;
+
 const READERS = [
   "preseason anchor",
   "season to date",
@@ -341,10 +493,140 @@ const READERS = [
   DROP_ONLY,
   ...Object.keys(RISES),
   ...Object.keys(DROPS),
+  ...Object.keys(WHY),
   SHIPPED,
   SHIPPED_WARY,
+  ...Object.keys(WHY).map(inSample),
   "oracle",
 ];
+
+const rose20: Keep = (at, i) => at.move[i] !== null && at.move[i]! >= 0.2;
+const roseAGame: Keep = (at, i) => at.rise[i] !== undefined;
+const everyRow: Keep = () => true;
+
+const REASONS: [RiseReason, RiseDetail[]][] = [
+  ["promotion", ["reserve list", "released", "traded"]],
+  ["fill-in", ["listed", "short reserve", "back"]],
+  ["depth", ["playing less", "benched", "nobody lost them"]],
+];
+
+/** a pool split by the reason his snaps rose, then by the finer reading */
+function byReason(pool: Keep, poolLabel: string): [string, Keep][] {
+  const splits: [string, Keep][] = [[poolLabel, pool]];
+
+  for (const [reason, details] of REASONS) {
+    splits.push([`  ${reason}`, (at, i) => pool(at, i) && at.rise[i]?.reason === reason]);
+
+    for (const detail of details) {
+      splits.push([`    ${detail}`, (at, i) => pool(at, i) && at.rise[i]?.detail === detail]);
+    }
+  }
+
+  splits.push(["  no roster to read", (at, i) => pool(at, i) && at.rise[i] === undefined]);
+
+  return splits;
+}
+
+/**
+ * Each reading of a rise by its reason against the wary rise it is laid
+ * over: out of sample on the one gap's weights, and in sample on the
+ * shipped constant. The whole pool cut by cut, the error by the move in
+ * his snaps, the rises split by reason, and the difference with a paired
+ * bootstrap's standard error.
+ */
+function reportWhy(marked: Marked[]): void {
+  const arms: [string, string, string[]][] = [
+    ["out of sample, on the one gap's weights", WARY, Object.keys(WHY)],
+    ["in sample, on the shipped constant", SHIPPED, Object.keys(WHY).map(inSample)],
+  ];
+  const width = Math.max(...READERS.map((r) => r.length)) + 2;
+
+  for (const [over, base, readers] of arms) {
+    console.log(`\nthe whole pool by cut, ${over}: MAE, then the cuts it beats ${base} at`);
+    console.log("".padEnd(width) + CUTS.map((c) => `wk ${c}`.padEnd(8)).join("") + "mean    beats");
+
+    for (const reader of [base, ...readers]) {
+      const at = marked.map((m) => mae(m.said[reader]!, m.was));
+      const was = marked.map((m) => mae(m.said[base]!, m.was));
+      const beats = at.filter((e, i) => e < was[i]! - 1e-9).length;
+
+      console.log(
+        reader.padEnd(width) + at.map((e) => e.toFixed(3).padEnd(8)).join("") +
+          (at.reduce((s, e) => s + e, 0) / at.length).toFixed(3).padEnd(8) +
+          (reader === base ? "" : `${beats} of ${at.length}`),
+      );
+    }
+
+    const heads = {
+      name: (r: string) =>
+        r === "preseason anchor" ? "anchor" : r === base ? "wary" : tagOf(r),
+      column: 15,
+    };
+
+    reportSplit(
+      marked, [base, ...readers],
+      `by the move in his snap share over his last three games, ${over}, every cut pooled`,
+      MOVES.map(([label, keep]) => [label, (at, i) => keep(at.move[i]!)]),
+      heads,
+    );
+    reportSplit(
+      marked, ["preseason anchor", base, ...readers],
+      `the men whose snaps rose .20 or more, by why, ${over}`,
+      byReason(rose20, "rose .20 or more"),
+      heads,
+    );
+    reportSplit(
+      marked, ["preseason anchor", base, ...readers],
+      `any game of his last three .20 over his share before, by why, ${over}`,
+      byReason(roseAGame, "rose in a game"),
+      heads,
+    );
+
+    console.log(
+      `\nMAE less ${base}'s season by season, ${over}: the whole pool, then the rises of .20`,
+    );
+    console.log("".padEnd(width) + MARKED.map((y) => String(y).padEnd(15)).join(""));
+
+    for (const reader of readers) {
+      console.log(reader.padEnd(width) + MARKED.map((year) => {
+        const inYear: Keep = (at, i) => at.season[i] === year;
+        const all = pairedDifference(marked, reader, base, inYear, 0).diff;
+        const rises = pairedDifference(
+          marked, reader, base, (at, i) => inYear(at, i) && rose20(at, i), 0).diff;
+
+        return `${all.toFixed(3)} ${rises.toFixed(3)}`.padEnd(15);
+      }).join(""));
+    }
+
+    console.log(
+      `\nMAE less ${base}'s, ${over}, and its standard error by a paired ` +
+        `bootstrap of whole players (${DRAWS} draws)`,
+    );
+    console.log(
+      "".padEnd(width) + "rose .20 or more       rose in a game         whole pool",
+    );
+
+    for (const reader of readers) {
+      console.log(reader.padEnd(width) + [rose20, roseAGame, everyRow].map((keep) => {
+        const d = pairedDifference(marked, reader, base, keep);
+
+        return `${d.diff >= 0 ? "+" : ""}${d.diff.toFixed(4)} ± ${d.se.toFixed(4)}`.padEnd(23);
+      }).join(""));
+    }
+  }
+
+  const players = (keep: Keep) =>
+    pairedDifference(marked, WARY, WARY, keep);
+  console.log(
+    `\nrows and players: rose .20 or more ${players(rose20).rows} rows, ` +
+      `${players(rose20).players} players; rose in a game ${players(roseAGame).rows}, ` +
+      `${players(roseAGame).players}; whole pool ${players(everyRow).rows}, ` +
+      `${players(everyRow).players}`,
+  );
+}
+
+/** wide enough for the longest reader's name */
+const LABEL_WIDTH = Math.max(...READERS.map((r) => r.length)) + 2;
 
 function report(marked: Marked): void {
   const surprised = marked.surprise.filter(Boolean).length;
@@ -354,7 +636,7 @@ function report(marked: Marked): void {
       `${surprised} of them with a changed role`,
   );
   console.log(
-    "".padEnd(32) + "MAE    corr    role changed: MAE    corr",
+    "".padEnd(LABEL_WIDTH) + "MAE    corr    role changed: MAE    corr",
   );
 
   for (const reader of READERS) {
@@ -363,7 +645,7 @@ function report(marked: Marked): void {
     const keptWas = marked.was.filter((_, i) => marked.surprise[i]);
 
     console.log(
-      `${reader.padEnd(32)}${mae(said, marked.was).toFixed(3)}  ` +
+      `${reader.padEnd(LABEL_WIDTH)}${mae(said, marked.was).toFixed(3)}  ` +
         `${correlation(said, marked.was).toFixed(3)}   ` +
         `${mae(keptSaid, keptWas).toFixed(3).padStart(15)}  ` +
         `${correlation(keptSaid, keptWas).toFixed(3)}`,
@@ -435,6 +717,7 @@ async function main(): Promise<void> {
       anchors,
       weeks: read.weeks,
       roleRows: roleRowsFrom(read),
+      ...(MARKED.includes(year) ? { rooms: await readRooms(year) } : {}),
     });
     console.log(`${year}: ${anchors.size} anchors, ${read.weeks.size} played`);
   }
@@ -448,6 +731,9 @@ async function main(): Promise<void> {
         said: Object.fromEntries(READERS.map((r) => [r, []])),
         surprise: [],
         move: [],
+        who: [],
+        season: [],
+        rise: [],
       },
     ]),
   );
@@ -517,8 +803,24 @@ async function main(): Promise<void> {
       without.set(label, { role: fit.role, shape: { ...oneGap, ...rise } });
     }
 
+    for (const [label, riseBy] of Object.entries(WHY)) {
+      without.set(label, {
+        role: fit.role,
+        shape: { ...oneGap, ...RISES[WARY], riseBy },
+      });
+      without.set(inSample(label), {
+        role: fit.role,
+        shape: { ...SHIPPED_SHAPE, riseBy },
+      });
+    }
+
+    const season = built.get(year)!;
+
     for (const cut of CUTS) {
-      const rows = rowsAt(built.get(year)!, year, cut);
+      // why his snaps rose, off the rosters as they stood at the cut
+      const rows = rowsAt(season, year, cut).map((row) => ({
+        ...row, rise: readRise(season.rooms!, row.playerId, row.weeks, cut),
+      }));
       const surprises = rows.map((row) => surpriseOf(fit, row));
       const line = cutAt(surprises, SURPRISE_SHARE);
       const into = marked.get(cut)!;
@@ -541,6 +843,9 @@ async function main(): Promise<void> {
 
         into.surprise.push(surprises[i]! >= line);
         into.move.push(snapMove(row.weeks));
+        into.who.push(row.playerId);
+        into.season.push(year);
+        into.rise.push(row.rise);
       });
     }
   }
@@ -557,6 +862,8 @@ async function main(): Promise<void> {
     reportMoves(
       [marked.get(cut)!], [UPDATE, ONE_GAP, DROP_ONLY, ...Object.keys(RISES)], `after week ${cut} alone`);
   }
+
+  reportWhy([...marked.values()]);
 
   await withSleeperNext(built, fits);
 
