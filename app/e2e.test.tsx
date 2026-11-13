@@ -330,7 +330,9 @@ describe("a kicker gets what everyone else gets", () => {
 
       expect(game, String(k["name"])).toBeTruthy();
       expect(game!["high"]).toBeGreaterThan(game!["low"]!);
-      expect(sim!["games"]).toBeGreaterThan(12);
+      // a kicker who has missed a lot is likelier to be cut, and the
+      // fit's furthest reach is six kicks under, which is seven games
+      expect(sim!["games"], String(k["name"])).toBeGreaterThan(6.5);
       expect(sim!["games"]).toBeLessThanOrEqual(17);
       expect(weeks!.length).toBe(17);
     }
