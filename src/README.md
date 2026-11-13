@@ -115,7 +115,18 @@ points a season closer at t+1, t+2 and t+3, ranks the seasons at .67,
 .62 and .60 against .62, .55 and .53, and is one to two and a half
 points low where the curve is nine to eleven. Jeremiyah Love, taken
 third in 2026 and on reserve by November, comes out at 13.7 a game over
-13.1 games in 2027 against the 11.1 the board has him at now.
+13.1 games in 2027 against the 11.1 the board has him at now. A player
+scoring fourteen a game or more is held 13 season points short three
+seasons on. Taught on every other season rather than the two or three
+the bench can use, that is 11 on the same cuts and 5.5 over all seven,
+with a standard error of 6.8, and it is all games: on the held out cuts
+it is mostly thirty backs who lasted into 2024 and 2025. Nothing tried
+for it shipped. The games run high at the top two and three seasons on,
+where the square of the rate bends the games fit up, which is why Puka
+Nacua's later seasons climb to the cap of seventeen; the cap does real
+work, and reading the games as the chance he plays times his games if
+he does is closer, but waits for a bench that can teach it on more than
+three seasons.
 
 ## Which way things are passed
 
