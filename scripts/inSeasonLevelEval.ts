@@ -11,6 +11,11 @@
  * steady or up, beside the shipped break and three ways of reading a drop
  * apart from a rise, so a shrinking role can be checked on its own.
  *
+ * Then a rise read by why his snaps went up, off his club's roster at the
+ * cut, against the wary rise the build ships: the whole pool cut by cut
+ * and season by season, the rises split by reason, and the difference
+ * with a paired bootstrap of whole players for its standard error.
+ *
  * Run: npx tsx scripts/inSeasonLevelEval.ts
  */
 
@@ -215,10 +220,93 @@ interface Marked {
   season: number[];
   /** why his snaps went up, where they went up in one of his last three */
   rise: (ReadRise | undefined)[];
+  /**
+   * What a riser went on to do, read after the cut for the table of it
+   * and nothing else: his share of the snaps and his points before he
+   * rose, in the games he rose in and after the cut, and whether the
+   * teammate who lost the snaps played for his club again.
+   */
+  after: (RiseAfter | undefined)[];
+}
+
+interface RiseAfter {
+  share: [number, number, number];
+  points: [number, number, number];
+  mateBack: boolean;
 }
 
 /** games at the end of the window a move is read over, as the break reads it */
 const MOVE_WINDOW = 3;
+
+/** a teammate counts as back once he has this share of a game after the cut */
+const BACK_SHARE = 0.2;
+
+/**
+ * What a riser went on to do. This reads past the cut on purpose and
+ * only feeds the table that says so; nothing an arm reads comes from it.
+ */
+function riseAfter(
+  season: Season, playerId: string, rise: ReadRise, cut: number,
+): RiseAfter {
+  const his = season.weeks.get(playerId) ?? [];
+  const mean = (some: PlayedWeek[], of: (w: PlayedWeek) => number) =>
+    some.reduce((sum, w) => sum + of(w), 0) / Math.max(1, some.length);
+  const parts = [
+    his.filter((w) => w.week < rise.fromWeek),
+    his.filter((w) => w.week >= rise.fromWeek && w.week <= cut),
+    his.filter((w) => w.week > cut),
+  ];
+  const club = (season.rooms?.byPlayer.get(playerId) ?? [])
+    .filter((r) => r.week <= cut).at(-1)?.teamId;
+  const mateBack = rise.teammate !== undefined && (season.rooms?.byPlayer
+    .get(rise.teammate) ?? []).some((r) =>
+    r.week > cut && r.teamId === club && r.snapShare >= BACK_SHARE);
+
+  return {
+    share: parts.map((p) => mean(p, (w) => w.snapShare)) as RiseAfter["share"],
+    points: parts.map((p) => mean(p, (w) => w.points)) as RiseAfter["points"],
+    mateBack,
+  };
+}
+
+/**
+ * Each kind of riser's share of the snaps and points a game before he
+ * rose, in the games he rose in and after the cut, and how often the man
+ * who lost the snaps played for the club again. Read after the cut.
+ */
+function reportAfter(marked: Marked[]): void {
+  console.log(
+    "\nwhat each kind of riser went on to do, every man with a game of his " +
+      "last three .20 up (read after the cut, for this table alone)",
+  );
+  console.log(
+    "".padEnd(24) + "n     snaps: before rising after   points: before rising after   mate back",
+  );
+
+  for (const [reason, details] of REASONS) {
+    for (const detail of details) {
+      const rows: RiseAfter[] = [];
+
+      for (const at of marked) {
+        at.after.forEach((after, i) => {
+          if (after && at.rise[i]?.detail === detail) {
+            rows.push(after);
+          }
+        });
+      }
+
+      const mean = (of: (a: RiseAfter) => number) =>
+        rows.reduce((sum, a) => sum + of(a), 0) / Math.max(1, rows.length);
+
+      console.log(
+        `${reason}, ${detail}`.padEnd(24) + String(rows.length).padEnd(6) +
+          `       ${[0, 1, 2].map((k) => mean((a) => a.share[k]!).toFixed(2)).join("   ")}` +
+          `            ${[0, 1, 2].map((k) => mean((a) => a.points[k]!).toFixed(1).padStart(4)).join("  ")}` +
+          `        ${mean((a) => (a.mateBack ? 1 : 0)).toFixed(2)}`,
+      );
+    }
+  }
+}
 
 /**
  * His snap share over his last three games less what it was over the
@@ -734,6 +822,7 @@ async function main(): Promise<void> {
         who: [],
         season: [],
         rise: [],
+        after: [],
       },
     ]),
   );
@@ -846,6 +935,7 @@ async function main(): Promise<void> {
         into.who.push(row.playerId);
         into.season.push(year);
         into.rise.push(row.rise);
+        into.after.push(row.rise && riseAfter(season, row.playerId, row.rise, cut));
       });
     }
   }
@@ -864,6 +954,7 @@ async function main(): Promise<void> {
   }
 
   reportWhy([...marked.values()]);
+  reportAfter([...marked.values()]);
 
   await withSleeperNext(built, fits);
 
