@@ -478,9 +478,8 @@ function printTaught(rowsBySeason: Map<number, AheadRow[]>): void {
     for (const position of ["QB", "RB", "WR", "TE"]) {
       const mine = (m: Marked) => isStar(m.row) && m.row.position === position;
 
-      console.log(starLine(
-        `${position}, held out cuts taught before them`,
-        pooled.honest.filter((m) => mine(m) && held.includes(m.row.season)), horizon));
+      console.log(starLine(`${position}, held out cuts taught before them`, heldIn(pooled.honest).filter(mine), horizon));
+      console.log(starLine(`${position}, held out cuts taught on every other`, heldIn(pooled.other).filter(mine), horizon));
       console.log(starLine(`${position}, every cut taught on every other`, pooled.other.filter(mine), horizon));
     }
   }
