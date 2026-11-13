@@ -872,20 +872,12 @@ function printStars(rowsBySeason: Map<number, AheadRow[]>): void {
 }
 
 /**
- * Why one man's games rise past next season: what the share of his
- * club's games he has played and the square of his pooled rate add to
- * the shipped games fit at each horizon, against an average man at his
- * position, and what stars who had missed games by the cut went on to
- * play.
+ * Why a man's games rise past next season, or fall: what the share of
+ * his club's games he has played and the square of his pooled rate add
+ * to the shipped games fit at each horizon, against an average man at
+ * his position, and what the hurdle says instead.
  */
-function printGamesShape(rowsBySeason: Map<number, AheadRow[]>, name: string): void {
-  const season = Math.max(...rowsBySeason.keys());
-  const him = rowsBySeason.get(season)?.find((row) => row.name === name);
-
-  if (!him) {
-    return;
-  }
-
+function printGamesOf(rowsBySeason: Map<number, AheadRow[]>, season: number, him: AheadRow): void {
   const keep = AHEAD_TERMS.map((term, i) => [term, i] as const)
     .filter(([term]) => SHIPPED_TERMS.includes(term));
   const termsOf = (row: AheadRow) => {
@@ -895,7 +887,7 @@ function printGamesShape(rowsBySeason: Map<number, AheadRow[]>, name: string): v
   };
 
   console.log(
-    `\n${name}, week ${WEEK} of ${season}: ${him.games} games of ${him.clubGames} at ` +
+    `\n${him.name}, week ${WEEK} of ${season}: ${him.games} games of ${him.clubGames} at ` +
       `${f1(ppgOf(him))} a game, this season and last pooled at ${f1(pooledRate(him))}`);
   console.log(
     "| horizon | games said, before the cap | the share of his club's games adds, against an average man at his position | " +
@@ -918,6 +910,19 @@ function printGamesShape(rowsBySeason: Map<number, AheadRow[]>, name: string): v
     console.log(
       `| t+${horizon} | ${f1(linearAt(fit, termsOf(him)))} | ${signed(adds("share of his club's games played"))} | ` +
         `${signed(adds("the same, squared"))} | ${hurdle ? f1(hurdle.games) : "-"} |`);
+  }
+}
+
+/** each named man's games taken apart, then what stars who had missed games went on to play */
+function printGamesShape(rowsBySeason: Map<number, AheadRow[]>, names: string[]): void {
+  const season = Math.max(...rowsBySeason.keys());
+
+  for (const name of names) {
+    const him = rowsBySeason.get(season)?.find((row) => row.name === name);
+
+    if (him) {
+      printGamesOf(rowsBySeason, season, him);
+    }
   }
 
   const done = [...rowsBySeason.values()].flat()
@@ -1063,7 +1068,7 @@ async function main(): Promise<void> {
 
   if (STARS) {
     printStars(rowsBySeason);
-    printGamesShape(rowsBySeason, "Puka Nacua");
+    printGamesShape(rowsBySeason, ["Puka Nacua", "Bijan Robinson"]);
   }
 
   printCase(rowsBySeason);
