@@ -11,8 +11,14 @@
  * the free agents page: fantasy.espn.com/.well-known/apple-app-site-association
  * lists the team and players/add paths of every sport. Sleeper's iPhone app takes only
  * its chat links, so a league page always opens in the browser there.
- * On Android both apps are registered for their sites, and a link can be
- * addressed to the app itself, so there the page goes to the app.
+ *
+ * Android is the same: an app opens a plain link to its site when it
+ * takes that page, and Sleeper's does not take a league page. A link
+ * addressed to the Sleeper app itself (an intent link) was tried and
+ * sent the reader to the Play Store, since a browser cannot open an app
+ * at a page it does not take. So every link is the plain web page, and
+ * a Sleeper page works once the reader is signed in to sleeper.com in
+ * that browser.
  */
 
 import type { League } from "./providers.ts";
@@ -42,42 +48,3 @@ export function playersLink(league: League): string {
 
   return `https://sleeper.com/leagues/${encodeURIComponent(league.leagueId)}/players`;
 }
-
-/**
- * Each provider's Android app, as its site's assetlinks.json names it.
- */
-const ANDROID_APP: Record<string, string> = {
-  "sleeper.com": "com.sleeperbot",
-  "fantasy.espn.com": "com.espn.fantasy.lm.football",
-};
-
-/**
- * The same page addressed to the provider's Android app, so it opens
- * there rather than in a browser that is not signed in. Where the app is
- * not installed, or does not take that page, the phone opens the page on
- * the web instead. Null for a page no app is known for.
- */
-export function androidAppLink(url: string): string | null {
-  let page: URL;
-
-  try {
-    page = new URL(url);
-  } catch {
-    return null;
-  }
-
-  const app = ANDROID_APP[page.hostname];
-
-  if (!app || page.protocol !== "https:") {
-    return null;
-  }
-
-  return `intent://${page.host}${page.pathname}${page.search}` +
-    `#Intent;scheme=https;package=${app};` +
-    `S.browser_fallback_url=${encodeURIComponent(url)};end`;
-}
-
-/** whether this is an Android phone or tablet */
-export const onAndroid = (
-  agent = typeof navigator === "undefined" ? "" : navigator.userAgent,
-) => /Android/i.test(agent);
