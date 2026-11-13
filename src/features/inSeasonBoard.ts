@@ -32,6 +32,7 @@ import { fantasyPoints } from "../scoring/fantasyPoints.js";
 import { loadLeverage } from "./leverageUsage.js";
 import { scoring } from "../scoring/active.js";
 import { pointsOfLine, updateParts } from "./inSeasonParts.js";
+import { readRise, readRooms } from "./riseReason.js";
 import type { StatParts } from "./seasonSummary.js";
 import {
   fitRoleLevel,
@@ -239,6 +240,7 @@ interface BoardPlayer {
 export async function updateBoardLevels(
   players: BoardPlayer[],
   season: number,
+  shape: UpdateShape = SHIPPED_SHAPE,
 ): Promise<number> {
   const read = await readPlayedWeeks(season);
 
@@ -246,7 +248,11 @@ export async function updateBoardLevels(
     return 0;
   }
 
-  const fit = await fitForSeason(season);
+  const fit = await fitForSeason(season, shape);
+  // why a man's snaps rose is read off the rosters only where the shape
+  // reads a rise by it, which the shipped one does not
+  const rooms = fit.shape.riseBy ? await readRooms(season) : undefined;
+  const cut = Math.max(0, ...[...read.weeks.values()].flatMap((his) => his.map((w) => w.week)));
   let moved = 0;
 
   for (const player of players) {
@@ -259,13 +265,16 @@ export async function updateBoardLevels(
     }
 
     const anchor = player.projectedPpg;
-    const level = updateLevel(fit, { anchor, position: player.position, weeks });
+    const rise = rooms ? readRise(rooms, player.playerId, weeks, cut) : undefined;
+    const level = updateLevel(fit, {
+      anchor, position: player.position, weeks, ...(rise ? { rise } : {}),
+    });
     player.projectedPpg = level.ppg;
 
     if (player.projectedParts && anchor > 0) {
       player.projectedParts = updateParts({
         anchor: player.projectedParts,
-        observed: summarizeWindow(weeks, fit.shape).usage,
+        observed: summarizeWindow(weeks, fit.shape, rise).usage,
         fromSeason: level.weightOnRole + level.weightOnPoints,
         levelRatio: level.ppg / anchor,
       });
