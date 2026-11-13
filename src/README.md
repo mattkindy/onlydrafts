@@ -224,6 +224,7 @@ when you want to measure it again.
 | `KICKER_GAMES` staying one number for every kicker | `scripts/buildSite.ts` | `scripts/kickerSeasonEval.ts` |
 | `OUT_BACK`, how likely a man ruled out is to play each of his side's next four games, and no ramp after a short absence | `app/lib/availability.ts` | `scripts/outSpellEval.ts` |
 | `SHIPPED_SHAPE` breaking a drop in snap share at twenty points and a rise at thirty, held two games | `features/inSeasonBoard.ts` | `scripts/inSeasonLevelEval.ts` |
+| A rise read by why his snaps went up, a promotion, a fill-in or a depth change off his club's roster, off | `features/riseReason.ts`, `riseBy` in `features/inSeasonLevel.ts` | `scripts/inSeasonLevelEval.ts` |
 | The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
 | A card's spread outside the walk's cast being the pooled band | `scripts/buildSite.ts` | `scripts/bandSourceEval.ts` |
 | The weekly ridge fitted on past seasons alone, and adding its features up | `features/fitWeeklyByPosition.ts` | `scripts/inSeasonRowsEval.ts`, `scripts/weeklyInteractionEval.ts` |

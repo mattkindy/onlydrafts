@@ -3820,15 +3820,202 @@ row in ten; on the men it is about, the bias is gone.
 What did not help: a wider gap on its own (.25 is still .22 over) and the
 hold on its own (.30 over). Either half alone leaves most of the bias.
 
+## Why his snaps rose
+
+The wary rise guesses from the size of a move and how long it held. His
+club's roster says outright whether a man filling in for a hurt starter
+is what happened, so `src/features/riseReason.ts` reads it. The games he
+rose in are those of his last three twenty points or more over his share
+before them. Of the teammates at his position on his club, the one who
+lost the most share between his games before and the games he rose in is
+the man the snaps came from, and where that man lost under fifteen
+points nobody at his position is missing. Then, off the last roster of
+his club the cut has seen and the injury reports up to it:
+
+- a promotion: that man is on a reserve list, on the practice squad or
+  off the roster, or on another club;
+- a fill-in: he is on the roster and listed Out, Doubtful or
+  Questionable, or on the COVID list, or he missed one of the games and
+  has played since;
+- a depth change: he is playing, only less, or he is healthy and not
+  dressing, or nobody lost the snaps.
+
+A fullback is a room of his own: the roster files him as a back, only
+its depth chart column says fullback, and his snaps do not go to the
+tailback. Nothing after the cut is read, so a starter put on injured
+reserve the Tuesday after week 6 is a fill-in at week 6. The roster
+loader now keeps the league's reason code beside the status, since RES
+covers injured reserve and the COVID list alike.
+
+Every cut pooled over 2019 to 2025, the men whose snaps rose twenty
+points on the mean of the three games, and every man with one game of
+the three twenty points up:
+
+| why | rose .20 or more | rose in a game |
+| --- | --- | --- |
+| promotion | 208 | 409 |
+| promotion: a reserve list | 176 | 342 |
+| promotion: released | 6 | 14 |
+| promotion: traded | 26 | 53 |
+| fill-in | 395 | 822 |
+| fill-in: listed on the report | 244 | 462 |
+| fill-in: the COVID list | 3 | 7 |
+| fill-in: back already | 148 | 353 |
+| depth change | 237 | 829 |
+| depth: still playing, less | 125 | 461 |
+| depth: healthy, not dressing | 42 | 69 |
+| depth: nobody lost them | 70 | 299 |
+| all | 840 | 2060 |
+
+What each went on to do was not what the guess was. The bench reads past
+the cut for this one table: of the 2060 who rose in a game, his share of
+the snaps and his points a game before he rose, in the games he rose in,
+and over the rest of the season, and how often the man who lost the
+snaps played a fifth of a game or more for the club again:
+
+| why | players | snap share | points a game | the other man back |
+| --- | --- | --- | --- | --- |
+| promotion, a reserve list | 342 | .30, .61, .47 | 4.2, 8.1, 6.4 | .54 |
+| promotion, released | 14 | .39, .68, .53 | 5.3, 5.6, 6.0 | .14 |
+| promotion, traded | 53 | .28, .63, .50 | 3.4, 7.7, 5.8 | .02 |
+| fill-in, listed | 462 | .30, .65, .46 | 4.1, 8.5, 6.0 | .87 |
+| fill-in, the COVID list | 7 | .37, .73, .53 | 6.1, 8.6, 7.7 | .86 |
+| fill-in, back already | 353 | .30, .52, .42 | 4.0, 6.9, 5.5 | .92 |
+| depth, still playing less | 461 | .31, .53, .48 | 5.0, 7.8, 7.0 | .92 |
+| depth, healthy, not dressing | 69 | .37, .75, .67 | 6.5, 11.4, 11.1 | .61 |
+| depth, nobody lost them | 299 | .39, .58, .51 | 5.3, 6.8, 6.1 | |
+
+A fill-in keeps about half the share he gained, as expected. So does a
+promotion off a reserve list: the man on it played again after the cut
+54 times in a hundred, since a starter on injured reserve can come back
+after a few games. A depth change keeps two thirds to four fifths of it,
+and the man who took a healthy starter's place keeps nearly all of his
+points, 11.4 a game while rising and 11.1 after.
+
+`inSeasonLevelEval.ts` marks fourteen readings of a rise by its reason,
+each laid over the wary rise, out of sample on the one gap's weights
+the way the wary rise was marked and in sample on the shipped constant.
+A reason with no read of its own keeps the wary rise. At once reads only
+the games from the first he rose in, however few; whole reads every game
+and never breaks. Each reason's read moves only its own men, so they can
+be shown apart. Signed error, then MAE, out of sample, every cut pooled,
+first the 840 whose snaps rose twenty points:
+
+| why | the wary rise | at once | at .20, no hold | whole | other |
+| --- | --- | --- | --- | --- | --- |
+| promotion, 208 | +.191, 2.840 | +.901, 3.015 | +.658, 2.960 | -.704, 2.853 | |
+| fill-in, 395 | +.446, 2.840 | | | -.299, 2.746 | his games before he rose -1.853, 3.118; whole with half the season's weight back on the anchor -.380, 2.820 |
+| depth change, 237 | -1.064, 2.962 | -.231, 2.745 | -.502, 2.811 | | at .25 -.912, 2.899; at .20 held -.673, 2.884 |
+
+and the 2060 with one game of the three twenty points up:
+
+| why | the wary rise | at once | at .20, no hold | whole |
+| --- | --- | --- | --- | --- |
+| promotion, 409 | -.167, 2.598 | +.670, 2.732 | +.071, 2.659 | -.622, 2.605 |
+| fill-in, 822 | +.269, 2.606 | | | -.089, 2.561 |
+| depth change, 829 | -.672, 2.535 | +.119, 2.605 | -.512, 2.492 | |
+
+The reading this set out to test, a promotion at once and a fill-in
+read whole, loses. Read at once a promotion is held .90 a game above what
+he did, where the wary rise has him .19 over, and at twenty points
+without the hold he is .66 over. The wary rise is already the best read
+of a promotion. A fill-in read whole is better than the wary rise, .30
+under against .45 over, and dropping his fill-in games altogether, or
+handing half the weight back to the anchor, is worse. A depth change is
+where breaking sooner pays: at twenty points without the hold it goes
+from 1.06 under to .50 under on the rises of twenty and is better on the
+men who rose in one game too, where breaking at once is not.
+
+The whole pool, MAE:
+
+| after week | the wary rise | promotion at once, fill-in whole | a promotion at once | a fill-in whole | a depth change at .20 | fill-in whole, depth at .20 | shipped | shipped, fill-in whole, depth at .20 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2 | 2.454 | 2.454 | 2.454 | 2.454 | 2.454 | 2.454 | 2.462 | 2.462 |
+| 4 | 2.465 | 2.471 | 2.474 | 2.463 | 2.463 | 2.461 | 2.459 | 2.456 |
+| 6 | 2.476 | 2.479 | 2.479 | 2.477 | 2.472 | 2.472 | 2.460 | 2.455 |
+| 8 | 2.488 | 2.478 | 2.485 | 2.481 | 2.483 | 2.476 | 2.469 | 2.460 |
+| 10 | 2.524 | 2.534 | 2.538 | 2.520 | 2.524 | 2.519 | 2.518 | 2.519 |
+
+The last two columns are in sample. Nobody has four games at week 2, so
+nothing reads differently there. Every reading against the wary rise,
+the difference in MAE with its standard error from a paired bootstrap
+that draws whole players, 2000 draws: 840 rows from 424 players on the
+rises of twenty, 2060 from 641 rising in a game, 13572 from 1117 in the
+whole pool. Out of sample:
+
+| reading | rose .20 or more | rose in a game | whole pool | cuts it beats |
+| --- | --- | --- | --- | --- |
+| promotion at once, fill-in whole | -.001 ± .046 | +.009 ± .021 | +.0013 ± .0031 | 1 of 5 |
+| promotion at .20, fill-in whole | -.014 ± .042 | -.006 ± .016 | -.0009 ± .0025 | 2 of 5 |
+| promotion at once, fill-in whole, depth at once | -.062 ± .053 | +.037 ± .031 | +.0056 ± .0048 | 1 of 5 |
+| promotion at once, fill-in whole, depth at .20 | -.043 ± .051 | -.009 ± .022 | -.0013 ± .0033 | 2 of 5 |
+| promotion at once, fill-in on his games before | +.175 ± .086 | +.093 ± .037 | +.0141 ± .0057 | 0 of 5 |
+| promotion at once, fill-in half to the anchor | +.034 ± .059 | +.041 ± .029 | +.0062 ± .0044 | 1 of 5 |
+| a promotion at once alone | +.044 ± .025 | +.027 ± .015 | +.0041 ± .0023 | 1 of 5 |
+| a fill-in whole alone | -.044 ± .037 | -.018 ± .015 | -.0027 ± .0023 | 3 of 5 |
+| a depth change at .20 alone | -.043 ± .022 | -.017 ± .009 | -.0026 ± .0014 | 4 of 5 |
+| fill-in whole, depth at .20 | -.087 ± .043 | -.035 ± .017 | -.0054 ± .0026 | 4 of 5 |
+| fill-in whole, depth at once | -.105 ± .045 | +.010 ± .027 | +.0015 ± .0041 | 1 of 5 |
+| fill-in whole, depth at .20, promotion whole | -.083 ± .053 | -.034 ± .022 | -.0052 ± .0034 | 3 of 5 |
+| fill-in whole, depth at .25 | -.062 ± .039 | -.025 ± .015 | -.0038 ± .0024 | 4 of 5 |
+| fill-in whole, depth at .20 held | -.066 ± .042 | -.027 ± .017 | -.0041 ± .0026 | 4 of 5 |
+
+On the shipped constant, in sample, fill-in whole with a depth change at
+twenty is -.051 ± .031 on the rises of twenty, -.021 ± .013 on the men
+rising in a game, -.0032 ± .0019 on the whole pool, and beats it at
+weeks 4, 6 and 8 and loses week 10 by a thousandth. It takes the rises
+of twenty from .16 under to .28 under and their error from 2.783 to
+2.731. The reading this set out to test is +.011 ± .033, +.018 ± .015
+and +.0027 ± .0023 there, worse on all three.
+
+Season by season, out of sample, fill-in whole with a depth change at
+twenty against the wary rise, the whole pool then the rises of twenty:
+
+| season | whole pool | rose .20 or more |
+| --- | --- | --- |
+| 2019 | -.015 | -.190 |
+| 2020 | -.001 | -.012 |
+| 2021 | -.014 | -.244 |
+| 2022 | -.004 | -.065 |
+| 2023 | -.008 | -.141 |
+| 2024 | +.004 | +.068 |
+| 2025 | .000 | +.002 |
+
+Nothing ships. The reading this set out to test beats the wary rise at
+one cut of five, week 8, and is no better on the rises. The best
+reading, a fill-in read whole and a depth change broken at twenty
+without the hold, beats
+the wary rise at every cut that can differ out of sample and is two
+standard errors better on the rises and on the pool. But it was put
+together after the first eight readings showed which halves helped, it
+is the best of fourteen, its neighbours at .25 or held are a standard
+error and a half, on the shipped constant it is 1.6 to 1.7 standard
+errors and loses week 10, and the last two seasons do not back it. The
+best of fourteen coming in two standard errors up is what noise hands
+over often enough.
+
+The reasons are read and the reads are there, `riseBy` on the shape in
+`inSeasonLevel.ts`, switched off: the shipped shape gives no reason a
+read of its own, so the board reads every rise as before.
+`updateBoardLevels` reads the rosters and each riser's reason at build
+time only where the shape it is given has one. Run over every skill
+player in the 2026 files through week 9 with the best reading, it reads
+a reason for 107 risers and changes 11 numbers, so shipping it is one
+line in `SHIPPED_SHAPE`.
+
 ## What to try next on this
 
-Whether the rise came from a teammate at his position sitting out. A man
-filling in is the case this guards against, and the box score knows who
-was missing. Reading that directly could let a real promotion count at
-once and a fill-in not at all.
+Mark fill-in whole with a depth change at twenty alone on 2026 once it
+is played out, the one season it was not picked on, against the wary
+rise.
+
+Tell a starter put on injured reserve for the season from one who will
+be back in four games. Over half come back, which is why a promotion
+read at once is held too high, and the injury named on his last report
+might say which.
 
 Split the shrinkage by why a player's games are short, which the update's
-own section already asks for. Neither half of this touched it.
+own section already asks for. None of this touched it.
 
 # What a player's next three seasons are worth to a keeper league
 

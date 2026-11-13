@@ -179,6 +179,10 @@ export interface UpdateShape {
    * How a rise is read once it is known why his snaps went up, which
    * `riseReason.ts` reads off his club's roster. A reason with no entry
    * here, and a player with no reason, is read as any rise is above.
+   * The build ships none: the best reading the eval found, a fill-in
+   * read whole and a depth change broken at twenty, came in at two
+   * standard errors out of sample after fourteen were tried, and under
+   * that on the shipped constant.
    */
   riseBy?: Partial<Record<RiseReason, RiseRead>>;
   roleCap: number;
