@@ -20,7 +20,13 @@
  * `isRelevant`. Standard errors resample players, so a man who is in all
  * three seasons goes in or out as one.
  *
- * Run: npx tsx scripts/seasonsAheadEval.ts [--week 10] [--scoring half] [--ablate]
+ * `--taught` asks whether the stars' shortfall three seasons out is the
+ * bench's doing, since its t+3 fits are taught on two or three seasons
+ * and the build's on seven: it marks each cut again with every other
+ * season taught, the future ones included. That is a diagnostic, not a
+ * held out score.
+ *
+ * Run: npx tsx scripts/seasonsAheadEval.ts [--week 10] [--scoring half] [--ablate] [--taught]
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -46,6 +52,7 @@ function argOf(flag: string, fallback: string): string {
 const WEEK = Number(argOf("--week", "10"));
 const FORMAT = argOf("--scoring", "half") as ScoringFormat;
 const ABLATE = process.argv.includes("--ablate");
+const TAUGHT = process.argv.includes("--taught");
 
 const FIRST_READ = 2015;
 const FIRST_ROW = 2016;
@@ -70,6 +77,8 @@ interface Marked {
   row: AheadRow;
   actual: number;
   said: Record<string, number>;
+  /** the model's rate and games, apart */
+  ahead?: SeasonAhead;
 }
 
 const total = (s: SeasonAhead | undefined) => (s ? s.ppg * s.games : 0);
@@ -185,6 +194,7 @@ function marksFor(
     return {
       row,
       actual: row.ahead[horizon - 1]!.points,
+      ahead: model,
       said: {
         carried: total(carriedForward(row)),
         aged: total(ageCurved(curve, row)),
@@ -364,6 +374,110 @@ function printAblation(rowsBySeason: Map<number, AheadRow[]>): void {
       `t+${k + 1} ${f1(mae(m, "model"))} against aged ${f1(mae(m, "aged"))}`).join(", ")}`);
 }
 
+/* ---------- is the stars' shortfall the bench or the model ---------- */
+
+const isStar = BREAKOUTS.find(([who]) => who === "fourteen a game or more so far")![1];
+
+const biasOf = (rows: Marked[], reader = "model") =>
+  meanOf(rows.map((m) => m.said[reader]! - m.actual));
+
+/** the cut seasons with an outcome that far on, oldest first */
+const seasonsWith = (rowsBySeason: Map<number, AheadRow[]>, horizon: number) =>
+  [...rowsBySeason.keys()].sort((a, b) => a - b)
+    .filter((s) => (rowsBySeason.get(s) ?? []).some((row) => row.ahead[horizon - 1] !== undefined));
+
+const rowsOf = (rowsBySeason: Map<number, AheadRow[]>, seasons: number[], horizon: number) =>
+  seasons.flatMap((s) => finishedRows(rowsBySeason.get(s) ?? [], horizon));
+
+/**
+ * Where a group's miss is: the games said against played over all of
+ * them, and the rate said against had over the games they did play.
+ */
+function partsOf(marked: Marked[], horizon: number): string {
+  const later = (m: Marked) => m.row.ahead[horizon - 1]!;
+  const played = marked.filter((m) => later(m).games >= 1);
+  const games = played.reduce((sum, m) => sum + later(m).games, 0);
+  const rateSaid = played.reduce((sum, m) => sum + (m.ahead?.ppg ?? 0) * later(m).games, 0) / games;
+  const rateHad = played.reduce((sum, m) => sum + later(m).points, 0) / games;
+
+  return `${f1(meanOf(marked.map((m) => m.ahead?.games ?? 0)))} / ${f1(meanOf(marked.map((m) => later(m).games)))} | ` +
+    `${f1(rateSaid)} / ${f1(rateHad)}`;
+}
+
+const starLine = (label: string, stars: Marked[], horizon: number) =>
+  `| ${label} | ${stars.length} | ${signed(biasOf(stars))} | ${f1(bootSe(stars, (r) => biasOf(r)))} | ` +
+    `${partsOf(stars, horizon)} |`;
+
+/**
+ * Each cut marked twice: by fits taught on the seasons before it, the
+ * way the held out seasons are, and by fits taught on every other season
+ * with an outcome that far on, the later ones included. The second is
+ * not a score anybody could have had on the day; it says only whether
+ * the shortfall shrinks once a fit has more seasons to learn from.
+ */
+function printTaught(rowsBySeason: Map<number, AheadRow[]>): void {
+  console.log(
+    "\nDIAGNOSTIC, not a held out score: the stars, fourteen a game or more so far, " +
+      "marked by fits taught on the seasons before the cut and by fits taught on every other season");
+
+  for (let horizon = 1; horizon <= HORIZONS; horizon++) {
+    const seasons = seasonsWith(rowsBySeason, horizon);
+
+    console.log(`\nseason t+${horizon}, star bias in season points (everybody's beside it)`);
+    console.log("| cut | the seasons before it, all | the last two | the last three | every other season |");
+    console.log("| --- | --- | --- | --- | --- |");
+
+    const pooled = { honest: [] as Marked[], other: [] as Marked[] };
+
+    for (const test of seasons) {
+      const before = seasons.filter((s) => s <= test - 1 - horizon);
+      const testRows = finishedRows(rowsBySeason.get(test) ?? [], horizon).filter(isRelevant);
+      const cell = (taught: number[], keep?: Marked[]) => {
+        if (taught.length === 0) {
+          return "";
+        }
+
+        const train = rowsOf(rowsBySeason, taught, horizon);
+        const marked = marksFor(train, testRows, horizon);
+
+        keep?.push(...marked);
+
+        return `${signed(biasOf(marked.filter((m) => isStar(m.row))))} (${signed(biasOf(marked))}), ${taught.length}`;
+      };
+
+      console.log(
+        `| ${test} | ${cell(before, pooled.honest)} | ` +
+          `${before.length > 2 ? cell(before.slice(-2)) : ""} | ` +
+          `${before.length > 3 ? cell(before.slice(-3)) : ""} | ` +
+          `${cell(seasons.filter((s) => s !== test), pooled.other)} |`);
+    }
+
+    const held = HELD_OUT[horizon]!;
+    const heldIn = (marked: Marked[]) => marked.filter((m) => held.includes(m.row.season));
+    const rows: [string, Marked[]][] = [
+      ["the held out cuts, taught on the seasons before them", heldIn(pooled.honest)],
+      ["the held out cuts, taught on every other season", heldIn(pooled.other)],
+      ["every cut, taught on every other season", pooled.other],
+    ];
+
+    console.log("\n| the stars | players | bias | se | games said / played | rate said / had |");
+    console.log("| --- | --- | --- | --- | --- | --- |");
+
+    for (const [label, marked] of rows) {
+      console.log(starLine(label, marked.filter((m) => isStar(m.row)), horizon));
+    }
+
+    for (const position of ["QB", "RB", "WR", "TE"]) {
+      const mine = (m: Marked) => isStar(m.row) && m.row.position === position;
+
+      console.log(starLine(
+        `${position}, held out cuts taught before them`,
+        pooled.honest.filter((m) => mine(m) && held.includes(m.row.season)), horizon));
+      console.log(starLine(`${position}, every cut taught on every other`, pooled.other.filter(mine), horizon));
+    }
+  }
+}
+
 /* ---------- the case that started this ---------- */
 
 const LOVE = "00-0041027";
@@ -478,6 +592,10 @@ async function main(): Promise<void> {
 
   if (ABLATE) {
     printAblation(rowsBySeason);
+  }
+
+  if (TAUGHT) {
+    printTaught(rowsBySeason);
   }
 
   printCase(rowsBySeason);
