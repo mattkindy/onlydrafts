@@ -872,6 +872,76 @@ function printStars(rowsBySeason: Map<number, AheadRow[]>): void {
   }
 }
 
+/**
+ * Why one man's games rise past next season: what the share of his
+ * club's games he has played and the square of his pooled rate add to
+ * the shipped games fit at each horizon, against an average man at his
+ * position, and what stars who had missed games by the cut went on to
+ * play.
+ */
+function printGamesShape(rowsBySeason: Map<number, AheadRow[]>, name: string): void {
+  const season = Math.max(...rowsBySeason.keys());
+  const him = rowsBySeason.get(season)?.find((row) => row.name === name);
+
+  if (!him) {
+    return;
+  }
+
+  const keep = AHEAD_TERMS.map((term, i) => [term, i] as const)
+    .filter(([term]) => SHIPPED_TERMS.includes(term));
+  const termsOf = (row: AheadRow) => {
+    const all = aheadTerms(row);
+
+    return keep.map(([, i]) => all[i]!);
+  };
+
+  console.log(
+    `\n${name}, week ${WEEK} of ${season}: ${him.games} games of ${him.clubGames} at ` +
+      `${f1(ppgOf(him))} a game, this season and last pooled at ${f1(pooledRate(him))}`);
+  console.log(
+    "| horizon | games said, before the cap | the share of his club's games adds, against an average man at his position | " +
+      "the square of the pooled rate adds | as a hurdle |");
+  console.log("| --- | --- | --- | --- | --- |");
+
+  for (let horizon = 1; horizon <= HORIZONS; horizon++) {
+    const train = rowsOf(rowsBySeason, [...rowsBySeason.keys()].filter((s) => s <= season - 1 - horizon), horizon);
+    const mine = taughtOn(train, horizon).filter((row) => row.position === him.position);
+    const X = mine.map(termsOf);
+    const fit = ridgeOn(X, mine.map((row) => row.ahead[horizon - 1]!.games), mine.map(() => 1), X[0]!.map(() => 1));
+    const z = standardizedRow(fit.scaling, termsOf(him));
+    const adds = (term: AheadTerm) => {
+      const j = keep.findIndex(([t]) => t === term);
+
+      return fit.weights[j + 1]! * z[j + 1]!;
+    };
+    const hurdle = readerFor(train, horizon, HURDLE)(him);
+
+    console.log(
+      `| t+${horizon} | ${f1(linearAt(fit, termsOf(him)))} | ${signed(adds("share of his club's games played"))} | ` +
+        `${signed(adds("the same, squared"))} | ${hurdle ? f1(hurdle.games) : "-"} |`);
+  }
+
+  const done = [...rowsBySeason.values()].flat()
+    .filter((row) => row.ahead.every((a) => a !== undefined) && isRelevant(row));
+  const groups: [string, (row: AheadRow) => boolean][] = [
+    ["fourteen a game or more, had missed a fifth of his club's games or more",
+      (row) => row.games >= 4 && ppgOf(row) >= 14 && row.games < 0.8 * row.clubGames],
+    ["fourteen a game or more, had missed none", (row) => row.games >= 4 && ppgOf(row) >= 14 && row.games >= row.clubGames],
+    ["seventeen a game or more", (row) => row.games >= 4 && ppgOf(row) >= 17],
+  ];
+
+  console.log("\nwhat they played in each of the next three seasons, every cut whose three have finished");
+  console.log("| who at the cut | players | t+1 | t+2 | t+3 |");
+  console.log("| --- | --- | --- | --- | --- |");
+
+  for (const [who, picked] of groups) {
+    const rows = done.filter(picked);
+
+    console.log(
+      `| ${who} | ${rows.length} | ${[0, 1, 2].map((k) => f1(meanOf(rows.map((row) => row.ahead[k]!.games)))).join(" | ")} |`);
+  }
+}
+
 /* ---------- the case that started this ---------- */
 
 const LOVE = "00-0041027";
@@ -994,6 +1064,7 @@ async function main(): Promise<void> {
 
   if (STARS) {
     printStars(rowsBySeason);
+    printGamesShape(rowsBySeason, "Puka Nacua");
   }
 
   printCase(rowsBySeason);
