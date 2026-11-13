@@ -252,6 +252,7 @@ async function rostersFrom(
       yearsExperience: toNumber(row["years_exp"]),
       depthPosition: row["depth_chart_position"] || undefined,
       status: row["status"] || undefined,
+      statusCode: row["status_description_abbr"] || undefined,
     }));
 }
 

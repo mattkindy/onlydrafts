@@ -34,6 +34,12 @@ export interface RosterAppearance {
    * play and nobody knows for how long.
    */
   status?: string;
+  /**
+   * The league's own code for why, where the file has one: R01 is
+   * injured reserve and R59 the COVID list, both RES above, though the
+   * second was a week or two. 2019 leaves it blank on most rows.
+   */
+  statusCode?: string;
 }
 
 /** nflverse roster labels collapsed into the graph's position groups. */

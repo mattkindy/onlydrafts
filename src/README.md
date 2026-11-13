@@ -115,7 +115,18 @@ points a season closer at t+1, t+2 and t+3, ranks the seasons at .67,
 .62 and .60 against .62, .55 and .53, and is one to two and a half
 points low where the curve is nine to eleven. Jeremiyah Love, taken
 third in 2026 and on reserve by November, comes out at 13.7 a game over
-13.1 games in 2027 against the 11.1 the board has him at now.
+13.1 games in 2027 against the 11.1 the board has him at now. A player
+scoring fourteen a game or more is held 13 season points short three
+seasons on. Taught on every other season rather than the two or three
+the bench can use, that is 11 on the same cuts and 5.5 over all seven,
+with a standard error of 6.8, and it is all games: on the held out cuts
+it is mostly thirty backs who lasted into 2024 and 2025. Nothing tried
+for it shipped. The games run high at the top two and three seasons on,
+where the square of the rate bends the games fit up, which is why Puka
+Nacua's later seasons climb to the cap of seventeen; the cap does real
+work, and reading the games as the chance he plays times his games if
+he does is closer, but waits for a bench that can teach it on more than
+three seasons.
 
 ## Which way things are passed
 
@@ -224,6 +235,7 @@ when you want to measure it again.
 | `KICKER_GAMES` staying one number for every kicker | `scripts/buildSite.ts` | `scripts/kickerSeasonEval.ts` |
 | `OUT_BACK`, how likely a man ruled out is to play each of his side's next four games, and no ramp after a short absence | `app/lib/availability.ts` | `scripts/outSpellEval.ts` |
 | `SHIPPED_SHAPE` breaking a drop in snap share at twenty points and a rise at thirty, held two games | `features/inSeasonBoard.ts` | `scripts/inSeasonLevelEval.ts` |
+| A rise read by why his snaps went up, a promotion, a fill-in or a depth change off his club's roster, off | `features/riseReason.ts`, `riseBy` in `features/inSeasonLevel.ts` | `scripts/inSeasonLevelEval.ts` |
 | The browser engine agreeing with the Node simulator | `app/lib/remainder.test.ts` | `scripts/simAgreement.ts` |
 | A card's spread outside the walk's cast being the pooled band | `scripts/buildSite.ts` | `scripts/bandSourceEval.ts` |
 | The weekly ridge fitted on past seasons alone, and adding its features up | `features/fitWeeklyByPosition.ts` | `scripts/inSeasonRowsEval.ts`, `scripts/weeklyInteractionEval.ts` |

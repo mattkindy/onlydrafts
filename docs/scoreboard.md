@@ -1473,6 +1473,24 @@ so the ridge ships. The term by term table and the misses that are
 left, the stars at t+3 and the first round rookies two years on, are in
 `scripts/README.md`.
 
+The stars three seasons on, fourteen a game or more so far, are 13.0
+season points short on 106 players with a standard error of 10.7.
+Taught on every other season, which is a diagnostic and not a score,
+they are 11.3 short on the same cuts and 5.5 over all seven, so the
+bench's short t+3 teaching is under two points of it. The miss is the
+games, not the rate, and on the held out cuts it is thirty backs who
+lasted into 2024 and 2025. Eight ways of lifting them were chosen on
+the development seasons and checked on the held out ones, and none
+ships: the one that moves the stars, how many of his last three seasons
+were at his position's star line, takes them to 6.4 short by putting the
+stars who were stars last season too seven over. The games run high at
+the top, the men said to play fifteen or more two seasons on playing
+about fourteen, and the cap at seventeen does real work. Reading the
+games as the chance he plays times his games if he does is closer at
+every horizon, 0.4, 0.8 and 0.4 on the held out seasons, but taught on
+two and three seasons it holds the stars at t+3 five points shorter, so
+it waits for a longer bench.
+
 Jeremiyah Love, third pick in 2026 and on reserve at week 10, comes out
 at 13.7 a game in 13.1 games in 2027, 13.8 in 13.2 in 2028 and 12.1 in
 13.2 in 2029, against the 11.1 a game the board has him at now.

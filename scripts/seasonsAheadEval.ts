@@ -20,21 +20,30 @@
  * `isRelevant`. Standard errors resample players, so a man who is in all
  * three seasons goes in or out as one.
  *
- * Run: npx tsx scripts/seasonsAheadEval.ts [--week 10] [--scoring half] [--ablate]
+ * `--taught` asks whether the stars' shortfall three seasons out is the
+ * bench's doing, since its t+3 fits are taught on two or three seasons
+ * and the build's on seven: it marks each cut again with every other
+ * season taught, the future ones included. That is a diagnostic, not a
+ * held out score. `--stars` measures the ways of lifting the stars that
+ * were tried and the ways of reading the games, none of which ships.
+ *
+ * Run: npx tsx scripts/seasonsAheadEval.ts [--week 10] [--scoring half] [--ablate] [--taught] [--stars]
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fitGbm, predictGbm, type GbmModel } from "../src/backtest/gbm.js";
 import { spearman } from "../src/backtest/metrics.js";
+import { fitRidge, predictRidge } from "../src/backtest/ridge.js";
 import {
-  HORIZONS, readSeasons, rowsAt, type AheadRow,
+  AHEAD_POSITIONS, HORIZONS, readSeasons, rowsAt, type AheadRow, type SeasonOutcome,
 } from "../src/features/aheadRows.js";
 import {
-  aheadTerms, AHEAD_TERMS, ageCurved, carriedForward, fitAgeCurve, fitAhead,
-  isRelevant, ppgOf, predictAhead, SHIPPED_TERMS,
+  aheadTerms, AHEAD_LAMBDA, AHEAD_TERMS, ageCurved, carriedForward, fitAgeCurve, fitAhead,
+  isRelevant, ppgOf, predictAhead, SHIPPED_TERMS, taughtOn,
   type AheadOptions, type AheadTerm, type SeasonAhead,
 } from "../src/model/seasonsAhead.js";
+import { scalingFor, standardizedRow, type TermScaling } from "../src/model/termScaling.js";
 import { scoringRules, type ScoringFormat } from "../src/scoring/fantasyPoints.js";
 
 function argOf(flag: string, fallback: string): string {
@@ -46,6 +55,8 @@ function argOf(flag: string, fallback: string): string {
 const WEEK = Number(argOf("--week", "10"));
 const FORMAT = argOf("--scoring", "half") as ScoringFormat;
 const ABLATE = process.argv.includes("--ablate");
+const TAUGHT = process.argv.includes("--taught");
+const STARS = process.argv.includes("--stars");
 
 const FIRST_READ = 2015;
 const FIRST_ROW = 2016;
@@ -70,6 +81,8 @@ interface Marked {
   row: AheadRow;
   actual: number;
   said: Record<string, number>;
+  /** the model's rate and games, apart */
+  ahead?: SeasonAhead;
 }
 
 const total = (s: SeasonAhead | undefined) => (s ? s.ppg * s.games : 0);
@@ -185,6 +198,7 @@ function marksFor(
     return {
       row,
       actual: row.ahead[horizon - 1]!.points,
+      ahead: model,
       said: {
         carried: total(carriedForward(row)),
         aged: total(ageCurved(curve, row)),
@@ -364,6 +378,574 @@ function printAblation(rowsBySeason: Map<number, AheadRow[]>): void {
       `t+${k + 1} ${f1(mae(m, "model"))} against aged ${f1(mae(m, "aged"))}`).join(", ")}`);
 }
 
+/* ---------- is the stars' shortfall the bench or the model ---------- */
+
+const isStar = BREAKOUTS.find(([who]) => who === "fourteen a game or more so far")![1];
+
+const biasOf = (rows: Marked[], reader = "model") =>
+  meanOf(rows.map((m) => m.said[reader]! - m.actual));
+
+/** the cut seasons with an outcome that far on, oldest first */
+const seasonsWith = (rowsBySeason: Map<number, AheadRow[]>, horizon: number) =>
+  [...rowsBySeason.keys()].sort((a, b) => a - b)
+    .filter((s) => (rowsBySeason.get(s) ?? []).some((row) => row.ahead[horizon - 1] !== undefined));
+
+const rowsOf = (rowsBySeason: Map<number, AheadRow[]>, seasons: number[], horizon: number) =>
+  seasons.flatMap((s) => finishedRows(rowsBySeason.get(s) ?? [], horizon));
+
+/**
+ * Where a group's miss is: the games said against played over all of
+ * them, and the rate said against had over the games they did play.
+ */
+function partsOf(marked: Marked[], horizon: number): string {
+  const later = (m: Marked) => m.row.ahead[horizon - 1]!;
+  const played = marked.filter((m) => later(m).games >= 1);
+  const games = played.reduce((sum, m) => sum + later(m).games, 0);
+  const rateSaid = played.reduce((sum, m) => sum + (m.ahead?.ppg ?? 0) * later(m).games, 0) / games;
+  const rateHad = played.reduce((sum, m) => sum + later(m).points, 0) / games;
+
+  return `${f1(meanOf(marked.map((m) => m.ahead?.games ?? 0)))} / ${f1(meanOf(marked.map((m) => later(m).games)))} | ` +
+    `${f1(rateSaid)} / ${f1(rateHad)}`;
+}
+
+const starLine = (label: string, stars: Marked[], horizon: number) =>
+  `| ${label} | ${stars.length} | ${signed(biasOf(stars))} | ${f1(bootSe(stars, (r) => biasOf(r)))} | ` +
+    `${partsOf(stars, horizon)} |`;
+
+/**
+ * Each cut marked twice: by fits taught on the seasons before it, the
+ * way the held out seasons are, and by fits taught on every other season
+ * with an outcome that far on, the later ones included. The second is
+ * not a score anybody could have had on the day; it says only whether
+ * the shortfall shrinks once a fit has more seasons to learn from.
+ */
+function printTaught(rowsBySeason: Map<number, AheadRow[]>): void {
+  console.log(
+    "\nDIAGNOSTIC, not a held out score: the stars, fourteen a game or more so far, " +
+      "marked by fits taught on the seasons before the cut and by fits taught on every other season");
+
+  for (let horizon = 1; horizon <= HORIZONS; horizon++) {
+    const seasons = seasonsWith(rowsBySeason, horizon);
+
+    console.log(`\nseason t+${horizon}, star bias in season points (everybody's beside it)`);
+    console.log("| cut | the seasons before it, all | the last two | the last three | every other season |");
+    console.log("| --- | --- | --- | --- | --- |");
+
+    const pooled = { honest: [] as Marked[], other: [] as Marked[] };
+    const hurdle = { honest: [] as Marked[], other: [] as Marked[] };
+
+    for (const test of seasons) {
+      const before = seasons.filter((s) => s <= test - 1 - horizon);
+      const testRows = finishedRows(rowsBySeason.get(test) ?? [], horizon).filter(isRelevant);
+      const cell = (taught: number[], keep?: Marked[], keepHurdle?: Marked[]) => {
+        if (taught.length === 0) {
+          return "";
+        }
+
+        const train = rowsOf(rowsBySeason, taught, horizon);
+        const marked = marksFor(train, testRows, horizon);
+
+        keep?.push(...marked);
+        keepHurdle?.push(...markWith(readerFor(train, horizon, HURDLE), testRows, horizon));
+
+        return `${signed(biasOf(marked.filter((m) => isStar(m.row))))} (${signed(biasOf(marked))}), ${taught.length}`;
+      };
+
+      console.log(
+        `| ${test} | ${cell(before, pooled.honest, hurdle.honest)} | ` +
+          `${before.length > 2 ? cell(before.slice(-2)) : ""} | ` +
+          `${before.length > 3 ? cell(before.slice(-3)) : ""} | ` +
+          `${cell(seasons.filter((s) => s !== test), pooled.other, hurdle.other)} |`);
+    }
+
+    const held = HELD_OUT[horizon]!;
+    const heldIn = (marked: Marked[]) => marked.filter((m) => held.includes(m.row.season));
+    const rows: [string, Marked[]][] = [
+      ["the held out cuts, taught on the seasons before them", heldIn(pooled.honest)],
+      ["the held out cuts, taught on every other season", heldIn(pooled.other)],
+      ["every cut, taught on every other season", pooled.other],
+      ["the games as a hurdle, the held out cuts taught before them", heldIn(hurdle.honest)],
+      ["the games as a hurdle, every cut taught on every other", hurdle.other],
+    ];
+
+    console.log("\n| the stars | players | bias | se | games said / played | rate said / had |");
+    console.log("| --- | --- | --- | --- | --- | --- |");
+
+    for (const [label, marked] of rows) {
+      console.log(starLine(label, marked.filter((m) => isStar(m.row)), horizon));
+    }
+
+    for (const position of ["QB", "RB", "WR", "TE"]) {
+      const mine = (m: Marked) => isStar(m.row) && m.row.position === position;
+
+      console.log(starLine(`${position}, held out cuts taught before them`, heldIn(pooled.honest).filter(mine), horizon));
+      console.log(starLine(`${position}, held out cuts taught on every other`, heldIn(pooled.other).filter(mine), horizon));
+      console.log(starLine(`${position}, every cut taught on every other`, pooled.other.filter(mine), horizon));
+    }
+  }
+}
+
+/* ---------- ways of lifting the stars, and of reading the games ---------- */
+
+const GAMES = 17;
+
+/**
+ * A reading of the seasons ahead the model module does not offer, fitted
+ * here so the ones that lost can be measured again. With nothing set it
+ * is the shipped fit, and `printStars` checks that it says the same.
+ */
+interface Reading {
+  /** terms read past the shipped ones */
+  extra?: (row: AheadRow) => number[];
+  /** shipped terms left out to make room for them */
+  drop?: AheadTerm[];
+  /** a multiple of the penalty on the four rate terms */
+  ratePenalty?: number;
+  /** one fit across the positions with an offset for each, rather than one each */
+  pooled?: boolean;
+  /**
+   * The games as a ridge, as a logistic out of seventeen, or as the chance
+   * he plays at all times his games if he does, each a logistic
+   */
+  games?: "ridge" | "logistic" | "logistic hurdle";
+  /** where the games stop */
+  cap?: number;
+  /** a straight line through the season totals, fitted on each training season left out in turn */
+  calibrated?: boolean;
+}
+
+interface Fit {
+  scaling: TermScaling;
+  weights: number[];
+  centre: number;
+}
+
+const RATE_TERMS: AheadTerm[] = [
+  "points a game so far", "points a game last season",
+  "points a game, this season and last", "the same, squared",
+];
+
+/**
+ * The model's weighted ridge, each column pulled in by the shared penalty
+ * times its own multiple: a column scaled by one over the root of its
+ * multiple before the fit, and its weight by the same after, is penalised
+ * by exactly that multiple.
+ */
+function ridgeOn(X: number[][], y: number[], w: number[], multiples: number[]): Fit {
+  const scaling = scalingFor(X);
+  const total = w.reduce((a, b) => a + b, 0);
+  const centre = y.reduce((sum, v, i) => sum + v * w[i]!, 0) / total;
+  const scale = [1, ...multiples].map((m) => 1 / Math.sqrt(m));
+  const Z = X.map((terms, i) =>
+    standardizedRow(scaling, terms).map((x, j) => x * scale[j]! * Math.sqrt(w[i]!)));
+  const z = y.map((v, i) => (v - centre) * Math.sqrt(w[i]!));
+
+  return { scaling, weights: fitRidge(Z, z, AHEAD_LAMBDA).map((v, j) => v * scale[j]!), centre };
+}
+
+/** a ridge logistic of a count out of `tries`, by iteratively reweighted least squares */
+function logisticOn(X: number[][], y: number[], tries: number): Fit {
+  const scaling = scalingFor(X);
+  const Z = X.map((terms) => standardizedRow(scaling, terms));
+  const share = Math.min(0.99, Math.max(0.01, meanOf(y) / tries));
+  let weights = Z[0]!.map((_, j) => (j === 0 ? Math.log(share / (1 - share)) : 0));
+
+  for (let step = 0; step < 25; step++) {
+    const rows: number[][] = [];
+    const targets: number[] = [];
+
+    Z.forEach((z, i) => {
+      const eta = predictRidge(weights, z);
+      const p = 1 / (1 + Math.exp(-eta));
+      const spread = Math.max(1e-6, tries * p * (1 - p));
+
+      rows.push(z.map((x) => x * Math.sqrt(spread)));
+      targets.push((eta + (y[i]! - tries * p) / spread) * Math.sqrt(spread));
+    });
+
+    const next = fitRidge(rows, targets, AHEAD_LAMBDA);
+    const moved = Math.max(...next.map((v, j) => Math.abs(v - weights[j]!)));
+
+    weights = next;
+
+    if (moved < 1e-6) {
+      break;
+    }
+  }
+
+  return { scaling, weights, centre: 0 };
+}
+
+const linearAt = (fit: Fit, terms: number[]) =>
+  fit.centre + predictRidge(fit.weights, standardizedRow(fit.scaling, terms));
+const chanceAt = (fit: Fit, terms: number[]) =>
+  1 / (1 + Math.exp(-predictRidge(fit.weights, standardizedRow(fit.scaling, terms))));
+
+type Reader = (row: AheadRow) => SeasonAhead | undefined;
+
+function readerFor(train: AheadRow[], horizon: number, reading: Reading): Reader {
+  if (reading.calibrated) {
+    return calibratedReader(train, horizon, { ...reading, calibrated: false });
+  }
+
+  const drop = reading.drop ?? [];
+  const keep = AHEAD_TERMS.map((term, i) => [term, i] as const)
+    .filter(([term]) => SHIPPED_TERMS.includes(term) && !drop.includes(term));
+  const termsOf = (row: AheadRow) => {
+    const all = aheadTerms(row);
+
+    return [
+      ...keep.map(([, i]) => all[i]!),
+      ...(reading.extra?.(row) ?? []),
+      ...(reading.pooled ? ["QB", "RB", "TE"].map((p) => (row.position === p ? 1 : 0)) : []),
+    ];
+  };
+  const multiples = (width: number) => Array.from({ length: width }, (_, j) =>
+    j < keep.length && RATE_TERMS.includes(keep[j]![0]) ? reading.ratePenalty ?? 1 : 1);
+  const games = reading.games ?? "ridge";
+  const fits = new Map<string, { ppg: Fit; games: Fit; plays?: Fit }>();
+
+  for (const group of reading.pooled ? [AHEAD_POSITIONS] : AHEAD_POSITIONS.map((p) => [p])) {
+    const mine = taughtOn(train, horizon).filter((row) => group.includes(row.position));
+    const later = (row: AheadRow) => row.ahead[horizon - 1]!;
+    const played = mine.filter((row) => later(row).games >= 1);
+
+    if (played.length < 20) {
+      continue;
+    }
+
+    const X = mine.map(termsOf);
+    const Xp = played.map(termsOf);
+    const penalties = multiples(X[0]!.length);
+    const fit = {
+      ppg: ridgeOn(Xp, played.map((row) => later(row).points / later(row).games),
+        played.map((row) => Math.min(GAMES, later(row).games) / GAMES), penalties),
+      games: games === "ridge"
+        ? ridgeOn(X, mine.map((row) => later(row).games), mine.map(() => 1), penalties)
+        : games === "logistic"
+          ? logisticOn(X, mine.map((row) => Math.min(GAMES, later(row).games)), GAMES)
+          : logisticOn(Xp, played.map((row) => Math.min(GAMES - 1, later(row).games - 1)), GAMES - 1),
+      plays: games === "logistic hurdle"
+        ? logisticOn(X, mine.map((row) => (later(row).games >= 1 ? 1 : 0)), 1)
+        : undefined,
+    };
+
+    for (const position of group) {
+      fits.set(position, fit);
+    }
+  }
+
+  return (row) => {
+    const his = fits.get(row.position);
+
+    if (!his) {
+      return undefined;
+    }
+
+    const terms = termsOf(row);
+    const said = his.plays
+      ? chanceAt(his.plays, terms) * (1 + (GAMES - 1) * chanceAt(his.games, terms))
+      : games === "logistic" ? GAMES * chanceAt(his.games, terms) : linearAt(his.games, terms);
+
+    return {
+      ppg: Math.max(0, linearAt(his.ppg, terms)),
+      games: Math.min(reading.cap ?? GAMES, Math.max(0, said)),
+    };
+  };
+}
+
+/**
+ * The reading with a straight line laid over its season totals, the line
+ * fitted on what it said of each training season with that season left
+ * out of its teaching. Only the games move, so the rate stays his.
+ */
+function calibratedReader(train: AheadRow[], horizon: number, reading: Reading): Reader {
+  const base = readerFor(train, horizon, reading);
+  const seasons = [...new Set(taughtOn(train, horizon).map((row) => row.season))];
+
+  if (seasons.length < 2) {
+    return base;
+  }
+
+  const said: number[] = [];
+  const had: number[] = [];
+
+  for (const season of seasons) {
+    const inner = readerFor(train.filter((row) => row.season !== season), horizon, reading);
+
+    for (const row of taughtOn(train, horizon)) {
+      if (row.season === season && isRelevant(row)) {
+        said.push(total(inner(row)));
+        had.push(row.ahead[horizon - 1]!.points);
+      }
+    }
+  }
+
+  const x = meanOf(said);
+  const y = meanOf(had);
+  const slope = said.reduce((sum, s, i) => sum + (s - x) * (had[i]! - y), 0) /
+    said.reduce((sum, s) => sum + (s - x) ** 2, 0);
+
+  return (row) => {
+    const season = base(row);
+
+    return season && season.ppg > 0
+      ? {
+          ppg: season.ppg,
+          games: Math.min(GAMES, Math.max(0, y + slope * (total(season) - x)) / season.ppg),
+        }
+      : season;
+  };
+}
+
+const rateOf = (season: SeasonOutcome | undefined) =>
+  season && season.games > 0 ? season.points / season.games : 0;
+const pooledRate = (row: AheadRow) => aheadTerms(row)[AHEAD_TERMS.indexOf("points a game, this season and last")]!;
+
+/** this season, last and the one before, at weights of one, a half and a quarter */
+function threeSeasons(row: AheadRow): number {
+  const games = row.games + 0.5 * (row.last?.games ?? 0) + 0.25 * (row.before?.games ?? 0);
+
+  return games > 0
+    ? (row.points + 0.5 * (row.last?.points ?? 0) + 0.25 * (row.before?.points ?? 0)) / games
+    : 0;
+}
+
+/** his best rate of the three, this season over four games or more and the others over six */
+const bestSeason = (row: AheadRow) => Math.max(
+  row.games >= 4 ? ppgOf(row) : 0,
+  (row.last?.games ?? 0) >= 6 ? rateOf(row.last) : 0,
+  (row.before?.games ?? 0) >= 6 ? rateOf(row.before) : 0,
+);
+
+/** a star's rate at each position, about where the top dozen start */
+const STAR_LINE: Record<string, number> = { QB: 18, RB: 14, WR: 14, TE: 11 };
+
+/** how many of this season, last and the one before he scored at his position's star line */
+function starSeasons(row: AheadRow): number {
+  const line = STAR_LINE[row.position] ?? 14;
+
+  return (row.games >= 4 && ppgOf(row) >= line ? 1 : 0) +
+    ((row.last?.games ?? 0) >= 6 && rateOf(row.last) >= line ? 1 : 0) +
+    ((row.before?.games ?? 0) >= 6 && rateOf(row.before) >= line ? 1 : 0);
+}
+
+/** the games as the chance he plays at all, times his games if he does */
+const HURDLE: Reading = { games: "logistic hurdle" };
+
+const READINGS: Record<string, Reading> = {
+  "with his best season of the three": { extra: (row) => [bestSeason(row)] },
+  "with three seasons pooled and its square": {
+    extra: (row) => [threeSeasons(row), threeSeasons(row) ** 2],
+  },
+  "three seasons pooled in place of two": {
+    drop: ["points a game, this season and last", "the same, squared"],
+    extra: (row) => [threeSeasons(row), threeSeasons(row) ** 2],
+  },
+  "with how many of the three were at his position's star line": {
+    extra: (row) => [starSeasons(row)],
+  },
+  "with the pooled rate times his age": {
+    extra: (row) => [pooledRate(row) * ((row.age ?? 26) - 26)],
+  },
+  "a tenth of the penalty on the rate terms": { ratePenalty: 0.1 },
+  "the four positions in one fit": { pooled: true },
+  "a straight line through the season totals": { calibrated: true },
+  "games stopped at sixteen": { cap: 16 },
+  "games stopped at fifteen": { cap: 15 },
+  "games a logistic out of seventeen": { games: "logistic" },
+  "games the chance he plays times his games if he does": HURDLE,
+};
+
+/** what a reader says of each row, marked the way the bench marks the model */
+const markWith = (read: Reader, rows: AheadRow[], horizon: number): Marked[] => rows.map((row) => {
+  const said = read(row);
+
+  return { row, actual: row.ahead[horizon - 1]!.points, said: { model: total(said) }, ahead: said };
+});
+
+/** every reading's marks on the development seasons, left out one at a time, and on the held out ones */
+function marksOf(
+  rowsBySeason: Map<number, AheadRow[]>, horizon: number, reading: Reading, held: boolean,
+): Marked[] {
+  const marked: Marked[] = [];
+  const tests = held
+    ? HELD_OUT[horizon]!
+    : seasonsWith(rowsBySeason, horizon).filter((s) => s <= DEVELOPMENT_THROUGH[horizon]!);
+
+  for (const season of tests) {
+    const train = [...rowsBySeason]
+      .filter(([s]) => (held ? s <= season - 1 - horizon : s <= DEVELOPMENT_THROUGH[horizon]! && s !== season))
+      .flatMap(([, rows]) => finishedRows(rows, horizon));
+    marked.push(...markWith(readerFor(train, horizon, reading),
+      finishedRows(rowsBySeason.get(season) ?? [], horizon).filter(isRelevant), horizon));
+  }
+
+  return marked;
+}
+
+const lastSeasonRate = (row: AheadRow) => rateOf(row.last);
+/** a star who was one last season too, against one who was not */
+const stayed = (row: AheadRow) => (row.last?.games ?? 0) >= 4 && lastSeasonRate(row) >= 14;
+/** played all his club's games but one, on three snaps in four or more */
+const heavy = (row: AheadRow) =>
+  row.clubGames > 0 && row.games >= row.clubGames - 1 && (row.snapShare ?? 0) >= 0.75;
+
+function printStars(rowsBySeason: Map<number, AheadRow[]>): void {
+  const sets = [false, true] as const;
+  const shipped = sets.map((held) =>
+    Array.from({ length: HORIZONS }, (_, k) => marksOf(rowsBySeason, k + 1, {}, held)));
+
+  const drift = Math.max(...shipped[1]!.flatMap((marked, k) => {
+    const fit = fitAhead(rowsOf(rowsBySeason,
+      [...rowsBySeason.keys()].filter((s) => s <= HELD_OUT[k + 1]![0]! - 2 - k), k + 1), k + 1);
+
+    return marked.filter((m) => m.row.season === HELD_OUT[k + 1]![0])
+      .map((m) => Math.abs(m.said.model! - total(predictAhead(fit, m.row))));
+  }));
+
+  console.log(`\nthe readings below are fitted in this script; read with nothing changed it is the shipped fit to ${drift.toExponential(1)} of a point`);
+
+  const rho = (marked: Marked[]) =>
+    spearman(marked.map((m) => m.said.model!), marked.map((m) => m.actual));
+  const pick = (marked: Marked[], who: (row: AheadRow) => boolean) => marked.filter((m) => who(m.row));
+  const rookies = (row: AheadRow) => row.experience === 0;
+  const three = (values: number[]) => values.map(signed).join(" / ");
+
+  for (const held of sets) {
+    const base = shipped[held ? 1 : 0]!;
+
+    console.log(
+      `\n${held ? "held out seasons" : "development seasons, each left out in turn"}: ` +
+        "error against the shipped fit, plus is worse, then bias, the stars' bias, the rookies' and the ordering, at t+1 / t+2 / t+3");
+    console.log("| change | t+1 | t+2 | t+3 | bias | stars | rookies | ordering | stars t+3, last season too / not |");
+    console.log("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+
+    for (const [name, reading] of [["the shipped fit", {}] as const, ...Object.entries(READINGS)]) {
+      const marked = name === "the shipped fit"
+        ? base
+        : Array.from({ length: HORIZONS }, (_, k) => marksOf(rowsBySeason, k + 1, reading, held));
+      const cells = marked.map((m, k) =>
+        `${signed(mae(m, "model") - mae(base[k]!, "model"))} ± ${f1(bootSe(
+          m.map((x, i) => ({ ...x, said: { model: x.said.model!, base: base[k]![i]!.said.model! } })),
+          (r) => mae(r, "model") - mae(r, "base")))}`);
+      const stars3 = pick(marked[2]!, isStar);
+
+      console.log(
+        `| ${name} | ${cells.join(" | ")} | ${three(marked.map((m) => biasOf(m)))} | ` +
+          `${three(marked.map((m) => biasOf(pick(m, isStar))))} | ` +
+          `${three(marked.map((m) => biasOf(pick(m, rookies))))} | ` +
+          `${marked.map((m) => f3(rho(m))).join(" / ")} | ` +
+          `${signed(biasOf(stars3.filter((m) => stayed(m.row))))} / ${signed(biasOf(stars3.filter((m) => !stayed(m.row))))} |`);
+    }
+  }
+
+  // the games: heavy users, the top of what is said, and the cap
+  console.log("\nthe games: said against played, for the heaviest users and for the most said");
+  console.log("| reading | seasons | horizon | heavy users | said 15 or more | over seventeen before the cap | error with no cap |");
+  console.log("| --- | --- | --- | --- | --- | --- | --- |");
+
+  const games: [string, Reading][] = [
+    ["the shipped ridge", {}],
+    ["games the chance he plays times his games if he does", HURDLE],
+  ];
+
+  for (const [name, reading] of games) {
+    for (const held of sets) {
+      for (let horizon = 1; horizon <= HORIZONS; horizon++) {
+        const marked = marksOf(rowsBySeason, horizon, reading, held);
+        const free = marksOf(rowsBySeason, horizon, { ...reading, cap: 99 }, held);
+        const played = (m: Marked) => m.row.ahead[horizon - 1]!.games;
+        const pair = (ms: Marked[]) => ms.length === 0
+          ? "none"
+          : `${ms.length}: ${f1(meanOf(ms.map((m) => m.ahead?.games ?? 0)))} / ${f1(meanOf(ms.map(played)))}`;
+        const over = free.filter((m) => (m.ahead?.games ?? 0) > GAMES);
+        const both = marked.map((m, i) => ({ ...m, said: { model: m.said.model!, free: free[i]!.said.model! } }));
+
+        console.log(
+          `| ${name} | ${held ? "held out" : "development"} | t+${horizon} | ${pair(pick(marked, heavy))} | ` +
+            `${pair(marked.filter((m) => (m.ahead?.games ?? 0) >= 15))} | ${pair(over)} | ` +
+            `${signed(mae(both, "free") - mae(both, "model"))} ± ${f1(bootSe(both, (r) => mae(r, "free") - mae(r, "model")))} |`);
+      }
+    }
+  }
+}
+
+/**
+ * Why a man's games rise past next season, or fall: what the share of
+ * his club's games he has played and the square of his pooled rate add
+ * to the shipped games fit at each horizon, against an average man at
+ * his position, and what the hurdle says instead.
+ */
+function printGamesOf(rowsBySeason: Map<number, AheadRow[]>, season: number, him: AheadRow): void {
+  const keep = AHEAD_TERMS.map((term, i) => [term, i] as const)
+    .filter(([term]) => SHIPPED_TERMS.includes(term));
+  const termsOf = (row: AheadRow) => {
+    const all = aheadTerms(row);
+
+    return keep.map(([, i]) => all[i]!);
+  };
+
+  console.log(
+    `\n${him.name}, week ${WEEK} of ${season}: ${him.games} games of ${him.clubGames} at ` +
+      `${f1(ppgOf(him))} a game, this season and last pooled at ${f1(pooledRate(him))}`);
+  console.log(
+    "| horizon | games said, before the cap | the share of his club's games adds, against an average man at his position | " +
+      "the square of the pooled rate adds | as a hurdle |");
+  console.log("| --- | --- | --- | --- | --- |");
+
+  for (let horizon = 1; horizon <= HORIZONS; horizon++) {
+    const train = rowsOf(rowsBySeason, [...rowsBySeason.keys()].filter((s) => s <= season - 1 - horizon), horizon);
+    const mine = taughtOn(train, horizon).filter((row) => row.position === him.position);
+    const X = mine.map(termsOf);
+    const fit = ridgeOn(X, mine.map((row) => row.ahead[horizon - 1]!.games), mine.map(() => 1), X[0]!.map(() => 1));
+    const z = standardizedRow(fit.scaling, termsOf(him));
+    const adds = (term: AheadTerm) => {
+      const j = keep.findIndex(([t]) => t === term);
+
+      return fit.weights[j + 1]! * z[j + 1]!;
+    };
+    const hurdle = readerFor(train, horizon, HURDLE)(him);
+
+    console.log(
+      `| t+${horizon} | ${f1(linearAt(fit, termsOf(him)))} | ${signed(adds("share of his club's games played"))} | ` +
+        `${signed(adds("the same, squared"))} | ${hurdle ? f1(hurdle.games) : "-"} |`);
+  }
+}
+
+/** each named man's games taken apart, then what stars who had missed games went on to play */
+function printGamesShape(rowsBySeason: Map<number, AheadRow[]>, names: string[]): void {
+  const season = Math.max(...rowsBySeason.keys());
+
+  for (const name of names) {
+    const him = rowsBySeason.get(season)?.find((row) => row.name === name);
+
+    if (him) {
+      printGamesOf(rowsBySeason, season, him);
+    }
+  }
+
+  const done = [...rowsBySeason.values()].flat()
+    .filter((row) => row.ahead.every((a) => a !== undefined) && isRelevant(row));
+  const groups: [string, (row: AheadRow) => boolean][] = [
+    ["fourteen a game or more, had missed a fifth of his club's games or more",
+      (row) => row.games >= 4 && ppgOf(row) >= 14 && row.games < 0.8 * row.clubGames],
+    ["fourteen a game or more, had missed none", (row) => row.games >= 4 && ppgOf(row) >= 14 && row.games >= row.clubGames],
+    ["seventeen a game or more", (row) => row.games >= 4 && ppgOf(row) >= 17],
+  ];
+
+  console.log("\nwhat they played in each of the next three seasons, every cut whose three have finished");
+  console.log("| who at the cut | players | t+1 | t+2 | t+3 |");
+  console.log("| --- | --- | --- | --- | --- |");
+
+  for (const [who, picked] of groups) {
+    const rows = done.filter(picked);
+
+    console.log(
+      `| ${who} | ${rows.length} | ${[0, 1, 2].map((k) => f1(meanOf(rows.map((row) => row.ahead[k]!.games)))).join(" | ")} |`);
+  }
+}
+
 /* ---------- the case that started this ---------- */
 
 const LOVE = "00-0041027";
@@ -478,6 +1060,15 @@ async function main(): Promise<void> {
 
   if (ABLATE) {
     printAblation(rowsBySeason);
+  }
+
+  if (TAUGHT) {
+    printTaught(rowsBySeason);
+  }
+
+  if (STARS) {
+    printStars(rowsBySeason);
+    printGamesShape(rowsBySeason, ["Puka Nacua", "Bijan Robinson"]);
   }
 
   printCase(rowsBySeason);
