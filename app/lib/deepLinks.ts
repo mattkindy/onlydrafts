@@ -12,13 +12,13 @@
  * lists the team and players/add paths of every sport. Sleeper's iPhone app takes only
  * its chat links, so a league page always opens in the browser there.
  *
- * Android is the same: an app opens a plain link to its site when it
- * takes that page, and Sleeper's does not take a league page. A link
- * addressed to the Sleeper app itself (an intent link) was tried and
- * sent the reader to the Play Store, since a browser cannot open an app
- * at a page it does not take. So every link is the plain web page, and
- * a Sleeper page works once the reader is signed in to sleeper.com in
- * that browser.
+ * On Android Sleeper's app opens for a link to its site but always on
+ * its own home screen, whatever page the link names: tried on a phone
+ * with the plain league page, sleeper.app, three sleeper:// addresses
+ * and two intent links, all eight landing on the home screen. A link
+ * addressed to the app with a web fallback once sent a reader to the
+ * Play Store instead. So every link is the plain web page, which opens
+ * Sleeper's app where it is installed and the page where it is not.
  */
 
 import type { League } from "./providers.ts";

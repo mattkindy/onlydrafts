@@ -15,52 +15,65 @@
     background: var(--panel); color: var(--ink); text-decoration: none; }
   a.try b { color: var(--go); margin-right: 8px; }
   a.try small { display: block; color: var(--muted); font-size: .8rem; word-break: break-all; margin-top: 4px; }
-  input { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 10px; border: 1px solid var(--edge);
-    background: var(--panel); color: var(--ink); font: inherit; }
+  input { width: 100%; box-sizing: border-box; padding: 12px; margin-bottom: 8px; border-radius: 10px;
+    border: 1px solid var(--edge); background: var(--panel); color: var(--ink); font: inherit; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Which link opens Sleeper?</h1>
-  <p>Tap each one, then come back here. Note for each: did it open the Sleeper app, and on which screen (your team, the league, the app's home), or the browser, or the Play Store?</p>
+  <h1>Which link opens ESPN?</h1>
+  <p>Tap each one, then come back here. Note for each: did it open the ESPN Fantasy app, and on which screen (your team, free agents, the matchup, the league, the app's home), or the browser, or the Play Store?</p>
   <div id="pick"></div>
   <div id="tries"></div>
 </main>
 <script>
-  // the leagues the app has saved on this phone, Sleeper's only
+  // the ESPN leagues the app has saved on this phone; an ESPN league's
+  // userId is the team you picked in it
   let leagues = [];
   try {
     leagues = (JSON.parse(localStorage.getItem("dc.leagues") || "[]") || [])
-      .filter((l) => l && l.provider === "sleeper" && l.leagueId);
+      .filter((l) => l && l.provider === "espn" && l.leagueId);
   } catch (e) {}
 
   const pick = document.getElementById("pick");
   const tries = document.getElementById("tries");
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 
-  function show(id) {
-    const L = encodeURIComponent(id);
+  function show(league, team, season) {
+    if (!league) {
+      tries.innerHTML = "";
+      return;
+    }
+
+    const L = encodeURIComponent(league);
+    const T = encodeURIComponent(team || "1");
+    const S = encodeURIComponent(season || "2026");
+    const base = "https://fantasy.espn.com/football";
     const links = [
-      ["A", "the link the app uses now", `https://sleeper.com/leagues/${L}/team`],
-      ["B", "Sleeper's app address, home", "sleeper://"],
-      ["C", "Sleeper's app address, your team", `sleeper://leagues/${L}/team`],
-      ["D", "Sleeper's app address, the league", `sleeper://league/${L}`],
-      ["E", "straight to the app, your team", `intent://leagues/${L}/team#Intent;scheme=sleeper;package=com.sleeperbot;end`],
-      ["F", "straight to the app, home", "intent://#Intent;scheme=sleeper;package=com.sleeperbot;end"],
-      ["G", "a chat link, which the app takes on iPhone", "https://sleeper.com/channels"],
-      ["H", "the league on sleeper.app", `https://sleeper.app/leagues/${L}/team`],
+      ["A", "your team, the link the app uses now", `${base}/team?leagueId=${L}&teamId=${T}&seasonId=${S}`],
+      ["B", "free agents, the link the app uses now", `${base}/players/add?leagueId=${L}&seasonId=${S}`],
+      ["C", "this week's matchup", `${base}/fantasycast?leagueId=${L}&teamId=${T}&seasonId=${S}`],
+      ["D", "the league", `${base}/league?leagueId=${L}&seasonId=${S}`],
+      ["E", "your team, without the season", `${base}/team?leagueId=${L}&teamId=${T}`],
+      ["F", "your team, straight to the app",
+        `intent://fantasy.espn.com/football/team?leagueId=${L}&teamId=${T}&seasonId=${S}#Intent;scheme=https;package=com.espn.fantasy.lm.football;end`],
     ];
     tries.innerHTML = "<h2>Links</h2>" + links.map(([k, says, href]) =>
-      `<a class="try" href="${href}"><b>${k}</b>${says}<small>${href.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</small></a>`).join("");
+      `<a class="try" href="${esc(href)}"><b>${k}</b>${says}<small>${esc(href)}</small></a>`).join("");
   }
 
   if (leagues.length) {
     pick.innerHTML = "<p>League: " + leagues.map((l, i) =>
-      `<label><input type="radio" name="lg" value="${i}" ${i === 0 ? "checked" : ""} style="width:auto"> ${String(l.name || l.leagueId).replace(/</g, "&lt;")}</label>`).join("<br>") + "</p>";
-    pick.addEventListener("change", (e) => show(leagues[Number(e.target.value)].leagueId));
-    show(leagues[0].leagueId);
+      `<label><input type="radio" name="lg" value="${i}" ${i === 0 ? "checked" : ""} style="width:auto"> ${esc(l.name || l.leagueId)}</label>`).join("<br>") + "</p>";
+    const use = (l) => show(l.leagueId, l.userId, l.season);
+    pick.addEventListener("change", (e) => use(leagues[Number(e.target.value)]));
+    use(leagues[0]);
   } else {
-    pick.innerHTML = '<p>No Sleeper league saved here. Paste your league ID:</p><input id="lid" inputmode="numeric" placeholder="league ID">';
-    document.getElementById("lid").addEventListener("input", (e) => show(e.target.value.trim()));
+    pick.innerHTML = '<p>No ESPN league saved here. Enter your league ID and team ID (both are in the address on ESPN\'s team page):</p>' +
+      '<input id="lid" inputmode="numeric" placeholder="league ID"><input id="tid" inputmode="numeric" placeholder="team ID">';
+    const read = () => show(document.getElementById("lid").value.trim(), document.getElementById("tid").value.trim(), "2026");
+    document.getElementById("lid").addEventListener("input", read);
+    document.getElementById("tid").addEventListener("input", read);
   }
 </script>
 </body>
