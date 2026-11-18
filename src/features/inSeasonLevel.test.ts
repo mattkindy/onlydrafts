@@ -5,6 +5,7 @@ import {
   gamesRead,
   gamesSinceBreak,
   riseReadFor,
+  shapeFor,
   summarizeWindow,
   updateLevel,
   type InSeasonFit,
@@ -206,6 +207,22 @@ describe("gamesRead", () => {
 });
 
 describe("updateLevel", () => {
+  /**
+   * A passer's points hold up better than the shared weights trust them
+   * to, so a quarterback can carry weights of his own.
+   */
+  it("reads a position by its own weights where it has them", () => {
+    const passer: UpdateShape = { ...SHAPE, pointsCap: 0.7 };
+    const fit = { ...fitWith(SHAPE), byPosition: { QB: passer } };
+    const weeks = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((w) => week({ week: w, points: 22 }));
+    const asQb = updateLevel(fit, { anchor: 15, position: "QB", weeks });
+    const asWr = updateLevel(fit, { anchor: 15, position: "WR", weeks });
+
+    expect(shapeFor(fit, "QB")).toBe(passer);
+    expect(shapeFor(fit, "WR")).toBe(SHAPE);
+    expect(asQb.weightOnPoints).toBeGreaterThan(asWr.weightOnPoints);
+  });
+
   it("returns the anchor before a snap is played", () => {
     const said = updateLevel(fitWith(SHAPE), {
       anchor: 12,

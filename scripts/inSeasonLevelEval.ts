@@ -872,6 +872,36 @@ async function main(): Promise<void> {
       console.log(`  ${label}: ${describe(shape)}`);
     }
 
+    const passerShape = fitUpdateShape(
+      fit.role, cases.filter((c) => c.position === "QB"));
+
+    console.log(`  quarterbacks alone: ${describe(passerShape)}`);
+
+    if (year === LIVE) {
+      const live = built.get(year)!;
+
+      for (const name of ["Brock Purdy", "Jordan Love", "Cam Ward"]) {
+        const found = [...live.anchors].find(([, a]) => a.name === name);
+
+        if (!found) {
+          continue;
+        }
+
+        const [playerId, anchor] = found;
+        const input = {
+          anchor: anchor.ppg, position: anchor.position,
+          weeks: live.weeks.get(playerId) ?? [],
+        };
+        const soFar = input.weeks.reduce((sum, w) => sum + w.points, 0) /
+          Math.max(1, input.weeks.length);
+
+        console.log(`  ${name}: anchor ${anchor.ppg.toFixed(1)}, so far ` +
+          `${soFar.toFixed(1)} over ${input.weeks.length}, pooled ` +
+          `${updateLevel(fit, input).ppg.toFixed(1)}, quarterbacks alone ` +
+          `${updateLevel({ role: fit.role, shape: passerShape }, input).ppg.toFixed(1)}`);
+      }
+    }
+
     // The live season is fitted for the table at the end and not marked.
     // Its few weeks after a cut made a rest of season of two or three
     // games, and since the parts switched off below were never fitted for
@@ -912,10 +942,6 @@ async function main(): Promise<void> {
     }
 
     const season = built.get(year)!;
-    const passerShape = fitUpdateShape(
-      fit.role, cases.filter((c) => c.position === "QB"));
-
-    console.log(`  quarterbacks alone: ${describe(passerShape)}`);
 
     for (const cut of CUTS) {
       // why his snaps rose, off the rosters as they stood at the cut

@@ -36,6 +36,7 @@ import { readRise, readRooms } from "./riseReason.js";
 import type { StatParts } from "./seasonSummary.js";
 import {
   fitRoleLevel,
+  shapeFor,
   summarizeWindow,
   updateLevel,
   type InSeasonFit,
@@ -68,6 +69,27 @@ export const SHIPPED_SHAPE: UpdateShape = {
   roleCap: 0.5,
   roleGames: 2,
   pointsCap: 0.6,
+  pointsGames: 5,
+};
+
+/**
+ * A quarterback's own weights. A passer's points hold up better than the
+ * weights shared with every position trust them to: Brock Purdy scored
+ * 22.6 a game into November of 2026 and the board read him at 18.1.
+ * Fitted on quarterbacks alone and marked on seasons the fit never saw,
+ * the rest of season error falls from 3.86 to 3.79 after week 6, from
+ * 3.93 to 3.84 after week 8 and from 3.98 to 3.83 after week 10, with the
+ * order better from week 8 on. After week 2 it is 3.66 against 3.62, a
+ * little worse. These are the weights fitted on 2018 to 2024, with the
+ * shipped shape's break rules, since a passer takes nearly every snap and
+ * a break hardly ever reads for one.
+ */
+export const SHIPPED_PASSER_SHAPE: UpdateShape = {
+  ...SHIPPED_SHAPE,
+  decay: 0.8,
+  roleCap: 0.5,
+  roleGames: 0.5,
+  pointsCap: 0.7,
   pointsGames: 5,
 };
 
@@ -222,7 +244,10 @@ export async function fitForSeason(
     rows.push(...roleRowsFrom(await readPlayedWeeks(year)));
   }
 
-  return { role: fitRoleLevel(rows), shape };
+  return {
+    role: fitRoleLevel(rows), shape,
+    ...(shape === SHIPPED_SHAPE ? { byPosition: { QB: SHIPPED_PASSER_SHAPE } } : {}),
+  };
 }
 
 interface BoardPlayer {
@@ -274,7 +299,8 @@ export async function updateBoardLevels(
     if (player.projectedParts && anchor > 0) {
       player.projectedParts = updateParts({
         anchor: player.projectedParts,
-        observed: summarizeWindow(weeks, fit.shape, rise).usage,
+        observed: summarizeWindow(
+          weeks, shapeFor(fit, player.position), rise).usage,
         fromSeason: level.weightOnRole + level.weightOnPoints,
         levelRatio: level.ppg / anchor,
       });
