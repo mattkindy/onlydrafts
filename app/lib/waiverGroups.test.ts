@@ -57,8 +57,8 @@ describe("the wire, grouped", () => {
     // nothing to wait for on a torn ACL, so he is in neither
     expect(said.claim.map((g) => g.p.key)).toEqual(["playing"]);
     expect(said.stash.map((g) => g.p.key)).toEqual(["onbye", "hurt"]);
-    expect(said.stash[0]!.why).toBe("on bye, +2.5% win chance over the season");
-    expect(said.stash[1]!.why).toBe("IR, +2.0% win chance over the season");
+    expect(said.stash[0]!.why).toBe("on bye, +1.0 point a week over the season");
+    expect(said.stash[1]!.why).toBe("IR, +1.0 point a week over the season");
   });
 
   it("streams the best line this week at the positions a lineup streams", () => {
@@ -132,5 +132,37 @@ describe("worth a claim", () => {
     );
 
     expect(said.claim.map((g) => g.p.key)).toEqual(["mclaughlin", "ryland"]);
+  });
+});
+
+describe("stream this week", () => {
+  /**
+   * Harrison Butker was listed to stream with nothing to say whether he
+   * beat the kicker his owner already had.
+   */
+  it("lists a free agent only where he beats your own starter by a point", () => {
+    const wire = [
+      anAdd(aMan("butker", "K"), 0), anAdd(aMan("closeK", "K"), 0),
+      anAdd(aMan("ward", "QB"), 0),
+    ];
+    const rows = new Map([
+      aLine("butker", 9.0), aLine("closeK", 8.0), aLine("ward", 14.4),
+      aLine("shrader", 7.5), aLine("purdy", 16.6),
+    ]);
+    const mine = [aMan("shrader", "K"), aMan("purdy", "QB")];
+    const said = groupsFor(wire, 11, rows, NOBODY, PAYS, mine);
+
+    expect(said.stream.map((g) => g.p.key)).toEqual(["butker"]);
+    expect(said.stream[0]!.why).toBe("9.0 vs CAR this week, against shrader's 7.5");
+  });
+
+  it("says so when you have nobody playing there", () => {
+    const said = groupsFor(
+      [anAdd(aMan("butker", "K"), 0)], 11,
+      new Map([aLine("butker", 9.0), aLine("shrader", 7.5, { bye: true })]),
+      NOBODY, PAYS, [aMan("shrader", "K")],
+    );
+
+    expect(said.stream[0]!.why).toBe("9.0 vs CAR this week, and you have no K playing");
   });
 });

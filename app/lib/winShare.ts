@@ -282,11 +282,24 @@ function drawWeeks(p: Player, draws: number): number[] {
   const scale = scored > 0 ? g["ev"]! / scored : 1;
   const out = streamFor(p.key + "|out", draws);
 
+  // A week he plays and scores nothing in is still a week he played. The
+  // lineup reads a week at nothing as one he missed and starts somebody
+  // else, so the tail below zero went to the bench or the wire: three in a
+  // hundred of a kicker's weeks, six of a defence's, and Chase McLaughlin
+  // "started 94% of the time" in a week he was on the field for 97.
   return weeks.map((week, i) =>
     out[i]! < playsIn(p, weekOfDraw(i, from))
-      ? week > 0 ? week * scale : week
+      ? Math.max(PLAYED_NOTHING, week * scale)
       : 0);
 }
+
+/**
+ * What a week he played and scored nothing in is drawn as: above zero, so
+ * the lineup keeps him in it, and too little to move a total. A defence's
+ * worst weeks go below zero in the scoring, and are read here as nothing,
+ * which is closer than reading them as the wire's week.
+ */
+const PLAYED_NOTHING = 0.01;
 
 interface Slot {
   where: string[];

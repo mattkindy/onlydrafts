@@ -570,7 +570,8 @@ function Sleepers(
 const GROUPS: [keyof WaiverGroups, string, string][] = [
   ["claim", "worth a claim", "the best season adds who play this week"],
   ["stash", "stash", "season value, but no game this week"],
-  ["stream", "stream this week", "the best lines at QB, TE, DEF and K"],
+  ["stream", "stream this week",
+    "a free agent to start this week over your own QB, TE, DEF or K"],
   ["rising", "rising roles", "snap share up sharply in his last games"],
   ["fluke", "fluke watch", "big points on a part-time role"],
 ];
@@ -647,8 +648,15 @@ export function Waivers(props: Props) {
     players, league, props.schedule, posFilter, props.listed, props.week);
 
   const groups = useMemo(
-    () => groupsFor(wire, props.week, rows, props.listed, league.pays ?? {}),
-    [wire, props.week, rows, props.listed, league.pays],
+    () => groupsFor(
+      wire, props.week, rows, props.listed, league.pays ?? {},
+      league.myRoster.flatMap((m) => {
+        const p = players.find((q) => q.key === m.key);
+
+        return p ? [p] : [];
+      }),
+    ),
+    [wire, props.week, rows, props.listed, league.pays, league.myRoster, players],
   );
 
   const shift = catchShiftOf(league.pays, props.boardPerCatch);
@@ -915,7 +923,12 @@ export function Waivers(props: Props) {
 
       {!wanted && <Groups groups={groups} onMore={props.onMore} />}
 
-      <h2>waiver wire adds</h2>
+      <h2>every free agent</h2>
+      <p class="hint">
+        The whole list the groups above are picked from: each free agent on
+        his own, what he does to your win chance and your points a week, who
+        he would replace in your lineup, and who you would drop for him.
+      </p>
       <table class="line pairs">
         <thead>
           <tr>
