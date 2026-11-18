@@ -4547,3 +4547,70 @@ fit anything on.
 Fit every horizon at once, with how far ahead as a term, so the t+3 fit
 can borrow the seasons only t+1 has. That is the other way to give the
 hurdle more to learn from.
+
+## How much of the rest a player plays, once the season is under way
+
+`availabilityNowEval.ts`. The waiver page drew every player's remaining
+weeks off the board's games, which come from the summer: his history and
+his age. They never moved. Brock Purdy's history put him at 9.7 games of
+17, so in week 11 of 2026, having played every game, he was still drawn to
+miss 43% of what was left. That made his owner's other quarterback the
+starter in nearly half the weeks, and made dropping Purdy look cheap.
+
+Over 2017 to 2025, starters who had played every game so far:
+
+```
+history     cut   n      says    played
+0%-60%      6     82     43%     79%
+0%-60%      10    62     44%     86%
+60%-75%     10    72     69%     85%
+75%-90%     10    190    83%     85%
+90%-100%    10    345    97%     88%
+```
+
+Once a season is under way the history says little: a man on the field
+plays about 85% of the rest whatever it said. Over every starter who
+played his side's last game, healthy all year or not, the line fitted on
+2017 to 2021 is 0.465 + 0.149 x history + 0.255 x the share of his side's
+games he has played this season. On 2022 to 2025 it lands within a point
+of what happened in each band it predicts (70% against 69%, 82% against
+82%, 86% against 87%), and its error a player is 0.175 against 0.189
+for the history alone.
+
+`gamesNow` in `app/lib/availability.ts` ships it for the waiver page's
+weeks left. A player who missed his side's last game keeps the board's
+number, since the line was fitted on players who had not, and so does one
+with fewer than two games behind him. Purdy goes from 57% of the
+remaining weeks to 81%.
+
+## A quarterback's own update weights
+
+The in-season update shares one set of weights across every position.
+Brock Purdy scored 22.6 a game into November of 2026 and the board read
+him at 18.1, which raised the question of whether a passer's points are
+trusted too little. `inSeasonLevelEval.ts` now fits the weights on
+quarterbacks alone and marks both sets on the same quarterbacks, each
+season's weights fitted on the seasons before it:
+
+```
+quarterbacks, MAE, bias (said less got), correlation, 2019-2025
+              pooled                quarterbacks alone
+after week 2  3.620  0.51  0.757    3.656  0.45  0.753
+after week 4  3.783  0.34  0.748    3.773  0.27  0.744
+after week 6  3.857  0.28  0.729    3.794  0.27  0.731
+after week 8  3.927  0.30  0.730    3.839  0.37  0.745
+after week 10 3.981  0.31  0.723    3.833  0.38  0.749
+```
+
+Better from week 6 on and in order from week 8 on, a little worse after
+week 2. The weights fitted on quarterbacks alone put more on points, 0.7
+at half by five games against 0.6, and read recent games harder, with a
+decay of 0.8. The build ships them as `SHIPPED_PASSER_SHAPE`, with the
+shipped shape's break rules, since a passer takes nearly every snap.
+
+It does not answer the question the way it was asked. Both sets say more
+than quarterbacks went on to score, by about 0.3 a game, so as a group a
+passer running hot does come back. And for Purdy himself the new weights
+read his recent games, which through week 7 were his three quietest, and
+say 17.6 against the pooled 17.9. The prior that was too sticky was his
+availability, which the section above fixes.

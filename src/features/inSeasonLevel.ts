@@ -194,7 +194,13 @@ export interface UpdateShape {
 export interface InSeasonFit {
   role: RoleLevelFit;
   shape: UpdateShape;
+  /** a position's own weights, where it has them, in place of `shape` */
+  byPosition?: Partial<Record<string, UpdateShape>>;
 }
+
+/** the weights a player's position updates by */
+export const shapeFor = (fit: InSeasonFit, position: string): UpdateShape =>
+  fit.byPosition?.[position] ?? fit.shape;
 
 /** how much of the final number can come from this season at most */
 const MOST_FROM_SEASON = 0.95;
@@ -400,10 +406,11 @@ export function updateLevel(
     };
   }
 
-  const window = summarizeWindow(input.weeks, fit.shape, input.rise);
+  const shape = shapeFor(fit, input.position);
+  const window = summarizeWindow(input.weeks, shape, input.rise);
   const level = roleLevel(fit.role, input.position, window.usage);
-  const weights = sourceWeights(window.effectiveGames, fit.shape);
-  const kept = 1 - (riseReadFor(input.weeks, fit.shape, input.rise)?.toward ?? 0);
+  const weights = sourceWeights(window.effectiveGames, shape);
+  const kept = 1 - (riseReadFor(input.weeks, shape, input.rise)?.toward ?? 0);
   const onRole = weights.onRole * kept;
   const onPoints = weights.onPoints * kept;
 

@@ -826,6 +826,14 @@ async function main(): Promise<void> {
       },
     ]),
   );
+
+  /**
+   * Quarterbacks on their own: the update's weights fitted on quarterbacks
+   * alone against the pooled fit, on the same rows, since a passer's points
+   * may hold up better than the shared weights trust them to.
+   */
+  const passers = new Map<number, { was: number[]; pooled: number[]; own: number[] }>(
+    CUTS.map((cut) => [cut, { was: [], pooled: [], own: [] }]));
   const fits = new Map<number, InSeasonFit>();
 
   for (const year of [...MARKED, LIVE]) {
@@ -862,6 +870,36 @@ async function main(): Promise<void> {
 
       without.set(label, { role: fit.role, shape });
       console.log(`  ${label}: ${describe(shape)}`);
+    }
+
+    const passerShape = fitUpdateShape(
+      fit.role, cases.filter((c) => c.position === "QB"));
+
+    console.log(`  quarterbacks alone: ${describe(passerShape)}`);
+
+    if (year === LIVE) {
+      const live = built.get(year)!;
+
+      for (const name of ["Brock Purdy", "Jordan Love", "Cam Ward"]) {
+        const found = [...live.anchors].find(([, a]) => a.name === name);
+
+        if (!found) {
+          continue;
+        }
+
+        const [playerId, anchor] = found;
+        const input = {
+          anchor: anchor.ppg, position: anchor.position,
+          weeks: live.weeks.get(playerId) ?? [],
+        };
+        const soFar = input.weeks.reduce((sum, w) => sum + w.points, 0) /
+          Math.max(1, input.weeks.length);
+
+        console.log(`  ${name}: anchor ${anchor.ppg.toFixed(1)}, so far ` +
+          `${soFar.toFixed(1)} over ${input.weeks.length}, pooled ` +
+          `${updateLevel(fit, input).ppg.toFixed(1)}, quarterbacks alone ` +
+          `${updateLevel({ role: fit.role, shape: passerShape }, input).ppg.toFixed(1)}`);
+      }
     }
 
     // The live season is fitted for the table at the end and not marked.
@@ -914,6 +952,14 @@ async function main(): Promise<void> {
       const line = cutAt(surprises, SURPRISE_SHARE);
       const into = marked.get(cut)!;
 
+      for (const row of rows.filter((r) => r.position === "QB")) {
+        const at = passers.get(cut)!;
+
+        at.was.push(row.restPpg);
+        at.pooled.push(updateLevel(fit, row).ppg);
+        at.own.push(updateLevel({ role: fit.role, shape: passerShape }, row).ppg);
+      }
+
       rows.forEach((row, i) => {
         into.was.push(row.restPpg);
         into.said["preseason anchor"]!.push(row.anchor);
@@ -938,6 +984,21 @@ async function main(): Promise<void> {
         into.after.push(row.rise && riseAfter(season, row.playerId, row.rise, cut));
       });
     }
+  }
+
+  console.log("\nquarterbacks, the pooled weights against weights fitted on " +
+    "quarterbacks alone: MAE, bias (said less got), correlation");
+
+  for (const cut of CUTS) {
+    const at = passers.get(cut)!;
+    const bias = (said: number[]) =>
+      said.reduce((sum, x, i) => sum + x - at.was[i]!, 0) / Math.max(1, said.length);
+
+    console.log(`after week ${cut}: ${at.was.length} passers   pooled ` +
+      `${mae(at.pooled, at.was).toFixed(3)} ${bias(at.pooled).toFixed(2)} ` +
+      `${correlation(at.pooled, at.was).toFixed(3)}   alone ` +
+      `${mae(at.own, at.was).toFixed(3)} ${bias(at.own).toFixed(2)} ` +
+      `${correlation(at.own, at.was).toFixed(3)}`);
   }
 
   for (const cut of CUTS) {

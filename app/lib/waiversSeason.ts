@@ -14,7 +14,7 @@
  */
 
 import {
-  listingFits, playsByWeek, statusOf, type Listed,
+  gamesNow, listingFits, playsByWeek, statusOf, type Listed,
 } from "./availability.ts";
 import type { Room } from "./draftShare.ts";
 import { roomFor } from "./draftShare.ts";
@@ -76,15 +76,20 @@ export function statusesOn(
 
 /**
  * The board priced for the weeks left: each player drawn from the coming
- * week on, with his games there cut by what the injury report says. A man
- * on reserve scores nothing for the weeks the list costs him.
+ * week on, with his games there cut by what the injury report says, and
+ * his chance of playing the rest moved by how much of this season he has
+ * played. A man on reserve scores nothing for the weeks the list costs him.
  */
 export function forTheWeeksLeft(
   players: Player[], from: number, hurt: Record<string, string> = {},
 ): Player[] {
   return players.map((p) => ({
     ...p,
-    weeksLeft: { from, plays: playsByWeek(p.games, hurt[p.key], from, p.bye) },
+    weeksLeft: {
+      from,
+      plays: playsByWeek(
+        gamesNow(p.games, p.weeks, from), hurt[p.key], from, p.bye),
+    },
   }));
 }
 

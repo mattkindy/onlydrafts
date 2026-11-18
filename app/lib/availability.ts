@@ -275,6 +275,49 @@ function reserveGames(games: number): number[] {
 }
 
 /**
+ * How much of what is left a player who is on the field now goes on to
+ * play, from his injury history and the share of his side's games he has
+ * played this season.
+ *
+ * The board's games come from the summer and never moved, so Brock Purdy,
+ * whose history put him at 9.7 games of 17, was still drawn to miss 43%
+ * of what was left after playing every game into November. Over 2017 to
+ * 2025, starters who had played every game through week 10 went on to
+ * play 86% of the rest if their history said under 60%, and 89% if it
+ * said over 90%: once a season is under way the history says little.
+ * `scripts/availabilityNowEval.ts` fits the line on 2017 to 2021 and on
+ * 2022 to 2025 it lands within a point in each band it predicts, where
+ * the history on its own was off by 0.189 a player against 0.175.
+ */
+export const STILL_PLAYING = { base: 0.465, history: 0.149, season: 0.255 };
+
+/**
+ * His games over a season, moved by the season so far. The line was
+ * fitted on players who played their side's last game, so a man who
+ * missed it keeps what the board had, and so does a man with fewer than
+ * two of his side's games behind him.
+ */
+export function gamesNow(
+  games: number | undefined,
+  weeks: { w: number; played?: unknown }[] | undefined,
+  from: number,
+): number | undefined {
+  const behind = (weeks ?? []).filter((w) => w.w < from)
+    .sort((a, b) => a.w - b.w);
+
+  if (behind.length < 2 || !behind[behind.length - 1]!.played) {
+    return games;
+  }
+
+  const history = Math.min(1, (games ?? SEASON_GAMES) / SEASON_GAMES);
+  const season = behind.filter((w) => w.played).length / behind.length;
+  const share = STILL_PLAYING.base + STILL_PLAYING.history * history +
+    STILL_PLAYING.season * season;
+
+  return Math.min(1, share) * SEASON_GAMES;
+}
+
+/**
  * The games he is expected to play from week `from` to the end of the
  * season, with the list taken into account. `games` is the board's
  * expectation over a whole season, so the weeks already gone take their
