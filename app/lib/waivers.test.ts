@@ -6,7 +6,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { addsFor, capacityOf, dropsFor, netFor, openSpotsFor } from "./waivers.ts";
+import {
+  addsFor, capacityOf, dropsFor, netFor, openSpotsFor, worthMaking,
+  WORTH_POINTS,
+} from "./waivers.ts";
 import { baselineFor, weeksOf, winChance } from "./winShare.ts";
 import type { Player } from "./scoring.ts";
 
@@ -94,6 +97,57 @@ describe("what a pickup is worth once it is paid for", () => {
     expect(paid.drop?.key).toBe("rb5");
     expect(paid.net).toBeGreaterThan(0);
     expect(paid.net).toBeLessThanOrEqual(add!.added);
+    expect(paid.points).toBeGreaterThan(WORTH_POINTS);
+  });
+
+  /**
+   * "Add Chad Ryland, drop Brock Purdy" led a real page at 85% to 87% for
+   * a move that netted 0.01 points a week. The drop is the player who
+   * takes the fewest points, and a swap whose points are a wash says so.
+   */
+  it("pays for a kicker with the player who takes the fewest points", () => {
+    const roster = [
+      ...aRoster(), aMan("k", "K", 8.6),
+      // a second quarterback, who starts the weeks the first one misses
+      aMan("qb2", "QB", 17.5, 12), aMan("rb5", "RB", 4),
+    ];
+    roster[0] = aMan("qb", "QB", 18, 10);
+    const room = aRoom();
+    const [add] = addsFor(roster, [aMan("betterK", "K", 8.8)], SLOTS, room);
+    const paid = netFor(roster, add!, SLOTS, room, 0);
+    const drops = dropsFor([...roster, add!.p], SLOTS, room)
+      .filter((d) => d.p.key !== add!.p.key);
+    const qb2 = drops.find((d) => d.p.key === "qb2")!;
+
+    expect(qb2.takes).toBeGreaterThan(0.5);
+    expect(paid.drop?.key).toBe(drops[drops.length - 1]!.p.key);
+    expect(paid.drop?.key).not.toBe("qb2");
+  });
+
+  it("is not worth making when the points are a wash, whatever the win chance", () => {
+    const ryland = { drop: null, before: 0.85, after: 0.87 };
+
+    // add Chad Ryland, drop Brock Purdy, as a real page priced it
+    expect(worthMaking({ ...ryland, net: 0.013, points: 0.01 })).toBe(false);
+    expect(worthMaking({ ...ryland, net: 0.013, points: 0.62 })).toBe(true);
+    expect(worthMaking({ ...ryland, net: 0.008, points: 0.62 })).toBe(false);
+  });
+});
+
+describe("the wire, when it fills a slot", () => {
+  /**
+   * The wire used to score its average every week. Swapping a player for
+   * it took the bad tail off your week, so at a high win chance dropping
+   * a starter could read as a gain while it cost points.
+   */
+  it("has good weeks and bad ones like a player", () => {
+    const base = baselineFor([], ["QB"], DRAWN, { QB: 15 });
+    const mean = base.total.reduce((sum, n) => sum + n, 0) / base.total.length;
+
+    expect(Math.min(...base.total)).toBeLessThan(10);
+    expect(Math.max(...base.total)).toBeGreaterThan(20);
+    expect(mean).toBeGreaterThan(12);
+    expect(mean).toBeLessThan(18);
   });
 });
 
