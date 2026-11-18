@@ -303,6 +303,14 @@ describe("his games once the season is under way", () => {
     expect(gamesNow(9.7, [], 11)).toBe(9.7);
   });
 
+  it("leaves a kicker and a defence where the board had them", () => {
+    const all = weeks(Array(9).fill(true));
+
+    expect(gamesNow(16.5, all, 11, "K")).toBe(16.5);
+    expect(gamesNow(17, all, 11, "DEF")).toBe(17);
+    expect(gamesNow(9.7, all, 11, "QB")! / 17).toBeGreaterThan(0.79);
+  });
+
   it("reads only the weeks before the coming one", () => {
     const later = [...weeks(Array(9).fill(true)), { w: 11, played: null }];
 
