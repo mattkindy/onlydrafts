@@ -131,3 +131,25 @@ describe("why a waiver add is worth it", () => {
     }
   });
 });
+
+/**
+ * "Outscores him in 5 weeks of 10" read as a reason when it is a coin flip.
+ */
+describe("a pickup who starts over a man he barely outscores", () => {
+  const over = (outscored: number) => whyWords({
+    parts: [{
+      kind: "over", adds: 0.01, starts: 0.6, name: "Spencer Shrader",
+      outscored, status: null, empty: null, byes: [],
+    }],
+    weekly: [], from: 11,
+  } as unknown as Parameters<typeof whyWords>[0]);
+
+  it("says it is about half the time", () => {
+    expect(over(0.53)).toBe(
+      "Starts over Spencer Shrader, though he outscores him only about half the time.");
+  });
+
+  it("gives the count where it says something", () => {
+    expect(over(0.7)).toBe("Starts over Spencer Shrader and outscores him in 7 weeks of 10.");
+  });
+});

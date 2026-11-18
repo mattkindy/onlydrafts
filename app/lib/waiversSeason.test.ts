@@ -10,7 +10,7 @@ import { roomFor } from "./draftShare.ts";
 import type { Player } from "./scoring.ts";
 import { addsFor, dropsFor, netsFor } from "./waivers.ts";
 import {
-  forTheWeeksLeft, pricerHere, statusesOn, type SeasonAsk,
+  forTheWeeksLeft, KICKER_EDGE_KEPT, pricerHere, statusesOn, type SeasonAsk,
 } from "./waiversSeason.ts";
 import { weekOfDraw, weeksOf } from "./winShare.ts";
 
@@ -172,5 +172,29 @@ describe("the season a waiver page prices", () => {
     );
 
     expect(said).toEqual({ parked: "IR" });
+  });
+});
+
+/**
+ * A point a kicker is projected over the average is worth 0.74 of a point
+ * to come (`kickerSeasonEval.ts --rest`), so the weeks left shrink each
+ * kicker's edge to that before anybody is priced.
+ */
+describe("a kicker's weeks left", () => {
+  it("keeps 0.74 of his edge over the average kicker", () => {
+    const k = (name: string, ev: number) => ({
+      ...aMan(name, "K", ev),
+      game: { ev, low: ev - 7, q1: ev - 4, mid: ev - 0.5, q3: ev + 3.5, high: ev + 7.5 },
+    }) as Player;
+    const left = new Map(forTheWeeksLeft(
+      [k("good", 10), k("poor", 8), aMan("back", "RB", 12)], 11,
+    ).map((p) => [p.key, p]));
+
+    expect(KICKER_EDGE_KEPT).toBe(0.74);
+    expect(left.get("good")!.game!["ev"]).toBeCloseTo(9.74, 10);
+    expect(left.get("poor")!.game!["ev"]).toBeCloseTo(8.26, 10);
+    expect(left.get("good")!.game!["high"]).toBeCloseTo(17.24, 10);
+    // nobody else moves
+    expect(left.get("back")!.game!["ev"]).toBe(12);
   });
 });

@@ -83,8 +83,10 @@ export function statusesOn(
 export function forTheWeeksLeft(
   players: Player[], from: number, hurt: Record<string, string> = {},
 ): Player[] {
+  const kickers = shrinkKickers(players);
+
   return players.map((p) => ({
-    ...p,
+    ...(kickers.get(p.key) ?? p),
     weeksLeft: {
       from,
       plays: playsByWeek(
@@ -92,6 +94,44 @@ export function forTheWeeksLeft(
         p.bye),
     },
   }));
+}
+
+/**
+ * How much of a kicker's projected edge over the average kicker carries
+ * into the rest of a season. `kickerSeasonEval.ts --rest` fitted it on
+ * 295 kicker cuts at weeks 4 to 10 of 2023 to 2025: a point over the
+ * average on the model is worth 0.74 of a point to come, and the model
+ * still misses by a point and a half a game either way. Unshrunk, Chad
+ * Ryland's 9.5 against Spencer Shrader's 9.2 read as a pickup worth
+ * making; shrunk it is the lean it is.
+ */
+export const KICKER_EDGE_KEPT = 0.74;
+
+/**
+ * The board's kickers with each one's edge over the average kicker cut to
+ * what carries, his whole week moved by the same amount. The average is
+ * over the kickers in a job, the ones the board projects for a game.
+ */
+function shrinkKickers(players: Player[]): Map<string, Player> {
+  const kickers = players.filter((p) => p.position === "K" && (p.game?.["ev"] ?? 0) > 0);
+  const out = new Map<string, Player>();
+
+  if (kickers.length === 0) {
+    return out;
+  }
+
+  const average = kickers.reduce((sum, p) => sum + p.game!["ev"]!, 0) /
+    kickers.length;
+
+  for (const p of kickers) {
+    const by = (KICKER_EDGE_KEPT - 1) * (p.game!["ev"]! - average);
+    const game = Object.fromEntries(Object.entries(p.game!)
+      .map(([q, n]) => [q, Math.max(0, n + by)]));
+
+    out.set(p.key, { ...p, game, ppg: (p.ppg ?? 0) + by });
+  }
+
+  return out;
 }
 
 export interface NetsAsk {

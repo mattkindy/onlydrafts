@@ -269,10 +269,23 @@ function drawWeeks(p: Player, draws: number): number[] {
     normalsFor(p, draws),
   );
 
+  // Five figures give the shape of a week and not its average: drawn
+  // through them, with the tails run on past the tenth and the ninetieth,
+  // a week came out averaging whatever the shape made of it. Chad Ryland
+  // averaged 9.80 against his 9.24 and Spencer Shrader 9.27 against his
+  // 9.02, so a kicker a fifth of a point better read as half a point and
+  // topped a waiver page. His weeks are scaled to average what he is
+  // projected to score, counted over the weeks he scores at all, since a
+  // week at nothing is read below as a week he did not play.
+  const scored = weeks.reduce((sum, week) => sum + Math.max(0, week), 0) /
+    Math.max(1, weeks.length);
+  const scale = scored > 0 ? g["ev"]! / scored : 1;
   const out = streamFor(p.key + "|out", draws);
 
   return weeks.map((week, i) =>
-    out[i]! < playsIn(p, weekOfDraw(i, from)) ? week : 0);
+    out[i]! < playsIn(p, weekOfDraw(i, from))
+      ? week > 0 ? week * scale : week
+      : 0);
 }
 
 interface Slot {

@@ -14,7 +14,7 @@ import {
 import { payFor, type Pays, type Player } from "./scoring.ts";
 import type { SlateRow } from "./slate.ts";
 import { RECENT, ROLE_MOVE, workOf } from "./usage.ts";
-import { WORTH_ADDING, type Add } from "./waivers.ts";
+import { WORTH_POINTS, type Add } from "./waivers.ts";
 import { whyWords } from "./waiverWhy.ts";
 
 export interface Grouped {
@@ -111,12 +111,22 @@ export function groupsFor(
   };
   // a season-ending injury is priced at nothing already, and is kept out
   // here too in case the report changed after the pricing ran
+  // Worth it is judged on the points he brings. A pickup's win chance
+  // moves by half a point or more on the draws' luck alone, so a bar of a
+  // whole point let Chad Ryland in at +1.3% and kept out Chase McLaughlin,
+  // who brings more, at +0.85%. The win chance only has to point the
+  // right way.
   const worth = wire.filter((row) =>
-    row.added >= WORTH_ADDING && status(row.p) !== SEASON_OVER);
+    row.added > 0 && row.brings >= WORTH_POINTS &&
+    status(row.p) !== SEASON_OVER);
 
   // the win chance alone says how much, not why, so the model's own
   // reason rides after it: who he starts over, whose bye he covers
-  const claim = worth
+  // best first by the points he brings, for the same reason the page's
+  // pairs are: two kickers a few tenths apart came out in either order by
+  // win chance
+  const claim = [...worth]
+    .sort((a, b) => b.brings - a.brings)
     .filter((row) => !sitsThisWeek(row.p, week, status(row.p)))
     .slice(0, GROUP_SIZE)
     .map((row) => ({
