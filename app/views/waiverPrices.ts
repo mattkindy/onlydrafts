@@ -160,7 +160,9 @@ export function useWaiverPrices(
     () => top
       .filter((row) => nets.has(row.p.key))
       .map((row) => ({ row, paid: nets.get(row.p.key)! }))
-      .sort((a, b) => b.paid.net - a.paid.net),
+      // by the points a move adds, which a swap of draws barely moves: two
+      // kickers a few tenths apart came out in either order by win chance
+      .sort((a, b) => b.paid.points - a.paid.points || b.paid.net - a.paid.net),
     [top, nets],
   );
 

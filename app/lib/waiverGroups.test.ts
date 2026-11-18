@@ -48,7 +48,9 @@ describe("the wire, grouped", () => {
     ]);
     const said = groupsFor(
       [anAdd(playing, 0.03), anAdd(onBye, 0.025), anAdd(hurt, 0.02),
-        anAdd(done, 0.02), anAdd(aMan("small", "WR"), 0.005)],
+        anAdd(done, 0.02),
+        // too little to bother with, by the points he brings
+        { ...anAdd(aMan("small", "WR"), 0.005), brings: 0.1 }],
       8, new Map(), listed, PAYS,
     );
 
@@ -112,5 +114,23 @@ describe("the wire, grouped", () => {
 
     expect(said.fluke.map((g) => g.p.key)).toEqual(["lucky"]);
     expect(said.fluke[0]!.why).toBe("14.0 a game on 32% of snaps");
+  });
+});
+
+describe("worth a claim", () => {
+  /**
+   * A pickup's win chance moves by half a point or more on luck, so the
+   * group is judged and ordered on the points he brings: Chase McLaughlin
+   * brought more than Chad Ryland and was kept out at +0.85%.
+   */
+  it("takes and orders pickups by the points they bring", () => {
+    const said = groupsFor(
+      [{ ...anAdd(aMan("ryland", "K"), 0.013), brings: 0.29 },
+        { ...anAdd(aMan("mclaughlin", "K"), 0.0085), brings: 0.41 },
+        { ...anAdd(aMan("noise", "K"), 0.012), brings: 0.05 }],
+      11, new Map(), NOBODY, PAYS,
+    );
+
+    expect(said.claim.map((g) => g.p.key)).toEqual(["mclaughlin", "ryland"]);
   });
 });

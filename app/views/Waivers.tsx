@@ -444,7 +444,19 @@ export interface BestMove {
   points?: number;
   /** how often the player who goes was in your lineup */
   dropStarts?: number;
+  /** a word on how sure the model can be, where it cannot be very */
+  lean?: string;
 }
+
+/**
+ * What the model's misses are for a position whose players it can barely
+ * tell apart, measured: a kicker's rest of season misses by about a point
+ * and a half a game either way (`kickerSeasonEval.ts --rest`).
+ */
+const LEANS: Record<string, string> = {
+  K: "Kicker projections miss by about a point and a half a game either way, " +
+    "so this is a lean, not a lock.",
+};
 
 /** the best add with a drop worked out over the season, if one clears the bar */
 export function seasonBest(
@@ -466,6 +478,7 @@ export function seasonBest(
     after: top.paid.after,
     points: top.paid.points,
     ...(why ? { why } : {}),
+    ...(LEANS[top.row.p.position] ? { lean: LEANS[top.row.p.position]! } : {}),
     ...(gone ? { dropStarts: gone.starts } : {}),
   };
 }
@@ -885,6 +898,7 @@ export function Waivers(props: Props) {
               )}
             </span>
             {best.why && <span class="reason">{best.why}</span>}
+            {best.lean && <span class="reason">{best.lean}</span>}
             {best.drop && best.dropStarts !== undefined && (
               <span class="reason">
                 {best.dropStarts < RARELY_STARTS

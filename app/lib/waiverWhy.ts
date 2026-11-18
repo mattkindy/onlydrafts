@@ -322,9 +322,19 @@ function byeWords(byes: ByeCover[]): string {
     second.name;
 }
 
+/**
+ * Outscoring the man he replaces this close to half the time is a coin
+ * flip, and "5 weeks of 10" read as a reason when it is the absence of one.
+ */
+const A_COIN_FLIP = [0.45, 0.56];
+
 const PART_WORDS: Record<WhyKind, (part: WhyPart) => string> = {
-  over: (part) => `starts over ${part.name} and outscores him in ` +
-    `${tenths(part.outscored)} weeks of 10`,
+  over: (part) =>
+    part.outscored >= A_COIN_FLIP[0]! && part.outscored < A_COIN_FLIP[1]!
+      ? `starts over ${part.name}, though he outscores him only about half ` +
+        "the time"
+      : `starts over ${part.name} and outscores him in ` +
+        `${tenths(part.outscored)} weeks of 10`,
   bye: (part) => byeWords(part.byes),
   hurt: (part) => `fills in for ${part.name}, who is ${listedAs(part.status)}`,
   missing: (part) => `fills in when ${part.name} misses a game`,
