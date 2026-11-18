@@ -27,7 +27,7 @@ import {
 import { WeatherMark } from "./WeatherMark.tsx";
 import type { Listed } from "../lib/availability.ts";
 import {
-  RARELY_STARTS, WORTH_ADDING, type Add, type Drop, type Net,
+  RARELY_STARTS, WORTH_ADDING, worthMaking, type Add, type Drop, type Net,
 } from "../lib/waivers.ts";
 import type { Schedule } from "../lib/waiversSeason.ts";
 import { workWords } from "../lib/usage.ts";
@@ -654,7 +654,7 @@ export function Waivers(props: Props) {
    * can only take value off him, so anybody adding less than the bar
    * cannot clear it once he is paid for either.
    */
-  const worth = priced.filter(({ paid }) => paid.net >= WORTH_ADDING);
+  const worth = priced.filter(({ paid }) => worthMaking(paid));
   const rest = listed.slice(PRICED).filter((row) => row.added >= WORTH_ADDING);
   const wanted = normalizeName(query.trim());
   const matching = (row: { p: Player }) =>

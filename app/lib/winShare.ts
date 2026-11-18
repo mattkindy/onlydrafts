@@ -336,6 +336,11 @@ export interface SeasonLineup {
   fits: Record<string, number>;
   /** which slot each player took, by draw and then by his place in the order */
   at: Int8Array;
+  /**
+   * What the wire scores in each slot, drawn week by week, by slot. A
+   * slot with nobody on the wire for it has none.
+   */
+  wireIts: (number[] | null)[];
   /** the first drawn week this covers, since a caller can ask for a run */
   from: number;
   total: number[];
@@ -360,6 +365,13 @@ export function seasonLineupFor(
 
   const offWire = slots.map((slot) => slot.where.reduce(
     (best, where) => Math.max(best, wire[where] ?? 0), 0));
+  const wireIts = slots.map((slot, s) => {
+    const from = slot.where.find((where) => (wire[where] ?? 0) === offWire[s]);
+
+    return from && offWire[s]! > 0
+      ? weeksOf(wirePlayer(from, offWire[s]!, s), draws)
+      : null;
+  });
   const players = order.length;
   const full = (1 << slots.length) - 1;
   const at = new Int8Array((only[1] - only[0]) * players).fill(-1);
@@ -400,15 +412,79 @@ export function seasonLineupFor(
 
     for (let s = 0; s < slots.length; s++) {
       if (open & (1 << s)) {
-        sum += offWire[s]!;
+        sum += wireIts[s]?.[i] ?? offWire[s]!;
       }
     }
 
     total.push(sum);
   }
 
-  return { slots, offWire, order, fits, at, from: only[0], total, started, startedIn };
+  return {
+    slots, offWire, wireIts, order, fits, at, from: only[0], total, started,
+    startedIn,
+  };
 }
+
+/**
+ * How a week at the wire's level spreads around its average, as the
+ * share of it at the 10th, 25th, 50th, 75th and 90th percentiles. The
+ * median of each over the players ranked 13th to 48th at the position on
+ * the 2026 board, under standard scoring, which is about where the best
+ * player nobody rosters sits.
+ */
+const WIRE_SHAPE: Record<string, [number, number, number, number, number]> = {
+  QB: [0.29, 0.60, 0.99, 1.44, 1.89],
+  RB: [0.18, 0.45, 0.88, 1.44, 2.02],
+  WR: [0.15, 0.45, 0.88, 1.44, 2.08],
+  TE: [0.08, 0.33, 0.81, 1.50, 2.33],
+  K: [0.22, 0.50, 0.92, 1.40, 1.91],
+  DEF: [0.00, 0.47, 0.94, 1.51, 1.98],
+};
+
+/** a position the table has no shape for takes a receiver's */
+const WIRE_SHAPE_ELSE = WIRE_SHAPE["WR"]!;
+
+const wirePlayers = new Map<string, Player>();
+
+/**
+ * Whoever the wire gives you in a slot, as a player with good weeks and
+ * bad ones like anybody else.
+ *
+ * The wire used to score its average every week, with no spread at all.
+ * In a week a player of yours could not fill, swapping him for the wire
+ * then took the bad tail off your week as well as some points, and at a
+ * high win chance losing the tail is worth more than the points. So
+ * dropping a starting quarterback for a kicker read as a win: Brock
+ * Purdy cost his owner 0.79 points a week and came out as a gain of 0.4%.
+ *
+ * The wire is somebody different every week and nobody's teammate, so
+ * he plays every week on a stream of his own, one per slot, since two
+ * players off the wire in the same week are two players.
+ */
+function wirePlayer(position: string, level: number, slot: number): Player {
+  const key = `wire|${position}|${level}|${slot}`;
+  let his = wirePlayers.get(key);
+
+  if (!his) {
+    const [low, q1, mid, q3, high] = WIRE_SHAPE[position] ?? WIRE_SHAPE_ELSE;
+
+    his = {
+      name: "the wire", key, position, team: null, bye: null,
+      games: SEASON_WEEKS - 1, ppg: level,
+      game: {
+        ev: level, low: level * low, q1: level * q1, mid: level * mid,
+        q3: level * q3, high: level * high,
+      },
+    } as Player;
+    wirePlayers.set(key, his);
+  }
+
+  return his;
+}
+
+/** what the wire scores in a slot in one drawn week, by the draw's index */
+const wireAt = (lineup: SeasonLineup, s: number, i: number) =>
+  lineup.wireIts[s]?.[i] ?? lineup.offWire[s]!;
 
 /**
  * Your lineup one drawn week at a time, and what a newcomer at each
@@ -502,7 +578,9 @@ function heldIn(
 
   const off = lineup.offWire[s]!;
 
-  return off > 0 ? { expect: off, score: off, wire: true } : null;
+  return off > 0
+    ? { expect: off, score: wireAt(lineup, s, i + lineup.from), wire: true }
+    : null;
 }
 
 /** what your lineup scores each week once one player is gone, and who steps up */
@@ -573,7 +651,7 @@ export function withoutFor(lineup: SeasonLineup, key: string): Without {
     }
 
     if (hole >= 0) {
-      sum += lineup.offWire[hole]!;
+      sum += wireAt(lineup, hole, i + lineup.from);
     }
 
     total[i] = sum;

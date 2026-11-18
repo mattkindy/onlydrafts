@@ -29,6 +29,21 @@ import { whyFor, type Why } from "./waiverWhy.ts";
 export const WORTH_ADDING = 0.01;
 
 /**
+ * And a move has to make your lineup score more, by enough to tell from
+ * the draws. A swap redraws the weeks of the two players in it, so its
+ * win chance moves by half a point or more on luck alone, where its
+ * points a week move by about a tenth. "Add Chad Ryland, drop Brock
+ * Purdy" came out at 85% to 87% while it netted 0.01 points a week:
+ * Ryland's 0.53 over the kicker he replaced, less the 0.52 Purdy took.
+ * A quarter of a point is about two of those tenths.
+ */
+export const WORTH_POINTS = 0.25;
+
+/** whether a paid-for move clears both bars, the win chance and the points */
+export const worthMaking = (paid: Net) =>
+  paid.net >= WORTH_ADDING && paid.points >= WORTH_POINTS;
+
+/**
  * A player who is in the lineup less often than this is a bench player, and
  * naming the slot he takes in the odd week he starts tells a reader less
  * than saying he hardly ever starts.
@@ -62,6 +77,8 @@ export interface Drop {
 export interface Net {
   /** what the whole move is worth, the drop paid for */
   net: number;
+  /** how many more points a week your lineup scores after it */
+  points: number;
   /** who goes, or nobody when there is a spot for him */
   drop: Player | null;
   /** how often you win a week as you are, and how often after the move */
@@ -134,7 +151,9 @@ function dropsIn(held: SeasonLineup, mine: Player[], room: Room): Drop[] {
         slot: slotOf(held, p.key),
       };
     })
-    .sort((a, b) => b.costs - a.costs);
+    // by the points he takes, which a swap of draws barely moves, where
+    // his win chance can come out on either side of zero on luck alone
+    .sort((a, b) => b.takes - a.takes || b.costs - a.costs);
 }
 
 const mean = (xs: number[]) =>
@@ -220,7 +239,8 @@ export function netsFor(
 ): Map<string, Net> {
   const nets = new Map<string, Net>();
   const alone = (add: Add): Net => ({
-    net: add.added, drop: null, before: add.before, after: add.after,
+    net: add.added, points: add.brings, drop: null,
+    before: add.before, after: add.after,
   });
 
   if (openSpots !== null && openSpots > 0) {
@@ -231,13 +251,15 @@ export function netsFor(
     return nets;
   }
 
-  const held = winChance(
-    seasonLineupFor(mine, slots, room.draws, room.wire).total, room.opponent);
+  const now = seasonLineupFor(mine, slots, room.draws, room.wire).total;
+  const held = winChance(now, room.opponent);
 
   for (const add of adds) {
     const withHim = [...mine, add.p];
-    const cheapest = dropsIn(
-      seasonLineupFor(withHim, slots, room.draws, room.wire), withHim, room)
+    const lineup = seasonLineupFor(withHim, slots, room.draws, room.wire);
+    // the cheapest is the one who takes the fewest points, the order the
+    // drops come back in, so the swap does not turn on the draws' luck
+    const cheapest = dropsIn(lineup, withHim, room)
       .filter((d) => d.p.key !== add.p.key)
       .pop();
 
@@ -246,6 +268,7 @@ export function netsFor(
     nets.set(add.p.key, cheapest
       ? {
         net: cheapest.after - held,
+        points: mean(lineup.total) - cheapest.takes - mean(now),
         drop: cheapest.p,
         before: held,
         after: cheapest.after,
