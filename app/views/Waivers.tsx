@@ -433,21 +433,40 @@ export interface BestMove {
   drop: string | null;
   before: number;
   after: number;
+  /**
+   * Why, in the model's own terms: who he starts over, whose bye he
+   * covers, whose missed games he fills. A reader could not tell a kicker
+   * a third of a point better from one who covers a bye, and the card is
+   * the one place everybody reads.
+   */
+  why?: string;
+  /** what the move adds to your lineup a week, in points */
+  points?: number;
+  /** how often the player who goes was in your lineup */
+  dropStarts?: number;
 }
 
 /** the best add with a drop worked out over the season, if one clears the bar */
-export function seasonBest(worth: { row: Add; paid: Net }[]): BestMove | null {
+export function seasonBest(
+  worth: { row: Add; paid: Net }[], drops: Drop[] = [],
+): BestMove | null {
   const top = worth[0];
 
   if (!top) {
     return null;
   }
 
+  const gone = drops.find((d) => d.p.key === top.paid.drop?.key);
+  const why = whyWords(top.row.why);
+
   return {
     add: top.row.p.name,
     drop: top.paid.drop?.name ?? null,
     before: top.paid.before,
     after: top.paid.after,
+    points: top.paid.points,
+    ...(why ? { why } : {}),
+    ...(gone ? { dropStarts: gone.starts } : {}),
   };
 }
 
@@ -700,7 +719,7 @@ export function Waivers(props: Props) {
     : listed.length - worth.length - rest.length;
   const best = span === "week"
     ? weekBest(priced, week, nameFor)
-    : seasonBest(worth);
+    : seasonBest(worth, drops);
 
   const yours = drops.filter(matching);
   const missing = missingWeek(
@@ -861,7 +880,18 @@ export function Waivers(props: Props) {
             <span class="swing">
               win % {pct(best.before)} <span aria-hidden="true">→</span>{" "}
               <b class={best.after > best.before ? "up" : ""}>{pct(best.after)}</b>
+              {best.points !== undefined && (
+                <> &middot; {points(best.points)} points a week</>
+              )}
             </span>
+            {best.why && <span class="reason">{best.why}</span>}
+            {best.drop && best.dropStarts !== undefined && (
+              <span class="reason">
+                {best.dropStarts < RARELY_STARTS
+                  ? `${best.drop} is in your lineup ${pct(best.dropStarts)} of weeks, so he costs little.`
+                  : `${best.drop} is in your lineup ${pct(best.dropStarts)} of weeks.`}
+              </span>
+            )}
             <GoLink href={playersLink(league)}>
               make the move in {PROVIDER_NAME[league.provider]}
             </GoLink>

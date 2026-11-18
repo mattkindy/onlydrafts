@@ -15,6 +15,7 @@ import { payFor, type Pays, type Player } from "./scoring.ts";
 import type { SlateRow } from "./slate.ts";
 import { RECENT, ROLE_MOVE, workOf } from "./usage.ts";
 import { WORTH_ADDING, type Add } from "./waivers.ts";
+import { whyWords } from "./waiverWhy.ts";
 
 export interface Grouped {
   p: Player;
@@ -113,10 +114,16 @@ export function groupsFor(
   const worth = wire.filter((row) =>
     row.added >= WORTH_ADDING && status(row.p) !== SEASON_OVER);
 
+  // the win chance alone says how much, not why, so the model's own
+  // reason rides after it: who he starts over, whose bye he covers
   const claim = worth
     .filter((row) => !sitsThisWeek(row.p, week, status(row.p)))
     .slice(0, GROUP_SIZE)
-    .map((row) => ({ p: row.p, why: `+${pct(row.added)} over the season` }));
+    .map((row) => ({
+      p: row.p,
+      why: [`+${pct(row.added)} over the season.`, whyWords(row.why)]
+        .filter(Boolean).join(" "),
+    }));
 
   const stash = worth
     .filter((row) => sitsThisWeek(row.p, week, status(row.p)))
