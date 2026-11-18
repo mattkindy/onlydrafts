@@ -134,6 +134,34 @@ describe("what a pickup is worth once it is paid for", () => {
   });
 });
 
+describe("a player's drawn weeks", () => {
+  /**
+   * Five figures give a week's shape and not its average, and drawn
+   * through them Chad Ryland's weeks averaged 9.80 against his 9.24 while
+   * Spencer Shrader's averaged 9.27 against 9.02: a fifth of a point read
+   * as half a point. Two shapes around the same projection now draw the
+   * same average.
+   */
+  it("average what he is projected to score, whatever his shape", () => {
+    const skewed = {
+      ...aMan("skewed", "K", 9.24),
+      game: { ev: 9.24, low: 2.24, q1: 5.24, mid: 8.74, q3: 12.74, high: 16.74 },
+    } as Player;
+    const even = {
+      ...aMan("even", "K", 9.24),
+      game: { ev: 9.24, low: 2.3, q1: 5.6, mid: 9.1, q3: 12.6, high: 15.9 },
+    } as Player;
+    const mean = (p: Player) => {
+      const weeks = weeksOf(p, 2000);
+
+      return weeks.reduce((sum, w) => sum + Math.max(0, w), 0) / weeks.length;
+    };
+
+    expect(mean(skewed)).toBeCloseTo(9.24, 1);
+    expect(mean(even)).toBeCloseTo(9.24, 1);
+  });
+});
+
 describe("the wire, when it fills a slot", () => {
   /**
    * The wire used to score its average every week. Swapping a player for
