@@ -1257,6 +1257,8 @@
   .bestmove .what { font-size: var(--t4); line-height: 1.3; text-wrap: balance; }
   .bestmove .swing { font-size: var(--t2); color: var(--muted); }
   .bestmove .swing b { font-size: var(--t4); }
+  /* why the move, in the model's own terms, under the number it explains */
+  .bestmove .reason { font-size: var(--t2); color: var(--muted); line-height: 1.4; }
 
   /* another team's game, closed to its score until it is asked for */
   .card.matchup .unfold { grid-column: 1 / -1; display: flex;

@@ -291,17 +291,32 @@ function reserveGames(games: number): number[] {
  */
 export const STILL_PLAYING = { base: 0.465, history: 0.149, season: 0.255 };
 
+/** the positions the line was fitted on */
+const STILL_PLAYING_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
+
 /**
  * His games over a season, moved by the season so far. The line was
  * fitted on players who played their side's last game, so a man who
  * missed it keeps what the board had, and so does a man with fewer than
  * two of his side's games behind him.
+ *
+ * So does a kicker or a defence. The line was fitted on the four skill
+ * positions, where a starter misses about one game in seven; a kicker
+ * almost never does. Read through the line, a kicker who had not missed
+ * a game was drawn to sit 14% of what was left, and the kicker behind him
+ * on the wire read as cover for those games: most of what put Chad Ryland
+ * at the top of a page.
  */
 export function gamesNow(
   games: number | undefined,
   weeks: { w: number; played?: unknown }[] | undefined,
   from: number,
+  position?: string,
 ): number | undefined {
+  if (position && !STILL_PLAYING_POSITIONS.has(position)) {
+    return games;
+  }
+
   const behind = (weeks ?? []).filter((w) => w.w < from)
     .sort((a, b) => a.w - b.w);
 

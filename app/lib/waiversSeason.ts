@@ -88,7 +88,8 @@ export function forTheWeeksLeft(
     weeksLeft: {
       from,
       plays: playsByWeek(
-        gamesNow(p.games, p.weeks, from), hurt[p.key], from, p.bye),
+        gamesNow(p.games, p.weeks, from, p.position), hurt[p.key], from,
+        p.bye),
     },
   }));
 }

@@ -22,7 +22,7 @@ import { Roster } from "./views/Roster.tsx";
 import { readSlate } from "./lib/slate.ts";
 import { DraftView } from "./views/Draft.tsx";
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
-import { Waivers, weekBest } from "./views/Waivers.tsx";
+import { seasonBest, Waivers, weekBest } from "./views/Waivers.tsx";
 import type { Add } from "./lib/waivers.ts";
 import { pairedRows } from "./views/Matchups.tsx";
 import { nameOf } from "./views/Advice.tsx";
@@ -1832,5 +1832,37 @@ describe("a player nobody has a projection for", () => {
 
   it("falls back to his key only when nobody said a name", () => {
     expect(nameOf("treysmack", new Map(), new Map())).toBe("treysmack");
+  });
+});
+
+/**
+ * "Add Chad Ryland, drop Corey Kiner" told an owner nothing about why. The
+ * card carries the model's own reason, what the move adds a week, and how
+ * often the man who goes was starting.
+ */
+describe("the best move for the season", () => {
+  it("says why, by how much, and what the drop costs", () => {
+    const ryland = { name: "Chad Ryland", key: "chadryland", position: "K" } as Player;
+    const kiner = { name: "Corey Kiner", key: "coreykiner", position: "RB" } as Player;
+    const row = {
+      p: ryland, added: 0.012, starts: 0.8, brings: 0.53, before: 0.86, after: 0.872,
+      displaced: null,
+      why: {
+        parts: [{
+          kind: "bye", adds: 0.006, starts: 0.11, name: "Spencer Shrader",
+          outscored: 0.54, status: null, empty: null,
+          byes: [{ week: 13, name: "Spencer Shrader", share: 0.9 }],
+        }],
+        weekly: [], from: 11,
+      },
+    } as unknown as Add;
+    const best = seasonBest(
+      [{ row, paid: { net: 0.01, points: 0.55, drop: kiner, before: 0.86, after: 0.87 } }],
+      [{ p: kiner, costs: 0, starts: 0.05, takes: 0, before: 0.86, after: 0.86, heir: null, slot: null }],
+    )!;
+
+    expect(best.why).toContain("Spencer Shrader");
+    expect(best.points).toBe(0.55);
+    expect(best.dropStarts).toBe(0.05);
   });
 });
