@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  BACK_BY, gamesLeft, OUT_BACK, outThisWeek, playChance, playsByWeek,
+  BACK_BY, gamesNow, STILL_PLAYING, gamesLeft, OUT_BACK, outThisWeek, playChance, playsByWeek,
   pricedDown, RAMP, SEASON_OVER, seasonEnding, statusOf, WEEKS_OUT,
 } from "./availability.ts";
 
@@ -269,5 +269,43 @@ describe("an injury that ends seasons", () => {
     expect(statusOf({ status: "IR", part: "Ankle" })).toBe("IR");
     // a questionable man with an old ACL in his file is still questionable
     expect(statusOf({ status: "Questionable", part: "ACL" })).toBe("Questionable");
+  });
+});
+
+/**
+ * Brock Purdy's history put him at 9.7 games of 17, and he was still drawn
+ * to miss 43% of what was left after playing every game into November.
+ */
+describe("his games once the season is under way", () => {
+  const weeks = (played: boolean[]) =>
+    played.map((was, i) => ({ w: i + 1, played: was ? { passYds: 250 } : null }));
+
+  it("moves a man who has played every game well past his history", () => {
+    const now = gamesNow(9.7, weeks(Array(9).fill(true)), 11)!;
+    const share = STILL_PLAYING.base + STILL_PLAYING.history * (9.7 / 17) +
+      STILL_PLAYING.season;
+
+    expect(now / 17).toBeCloseTo(share, 10);
+    expect(now / 17).toBeGreaterThan(0.79);
+    expect(now / 17).toBeLessThan(0.82);
+  });
+
+  it("brings a sound history down a little, since anybody can get hurt", () => {
+    expect(gamesNow(16.5, weeks(Array(9).fill(true)), 11)! / 17).toBeLessThan(0.9);
+  });
+
+  it("leaves a man who missed his side's last game where the board had him", () => {
+    expect(gamesNow(9.7, weeks([true, true, true, false]), 11)).toBe(9.7);
+  });
+
+  it("leaves the board alone before two games are behind him", () => {
+    expect(gamesNow(9.7, weeks([true]), 11)).toBe(9.7);
+    expect(gamesNow(9.7, [], 11)).toBe(9.7);
+  });
+
+  it("reads only the weeks before the coming one", () => {
+    const later = [...weeks(Array(9).fill(true)), { w: 11, played: null }];
+
+    expect(gamesNow(9.7, later, 11)).toBe(gamesNow(9.7, weeks(Array(9).fill(true)), 11));
   });
 });

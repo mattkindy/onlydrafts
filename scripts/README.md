@@ -4547,3 +4547,38 @@ fit anything on.
 Fit every horizon at once, with how far ahead as a term, so the t+3 fit
 can borrow the seasons only t+1 has. That is the other way to give the
 hurdle more to learn from.
+
+## How much of the rest a player plays, once the season is under way
+
+`availabilityNowEval.ts`. The waiver page drew every player's remaining
+weeks off the board's games, which come from the summer: his history and
+his age. They never moved. Brock Purdy's history put him at 9.7 games of
+17, so in week 11 of 2026, having played every game, he was still drawn to
+miss 43% of what was left. That made his owner's other quarterback the
+starter in nearly half the weeks, and made dropping Purdy look cheap.
+
+Over 2017 to 2025, starters who had played every game so far:
+
+```
+history     cut   n      says    played
+0%-60%      6     82     43%     79%
+0%-60%      10    62     44%     86%
+60%-75%     10    72     69%     85%
+75%-90%     10    190    83%     85%
+90%-100%    10    345    97%     88%
+```
+
+Once a season is under way the history says little: a man on the field
+plays about 85% of the rest whatever it said. Over every starter who
+played his side's last game, healthy all year or not, the line fitted on
+2017 to 2021 is 0.465 + 0.149 x history + 0.255 x the share of his side's
+games he has played this season. On 2022 to 2025 it lands within a point
+of what happened in each band it predicts (70% against 69%, 82% against
+82%, 86% against 87%), and its error a player is 0.175 against 0.189
+for the history alone.
+
+`gamesNow` in `app/lib/availability.ts` ships it for the waiver page's
+weeks left. A player who missed his side's last game keeps the board's
+number, since the line was fitted on players who had not, and so does one
+with fewer than two games behind him. Purdy goes from 57% of the
+remaining weeks to 81%.
