@@ -826,6 +826,14 @@ async function main(): Promise<void> {
       },
     ]),
   );
+
+  /**
+   * Quarterbacks on their own: the update's weights fitted on quarterbacks
+   * alone against the pooled fit, on the same rows, since a passer's points
+   * may hold up better than the shared weights trust them to.
+   */
+  const passers = new Map<number, { was: number[]; pooled: number[]; own: number[] }>(
+    CUTS.map((cut) => [cut, { was: [], pooled: [], own: [] }]));
   const fits = new Map<number, InSeasonFit>();
 
   for (const year of [...MARKED, LIVE]) {
@@ -904,6 +912,10 @@ async function main(): Promise<void> {
     }
 
     const season = built.get(year)!;
+    const passerShape = fitUpdateShape(
+      fit.role, cases.filter((c) => c.position === "QB"));
+
+    console.log(`  quarterbacks alone: ${describe(passerShape)}`);
 
     for (const cut of CUTS) {
       // why his snaps rose, off the rosters as they stood at the cut
@@ -913,6 +925,14 @@ async function main(): Promise<void> {
       const surprises = rows.map((row) => surpriseOf(fit, row));
       const line = cutAt(surprises, SURPRISE_SHARE);
       const into = marked.get(cut)!;
+
+      for (const row of rows.filter((r) => r.position === "QB")) {
+        const at = passers.get(cut)!;
+
+        at.was.push(row.restPpg);
+        at.pooled.push(updateLevel(fit, row).ppg);
+        at.own.push(updateLevel({ role: fit.role, shape: passerShape }, row).ppg);
+      }
 
       rows.forEach((row, i) => {
         into.was.push(row.restPpg);
@@ -938,6 +958,21 @@ async function main(): Promise<void> {
         into.after.push(row.rise && riseAfter(season, row.playerId, row.rise, cut));
       });
     }
+  }
+
+  console.log("\nquarterbacks, the pooled weights against weights fitted on " +
+    "quarterbacks alone: MAE, bias (said less got), correlation");
+
+  for (const cut of CUTS) {
+    const at = passers.get(cut)!;
+    const bias = (said: number[]) =>
+      said.reduce((sum, x, i) => sum + x - at.was[i]!, 0) / Math.max(1, said.length);
+
+    console.log(`after week ${cut}: ${at.was.length} passers   pooled ` +
+      `${mae(at.pooled, at.was).toFixed(3)} ${bias(at.pooled).toFixed(2)} ` +
+      `${correlation(at.pooled, at.was).toFixed(3)}   alone ` +
+      `${mae(at.own, at.was).toFixed(3)} ${bias(at.own).toFixed(2)} ` +
+      `${correlation(at.own, at.was).toFixed(3)}`);
   }
 
   for (const cut of CUTS) {
