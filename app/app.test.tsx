@@ -187,7 +187,7 @@ describe("the views", () => {
 
     // by heading rather than by count, since a board with sleeper
     // claims on it draws a third table between these two
-    expect(headings(where)).toContain("waiver wire adds");
+    expect(headings(where)).toContain("every free agent");
     expect(headings(where)).toContain("what each drop costs");
     expect(where.querySelectorAll("table.line tbody tr").length)
       .toBeGreaterThan(5);

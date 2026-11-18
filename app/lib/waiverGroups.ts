@@ -39,6 +39,13 @@ export interface WaiverGroups {
 /** how many players each group shows */
 export const GROUP_SIZE = 4;
 
+/**
+ * How far a streamer's line this week has to clear your own starter's.
+ * Under a point either one is as likely to come out ahead, and a move
+ * that changes nothing is a move nobody needs to make.
+ */
+const STREAM_BY = 1;
+
 /** the positions a manager streams week to week, with how many of each */
 const STREAMED: [string, number][] = [["QB", 1], ["TE", 2], ["DEF", 2], ["K", 1]];
 
@@ -67,7 +74,14 @@ const FLUKE_SNAPS = 45;
 /** points a game over his recent games that would read as a breakout */
 const FLUKE_POINTS = 11;
 
-const pct = (share: number) => `${(100 * share).toFixed(1)}% win chance`;
+/**
+ * What a pickup brings, in points a week. The groups used to lead with his
+ * win chance, which moves by half a point or more on the draws' luck, so
+ * Chad Ryland read +1.3% under Chase McLaughlin's +0.9% in a list ranked,
+ * rightly, the other way round.
+ */
+const perWeek = (points: number) =>
+  `+${points.toFixed(1)} point${points.toFixed(1) === "1.0" ? "" : "s"} a week`;
 
 /**
  * Whether he has no game this week: a bye, or a word on the report that
@@ -103,6 +117,8 @@ function recentPoints(p: Player, pays: Pays, games = RECENT): number[] {
 export function groupsFor(
   wire: Add[], week: number | null, rows: Map<string, SlateRow>,
   listed: Map<string, Listed>, pays: Pays,
+  /** your own players by key, for what a streamer has to beat */
+  mine: { key: string; name: string; position: string }[] = [],
 ): WaiverGroups {
   const status = (p: Player) => {
     const his = listed.get(p.key);
@@ -131,7 +147,7 @@ export function groupsFor(
     .slice(0, GROUP_SIZE)
     .map((row) => ({
       p: row.p,
-      why: [`+${pct(row.added)} over the season.`, whyWords(row.why)]
+      why: [`${perWeek(row.brings)} over the season.`, whyWords(row.why)]
         .filter(Boolean).join(" "),
     }));
 
@@ -141,7 +157,7 @@ export function groupsFor(
     .map((row) => ({
       p: row.p,
       why: (week !== null && row.p.bye === week ? "on bye, " : `${status(row.p)}, `) +
-        `+${pct(row.added)} over the season`,
+        `${perWeek(row.brings)} over the season`,
     }));
 
   // this week's lines, for the players who have one and are playing
@@ -153,18 +169,38 @@ export function groupsFor(
       : undefined;
   };
 
-  const stream = STREAMED.flatMap(([position, count]) => wire
-    .filter((row) => row.p.position === position && line(row.p))
-    .sort((a, b) => line(b.p)!.blend - line(a.p)!.blend)
-    .slice(0, count)
-    .map((row) => {
-      const his = line(row.p)!;
+  // A streamer is somebody to start this week instead of your own man, so
+  // he has to beat your best line at the position by a point, and says
+  // whom he beats. The best free agent's line on its own put Harrison
+  // Butker up as a stream with nothing to say whether he beat the kicker
+  // you already had.
+  const yours = (position: string) => mine
+    .filter((p) => p.position === position)
+    .map((p) => ({ p, row: line(p as Player) }))
+    .filter((one) => one.row)
+    .sort((a, b) => b.row!.blend - a.row!.blend)[0];
 
-      return {
-        p: row.p,
-        why: `${his.blend.toFixed(1)} vs ${his.opponent} this week`,
-      };
-    }));
+  const stream = STREAMED.flatMap(([position, count]) => {
+    const starter = yours(position);
+    const bar = (starter?.row?.blend ?? 0) + STREAM_BY;
+
+    return wire
+      .filter((row) => row.p.position === position && line(row.p) &&
+        line(row.p)!.blend >= bar)
+      .sort((a, b) => line(b.p)!.blend - line(a.p)!.blend)
+      .slice(0, count)
+      .map((row) => {
+        const his = line(row.p)!;
+        const over = starter
+          ? `, against ${starter.p.name}'s ${starter.row!.blend.toFixed(1)}`
+          : mine.length ? `, and you have no ${position} playing` : "";
+
+        return {
+          p: row.p,
+          why: `${his.blend.toFixed(1)} vs ${his.opponent} this week${over}`,
+        };
+      });
+  });
 
   const rising = wire
     .flatMap((row) => {
