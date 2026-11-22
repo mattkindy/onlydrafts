@@ -402,7 +402,9 @@ export interface SeedRow {
   versus?: Record<string, { won: number; games: number }>;
 }
 
-const PLAIN_RULES: Pick<PlayoffRules, "seedBy" | "ties" | "divisions"> = {
+type SeedRules = Pick<PlayoffRules, "seedBy" | "ties" | "divisions" | "wildTies">;
+
+const PLAIN_RULES: SeedRules = {
   seedBy: "wins", ties: ["pf"], divisions: false,
 };
 
@@ -416,7 +418,9 @@ const PLAIN_RULES: Pick<PlayoffRules, "seedBy" | "ties" | "divisions"> = {
  * with a game against each week's median, all-play or points for, with
  * its tiebreakers in order and a coin flip after them. Where division
  * winners get in, each division's best team does, and the best of the
- * rest fill the places left.
+ * rest fill the places left. Where the wild cards have tiebreakers of
+ * their own, each division is ranked by the league's tiebreakers and the
+ * wild cards and the winners' seeds by theirs, the NFL's way.
  *
  * With `byWeek`, each week is drawn from that week's strengths, so a bye
  * or a starter back from reserve lands in the week it happens. With
@@ -438,7 +442,7 @@ export function playoffOdds(input: {
   bracket?: Map<string, Strength>[];
   playoffTeams: number;
   /** how the table is ranked; by record, then points for, without */
-  rules?: Pick<PlayoffRules, "seedBy" | "ties" | "divisions">;
+  rules?: SeedRules;
   /** each team's division, where division winners get in */
   divisionOf?: Map<string, number>;
   /** this week's games with their odds, owner a beating owner b */
@@ -470,16 +474,23 @@ export function playoffOdds(input: {
   const settled = new Set(thisWeek.flatMap((g) => [g.a, g.b]));
 
   // what the ranking needs kept beyond wins and points for
-  const uses = (tie: Tiebreak) => rules.ties.includes(tie);
+  const allTies = [...rules.ties, ...(rules.wildTies ?? [])];
+  const uses = (tie: Tiebreak) => allTies.includes(tie);
   const needAll = rules.seedBy === "allplay" || uses("allplay");
   const needMedian = rules.seedBy === "median";
-  const needPairs = uses("h2h") || uses("division");
+  const needPairs = uses("h2h") || uses("sweep") || uses("division");
   const needPa = uses("paMost") || uses("paFewest");
   const division = owners.map((o) => input.divisionOf?.get(o) ?? null);
   const divisionIds = rules.divisions
     ? [...new Set(division.filter((d): d is number => d !== null))]
     : [];
   const byDivision = divisionIds.length > 1;
+  // each division ranked on its own, and the wild cards by their own list
+  const wildTies = byDivision ? rules.wildTies : undefined;
+  const members = divisionIds.map((d) => owners.flatMap((_, i) => division[i] === d ? [i] : []));
+  // each team's place in its division this season, -1 where it has none
+  const inDivision: number[] = owners.map((_, i) =>
+    division[i] !== null && divisionIds.includes(division[i]!) ? 0 : -1);
 
   // your games from here through each week, and for each week and each
   // number of wins by then, how many seasons went that way and made it
@@ -602,6 +613,7 @@ export function playoffOdds(input: {
   const keyOf = (tie: Tiebreak, i: number, group: number[]): number => {
     switch (tie) {
       case "h2h": return shareAgainst(i, (j) => group.includes(j));
+      case "sweep": return sweepOf(i, group);
       case "division": return division[i] === null ? 0.5
         : shareAgainst(i, (j) => division[j] === division[i]);
       case "pf": return pf[i]!;
@@ -610,6 +622,85 @@ export function playoffOdds(input: {
       case "allplay": return allGames[i] ? allWon[i]! / allGames[i]! : 0;
       case "wins": return wins[i]!;
     }
+  };
+
+  /**
+   * Head-to-head the NFL's way for a wild card: two teams by their games
+   * with each other, and three or more only where one has beaten each of
+   * the others, which puts it first, or lost to each, which puts it last.
+   */
+  const sweepOf = (i: number, group: number[]): number => {
+    if (group.length === 2) {
+      return shareAgainst(i, (j) => group.includes(j));
+    }
+
+    let beatAll = true;
+    let lostAll = true;
+
+    for (const j of group) {
+      const games = pairGames[i * n + j]!;
+      const won = pairWon[i * n + j]!;
+
+      if (j === i) {
+        continue;
+      }
+
+      if (!games) {
+        return 0;
+      }
+
+      beatAll &&= won === games;
+      lostAll &&= won === 0;
+    }
+
+    return beatAll ? 1 : lostAll ? -1 : 0;
+  };
+
+  /**
+   * The one team a tie puts first, the NFL's way: a tiebreaker that drops
+   * some of the tied teams sends the rest back to the top of the list.
+   */
+  const firstOf = (group: number[], chain: Tiebreak[], layer = 0): number => {
+    if (group.length === 1) {
+      return group[0]!;
+    }
+
+    if (layer >= chain.length) {
+      return group[Math.floor(next() * group.length)]!;
+    }
+
+    const keys = group.map((i) => keyOf(chain[layer]!, i, group));
+    const best = Math.max(...keys);
+    const top = group.filter((_, k) => keys[k] === best);
+
+    return firstOf(top, chain, top.length < group.length ? 0 : layer + 1);
+  };
+
+  /**
+   * Teams ranked a place at a time: the best record left, its ties broken
+   * by `chain`. For a wild card only each division's best of the tied
+   * teams takes part, so nobody passes a team his own division put ahead.
+   */
+  const rankOut = (teams: number[], chain: Tiebreak[], bestOfDivision = false): number[] => {
+    const left = [...teams];
+    const out: number[] = [];
+
+    while (left.length) {
+      const top = Math.max(...left.map((i) => primary[i]!));
+      let tied = left.filter((i) => primary[i] === top);
+
+      if (bestOfDivision) {
+        tied = tied.filter((i) => inDivision[i]! < 0 || !tied.some((j) =>
+          division[j] === division[i] && inDivision[j]! < inDivision[i]!));
+      }
+
+      const pick = firstOf(tied, chain);
+
+      out.push(pick);
+      left.splice(left.indexOf(pick), 1);
+    }
+
+    return out;
   };
 
   /** puts order[from..to), all level so far, in order by the tiebreakers from this one */
@@ -762,55 +853,76 @@ export function playoffOdds(input: {
         : pf[i]!;
     }
 
-    order.sort((x, y) => primary[y]! - primary[x]! || x - y);
-
-    for (let k = 0; k < n;) {
-      let end = k + 1;
-
-      while (end < n && primary[order[end]!] === primary[order[k]!]) {
-        end++;
-      }
-
-      if (end - k > 1) {
-        settle(k, end, 0);
-      }
-
-      k = end;
-    }
-
     // who gets in: each division's best first where winners do, then the rest
     inIt.fill(0);
     seeds.length = 0;
 
-    if (byDivision) {
-      const won = new Set<number>();
+    if (wildTies) {
+      // each division ranked by the league's tiebreakers, then the wild
+      // cards and the winners' seeds by theirs
+      const winners = members.map((teams) => {
+        const ranked = rankOut(teams, rules.ties);
 
-      for (const i of order) {
-        const d = division[i] ?? null;
+        ranked.forEach((i, place) => { inDivision[i] = place; });
 
-        if (d !== null && divisionIds.includes(d) && !won.has(d)) {
-          won.add(d);
-          inIt[i] = 1;
-          titles[i]!++;
-          seeds.push(i);
-        }
+        return ranked[0]!;
+      });
+      const wild = rankOut(owners.flatMap((_, i) => winners.includes(i) ? [] : [i]), wildTies, true)
+        .slice(0, Math.max(0, input.playoffTeams - winners.length));
+
+      for (const i of [...rankOut(winners, wildTies), ...wild]) {
+        inIt[i] = 1;
+        seeds.push(i);
       }
 
-      let wild = input.playoffTeams - won.size;
-
-      for (const i of order) {
-        if (wild <= 0) {
-          break;
-        }
-
-        if (!inIt[i]) {
-          inIt[i] = 1;
-          seeds.push(i);
-          wild--;
-        }
-      }
+      winners.forEach((i) => { titles[i]!++; });
     } else {
-      order.slice(0, input.playoffTeams).forEach((i) => { inIt[i] = 1; seeds.push(i); });
+      order.sort((x, y) => primary[y]! - primary[x]! || x - y);
+
+      for (let k = 0; k < n;) {
+        let end = k + 1;
+
+        while (end < n && primary[order[end]!] === primary[order[k]!]) {
+          end++;
+        }
+
+        if (end - k > 1) {
+          settle(k, end, 0);
+        }
+
+        k = end;
+      }
+
+      if (byDivision) {
+        const won = new Set<number>();
+
+        for (const i of order) {
+          const d = division[i] ?? null;
+
+          if (d !== null && divisionIds.includes(d) && !won.has(d)) {
+            won.add(d);
+            inIt[i] = 1;
+            titles[i]!++;
+            seeds.push(i);
+          }
+        }
+
+        let wild = input.playoffTeams - won.size;
+
+        for (const i of order) {
+          if (wild <= 0) {
+            break;
+          }
+
+          if (!inIt[i]) {
+            inIt[i] = 1;
+            seeds.push(i);
+            wild--;
+          }
+        }
+      } else {
+        order.slice(0, input.playoffTeams).forEach((i) => { inIt[i] = 1; seeds.push(i); });
+      }
     }
 
     if (rounds) {
@@ -849,7 +961,7 @@ export function playoffOdds(input: {
       winsSum[i]! += wins[i]!;
     }
 
-    firsts[order[0]!]!++;
+    firsts[wildTies ? seeds[0]! : order[0]!]!++;
 
     if (me === undefined) {
       continue;

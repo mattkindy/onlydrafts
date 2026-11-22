@@ -3,7 +3,8 @@
  * did not say or said it differently: how many get in, what ranks the
  * table, whether division winners get in first, and the tiebreakers in
  * the order they are tried. Tapping a tiebreaker adds it to the end of
- * the order, and tapping it again takes it out.
+ * the order, and tapping it again takes it out. Where division winners
+ * get in, the wild cards can have tiebreakers of their own.
  */
 
 import {
@@ -31,30 +32,50 @@ export function RulesPanel({ league, rules, onRules, onDone }: {
   const divisions = league.divisions?.length ?? 0;
   const own = leagueRules(league);
   const isOwn = JSON.stringify(own) === JSON.stringify(rules);
-  // the chosen ones lead, in their order, and a tiebreaker that says the
-  // same as the ranking is left off the list
-  const offered = [
-    ...rules.ties,
-    ...(Object.keys(TIE_SAYS) as Tiebreak[]).filter((tie) => !rules.ties.includes(tie)),
-  ].filter((tie) =>
-    !(tie === "division" && divisions < 2) &&
-    !(tie === "wins" && (rules.seedBy === "wins" || rules.seedBy === "median")) &&
-    !(tie === "pf" && rules.seedBy === "pf") &&
-    !(tie === "allplay" && rules.seedBy === "allplay"));
+  // a tiebreaker that says the same as the ranking is no use
+  const pointless = (tie: Tiebreak, seedBy: SeedBy) =>
+    (tie === "wins" && (seedBy === "wins" || seedBy === "median")) ||
+    (tie === "pf" && seedBy === "pf") ||
+    (tie === "allplay" && seedBy === "allplay");
+  // the chosen ones lead, in their order, and the pointless are left off
+  const offered = (chosen: Tiebreak[]) => [
+    ...chosen,
+    ...(Object.keys(TIE_SAYS) as Tiebreak[]).filter((tie) => !chosen.includes(tie)),
+  ].filter((tie) => !(tie === "division" && divisions < 2) && !pointless(tie, rules.seedBy));
   const set = (change: Partial<PlayoffRules>) => {
     const next = { ...rules, ...change };
 
     // a tiebreaker the new ranking makes pointless goes
-    next.ties = next.ties.filter((tie) =>
-      !(tie === "wins" && (next.seedBy === "wins" || next.seedBy === "median")) &&
-      !(tie === "pf" && next.seedBy === "pf") &&
-      !(tie === "allplay" && next.seedBy === "allplay"));
+    next.ties = next.ties.filter((tie) => !pointless(tie, next.seedBy));
+
+    // and wild cards left with none go back to the same as everybody
+    next.wildTies = next.wildTies?.filter((tie) => !pointless(tie, next.seedBy));
+
+    if (!next.wildTies?.length) {
+      delete next.wildTies;
+    }
+
     onRules(next);
   };
-  const toggleTie = (tie: Tiebreak) => set({
-    ties: rules.ties.includes(tie) ? rules.ties.filter((t) => t !== tie) : [...rules.ties, tie],
-  });
+  const toggled = (list: Tiebreak[], tie: Tiebreak) =>
+    list.includes(tie) ? list.filter((t) => t !== tie) : [...list, tie];
   const wild = rules.teams - divisions;
+  // the wild cards' own tiebreakers, where division winners get in
+  const ownWild = rules.divisions && divisions > 1;
+  const chips = (chosen: Tiebreak[], toggle: (tie: Tiebreak) => void) =>
+    offered(chosen).map((tie) => {
+      const at = chosen.indexOf(tie);
+
+      return (
+        <button
+          key={tie} class={at >= 0 ? "on" : ""} aria-pressed={at >= 0}
+          onClick={() => toggle(tie)}
+        >
+          {at >= 0 && <span class="nth">{at + 1}</span>}
+          {TIE_SAYS[tie]}
+        </button>
+      );
+    });
 
   return (
     <section class="rules" aria-label="playoff rules">
@@ -100,23 +121,33 @@ export function RulesPanel({ league, rules, onRules, onDone }: {
         </div>
       )}
       <div class="rrow">
-        <i>tiebreakers</i>
+        <i>{ownWild && rules.wildTies ? "tiebreakers in a division" : "tiebreakers"}</i>
         <div class="chips flow">
-          {offered.map((tie) => {
-            const at = rules.ties.indexOf(tie);
-
-            return (
-              <button
-                key={tie} class={at >= 0 ? "on" : ""} aria-pressed={at >= 0}
-                onClick={() => toggleTie(tie)}
-              >
-                {at >= 0 && <span class="nth">{at + 1}</span>}
-                {TIE_SAYS[tie]}
-              </button>
-            );
-          })}
+          {chips(rules.ties, (tie) => set({ ties: toggled(rules.ties, tie) }))}
         </div>
       </div>
+      {ownWild && (
+        <div class="rrow">
+          <i>wild card tiebreakers</i>
+          <div class="chips flow">
+            <button
+              class={rules.wildTies ? "" : "on"} aria-pressed={!rules.wildTies}
+              onClick={() => set({ wildTies: undefined })}
+            >
+              same as above
+            </button>
+            {chips(rules.wildTies ?? [], (tie) =>
+              set({ wildTies: toggled(rules.wildTies ?? [], tie) }))}
+          </div>
+          {rules.wildTies && (
+            <p class="rsrc">
+              Of the tied teams only each division's best is compared, and once one
+              is placed the rest start over, as the NFL does. An h2h sweep splits three
+              or more teams only where one beat, or lost to, all the others.
+            </p>
+          )}
+        </div>
+      )}
       <div class="rfoot">
         {!isOwn && (
           <button class="textbtn" onClick={() => onRules(own)}>league's settings</button>
