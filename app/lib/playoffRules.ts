@@ -11,16 +11,28 @@
 export type SeedBy = "wins" | "median" | "allplay" | "pf";
 
 /** what settles a tie in the ranking, tried in order */
-export type Tiebreak = "h2h" | "pf" | "paMost" | "paFewest" | "allplay" | "division" | "wins";
+export type Tiebreak =
+  "h2h" | "sweep" | "pf" | "paMost" | "paFewest" | "allplay" | "division" | "wins";
 
 export interface PlayoffRules {
   /** how many teams make it */
   teams: number;
   seedBy: SeedBy;
-  /** tried in order; a tie through all of them is a coin flip */
+  /**
+   * Tried in order; a tie through all of them is a coin flip. Where the
+   * wild cards have tiebreakers of their own, these rank each division.
+   */
   ties: Tiebreak[];
   /** whether each division's winner gets in, the rest as wild cards */
   divisions: boolean;
+  /**
+   * Where division winners get in, the tiebreakers for the wild cards and
+   * for seeding the winners, the way the NFL breaks them: of the tied
+   * teams only each division's best is compared, and whenever a team is
+   * placed or a tiebreaker drops some, the rest start the list over.
+   * Without them one table is ranked by `ties` alone.
+   */
+  wildTies?: Tiebreak[];
 }
 
 export const SEED_SAYS: Record<SeedBy, string> = {
@@ -32,6 +44,7 @@ export const SEED_SAYS: Record<SeedBy, string> = {
 
 export const TIE_SAYS: Record<Tiebreak, string> = {
   h2h: "head-to-head",
+  sweep: "h2h sweep",
   pf: "points for",
   paMost: "most PA",
   paFewest: "fewest PA",
@@ -83,9 +96,12 @@ export function readRules(saved: unknown, league: LeagueSays): PlayoffRules {
 
   const said = saved as Partial<Record<keyof PlayoffRules, unknown>>;
   const teams = Number(said.teams);
-  const ties = Array.isArray(said.ties)
-    ? [...new Set(said.ties.filter((t): t is Tiebreak => TIES.includes(t as Tiebreak)))]
-    : own.ties;
+  const tiesIn = (list: unknown) => Array.isArray(list)
+    ? [...new Set(list.filter((t): t is Tiebreak => TIES.includes(t as Tiebreak)))]
+    : null;
+  const ties = tiesIn(said.ties) ?? own.ties;
+  // wild card tiebreakers mean nothing in a league without divisions
+  const wildTies = (league.divisions?.length ?? 0) > 1 ? tiesIn(said.wildTies) : null;
 
   return {
     teams: Number.isInteger(teams) && teams >= 1 && teams <= league.size ? teams : own.teams,
@@ -94,6 +110,7 @@ export function readRules(saved: unknown, league: LeagueSays): PlayoffRules {
     divisions: typeof said.divisions === "boolean"
       ? said.divisions && (league.divisions?.length ?? 0) > 1
       : own.divisions,
+    ...(wildTies ? { wildTies } : {}),
   };
 }
 

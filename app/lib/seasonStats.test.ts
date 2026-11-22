@@ -336,6 +336,127 @@ describe("a league's own playoff rules", () => {
     expect(chance(run, "ann").playoffs).toBeLessThan(0.55);
   });
 
+  describe("with tiebreakers of their own for the wild cards", () => {
+    /** a season over, each pairing's games as [winner, loser] */
+    const finished = (rows: [string, number, number, number][], games: [string, string][]) =>
+      rows.map(([owner, wins, pf, division]) => {
+        const versus: Record<string, { won: number; games: number }> = {};
+
+        for (const [won, lost] of games) {
+          if (won === owner || lost === owner) {
+            const them = won === owner ? lost : won;
+            const had = versus[them] ?? { won: 0, games: 0 };
+
+            versus[them] = { won: had.won + Number(won === owner), games: had.games + 1 };
+          }
+        }
+
+        return { row: row(owner, wins, pf, { versus }), division };
+      });
+    const playOut = (
+      teams: ReturnType<typeof finished>, playoffTeams: number, wildTies: Tiebreak[],
+      ties: Tiebreak[] = ["h2h", "division", "pf", "paMost"],
+    ) => playoffOdds({
+      table: teams.map((t) => t.row), weeks: [], strength: flat, playoffTeams, draws: 10,
+      divisionOf: new Map(teams.map((t) => [t.row.owner, t.division])),
+      rules: { seedBy: "wins", ties, divisions: true, wildTies },
+    });
+
+    it("breaks a division's tie among its own teams only", () => {
+      // all three are 6-4; across the three cy has the best record, but
+      // in their division ann beat bo, so ann wins it
+      const teams = finished(
+        [["ann", 6, 800, 1], ["bo", 6, 900, 1], ["cy", 6, 850, 2], ["di", 8, 700, 2]],
+        [["ann", "bo"], ["cy", "ann"], ["cy", "ann"], ["bo", "cy"]],
+      );
+      const run = playOut(teams, 3, ["sweep", "pf", "paMost"]);
+
+      expect(chance(run, "ann").division).toBe(1);
+      // bo beat cy for the wild card
+      expect(chance(run, "bo").playoffs).toBe(1);
+      expect(chance(run, "cy").playoffs).toBe(0);
+
+      // one table ranked the old way gives bo the division instead
+      const old = playoffOdds({
+        table: teams.map((t) => t.row), weeks: [], strength: flat, playoffTeams: 3, draws: 10,
+        divisionOf: new Map(teams.map((t) => [t.row.owner, t.division])),
+        rules: { seedBy: "wins", ties: ["h2h", "division", "pf", "paMost"], divisions: true },
+      });
+
+      expect(chance(old, "bo").division).toBe(1);
+    });
+
+    it("compares only each division's best of the teams tied for a wild card", () => {
+      // bo has the most points of the three at 6-4, but eve beat him and
+      // is ahead in their division, so the wild card is eve's or di's
+      const teams = finished(
+        [["ann", 9, 900, 1], ["bo", 6, 990, 1], ["eve", 6, 700, 1],
+          ["cy", 9, 900, 2], ["di", 6, 800, 2]],
+        [["eve", "bo"]],
+      );
+      const run = playOut(teams, 3, ["sweep", "pf"]);
+
+      expect(chance(run, "di").playoffs).toBe(1);
+      expect(chance(run, "bo").playoffs).toBe(0);
+      expect(chance(run, "eve").playoffs).toBe(0);
+    });
+
+    it("lets a sweep settle three teams, and nothing short of one", () => {
+      const winners: [string, number, number, number][] =
+        [["ann", 9, 900, 1], ["cy", 9, 900, 2], ["eve", 9, 900, 3]];
+      const rest: [string, number, number, number][] =
+        [["bo", 6, 700, 1], ["di", 6, 800, 2], ["fay", 6, 750, 3]];
+      const swept = playOut(finished([...winners, ...rest],
+        [["bo", "di"], ["bo", "fay"]]), 4, ["sweep", "pf"]);
+      const round = playOut(finished([...winners, ...rest],
+        [["bo", "di"], ["di", "fay"], ["fay", "bo"]]), 4, ["sweep", "pf"]);
+
+      expect(chance(swept, "bo").playoffs).toBe(1);
+      // beat one and lost to one is no sweep, so points for decides
+      expect(chance(round, "di").playoffs).toBe(1);
+    });
+
+    it("starts the tiebreakers over for the teams left once one is placed", () => {
+      // di takes the first wild card on points; bo and fay then go back to
+      // their own game, which fay won, though bo has more points
+      const teams = finished(
+        [["ann", 9, 900, 1], ["cy", 9, 900, 2], ["eve", 9, 900, 3],
+          ["bo", 6, 750, 1], ["di", 6, 800, 2], ["fay", 6, 700, 3]],
+        [["bo", "di"], ["di", "fay"], ["fay", "bo"]],
+      );
+      const run = playOut(teams, 5, ["sweep", "pf"]);
+
+      expect(chance(run, "di").playoffs).toBe(1);
+      expect(chance(run, "fay").playoffs).toBe(1);
+      expect(chance(run, "bo").playoffs).toBe(0);
+    });
+
+    it("sends the teams a tiebreaker leaves back to the first one", () => {
+      // fay lost to both, so the sweep drops her, and nobody beat both,
+      // since bo took one of three from di; bo and di then start over at
+      // their own games, which di won, though bo has more points
+      const teams = finished(
+        [["ann", 9, 900, 1], ["cy", 9, 900, 2], ["eve", 9, 900, 3],
+          ["bo", 6, 800, 1], ["di", 6, 750, 2], ["fay", 6, 990, 3]],
+        [["bo", "fay"], ["di", "fay"], ["di", "bo"], ["di", "bo"], ["bo", "di"]],
+      );
+      const run = playOut(teams, 4, ["sweep", "pf"]);
+
+      expect(chance(run, "di").playoffs).toBe(1);
+      expect(chance(run, "bo").playoffs).toBe(0);
+    });
+
+    it("seeds the division winners by the wild card tiebreakers", () => {
+      const teams = finished(
+        [["ann", 9, 800, 1], ["bo", 4, 700, 1], ["cy", 9, 900, 2], ["di", 4, 700, 2]],
+        [["ann", "cy"]],
+      );
+
+      expect(chance(playOut(teams, 2, ["sweep", "pf"]), "ann").first).toBe(1);
+      expect(chance(playOut(teams, 2, ["pf"]), "cy").first).toBe(1);
+    });
+  });
+
   it("keeps each week's median wins and each pairing's record from the weeks played", () => {
     const team = (owner: string, points: number) => ({ owner, points, starters: [], bench: [] });
     const seasons = seasonOf([{

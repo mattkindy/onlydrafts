@@ -27,6 +27,14 @@ describe("a league's playoff rules", () => {
     expect(readRules(null, league)).toEqual(leagueRules(league));
   });
 
+  it("keeps the wild cards' own tiebreakers only in a league with divisions", () => {
+    const saved = { ties: ["h2h", "division", "pf"], wildTies: ["sweep", "pf", "sweep", "luck"] };
+
+    expect(readRules(saved, league).wildTies).toEqual(["sweep", "pf"]);
+    expect(readRules(saved, { ...league, divisions: null }).wildTies).toBeUndefined();
+    expect(readRules({ ties: ["pf"] }, league)).not.toHaveProperty("wildTies");
+  });
+
   it("says itself in a line", () => {
     expect(rulesSay(leagueRules(league), 3)).toBe("3 division winners + 3 wild cards");
     expect(rulesSay({ teams: 4, seedBy: "allplay", ties: [], divisions: false }, 0))
