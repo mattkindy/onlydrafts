@@ -131,10 +131,12 @@ export function applyMoves<T extends Team>(
       stale.push({
         move,
         missing: gone
-          ? `${gone.name} is ${gone.from === null ? "on a roster now" : `not on ${gone.from}'s roster`}`
+          ? gone.from === null
+            ? `${gone.name} is already on a roster`
+            : `${gone.name} isn't on ${gone.from}'s roster anymore`
           : noTeam
-            ? `${noTeam.to} is not in the league`
-            : `${pickGone!.giver} does not hold the ${pickGone!.season} round ${pickGone!.round} pick`,
+            ? `${noTeam.to} isn't in the league`
+            : `${pickGone!.giver} doesn't have that ${pickGone!.season} round ${pickGone!.round} pick`,
       });
       continue;
     }

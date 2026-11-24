@@ -14,7 +14,9 @@ import { playChance, SEASON_WEEKS, statusOf, type Listed } from "./availability.
 import { PROVIDERS, type League, type Matchup, type RosterPlayer } from "./providers.ts";
 import type { Player } from "./scoring.ts";
 import { forTheWeeksLeft, statusesOn } from "./waiversSeason.ts";
-import { linesFor, settledGames, standingFor, type GameState } from "./matchups.ts";
+import {
+  linesFor, settledGames, standingFor, starterState, type GameState,
+} from "./matchups.ts";
 import { catchShiftOf, type SlateRow } from "./slate.ts";
 import type { Pays } from "./scoring.ts";
 import {
@@ -424,6 +426,8 @@ export interface LiveGame {
   b: string;
   odds: number;
   projected: [number, number];
+  /** whether either side has a starter whose game has kicked off, or any points */
+  started: boolean;
 }
 
 /**
@@ -452,20 +456,23 @@ export function liveWeek(input: {
   return settled.map((game) => {
     const { odds, projected } = standingFor(
       game, { rows: now.rows, states: now.states!, lines, remainder: null });
+    const started = game.sides.some((side) => side.points > 0 || side.starters.some((p) =>
+      p.points !== 0 || (starterState(p, now.rows, now.states!, lines)?.where ?? "pre") !== "pre"));
 
-    return { a: game.sides[0].owner, b: game.sides[1].owner, odds: odds[0], projected };
+    return { a: game.sides[0].owner, b: game.sides[1].owner, odds: odds[0], projected, started };
   });
 }
 
 /**
- * This week's games less any a trade touches: a team whose roster a trade
- * changes plays the week from its new roster, like every week after it,
- * rather than from a lineup it no longer has.
+ * This week's games less any a trade touches that has not kicked off: a
+ * team whose roster a trade changes plays an unstarted week from its new
+ * roster, like every week after it. A game under way or finished stands
+ * as it is, since no trade changes a lineup that has already played.
  */
 export function leavingOut(live: LiveGame[] | undefined, teams: Iterable<string>): LiveGame[] | undefined {
   const touched = new Set(teams);
 
   return live && touched.size
-    ? live.filter((g) => !touched.has(g.a) && !touched.has(g.b))
+    ? live.filter((g) => g.started || (!touched.has(g.a) && !touched.has(g.b)))
     : live;
 }

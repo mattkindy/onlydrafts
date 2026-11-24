@@ -21,9 +21,7 @@ import {
   HOW_ODDS_WORK, HOW_ODDS_WORK_IN_FULL, leavingOut, liveWeek, splitAtPlayoffs, useSeasonSim,
 } from "../lib/seasonSim.ts";
 import type { Player } from "../lib/scoring.ts";
-import {
-  movesOf, nudged, resultKey, resultsFrom, teamsIn, type Move,
-} from "../lib/scenario.ts";
+import { nudged, resultKey, resultsFrom, teamsIn, type Move } from "../lib/scenario.ts";
 import {
   chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, playoffRounds, scenarioPath,
   TIE, weekOfPair, winShare,
@@ -38,7 +36,7 @@ import {
   layoutPlayoffs, layoutSeasonTable, sharePlayoffs, shareSeasonTable,
 } from "../lib/shareStats.ts";
 import { ordinal, recordSays } from "./Standings.tsx";
-import { WhatIfBar, type WhatIfState } from "./WhatIf.tsx";
+import { asItStands, whatIfSays, WhatIfTrades, type WhatIfState } from "./WhatIf.tsx";
 
 interface Props {
   league: League;
@@ -672,17 +670,6 @@ export function Stats(props: Props) {
         </section>
       )}
 
-      {run && (movesOf(league, scenario).length > 0 || inWhatIf) && (
-        <WhatIfBar
-          league={league}
-          whatIf={props.whatIf}
-          onEdit={props.onWeighTrade}
-          {...(props.onWeighTrade
-            ? { action: { says: "weigh another trade", onClick: () => props.onWeighTrade!() } }
-            : {})}
-        />
-      )}
-
       {run && (
         <div class="scols rhythm">
           <div class="srace rhythm">
@@ -738,6 +725,20 @@ export function Stats(props: Props) {
               onDone={() => setShowRules(false)}
             />
           )}
+          {/* a pending trade counts without anybody asking, so the table
+              says what it includes and how to change it */}
+          {inWhatIf && (
+            <p class="hint scenario">
+              includes {whatIfSays(league, props.whatIf)}{" "}
+              <button
+                class="textbtn"
+                onClick={() => document.getElementById("whatif")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              >
+                change
+              </button>
+            </p>
+          )}
           <div class={"odds-list" + (hasTitle ? " with-title" : "") + (hasBye ? " with-bye" : "")}>
             {hasTitle && (
               <div class="orow ohead">
@@ -784,15 +785,12 @@ export function Stats(props: Props) {
           </div>
 
           {setup && path && path.cols.length > 0 && (
-            <div class="swhatif rhythm">
+            <div class="swhatif rhythm" id="whatif">
               <div class="sectionhead">
                 <h2>what if</h2>
-                {(forced.size > 0 || nudge !== 0) && (
-                  <button
-                    class="textbtn"
-                    onClick={() => onScenario({ ...scenario, results: new Map(), nudge: 0 })}
-                  >
-                    reset{forced.size ? ` ${forced.size} pick${forced.size === 1 ? "" : "s"}` : ""}
+                {inWhatIf && (
+                  <button class="textbtn" onClick={() => onScenario(asItStands(league, scenario))}>
+                    reset
                   </button>
                 )}
               </div>
@@ -808,9 +806,17 @@ export function Stats(props: Props) {
                 coming={coming}
                 marks={marks}
               />
+              <h3 class="wisub">trades</h3>
+              <WhatIfTrades
+                league={league}
+                whatIf={props.whatIf}
+                onEdit={props.onWeighTrade}
+                onAdd={props.onWeighTrade ? () => props.onWeighTrade!() : undefined}
+              />
+              <h3 class="wisub">your scoring</h3>
               <label class="nudge">
                 <span>
-                  your scoring vs projection{" "}
+                  vs projection{" "}
                   <b>{nudge > 0 ? "+" : ""}{Math.round(nudge * 100)}%</b>
                 </span>
                 <input
@@ -822,6 +828,7 @@ export function Stats(props: Props) {
                   }}
                 />
               </label>
+              <h3 class="wisub">pick results</h3>
               <Picker
                 toCome={setup.toCome}
                 coming={coming}
@@ -840,11 +847,6 @@ export function Stats(props: Props) {
                   onScenario({ ...scenario, results: next });
                 }}
               />
-              {props.onWeighTrade && (
-                <button class="textbtn" onClick={() => props.onWeighTrade!()}>
-                  weigh a trade to add to the what-if
-                </button>
-              )}
             </div>
           )}
         </div>

@@ -7,6 +7,7 @@ import {
 } from "./scenario.ts";
 import { pairKey } from "./seasonStats.ts";
 import { pickId } from "./trade.ts";
+import { leavingOut } from "./seasonSim.ts";
 
 const p = (key: string) => ({ key, name: key.toUpperCase(), pos: "RB" });
 
@@ -66,7 +67,7 @@ describe("a what-if's moves", () => {
     const after = applyMoves(lg.allRosters, [], [trade("x"), late]);
 
     expect(after.applied.map((m) => m.id)).toEqual(["x"]);
-    expect(after.stale[0]!.missing).toBe("A is not on me's roster");
+    expect(after.stale[0]!.missing).toBe("A isn't on me's roster anymore");
     expect(after.rosters.find((r) => r.owner === "cy")!.keys.map((k) => k.key)).toEqual(["e"]);
   });
 
@@ -221,5 +222,18 @@ describe("Sleeper's trades still to go through", () => {
     expect(legsToRead({ leg: 1 })).toEqual([1]);
     expect(legsToRead({ leg: 0 })).toEqual([]);
     expect(legsToRead(null)).toEqual([]);
+  });
+});
+
+describe("this week's games in a what-if", () => {
+  const game = (a: string, b: string, started: boolean) =>
+    ({ a, b, odds: 0.5, projected: [100, 100] as [number, number], started });
+
+  it("play a team a trade touches from its new roster, unless its game has kicked off", () => {
+    const live = [game("me", "bo", false), game("cy", "di", true), game("ed", "fa", false)];
+
+    expect(leavingOut(live, ["me", "cy"])!.map((g) => g.a)).toEqual(["cy", "ed"]);
+    expect(leavingOut(live, [])).toBe(live);
+    expect(leavingOut(undefined, ["me"])).toBeUndefined();
   });
 });

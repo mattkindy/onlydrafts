@@ -1935,51 +1935,72 @@
 .tbalance .tlearnbtn { margin-left: auto; color: var(--faint); }
 
 /*
- * The what-if, where its odds are shown: a trade a row with its switch,
- * then the results and scoring set. The same panel on the stats tab and
- * the trade tab, since the two play out the same what-if.
+ * The what-if. On the stats tab its trades sit in the what-if section
+ * with the scoring and the results; on the trade tab they fold into one
+ * line over the result. A trade is a row: its switch, then what it does a
+ * line at a time, so a phone never squeezes the names beside buttons.
  */
-.whatif { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px;
-  padding: var(--s2) var(--s4) var(--s3); display: flex; flex-direction: column; gap: var(--s1);
-  margin-bottom: var(--s4); }
-.trade .whatif { margin-bottom: 0; }
-.wihead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s3); }
-.wihead > b { font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
+.wisub { margin: var(--s3) 0 0; font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
   text-transform: uppercase; color: var(--faint); }
-.wihead > span { font-size: var(--t2); color: var(--muted); min-width: 0; }
-.wihead .textbtn { margin-left: auto; }
+.witrades { display: flex; flex-direction: column; gap: var(--s2); }
+.witrades > .hint { margin: 0; }
 .wimoves { list-style: none; margin: 0; padding: 0; }
-.wimoves li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start;
-  gap: var(--s3); padding: var(--s2) 0; border-top: 1px solid var(--edge); }
+.wimoves li { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: start;
+  column-gap: var(--s2); padding: var(--s2) 0; border-top: 1px solid var(--edge); }
+.wimoves li:first-child { border-top: none; padding-top: 0; }
 .wimoves p { margin: 0; }
-.witeams { font-weight: 700; overflow-wrap: anywhere; }
+.witeams { font-weight: 700; line-height: var(--tap); overflow-wrap: anywhere; }
 .wiby { margin-left: var(--s2); font-size: .6rem; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--faint); white-space: nowrap; }
-.wiby.league { color: var(--mark); }
+.wiby.pending { color: var(--mark); }
 .widetail { font-size: var(--t2); color: var(--muted); overflow-wrap: anywhere; }
-.wistale { font-size: var(--t1); color: var(--mark); }
+.wistale { margin-top: var(--s1) !important; font-size: var(--t2); color: var(--mark); }
 .wimoves li.off .witeams, .wimoves li.off .widetail { color: var(--faint); }
-.wiacts { display: flex; gap: var(--s3); }
+.wiacts { display: flex; gap: var(--s2); margin-top: var(--s2); }
+.wiacts .quiet, .wiadd, .wifoot .quiet { min-height: var(--tap); padding: 0 var(--s4); }
+.wiadd { align-self: flex-start; }
 /* a switch a thumb can hit: the button is the full tap height, the track sits in it */
-.wiswitch { position: relative; width: 44px; height: var(--tap); margin: calc(var(--s1) * -1) 0;
+.wiswitch { position: relative; width: 44px; height: var(--tap);
   padding: 0; border: none; background: none; cursor: pointer; }
-.wiswitch::before { content: ""; position: absolute; left: 4px; right: 4px; top: 50%; height: 20px;
-  margin-top: -10px; border-radius: 999px; background: var(--chip); border: 1px solid var(--edge); }
-.wiswitch::after { content: ""; position: absolute; left: 7px; top: 50%; width: 14px; height: 14px;
-  margin-top: -7px; border-radius: 50%; background: var(--faint); transition: transform .15s; }
+.wiswitch::before { content: ""; position: absolute; left: 2px; right: 2px; top: 50%; height: 22px;
+  margin-top: -11px; border-radius: 999px; background: var(--chip); border: 1px solid var(--edge); }
+.wiswitch::after { content: ""; position: absolute; left: 6px; top: 50%; width: 16px; height: 16px;
+  margin-top: -8px; border-radius: 50%; background: var(--faint); transition: transform .15s; }
 .wiswitch[aria-checked="true"]::before { background: color-mix(in srgb, var(--go) 28%, var(--chip));
   border-color: var(--go); }
 .wiswitch[aria-checked="true"]::after { transform: translateX(16px); background: var(--go); }
 .wiswitch:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; border-radius: 8px; }
 @media (prefers-reduced-motion: reduce) { .wiswitch::after { transition: none; } }
-.wisettled { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s3); margin: 0;
-  padding-top: var(--s1); border-top: 1px solid var(--edge); font-size: var(--t2); color: var(--muted); }
-.wisettled .textbtn { margin-left: auto; }
-.wiaction { align-self: flex-start; }
+/* the stats tab's line over the playoff table, saying what the odds include */
+.srace .hint.scenario { margin: 0; }
+.srace .hint.scenario .textbtn { min-height: 0; color: var(--mark); text-decoration: underline; }
+#whatif { scroll-margin-top: var(--s5); }
 
+/* the trade tab's what-if, one line until it is opened */
+.whatif { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; }
+.wisummary { display: flex; align-items: center; gap: var(--s2); width: 100%; min-height: var(--tap);
+  padding: 0 var(--s3) 0 var(--s4); font: inherit; text-align: left; color: var(--muted);
+  background: none; border: none; cursor: pointer; }
+.wisummary b { font-size: var(--t1); font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--faint); white-space: nowrap; }
+.wisummary span { flex: 1 1 auto; min-width: 0; font-size: var(--t2); color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wisummary span.on { color: var(--mark); }
+.wisummary .chev { flex: 0 0 auto; color: var(--muted); transition: transform .15s ease; }
+.wisummary .chev.open { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .wisummary .chev { transition: none; } }
+.whatif.open .witrades { padding: var(--s1) var(--s4) 0; border-top: 1px solid var(--edge); }
+.whatif.open .wimoves li:first-child { padding-top: var(--s2); }
+.wifoot { display: flex; flex-wrap: wrap; gap: var(--s2); padding: var(--s2) var(--s4) var(--s3); }
+
+/* the word to press on the empty scales, after a trade is added or while one is edited */
+.tresult.idle .textbtn { min-height: var(--tap); }
 /* the trade on the scales into the what-if, at the foot of its result */
-.twhatif { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); }
+.twhatif { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 .twhatif .hint { margin: 0; }
+@media (max-width: 600px) {
+  .twhatif .act { flex: 1 1 100%; }
+}
 @media (min-width: 1000px) {
   .tresult .twhatif { grid-column: 1 / -1; margin-top: var(--s3); }
 }

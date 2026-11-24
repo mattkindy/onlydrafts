@@ -56,7 +56,7 @@ import {
   toggled, type Move, type Scenario,
 } from "../lib/scenario.ts";
 import { ordinal } from "./Standings.tsx";
-import { WhatIfBar, type WhatIfState } from "./WhatIf.tsx";
+import { WhatIfLine, type WhatIfState } from "./WhatIf.tsx";
 
 /** how often each version of the season is played out, as the stats tab does */
 const SEASONS = 5000;
@@ -137,10 +137,21 @@ export function Trade(props: Props) {
     }
   }, []);
 
+  /** the what-if with the trade being edited switched back on, as it was before */
+  const putBack = (from: Scenario): Scenario => {
+    const was = from.moves.find((m) => m.id === editing);
+
+    return was && !isOn(was, from) ? toggled(from, was) : from;
+  };
   const choosePartner = (owner: string) => {
+    if (editing) {
+      onScenario(putBack(scenario));
+    }
+
     keep(partnerKey, owner);
     setDeal(NO_DEAL(owner));
     setEditing(null);
+    setAdded(false);
     setBalancing(false);
     setEvenPage(0);
   };
@@ -152,10 +163,9 @@ export function Trade(props: Props) {
       return;
     }
 
-    if (isOn(move, scenario)) {
-      onScenario(toggled(scenario, move));
-    }
+    const restored = putBack(scenario);
 
+    onScenario(isOn(move, restored) ? toggled(restored, move) : restored);
     keep(partnerKey, back.partner);
     setDeal(back);
     setEditing(move.id);
@@ -181,7 +191,16 @@ export function Trade(props: Props) {
     setEditing(null);
     setDeal(NO_DEAL(deal.partner));
     setBalancing(false);
+    setAdded(true);
   };
+  /** the trade being edited put back as it was, and the scales cleared */
+  const cancelEdit = () => {
+    onScenario(putBack(scenario));
+    setEditing(null);
+    setDeal(NO_DEAL(deal.partner));
+  };
+  // whether a trade was just added, so the empty scales say so
+  const [added, setAdded] = useState(false);
   // whether the ways to even the deal up are showing, kept to players or
   // picks where you said, and how far through them you have stepped
   const [balancing, setBalancing] = useState(false);
@@ -198,10 +217,12 @@ export function Trade(props: Props) {
     }
   };
   const [shown, setShown] = useState<"send" | "get">("send");
-  const toggle = (list: keyof Omit<Deal, "partner">, id: string) =>
+  const toggle = (list: keyof Omit<Deal, "partner">, id: string) => {
+    setAdded(false);
     setDeal((d) => ({
       ...d, [list]: d[list].includes(id) ? d[list].filter((x) => x !== id) : [...d[list], id],
     }));
+  };
 
   const lastRegular = league.lastRegularWeek ?? 14;
   const rules = useMemo(() => readRules(stored(rulesKey(league), null), league), [league]);
@@ -479,19 +500,30 @@ export function Trade(props: Props) {
         </p>
       )}
 
-      <WhatIfBar
-        league={league}
-        whatIf={whatIf}
-        onEdit={edit}
-        editing={editing}
-        {...(props.onSeeOdds && (moved || scenario.results.size > 0 || nudge !== 0)
-          ? { action: { says: "see the whole race with it", onClick: props.onSeeOdds } }
-          : {})}
+      <WhatIfLine
+        league={league} whatIf={whatIf} onEdit={edit} editing={editing}
+        onSeeOdds={props.onSeeOdds}
       />
 
       <div class={"tresult" + (dealIsEmpty(deal) ? " idle" : "")}>
         {dealIsEmpty(deal)
-          ? <p class="hint">Tick players or picks on either side to weigh a trade.</p>
+          ? editing
+            ? (
+              <p class="hint">
+                Editing a trade from your what-if.{" "}
+                <button class="textbtn" onClick={cancelEdit}>cancel</button>
+              </p>
+            )
+            : added
+              ? (
+                <p class="hint">
+                  Added to your what-if.{" "}
+                  {props.onSeeOdds && (
+                    <button class="textbtn" onClick={props.onSeeOdds}>view in stats</button>
+                  )}
+                </p>
+              )
+              : <p class="hint">Tick players or picks on either side to weigh a trade.</p>
           : (
             <>
               <div class="tsum">
@@ -518,9 +550,6 @@ export function Trade(props: Props) {
                   </span>
                 )}
                 {!hasLater && <span><i>after</i>nothing carries over</span>}
-                {(moved || forced.size > 0 || nudge !== 0) && (
-                  <span><i>against</i>the what-if above</span>
-                )}
               </p>
               <table class="tgrid">
                 <thead>
@@ -650,14 +679,12 @@ export function Trade(props: Props) {
                 </p>
               )}
               <div class="twhatif">
-                <button class="quiet" onClick={addToWhatIf}>
-                  {editing ? "save it in the what-if" : "add to the what-if"}
+                <button class="act" onClick={addToWhatIf}>
+                  {editing ? "save changes" : "add to what-if"}
                 </button>
-                <span class="hint">
-                  {editing
-                    ? "puts it back, changed, and counts it"
-                    : "counts it on the stats tab, and weighs the next trade with it done"}
-                </span>
+                {editing
+                  ? <button class="quiet" onClick={cancelEdit}>cancel</button>
+                  : <span class="hint">Stats will count it.</span>}
               </div>
             </>
           )}
