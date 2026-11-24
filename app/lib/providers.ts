@@ -16,6 +16,8 @@ import {
 } from "./boxScore.ts";
 import { stored, keep } from "./store.ts";
 import { paidFor, type Pays } from "./scoring.ts";
+import type { Move } from "./scenario.ts";
+import { pickId } from "./trade.ts";
 
 export interface RosterPlayer {
   name: string;
@@ -106,6 +108,12 @@ export interface League {
   tradeDeadline?: number | null;
   /** whether players carry over from season to season, all of them */
   dynasty?: boolean;
+  /**
+   * Trades the league has but has not processed yet, a trade both sides
+   * accepted that is waiting out its review among them, as of `readAt`.
+   * Nothing where the provider does not say.
+   */
+  pending?: Move[] | null;
 }
 
 export interface Provider {
@@ -806,13 +814,18 @@ async function sleeperLeagues(username: string): Promise<League[]> {
   const out: League[] = [];
 
   for (const lg of (found ?? []) as Record<string, any>[]) {
-    const [rosters, users, traded, drafts] = await Promise.all([
+    const [rosters, users, traded, drafts, moves] = await Promise.all([
       ask("/league/" + lg["league_id"] + "/rosters"),
       ask("/league/" + lg["league_id"] + "/users"),
       // nothing rather than an empty list when it fails: a league whose
       // trades did not arrive would credit every team with every pick
       ask("/league/" + lg["league_id"] + "/traded_picks").catch(() => null),
       ask("/league/" + lg["league_id"] + "/drafts").catch(() => []),
+      // a trade under review is made this week, or late last week before
+      // the week turned over, so those two weeks hold every one of them
+      Promise.all(legsToRead(state).map((leg) =>
+        ask("/league/" + lg["league_id"] + "/transactions/" + leg).catch(() => [])))
+        .then((all) => all.flatMap((txs) => Array.isArray(txs) ? txs as SleeperTransaction[] : [])),
     ]);
     const settings = (lg["settings"] ?? {}) as Record<string, number>;
     const thisSeason = Number(lg["season"] ?? state.season);
@@ -890,6 +903,15 @@ async function sleeperLeagues(username: string): Promise<League[]> {
         ? Number(settings["trade_deadline"])
         : null,
       dynasty: type === 2,
+      pending: sleeperPendingTrades(
+        moves,
+        (id) => sleeperPlayerOf(players, id),
+        (id) => {
+          const owner = ownerOfRoster.get(id) ?? String(id);
+
+          return nameOf.get(owner) ?? owner;
+        },
+      ),
       allRosters: (rosters as SleeperRoster[]).map((r) => ({
         owner: nameOf.get(r.owner_id) ?? r.owner_id,
         picks: held(r.roster_id),
@@ -897,6 +919,96 @@ async function sleeperLeagues(username: string): Promise<League[]> {
         ...(sleeperRecord(r) ? { record: sleeperRecord(r)! } : {}),
         division: r.settings?.division ?? null,
       })),
+    });
+  }
+
+  return out;
+}
+
+/** the weeks whose transactions can hold a trade still to go through: this one and the one before */
+export const legsToRead = (state: { leg?: number; week?: number } | null | undefined) => {
+  const leg = Number(state?.leg ?? state?.week) || 0;
+
+  return leg > 1 ? [leg - 1, leg] : leg === 1 ? [1] : [];
+};
+
+/** one of Sleeper's transactions, as much of it as a trade needs */
+export interface SleeperTransaction {
+  transaction_id: string;
+  type: string;
+  status: string;
+  created?: number;
+  adds?: Record<string, number> | null;
+  drops?: Record<string, number> | null;
+  draft_picks?: {
+    season: string | number; round: number; roster_id: number;
+    previous_owner_id: number; owner_id: number;
+  }[] | null;
+}
+
+/**
+ * The trades Sleeper lists that have not gone through: a trade both
+ * managers accepted waits out the league's review as pending, and the
+ * rosters do not show it until it is processed. A finished trade is in
+ * the rosters already and a failed one never will be, so both are left
+ * out. Every other status is kept with its word, since a status nobody
+ * has seen is better shown and switched off than silently lost.
+ *
+ * Each player goes from the roster that drops him to the one that adds
+ * him, and one dropped to make room goes to nobody. A pick goes from the
+ * roster that held it to the one that will.
+ */
+export function sleeperPendingTrades(
+  txs: SleeperTransaction[],
+  playerOf: (id: string) => RosterPlayer | null,
+  ownerOf: (rosterId: number) => string,
+): Move[] {
+  const seen = new Set<string>();
+  const out: Move[] = [];
+
+  for (const tx of txs) {
+    if (tx.type !== "trade" || ["complete", "failed"].includes(tx.status) ||
+      seen.has(tx.transaction_id)) {
+      continue;
+    }
+
+    seen.add(tx.transaction_id);
+
+    const adds = tx.adds ?? {};
+    const drops = tx.drops ?? {};
+    const ids = [...new Set([...Object.keys(adds), ...Object.keys(drops)])];
+
+    out.push({
+      id: "league:" + tx.transaction_id,
+      by: "league",
+      status: tx.status,
+      ...(tx.created ? { at: tx.created } : {}),
+      players: ids.flatMap((id) => {
+        const p = playerOf(id);
+
+        if (!p) {
+          return [];
+        }
+
+        return [{
+          ...p,
+          from: drops[id] === undefined ? null : ownerOf(drops[id]!),
+          to: adds[id] === undefined ? null : ownerOf(adds[id]!),
+        }];
+      }),
+      picks: (tx.draft_picks ?? []).map((d) => {
+        const original = ownerOf(d.roster_id);
+        const season = Number(d.season);
+
+        return {
+          id: pickId({ season, round: d.round, from: original }),
+          season,
+          round: d.round,
+          original,
+          giver: ownerOf(d.previous_owner_id),
+          to: ownerOf(d.owner_id),
+        };
+      }),
     });
   }
 

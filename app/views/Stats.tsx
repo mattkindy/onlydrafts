@@ -15,20 +15,19 @@ import type { Listed } from "../lib/availability.ts";
 import { tick } from "../lib/haptics.ts";
 import { readRules, rulesKey, rulesSay, type PlayoffRules } from "../lib/playoffRules.ts";
 import { keep, stored } from "../lib/store.ts";
-import {
-  linesFor, settledGames, standingFor, type GameState,
-} from "../lib/matchups.ts";
+import type { GameState } from "../lib/matchups.ts";
 import type { League, Matchup } from "../lib/providers.ts";
 import {
-  HOW_ODDS_WORK, HOW_ODDS_WORK_IN_FULL, splitAtPlayoffs, useSeasonSim,
+  HOW_ODDS_WORK, HOW_ODDS_WORK_IN_FULL, leavingOut, liveWeek, splitAtPlayoffs, useSeasonSim,
 } from "../lib/seasonSim.ts";
 import type { Player } from "../lib/scoring.ts";
+import { nudged, resultKey, resultsFrom, teamsIn, type Move } from "../lib/scenario.ts";
 import {
   chanceAt, chanceOf, luckOf, pairKey, picksSignature, playoffOdds, playoffRounds, scenarioPath,
   TIE, weekOfPair, winShare,
   type PathOutcome, type PlayoffRun, type ScenarioPath, type Strength, type TeamSeason,
 } from "../lib/seasonStats.ts";
-import { catchShiftOf, type SlateRow } from "../lib/slate.ts";
+import type { SlateRow } from "../lib/slate.ts";
 import { pct } from "./Advice.tsx";
 import { Skeleton } from "./Reading.tsx";
 import { RulesPanel } from "./RulesPanel.tsx";
@@ -37,6 +36,7 @@ import {
   layoutPlayoffs, layoutSeasonTable, sharePlayoffs, shareSeasonTable,
 } from "../lib/shareStats.ts";
 import { ordinal, recordSays } from "./Standings.tsx";
+import { asItStands, whatIfSays, WhatIfTrades, type WhatIfState } from "./WhatIf.tsx";
 
 interface Props {
   league: League;
@@ -52,6 +52,13 @@ interface Props {
   } | undefined;
   boardPerCatch?: number | undefined;
   listed: Map<string, Listed>;
+  /**
+   * The what-if this tab and the trade tab share: trades in it, the
+   * league's under review and yours, results picked and your scoring.
+   */
+  whatIf: WhatIfState;
+  /** opens the trade tab, with one of your trades in it to change where one is given */
+  onWeighTrade?: ((move?: Move) => void) | undefined;
 }
 
 /** how often the season is played out */
@@ -382,34 +389,41 @@ function Picker(
 
 export function Stats(props: Props) {
   const { league, players, coming } = props;
-  const { weeks, trouble, played, season, strength, weekly, setup, lastRegular } = useSeasonSim({
+  const { scenario, world, onScenario } = props.whatIf;
+  // the rosters after the trades in the what-if, where any went in
+  const moved = world.applied.length > 0;
+  const {
+    weeks, trouble, played, season, strength, weekly, setup, lastRegular, standing,
+  } = useSeasonSim({
     league, players, coming, listed: props.listed,
+    rosters: moved ? world.league.allRosters : undefined,
   });
 
   /** this week's games with their odds, where the week on screen is this one */
-  const thisWeek = useMemo(() => {
-    const now = props.thisWeek;
+  const thisWeekAsItStands = useMemo(() => liveWeek({
+    week: props.thisWeek, players, coming, pays: league.pays, boardPerCatch: props.boardPerCatch,
+  }), [props.thisWeek, players, coming, league.pays, props.boardPerCatch]);
 
-    if (!now?.states || !now.games.length) {
-      return undefined;
-    }
+  /**
+   * This week's odds come from the lineups as they stand, so a team a
+   * trade in the what-if changes plays its week from its new roster
+   * instead, like every week after it.
+   */
+  const thisWeek = useMemo(
+    () => leavingOut(thisWeekAsItStands, world.applied.flatMap((m) => teamsIn(m))),
+    [thisWeekAsItStands, world.applied]);
 
-    const lines = linesFor(players, coming, catchShiftOf(league.pays ?? {}, props.boardPerCatch));
-    const settled = settledGames(now.games, now.rows, now.states, lines);
-
-    return settled.map((game) => {
-      const { odds, projected } = standingFor(
-        game, { rows: now.rows, states: now.states!, lines, remainder: null });
-
-      return {
-        a: game.sides[0].owner, b: game.sides[1].owner, odds: odds[0], projected,
-      };
-    });
-  }, [props.thisWeek, players, coming, league.pays, props.boardPerCatch]);
-
-  /** results somebody has picked, and how you think your team will score */
-  const [forced, setForced] = useState<Map<string, string>>(() => new Map());
-  const [nudge, setNudge] = useState(0);
+  /**
+   * Results somebody has picked, by each week's place from the coming
+   * one, and how you think your team will score. Both live in the
+   * what-if, so the trade tab weighs a trade with them in place.
+   */
+  const forced = useMemo(
+    () => resultsFrom(scenario.results, coming), [scenario.results, coming]);
+  const nudge = scenario.nudge;
+  const setNudge = (next: number) => onScenario({ ...scenario, nudge: next });
+  // whether anything here is other than as things stand
+  const inWhatIf = forced.size > 0 || nudge !== 0 || moved;
 
   /** the pairings of every week left, this one first, and the table now */
   /**
@@ -444,25 +458,22 @@ export function Stats(props: Props) {
 
   /** your team scoring what you think it will, everybody else as projected */
   const adjusted = useMemo(() => {
-    const nudged = (strengths: Map<string, Strength>) => {
-      const out = new Map(strengths);
-      const mine = out.get(league.team);
-
-      if (mine) {
-        out.set(league.team, { ...mine, mean: mine.mean * (1 + nudge) });
-      }
-
-      return out;
-    };
+    const mine = (s: Map<string, Strength>) => nudged(s, league.team, nudge);
 
     return nudge
-      ? { strength: nudged(strength), byWeek: byWeek.map(nudged), bracket: bracket.map(nudged) }
+      ? { strength: mine(strength), byWeek: byWeek.map(mine), bracket: bracket.map(mine) }
       : { strength, byWeek, bracket };
   }, [strength, byWeek, bracket, nudge, league.team]);
-  const asProjected = useMemo(
-    () => ({ strength, byWeek, bracket }), [strength, byWeek, bracket]);
+  /** the league as it stands, before any trade in the what-if */
+  const asProjected = useMemo(() => {
+    const split = splitAtPlayoffs(standing.weekly, coming, lastRegular, rounds);
 
-  const playOut = (picks: Map<string, string>, draws: number, using = adjusted) => setup
+    return { strength: standing.strength, byWeek: split.byWeek, bracket: split.bracket };
+  }, [standing, coming, lastRegular, rounds]);
+
+  const playOut = (
+    picks: Map<string, string>, draws: number, using = adjusted, live = thisWeek,
+  ) => setup
     ? playoffOdds({
       table: setup.table,
       weeks: setup.toCome,
@@ -472,7 +483,7 @@ export function Stats(props: Props) {
       playoffTeams: rules.teams,
       rules,
       divisionOf,
-      ...(thisWeek ? { thisWeek } : {}),
+      ...(live ? { thisWeek: live } : {}),
       mine: league.team,
       draws,
       forced: picks,
@@ -503,12 +514,16 @@ export function Stats(props: Props) {
     return fresh;
   }, [runs, forced]);
 
-  /** your chance as things stand, with nothing picked and your scoring as projected */
+  /**
+   * Your chance as things stand: no trade, nothing picked and your
+   * scoring as projected. A trade still under review is a what-if until
+   * it goes through, so this is the figure it is measured against.
+   */
   const today = useMemo(() => {
-    const as = playOut(new Map(), SEASONS, asProjected);
+    const as = playOut(new Map(), SEASONS, asProjected, thisWeekAsItStands);
 
     return as?.odds.find((o) => o.owner === league.team)?.playoffs ?? null;
-  }, [setup, asProjected, league, thisWeek, rules, divisionOf]);
+  }, [setup, asProjected, league, thisWeekAsItStands, rules, divisionOf]);
 
   /**
    * Your chance week by week as the tab would tell it if the season goes
@@ -620,8 +635,8 @@ export function Stats(props: Props) {
                 label="playoff chance"
                 value={pct(myOdds.playoffs)}
                 {...(run?.ifWin != null && run.ifLose != null
-                  ? { note: `win ${pct(run.ifWin)} · lose ${pct(run.ifLose)}` }
-                  : {})}
+                  ? { note: `${inWhatIf ? "what if · " : ""}win ${pct(run.ifWin)} · lose ${pct(run.ifLose)}` }
+                  : inWhatIf ? { note: "what if" } : {})}
               />
             )}
             {myOdds?.division !== undefined && (
@@ -663,7 +678,7 @@ export function Stats(props: Props) {
           <div class="sectionhead">
             <h2>
               playoff chances
-              {(forced.size > 0 || nudge !== 0) && <span class="tag">what if</span>}
+              {inWhatIf && <span class="tag">what if</span>}
             </h2>
             <div class="headbtns">
             <button
@@ -679,8 +694,9 @@ export function Stats(props: Props) {
                 week: coming,
                 playoffTeams,
                 rule: rulesSay(rules, divisionCount),
-                ...(forced.size > 0 || nudge !== 0 ? {
+                ...(inWhatIf ? {
                   whatIf: [
+                    moved ? `${world.applied.length} trade${world.applied.length === 1 ? "" : "s"}` : "",
                     forced.size ? `${forced.size} pick${forced.size === 1 ? "" : "s"}` : "",
                     nudge ? `you ${nudge > 0 ? "+" : ""}${Math.round(nudge * 100)}%` : "",
                   ].filter(Boolean).join(", "),
@@ -708,6 +724,20 @@ export function Stats(props: Props) {
               league={league} rules={rules} onRules={setRules}
               onDone={() => setShowRules(false)}
             />
+          )}
+          {/* a pending trade counts without anybody asking, so the table
+              says what it includes and how to change it */}
+          {inWhatIf && (
+            <p class="hint scenario">
+              includes {whatIfSays(league, props.whatIf)}{" "}
+              <button
+                class="textbtn"
+                onClick={() => document.getElementById("whatif")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              >
+                change
+              </button>
+            </p>
           )}
           <div class={"odds-list" + (hasTitle ? " with-title" : "") + (hasBye ? " with-bye" : "")}>
             {hasTitle && (
@@ -755,19 +785,16 @@ export function Stats(props: Props) {
           </div>
 
           {setup && path && path.cols.length > 0 && (
-            <div class="swhatif rhythm">
+            <div class="swhatif rhythm" id="whatif">
               <div class="sectionhead">
                 <h2>what if</h2>
-                {(forced.size > 0 || nudge !== 0) && (
-                  <button
-                    class="textbtn"
-                    onClick={() => { setForced(new Map()); setNudge(0); }}
-                  >
-                    reset{forced.size ? ` ${forced.size} pick${forced.size === 1 ? "" : "s"}` : ""}
+                {inWhatIf && (
+                  <button class="textbtn" onClick={() => onScenario(asItStands(league, scenario))}>
+                    reset
                   </button>
                 )}
               </div>
-              {run && (forced.size > 0 || nudge !== 0) && (
+              {run && inWhatIf && (
                 <WhatNow
                   chance={run.odds.find((o) => o.owner === league.team)?.playoffs ?? 0}
                   today={today}
@@ -779,9 +806,17 @@ export function Stats(props: Props) {
                 coming={coming}
                 marks={marks}
               />
+              <h3 class="wisub">trades</h3>
+              <WhatIfTrades
+                league={league}
+                whatIf={props.whatIf}
+                onEdit={props.onWeighTrade}
+                onAdd={props.onWeighTrade ? () => props.onWeighTrade!() : undefined}
+              />
+              <h3 class="wisub">your scoring</h3>
               <label class="nudge">
                 <span>
-                  your scoring vs projection{" "}
+                  vs projection{" "}
                   <b>{nudge > 0 ? "+" : ""}{Math.round(nudge * 100)}%</b>
                 </span>
                 <input
@@ -793,14 +828,15 @@ export function Stats(props: Props) {
                   }}
                 />
               </label>
+              <h3 class="wisub">pick results</h3>
               <Picker
                 toCome={setup.toCome}
                 coming={coming}
                 mine={league.team}
                 forced={forced}
-                onPick={(w, a, b, winner) => setForced((was) => {
-                  const next = new Map(was);
-                  const key = pairKey(w, a, b);
+                onPick={(w, a, b, winner) => {
+                  const next = new Map(scenario.results);
+                  const key = resultKey(w, coming, a, b);
 
                   if (next.get(key) === winner) {
                     next.delete(key);
@@ -808,8 +844,8 @@ export function Stats(props: Props) {
                     next.set(key, winner);
                   }
 
-                  return next;
-                })}
+                  onScenario({ ...scenario, results: next });
+                }}
               />
             </div>
           )}
