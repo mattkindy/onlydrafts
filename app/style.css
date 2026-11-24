@@ -1933,3 +1933,53 @@
 .tlearn dt { font-weight: 700; color: var(--ink); }
 .tlearn dd { margin: 0; }
 .tbalance .tlearnbtn { margin-left: auto; color: var(--faint); }
+
+/*
+ * The what-if, where its odds are shown: a trade a row with its switch,
+ * then the results and scoring set. The same panel on the stats tab and
+ * the trade tab, since the two play out the same what-if.
+ */
+.whatif { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px;
+  padding: var(--s2) var(--s4) var(--s3); display: flex; flex-direction: column; gap: var(--s1);
+  margin-bottom: var(--s4); }
+.trade .whatif { margin-bottom: 0; }
+.wihead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s3); }
+.wihead > b { font-size: var(--t1); font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--faint); }
+.wihead > span { font-size: var(--t2); color: var(--muted); min-width: 0; }
+.wihead .textbtn { margin-left: auto; }
+.wimoves { list-style: none; margin: 0; padding: 0; }
+.wimoves li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start;
+  gap: var(--s3); padding: var(--s2) 0; border-top: 1px solid var(--edge); }
+.wimoves p { margin: 0; }
+.witeams { font-weight: 700; overflow-wrap: anywhere; }
+.wiby { margin-left: var(--s2); font-size: .6rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+.wiby.league { color: var(--mark); }
+.widetail { font-size: var(--t2); color: var(--muted); overflow-wrap: anywhere; }
+.wistale { font-size: var(--t1); color: var(--mark); }
+.wimoves li.off .witeams, .wimoves li.off .widetail { color: var(--faint); }
+.wiacts { display: flex; gap: var(--s3); }
+/* a switch a thumb can hit: the button is the full tap height, the track sits in it */
+.wiswitch { position: relative; width: 44px; height: var(--tap); margin: calc(var(--s1) * -1) 0;
+  padding: 0; border: none; background: none; cursor: pointer; }
+.wiswitch::before { content: ""; position: absolute; left: 4px; right: 4px; top: 50%; height: 20px;
+  margin-top: -10px; border-radius: 999px; background: var(--chip); border: 1px solid var(--edge); }
+.wiswitch::after { content: ""; position: absolute; left: 7px; top: 50%; width: 14px; height: 14px;
+  margin-top: -7px; border-radius: 50%; background: var(--faint); transition: transform .15s; }
+.wiswitch[aria-checked="true"]::before { background: color-mix(in srgb, var(--go) 28%, var(--chip));
+  border-color: var(--go); }
+.wiswitch[aria-checked="true"]::after { transform: translateX(16px); background: var(--go); }
+.wiswitch:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; border-radius: 8px; }
+@media (prefers-reduced-motion: reduce) { .wiswitch::after { transition: none; } }
+.wisettled { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--s3); margin: 0;
+  padding-top: var(--s1); border-top: 1px solid var(--edge); font-size: var(--t2); color: var(--muted); }
+.wisettled .textbtn { margin-left: auto; }
+.wiaction { align-self: flex-start; }
+
+/* the trade on the scales into the what-if, at the foot of its result */
+.twhatif { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); }
+.twhatif .hint { margin: 0; }
+@media (min-width: 1000px) {
+  .tresult .twhatif { grid-column: 1 / -1; margin-top: var(--s3); }
+}

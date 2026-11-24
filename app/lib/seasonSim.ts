@@ -14,6 +14,9 @@ import { playChance, SEASON_WEEKS, statusOf, type Listed } from "./availability.
 import { PROVIDERS, type League, type Matchup, type RosterPlayer } from "./providers.ts";
 import type { Player } from "./scoring.ts";
 import { forTheWeeksLeft, statusesOn } from "./waiversSeason.ts";
+import { linesFor, settledGames, standingFor, type GameState } from "./matchups.ts";
+import { catchShiftOf, type SlateRow } from "./slate.ts";
+import type { Pays } from "./scoring.ts";
 import {
   bestLineupPoints, seasonOf, startingSlots, weeklySpread,
   type SeedRow, type Strength, type TeamSeason,
@@ -321,14 +324,22 @@ export function seasonSetup(input: {
 /**
  * The season read for a league: its weeks, the season so far, each team's
  * strength as its roster stands, and what is left to play.
+ *
+ * `rosters` plays a what-if instead: those rosters, with the league's
+ * scale taken from the rosters as they stand, so a trade moves the teams
+ * in it and nobody else. The strengths as things stand come back beside
+ * them, for the figure a what-if is measured against.
  */
 export function useSeasonSim(input: {
   league: League;
   players: Player[];
   coming: number;
   listed: Map<string, Listed>;
+  rosters?: { owner: string; keys: RosterPlayer[] }[] | undefined;
 }) {
   const { league, players, coming, listed } = input;
+  const rosters = input.rosters ?? league.allRosters;
+  const changed = rosters !== league.allRosters;
   const lastRegular = league.lastRegularWeek ?? 14;
   const through = Math.max(coming, lastRegular);
   const { weeks, trouble } = useWeeks(league, through);
@@ -358,21 +369,38 @@ export function useSeasonSim(input: {
     [played, league.slots, positionOf],
   );
 
-  const strength = useMemo(() => teamStrengths({
+  const standingStrength = useMemo(() => teamStrengths({
     rosters: league.allRosters, slots: league.slots, byKey, listed, season,
   }), [league, byKey, season, listed]);
+  const strength = useMemo(() => changed
+    ? teamStrengths({
+        rosters, slots: league.slots, byKey, listed, season, scaleFrom: league.allRosters,
+      })
+    : standingStrength,
+  [changed, rosters, standingStrength, league, byKey, season, listed]);
 
   // the weeks left and the longest bracket after them, inside the season
   const ahead = Math.max(0, Math.min(SEASON_WEEKS, lastRegular + MOST_ROUNDS) - coming + 1);
-  const weekly = useMemo(() => weeklyStrengths({
+  const standingWeekly = useMemo(() => weeklyStrengths({
     rosters: league.allRosters, slots: league.slots, byKey, listed, season, weeks: ahead,
   }), [league, byKey, season, listed, ahead]);
+  const weekly = useMemo(() => changed
+    ? weeklyStrengths({
+        rosters, slots: league.slots, byKey, listed, season, weeks: ahead,
+        scaleFrom: league.allRosters,
+      })
+    : standingWeekly,
+  [changed, rosters, standingWeekly, league, byKey, season, listed, ahead]);
 
   const setup = useMemo(() => seasonSetup({
     weeks, coming, lastRegular, season, owners: league.allRosters.map((r) => r.owner),
   }), [weeks, coming, lastRegular, season, league]);
 
-  return { weeks, trouble, byKey, played, season, strength, weekly, setup, lastRegular };
+  return {
+    weeks, trouble, byKey, played, season, strength, weekly, setup, lastRegular,
+    /** the strengths as the rosters stand, the same as above outside a what-if */
+    standing: { strength: standingStrength, weekly: standingWeekly },
+  };
 }
 
 /** a bracket of sixteen, the most a league runs */
@@ -388,4 +416,56 @@ export function splitAtPlayoffs(
   const regular = Math.max(0, lastRegular - coming + 1);
 
   return { byWeek: weekly.slice(0, regular), bracket: weekly.slice(regular, regular + rounds) };
+}
+
+/** one of this week's games with its odds as the matchup tab has them, a beating b */
+export interface LiveGame {
+  a: string;
+  b: string;
+  odds: number;
+  projected: [number, number];
+}
+
+/**
+ * This week's games with the odds the matchup tab gives them, from each
+ * lineup as it is set and the points already scored, where the week on
+ * screen is the coming one. The season played out takes these for the
+ * week rather than each roster's best lineup, so a game half played
+ * counts what has been scored in it.
+ */
+export function liveWeek(input: {
+  week: { games: Matchup[]; rows: Map<string, SlateRow>; states: Map<string, GameState> | null } | undefined;
+  players: Player[];
+  coming: number;
+  pays: Pays | undefined;
+  boardPerCatch: number | undefined;
+}): LiveGame[] | undefined {
+  const now = input.week;
+
+  if (!now?.states || !now.games.length) {
+    return undefined;
+  }
+
+  const lines = linesFor(input.players, input.coming, catchShiftOf(input.pays ?? {}, input.boardPerCatch));
+  const settled = settledGames(now.games, now.rows, now.states, lines);
+
+  return settled.map((game) => {
+    const { odds, projected } = standingFor(
+      game, { rows: now.rows, states: now.states!, lines, remainder: null });
+
+    return { a: game.sides[0].owner, b: game.sides[1].owner, odds: odds[0], projected };
+  });
+}
+
+/**
+ * This week's games less any a trade touches: a team whose roster a trade
+ * changes plays the week from its new roster, like every week after it,
+ * rather than from a lineup it no longer has.
+ */
+export function leavingOut(live: LiveGame[] | undefined, teams: Iterable<string>): LiveGame[] | undefined {
+  const touched = new Set(teams);
+
+  return live && touched.size
+    ? live.filter((g) => !touched.has(g.a) && !touched.has(g.b))
+    : live;
 }

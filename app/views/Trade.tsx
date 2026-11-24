@@ -21,9 +21,16 @@
  *
  * Both sides are shown because a trade the other manager loses is a trade
  * nobody accepts, and finding one that helps you both is the job.
+ *
+ * A trade is weighed inside the what-if the stats tab plays out: the
+ * league's trades still under review, any you have added, the results
+ * you have picked and your scoring. "Before" is that what-if and "after"
+ * is it with this trade too, so a second trade is judged in the league
+ * the first would leave. Adding the trade to the what-if hands it to the
+ * stats tab, where the whole race is played out with it.
  */
 
-import { useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import type { Listed } from "../lib/availability.ts";
 import { readRules, rulesKey } from "../lib/playoffRules.ts";
@@ -34,7 +41,8 @@ import {
   playoffOdds, playoffRounds, type PlayoffOdds, type Strength,
 } from "../lib/seasonStats.ts";
 import {
-  HOW_ODDS_WORK, HOW_ODDS_WORK_IN_FULL, splitAtPlayoffs, useSeasonSim, weeklyStrengths,
+  HOW_ODDS_WORK, HOW_ODDS_WORK_IN_FULL, leavingOut, liveWeek, splitAtPlayoffs, useSeasonSim,
+  weeklyStrengths, type LiveGame,
 } from "../lib/seasonSim.ts";
 import { keeperCosts } from "../lib/keepers.ts";
 import { keep, stored } from "../lib/store.ts";
@@ -43,7 +51,12 @@ import {
   overallPick, overTheLimit, pickId, pickValue, restOfSeason, rostersAfter, SEASON_OUT,
   SEASONS_AHEAD, slotsFromWins, stageOf, tradeVerdict, valueSays, type Deal, type Offer,
 } from "../lib/trade.ts";
+import {
+  dealToMove, isOn, moveToDeal, NO_SCENARIO, nudged, resultsFrom, scenarioLeague, teamsIn,
+  toggled, type Move, type Scenario,
+} from "../lib/scenario.ts";
 import { ordinal } from "./Standings.tsx";
+import { WhatIfBar, type WhatIfState } from "./WhatIf.tsx";
 
 /** how often each version of the season is played out, as the stats tab does */
 const SEASONS = 5000;
@@ -60,6 +73,17 @@ interface Props {
   keeperLeague?: boolean;
   /** how many each team keeps there */
   perTeam?: number;
+  /** the what-if the stats tab plays out, which a trade is weighed inside */
+  whatIf?: WhatIfState | undefined;
+  /** one of your trades in the what-if, opened here to change */
+  start?: { deal: Deal; id: string } | null | undefined;
+  /** says the trade to change has been taken in, so it opens only once */
+  onStarted?: (() => void) | undefined;
+  /** opens the stats tab, where the what-if is played out in full */
+  onSeeOdds?: (() => void) | undefined;
+  /** the coming week's games as the matchup tab has them, where they have loaded */
+  thisWeek?: Parameters<typeof liveWeek>[0]["week"];
+  boardPerCatch?: number | undefined;
 }
 
 const signed = (n: number, places = 0) =>
@@ -73,20 +97,90 @@ const pickSays = (p: DraftPick, holder: string) =>
   `${p.season} ${ordinal(p.round)}` + (p.from !== holder ? ` (${p.from})` : "");
 
 export function Trade(props: Props) {
-  const { league, players, coming, listed } = props;
-  const sim = useSeasonSim({ league, players, coming, listed });
+  const { players, coming, listed } = props;
+  // without a what-if handed in, one of its own that lasts while the tab
+  // is open, its league the same object between renders so nothing that
+  // reads it is played out again for nothing
+  const [ownScenario, setOwnScenario] = useState<Scenario>(NO_SCENARIO);
+  const ownWorld = useMemo(
+    () => scenarioLeague(props.league, ownScenario), [props.league, ownScenario.moves, ownScenario.off]);
+  const whatIf: WhatIfState = props.whatIf ?? {
+    scenario: ownScenario, world: ownWorld, onScenario: setOwnScenario,
+  };
+  const { scenario, onScenario } = whatIf;
+  // the league as it stands, which the scale of every what-if is taken from
+  const real = props.league;
+  // and the league the trade lands in, after every trade in the what-if
+  const league = whatIf.world.league;
+  const moved = whatIf.world.applied.length > 0;
+  const sim = useSeasonSim({
+    league: real, players, coming, listed, rosters: moved ? league.allRosters : undefined,
+  });
   const others = league.allRosters.filter((r) => r.owner !== league.team);
   const partnerKey = `tradePartner:${league.provider}:${league.leagueId}`;
   const [deal, setDeal] = useState<Deal>(() => {
+    if (props.start) {
+      return props.start.deal;
+    }
+
     const last = stored<string>(partnerKey, "");
 
     return NO_DEAL(others.some((r) => r.owner === last) ? last : others[0]?.owner ?? "");
   });
+  // the trade of yours in the what-if being changed here, switched off
+  // while it is, so its players are back where they started
+  const [editing, setEditing] = useState<string | null>(() => props.start?.id ?? null);
+
+  useEffect(() => {
+    if (props.start) {
+      props.onStarted?.();
+    }
+  }, []);
+
   const choosePartner = (owner: string) => {
     keep(partnerKey, owner);
     setDeal(NO_DEAL(owner));
+    setEditing(null);
     setBalancing(false);
     setEvenPage(0);
+  };
+  /** one of your trades in the what-if back on the scales, to change */
+  const edit = (move: Move) => {
+    const back = moveToDeal(move, league.team);
+
+    if (!back) {
+      return;
+    }
+
+    if (isOn(move, scenario)) {
+      onScenario(toggled(scenario, move));
+    }
+
+    keep(partnerKey, back.partner);
+    setDeal(back);
+    setEditing(move.id);
+    setBalancing(false);
+    setEvenPage(0);
+  };
+  /**
+   * The trade on the scales into the what-if, or back into it in place of
+   * the one it was opened from, switched on either way. The scales are
+   * then cleared, since the trade is now part of what the next is
+   * weighed against.
+   */
+  const addToWhatIf = () => {
+    const move = dealToMove(deal, league, editing ?? `you:${Date.now()}`);
+
+    onScenario(editing && scenario.moves.some((m) => m.id === editing)
+      ? {
+          ...scenario,
+          moves: scenario.moves.map((m) => (m.id === editing ? move : m)),
+          off: scenario.off.filter((id) => id !== editing),
+        }
+      : { ...scenario, moves: [...scenario.moves, move] });
+    setEditing(null);
+    setDeal(NO_DEAL(deal.partner));
+    setBalancing(false);
   };
   // whether the ways to even the deal up are showing, kept to players or
   // picks where you said, and how far through them you have stepped
@@ -118,23 +212,51 @@ export function Trade(props: Props) {
     .filter((r) => typeof r.division === "number")
     .map((r) => [r.owner, r.division!])), [league]);
 
-  const playOut = (weekly: Map<string, Strength>[]) => sim.setup
+  // the results picked and your scoring, as the stats tab has them
+  const forced = useMemo(
+    () => resultsFrom(scenario.results, coming), [scenario.results, coming]);
+  const nudge = scenario.nudge;
+  const mineAt = (s: Map<string, Strength>) => nudged(s, league.team, nudge);
+  /**
+   * This week's games at the matchup tab's odds, as the stats tab plays
+   * them, less any game of a team a trade in the what-if touches. The two
+   * teams in the deal play theirs from their rosters before the trade as
+   * well as after, so the difference between the two is the trade alone.
+   */
+  const live = useMemo(() => liveWeek({
+    week: props.thisWeek, players, coming, pays: real.pays, boardPerCatch: props.boardPerCatch,
+  }), [props.thisWeek, players, coming, real.pays, props.boardPerCatch]);
+  const touched = useMemo(
+    () => whatIf.world.applied.flatMap((m) => teamsIn(m)), [whatIf.world.applied]);
+  const dealKey = JSON.stringify(deal);
+  const liveFor = useMemo(
+    () => leavingOut(live, dealIsEmpty(deal) ? touched : [...touched, league.team, deal.partner]),
+    [live, touched, dealKey, league.team]);
+  const playOut = (weekly: Map<string, Strength>[], thisWeek: LiveGame[] | undefined) => sim.setup
     ? playoffOdds({
         table: sim.setup.table,
         weeks: sim.setup.toCome,
-        strength: sim.strength,
-        ...splitAtPlayoffs(weekly, coming, lastRegular, rounds),
+        strength: mineAt(sim.strength),
+        ...splitAtPlayoffs(weekly.map(mineAt), coming, lastRegular, rounds),
         playoffTeams: rules.teams,
         rules,
         divisionOf,
+        ...(thisWeek ? { thisWeek } : {}),
         mine: league.team,
         draws: SEASONS,
+        forced,
       }).odds
     : null;
 
+  // the what-if as it is, the stats tab's figures, for each team's chance
+  // beside its name and the order the coming draft goes in
+  const asIs = useMemo(
+    () => playOut(sim.weekly, leavingOut(live, touched)),
+    [sim.setup, sim.weekly, sim.strength, rules, divisionOf, rounds, forced, nudge, live, touched]);
   const before = useMemo(
-    () => playOut(sim.weekly), [sim.setup, sim.weekly, rules, divisionOf, rounds]);
-  const dealKey = JSON.stringify(deal);
+    // without the week's games to set aside, the what-if as it is already is it
+    () => (dealIsEmpty(deal) || !live ? asIs : playOut(sim.weekly, liveFor)),
+    [asIs, live, liveFor, dealKey]);
   const afterWeekly = useMemo(() => weeklyStrengths({
     rosters: rostersAfter(league, deal),
     slots: league.slots,
@@ -142,18 +264,18 @@ export function Trade(props: Props) {
     listed,
     season: sim.season,
     weeks: sim.weekly.length,
-    scaleFrom: league.allRosters,
-  }), [dealKey, league, sim.byKey, sim.season, sim.weekly.length, listed]);
+    scaleFrom: real.allRosters,
+  }), [dealKey, league, real, sim.byKey, sim.season, sim.weekly.length, listed]);
   const after = useMemo(
-    () => (dealIsEmpty(deal) ? before : playOut(afterWeekly)),
-    [dealKey, afterWeekly, before],
+    () => (dealIsEmpty(deal) ? before : playOut(afterWeekly, liveFor)),
+    [dealKey, afterWeekly, before, liveFor],
   );
 
   // where each team's pick falls in the coming draft: the fewest wins first
   const slots = useMemo(() => slotsFromWins(
-    before?.map((o) => ({ owner: o.owner, wins: o.wins })) ??
+    asIs?.map((o) => ({ owner: o.owner, wins: o.wins })) ??
       league.allRosters.map((r) => ({ owner: r.owner, wins: r.record?.wins ?? 0 }))),
-  [before, league]);
+  [asIs, league]);
   const curve = useMemo(() => draftCurve(players), [players]);
   const picks = league.picks ?? [];
   const valueOfPick = (p: DraftPick) => pickValue(p, {
@@ -328,7 +450,7 @@ export function Trade(props: Props) {
           {others.map((r) => {
             // each team's chance of the playoffs, since a team out of the
             // race is the one selling
-            const odds = oddsOf(before, r.owner)?.playoffs;
+            const odds = oddsOf(asIs, r.owner)?.playoffs;
 
             return (
               <button
@@ -356,6 +478,16 @@ export function Trade(props: Props) {
           <button class="textbtn" onClick={props.onSettings}>set the deadline</button>
         </p>
       )}
+
+      <WhatIfBar
+        league={league}
+        whatIf={whatIf}
+        onEdit={edit}
+        editing={editing}
+        {...(props.onSeeOdds && (moved || scenario.results.size > 0 || nudge !== 0)
+          ? { action: { says: "see the whole race with it", onClick: props.onSeeOdds } }
+          : {})}
+      />
 
       <div class={"tresult" + (dealIsEmpty(deal) ? " idle" : "")}>
         {dealIsEmpty(deal)
@@ -386,6 +518,9 @@ export function Trade(props: Props) {
                   </span>
                 )}
                 {!hasLater && <span><i>after</i>nothing carries over</span>}
+                {(moved || forced.size > 0 || nudge !== 0) && (
+                  <span><i>against</i>the what-if above</span>
+                )}
               </p>
               <table class="tgrid">
                 <thead>
@@ -514,6 +649,16 @@ export function Trade(props: Props) {
                   {them.drop > 0 && `${deal.partner} would drop ${them.drop}.`}
                 </p>
               )}
+              <div class="twhatif">
+                <button class="quiet" onClick={addToWhatIf}>
+                  {editing ? "save it in the what-if" : "add to the what-if"}
+                </button>
+                <span class="hint">
+                  {editing
+                    ? "puts it back, changed, and counts it"
+                    : "counts it on the stats tab, and weighs the next trade with it done"}
+                </span>
+              </div>
             </>
           )}
       </div>

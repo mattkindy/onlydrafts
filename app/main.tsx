@@ -28,7 +28,7 @@ import type { Player } from "./lib/scoring.ts";
 import { PlayerSheet } from "./views/PlayerSheet.tsx";
 import { Reading, Skeleton } from "./views/Reading.tsx";
 import { EspnSheet } from "./views/EspnSheet.tsx";
-import { Roster } from "./views/Roster.tsx";
+import { Roster, type Mode as TeamMode } from "./views/Roster.tsx";
 import { LeagueSettingsPanel } from "./views/LeagueSettings.tsx";
 import {
   MOST_KEEPERS, readSettings, settingsKey, withSettings, type LeagueSettings,
@@ -41,6 +41,12 @@ import { Standings, standingSays } from "./views/Standings.tsx";
 import { Waivers } from "./views/Waivers.tsx";
 import { LeagueWeek } from "./views/LeagueWeek.tsx";
 import { Stats } from "./views/Stats.tsx";
+import type { WhatIfState } from "./views/WhatIf.tsx";
+import {
+  isOn, keepScenario, moveToDeal, NO_SCENARIO, readScenario, scenarioLeague, toggled,
+  type Move, type Scenario,
+} from "./lib/scenario.ts";
+import type { Deal } from "./lib/trade.ts";
 import { useWeekPoll } from "./views/scoreboard.ts";
 import {
   listedOnSlate, loadSlate, onTheBooks, rosterKeys, slateUnder, weekRefs,
@@ -294,6 +300,55 @@ function App() {
       setSettingsRev((n) => n + 1);
     }
   };
+  /**
+   * The what-if the stats tab and the trade tab share for the open league:
+   * the trades in it, the league's still under review and the ones built
+   * on the trade tab, the results picked and your scoring. The trades and
+   * their switches are kept between visits; the rest lasts the session.
+   */
+  const [scenario, setScenarioNow] = useState<Scenario>(
+    () => (given ? readScenario(given) : NO_SCENARIO));
+
+  useEffect(() => {
+    setScenarioNow(given ? readScenario(given) : NO_SCENARIO);
+  }, [given?.provider, given?.leagueId]);
+
+  const setScenario = (next: Scenario) => {
+    setScenarioNow(next);
+
+    if (given) {
+      keepScenario(given, next);
+    }
+  };
+  // the league after the trades switched on, worked out only when they
+  // change, so a picked result does not rebuild every roster
+  const world = useMemo(
+    () => (active ? scenarioLeague(active, scenario) : null),
+    [active, scenario.moves, scenario.off, scenario.on]);
+  const whatIf: WhatIfState | undefined = active && world
+    ? { scenario, world, onScenario: setScenario }
+    : undefined;
+  /** which way the team tab is read, since its trade view wants the scoreboard */
+  const [teamMode, setTeamMode] = useState<TeamMode>(() => stored<TeamMode>("teamMode", "week"));
+  /** one of your trades in the what-if, on its way to the trade tab to change */
+  const [tradeStart, setTradeStart] = useState<{ deal: Deal; id: string } | null>(null);
+  /** the trade tab, with one of your trades in it where one is given */
+  const weighTrade = (move?: Move) => {
+    const deal = move && active ? moveToDeal(move, active.team) : null;
+
+    if (move && deal) {
+      // off while it is changed, so its players are back where they began
+      if (isOn(move, scenario)) {
+        setScenario(toggled(scenario, move));
+      }
+
+      setTradeStart({ deal, id: move.id });
+    }
+
+    keep("teamMode", "trade");
+    setTeamMode("trade");
+    setView("team");
+  };
   /** whether the league tab's settings are open */
   const [settingsOpen, setSettingsOpen] = useState(false);
   // a reload lands back on the tab you were on, in the league you had open
@@ -346,8 +401,10 @@ function App() {
   // one poll for the whole page: each scoreboard read moves `tick`, and
   // the league's points are read again on it, so the two never drift apart
   // the league list prices each league's game too, once there are leagues
+  // and the trade tab, which plays this week the way the stats tab does
   const openWeek = week &&
-    (WEEK_VIEWS.includes(view) || (view === "leagues" && leagues.length > 0))
+    (WEEK_VIEWS.includes(view) || (view === "leagues" && leagues.length > 0) ||
+      (view === "team" && teamMode === "trade"))
     ? week : null;
   const scoreboard = useWeekPoll(
     openWeek?.season, openWeek?.week, active?.provider);
@@ -878,14 +935,16 @@ function App() {
   }, [view]);
 
   // the stats tab plays the season out from today, so it reads the week
-  // being played, whichever week another tab was looking back at
+  // being played, whichever week another tab was looking back at, and the
+  // trade tab plays out the same season
   useEffect(() => {
     const latest = weeks[weeks.length - 1];
+    const playsOut = view === "stats" || (view === "team" && teamMode === "trade");
 
-    if (view === "stats" && latest && week?.week !== latest.week) {
+    if (playsOut && latest && week?.week !== latest.week) {
       setWeek(latest);
     }
-  }, [view, weeks]);
+  }, [view, weeks, teamMode]);
 
   /** a hole in your lineup, taken to the free agents who could fill it */
   const findAt = (position: string) => {
@@ -1201,6 +1260,13 @@ function App() {
               // tab was last left on
               rows={comingWeek ? slateRows : undefined}
               onSettings={() => { setSettingsOpen(true); setView("league"); }}
+              whatIf={whatIf}
+              tradeStart={tradeStart}
+              onTradeStarted={() => setTradeStart(null)}
+              onSeeOdds={() => setView("stats")}
+              thisWeek={comingWeek ? statsWeek : undefined}
+              boardPerCatch={board.perCatch}
+              onMode={setTeamMode}
             />
 
             {active.keepers === undefined || active.keepers === null
@@ -1381,7 +1447,7 @@ function App() {
           </>
         )}
 
-        {board && active && view === "stats" && weeks.length > 0 && (
+        {board && active && whatIf && view === "stats" && weeks.length > 0 && (
           <Stats
             league={active}
             players={players}
@@ -1391,6 +1457,8 @@ function App() {
               : undefined}
             boardPerCatch={board.perCatch}
             listed={listed}
+            whatIf={whatIf}
+            onWeighTrade={weighTrade}
           />
         )}
 

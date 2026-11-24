@@ -21,8 +21,11 @@ import { lineupLink, PROVIDER_NAME } from "../lib/deepLinks.ts";
 import { KeeperRow, keeperDraft, keeperRounds } from "./Keepers.tsx";
 import { asRound } from "../lib/picks.ts";
 import { keep, stored } from "../lib/store.ts";
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
+import type { ComponentProps } from "preact";
 import { Trade } from "./Trade.tsx";
+import type { WhatIfState } from "./WhatIf.tsx";
+import type { Deal } from "../lib/trade.ts";
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF", "other"];
 
@@ -52,9 +55,21 @@ interface Props {
   week?: number | null;
   /** every player's line for that week, where it has loaded */
   rows?: Map<string, SlateRow>;
+  /** the what-if the stats tab plays out, which the trade tab weighs a trade inside */
+  whatIf?: WhatIfState | undefined;
+  /** one of your trades in the what-if to open on the trade tab, and word that it has been */
+  tradeStart?: { deal: Deal; id: string } | null | undefined;
+  onTradeStarted?: (() => void) | undefined;
+  /** opens the stats tab, where the what-if is played out in full */
+  onSeeOdds?: (() => void) | undefined;
+  /** the coming week's games, so the trade tab plays this week as the stats tab does */
+  thisWeek?: ComponentProps<typeof Trade>["thisWeek"];
+  boardPerCatch?: number | undefined;
+  /** says which way the tab is read, since the trade tab wants this week's scoreboard */
+  onMode?: ((mode: Mode) => void) | undefined;
 }
 
-type Mode = "week" | "season" | "trade";
+export type Mode = "week" | "season" | "trade";
 
 const MODES: [Mode, string][] = [["week", "this week"], ["season", "season"], ["trade", "trade"]];
 
@@ -71,6 +86,8 @@ export function Roster(props: Props) {
     setChosen(which);
     keep("teamMode", which);
   };
+
+  useEffect(() => props.onMode?.(mode), [mode]);
   /**
    * Read for the week, each position is in the order you would start it;
    * read for the season, by what he is worth over it. The two part ways
@@ -166,6 +183,9 @@ export function Roster(props: Props) {
           league={league} players={players} coming={props.week ?? 1}
           listed={props.listed ?? new Map()} {...(props.onSettings ? { onSettings: props.onSettings } : {})}
           keeperLeague={Boolean(props.keeperLeague)} perTeam={props.perTeam}
+          whatIf={props.whatIf} start={props.tradeStart}
+          onStarted={props.onTradeStarted} onSeeOdds={props.onSeeOdds}
+          thisWeek={props.thisWeek} boardPerCatch={props.boardPerCatch}
         />
       )}
 
