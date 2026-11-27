@@ -210,6 +210,46 @@ describe("who to start", () => {
     expect(where.textContent).toContain("Pick another WR");
   });
 
+  it("prices a questionable starter played and sat under the score", () => {
+    const listed = new Map<string, Listed>([[normalizeName("Josh Allen"),
+      { name: "Josh Allen", status: "Questionable", position: "QB" }]]);
+    const pre = { where: "pre" as const, left: 1 };
+    const states = new Map(["BUF", "NYJ", "ATL", "NO", "PHI", "DAL", "CIN", "BAL"]
+      .map((team) => [team, pre]));
+    const starter = (name: string, slot: string) =>
+      ({ key: normalizeName(name), name, slot, points: 0 });
+
+    render(
+      <MyMatchup
+        weeks={WEEKS} picked={WEEKS[0]!} onWeek={() => {}} slate={slate}
+        games={[{
+          sides: [
+            { owner: "me", points: 0, bench: [],
+              starters: [starter("Josh Allen", "QB"), starter("Bijan Robinson", "RB")] },
+            { owner: "you", points: 0, bench: [],
+              starters: [starter("Jalen Hurts", "QB"), starter("Ja'Marr Chase", "WR")] },
+          ],
+        }]}
+        rows={rowsOf(listed)} players={[]} mine="me" slots={["QB", "RB"]}
+        listed={listed}
+        scoreboard={{
+          season: 2026, week: 3, tick: 1, states, situations: new Map(),
+          read: new Date(), trouble: "",
+        }}
+      />,
+      where,
+    );
+
+    const card = where.querySelector(".hif")!;
+    const [plays, sits] = Array.from(card.querySelectorAll(".iffig b"))
+      .map((b) => Number(b.textContent!.replace("%", "")));
+
+    expect(card.textContent).toContain("Josh Allen");
+    expect(card.textContent).toContain("yours · 64% to play");
+    expect(plays).toBeGreaterThan(sits!);
+    expect(card.querySelector(".iffig b")!.className).toBe("up");
+  });
+
   it("says no week is built yet when none is", () => {
     render(
       <MyMatchup

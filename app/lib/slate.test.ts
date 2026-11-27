@@ -4,8 +4,8 @@ import type { Listed } from "./availability.ts";
 import { lineOf, linesFor, liveDraws, spreadOf } from "./matchups.ts";
 import type { Player } from "./scoring.ts";
 import {
-  hasGameIn, isSplit, onTheBooks, readSlate, slateUnder, withByesZeroed,
-  withOutPlayersZeroed,
+  asIfHePlays, asIfHeSits, hasGameIn, isSplit, onTheBooks, readSlate,
+  slateUnder, withByesZeroed, withOutPlayersZeroed,
 } from "./slate.ts";
 import { normalizeName } from "./store.ts";
 
@@ -256,6 +256,32 @@ describe("a player the injury report is unsure about", () => {
 
     expect(row.q3).toBe(22);
     expect(row.ceiling).toBe(28);
+  });
+
+  it("gives his whole week back if he is cleared to play", () => {
+    const row = asIfHePlays(asked("Questionable"));
+
+    expect(row.blend).toBe(17);
+    expect(row.ours).toBe(17);
+    expect(row.floor).toBe(9);
+    expect(row.q1).toBe(12);
+    expect(row.ceiling).toBe(28);
+    expect(row.playChance).toBe(1);
+    expect(row.full).toBeUndefined();
+  });
+
+  it("reads zero on every figure if he is ruled out", () => {
+    const row = asIfHeSits(asked("Questionable"));
+
+    expect(row.blend).toBe(0);
+    expect(row.ceiling).toBe(0);
+    expect(row.playChance).toBe(0);
+  });
+
+  it("leaves a player nobody marked down as he was", () => {
+    const burrow = rowsOf(built).get(normalizeName("Joe Burrow"))!;
+
+    expect(asIfHePlays(burrow)).toBe(burrow);
   });
 
   it("prices a doubtful player at nearly nothing", () => {

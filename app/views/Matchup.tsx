@@ -19,6 +19,7 @@ import {
   bestLineupFor, lineFor, linesFor, myGameIn, settledGames, standingFor,
   starterState, type GameState, type Lines,
 } from "../lib/matchups.ts";
+import { playOrSitFor, type PlayOrSit } from "../lib/playOrSit.ts";
 import type { League, Matchup, Roster, Side } from "../lib/providers.ts";
 import { scoredSays, type Pays, type Player } from "../lib/scoring.ts";
 import {
@@ -620,7 +621,7 @@ function Ring({ odds, tone }: { odds: number; tone: string }) {
  * sat under eight lineup cards and the bench.
  */
 function Scoreline(
-  { game, at, odds, projected, phase, week, teams, lock }: {
+  { game, at, odds, projected, phase, week, teams, lock, doubts }: {
     game: Matchup;
     at: number;
     odds: number;
@@ -630,6 +631,8 @@ function Scoreline(
     teams: Roster[];
     /** when your next starter's game kicks off, and whose, if one is still to */
     lock: NextLock | null;
+    /** the questionable starters yet to kick off, played and sat */
+    doubts: Doubt[];
   },
 ) {
   const me = game.sides[at]!;
@@ -691,7 +694,64 @@ function Scoreline(
           </span>
         </div>
       )}
+      {doubts.length > 0 && phase !== "final" && (
+        <IfTheyPlay doubts={doubts} at={at} odds={odds} />
+      )}
     </section>
+  );
+}
+
+/** a questionable starter priced both ways, with the name to call him by */
+interface Doubt extends PlayOrSit {
+  name: string;
+}
+
+/** the most questionable starters the card lists, the biggest swings first */
+const MOST_DOUBTS = 4;
+
+/** a win chance against the one in the ring: green above it, red below */
+const againstNow = (share: number, now: number) =>
+  share > now + 0.005 ? "up" : share < now - 0.005 ? "down" : "";
+
+/**
+ * Your chance of winning if each questionable starter plays and if he
+ * sits. The ring prices him at his chance of playing, which is the right
+ * number to set a lineup by, but on the day he plays his whole game or
+ * none of it, and these are the two numbers you will actually be looking
+ * at once the news comes out.
+ */
+function IfTheyPlay(
+  { doubts, at, odds }: { doubts: Doubt[]; at: number; odds: number },
+) {
+  return (
+    <div class="hif">
+      <span class="hiftitle">if questionable players play</span>
+      <ul>
+        {doubts.map((one) => (
+          <li
+            key={one.key}
+            title={`Your chance of winning if he is cleared to play, and if ` +
+              `he is ruled out. The ${pct(odds)} above prices him at a ` +
+              `${pct(one.chance)} chance of playing.`}
+          >
+            <span class="ifwho">
+              <b>{one.name}</b>
+              <span class="ifmeta">
+                {one.side === at ? "yours" : "theirs"} · {pct(one.chance)} to play
+              </span>
+            </span>
+            <span class="iffig">
+              <i>plays</i>
+              <b class={againstNow(one.plays, odds)}>{pct(one.plays)}</b>
+            </span>
+            <span class="iffig">
+              <i>sits</i>
+              <b class={againstNow(one.sits, odds)}>{pct(one.sits)}</b>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -870,6 +930,20 @@ export function MyMatchup(props: Props) {
     [ours, rows, states, lines, remainder],
   );
   const odds = ours ? standing?.odds[ours.at] : undefined;
+  const doubts = useMemo((): Doubt[] => {
+    if (!ours || !states) {
+      return [];
+    }
+
+    const named = new Map(ours.game.sides.flatMap((side) => side.starters)
+      .map((starter) => [starter.key, starter.name] as const));
+
+    return playOrSitFor(ours.game, ours.at, { rows, states, lines, remainder })
+      .slice(0, MOST_DOUBTS)
+      .map((one) => ({
+        ...one, name: nameOf(one.key, rows, lines, named.get(one.key)),
+      }));
+  }, [ours, rows, states, lines, remainder]);
   const worries = useMemo(() => {
     if (!ours || !states || odds === undefined) {
       return [];
@@ -1004,6 +1078,7 @@ export function MyMatchup(props: Props) {
               week={props.picked?.week}
               teams={props.teams ?? []}
               lock={nextLockIn(ours.side, rows, states, lines)}
+              doubts={doubts}
             />
           )}
           {/* on a wide screen the lineup sits beside the game it is in;
