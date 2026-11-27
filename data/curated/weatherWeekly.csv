@@ -1,10 +1,10 @@
 season,week,home_team,wind,temp,precip_mm,precip_chance,source
-2026,12,BUF,16.1,35.8,4.30,100,forecast
+2026,12,BUF,16.1,34.0,29.20,100,forecast
 2026,12,CIN,6.3,49.5,11.00,95,forecast
 2026,12,CLE,11.3,46.8,7.30,98,forecast
 2026,12,JAX,4.0,63.4,0.00,3,forecast
 2026,12,MIA,8.1,77.6,0.00,10,forecast
-2026,12,PIT,12.7,39.9,0.40,53,forecast
+2026,12,PIT,12.7,39.9,0.40,55,forecast
 2026,12,SF,9.4,64.9,0.00,77,forecast
 2026,12,TB,6.8,67.6,1.10,40,forecast
 2026,13,CHI,8.3,46.3,0.00,8,forecast
