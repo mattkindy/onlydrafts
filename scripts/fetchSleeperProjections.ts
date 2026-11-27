@@ -19,7 +19,7 @@ import {
   sleeperStatusToCsv, teamsAlreadyPlayed, type SleeperStatus,
 } from "../src/data/injuries.js";
 import {
-  canonicalTeam, comingWeek, currentSeason, loadGames,
+  canonicalTeam, comingWeek, currentSeason, easternDate, loadGames,
 } from "../src/data/nflverse.js";
 import {
   fetchSleeperGsisIds, fetchSleeperInjuryStatuses,
@@ -93,8 +93,12 @@ async function saveInjuryStatuses(): Promise<void> {
   const season = currentSeason();
   const games = await loadGames();
   const week = comingWeek(games, season);
-  const fetchedAt = new Date().toISOString();
-  const played = teamsAlreadyPlayed(games, season, week, fetchedAt.slice(0, 10));
+  const now = new Date();
+  const fetchedAt = now.toISOString();
+  // the east coast's date, since that is the one a gameday is written in:
+  // by the UTC date a run at 7pm ET on a Thursday would drop the night
+  // game's statuses an hour before its inactives come out
+  const played = teamsAlreadyPlayed(games, season, week, easternDate(now));
   const rows: SleeperStatus[] = [...await fetchSleeperInjuryStatuses()]
     .filter(([, { team }]) => !played.has(canonicalTeam(team)))
     .map(([gsisId, { status, team }]) =>
