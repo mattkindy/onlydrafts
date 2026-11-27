@@ -65,6 +65,12 @@ export interface SlateRow {
    */
   playChance?: number;
   /**
+   * The figures the markdown took down, as they were before it, so a page
+   * can ask what the week looks like if he does take the field. Only a
+   * row marked down for a chance between none and certain carries it.
+   */
+  full?: FullWeek;
+  /**
    * The forecast for his fixture, on the rows where it would move him:
    * wind 15 or more, under 40, or something falling. A mild afternoon
    * leaves this off, which is most of them.
@@ -313,6 +319,9 @@ const NOTHING = {
 const FLOOR_SURVIVES_AT = 0.9;
 const Q1_SURVIVES_AT = 0.75;
 
+/** the figures a chance of playing marks down */
+export type FullWeek = Pick<SlateRow, "ours" | "sleeper" | "blend" | "floor" | "q1">;
+
 /** his row marked down for the chance he does not take the field at all */
 function scaledBy(row: SlateRow, chance: number): SlateRow {
   const at = (points: number) => Number((points * chance).toFixed(1));
@@ -325,7 +334,33 @@ function scaledBy(row: SlateRow, chance: number): SlateRow {
     floor: chance >= FLOOR_SURVIVES_AT ? row.floor : 0,
     q1: chance >= Q1_SURVIVES_AT ? row.q1 : 0,
     playChance: chance,
+    full: {
+      ours: row.ours, sleeper: row.sleeper, blend: row.blend,
+      floor: row.floor, q1: row.q1,
+    },
   };
+}
+
+/**
+ * His row as though he is cleared to play: the figures from before the
+ * markdown, at a certain chance. A row nobody marked down comes back as
+ * it is, since he was already priced to play.
+ */
+export function asIfHePlays(row: SlateRow): SlateRow {
+  if (!row.full) {
+    return row;
+  }
+
+  const { full: _, ...rest } = row;
+
+  return { ...rest, ...row.full, playChance: 1 };
+}
+
+/** his row as though he is ruled out */
+export function asIfHeSits(row: SlateRow): SlateRow {
+  const { full: _, ...rest } = row;
+
+  return { ...rest, ...NOTHING, playChance: 0 };
 }
 
 /**

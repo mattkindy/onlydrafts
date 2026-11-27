@@ -76,9 +76,13 @@ That is `scripts/week.ts`, and it runs six steps in order:
    into `data/curated/weatherWeekly.csv`.
 6. `buildSite.ts` writes the site.
 
-A GitHub Actions workflow runs the same thing on Tuesday and Sunday
-mornings and commits the result. Another typechecks and tests every
-push to `main` and every pull request.
+A GitHub Actions workflow runs the same thing every three hours, every
+day, and commits the result when anything changed. GitHub can start a
+scheduled run many hours late, so the runs are close together rather
+than aimed at kickoffs, which keeps Thursday, Saturday, Monday and
+holiday games covered. It can also be run by hand from the Actions tab.
+Another workflow typechecks and tests every push to `main` and every
+pull request.
 
 It picks the current season on its own. Pass `--season` to override it,
 and anything else you pass goes through to `buildSite.ts`:

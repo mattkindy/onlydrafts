@@ -52,9 +52,10 @@ describe("sleeperPriced", () => {
 });
 
 describe("calendarWeek", () => {
+  const scored = { homeScore: 21, awayScore: 17 };
   const games = [
-    game(2, "2026-09-20"), game(2, "2026-09-21"),
-    game(3, "2026-09-24"), game(3, "2026-09-27"),
+    game(2, "2026-09-20", scored), game(2, "2026-09-21", scored),
+    game(3, "2026-09-24", scored), game(3, "2026-09-27", scored),
     game(4, "2026-10-04"),
   ];
 
@@ -62,6 +63,30 @@ describe("calendarWeek", () => {
     expect(calendarWeek(games, 2026, new Date("2026-09-22T11:00:00Z"))).toBe(3);
     expect(calendarWeek(games, 2026, new Date("2026-09-27T12:00:00Z"))).toBe(3);
     expect(calendarWeek(games, 2026, new Date("2026-09-28T11:00:00Z"))).toBe(4);
+  });
+
+  it("reads the day on the east coast, where a gameday is written", () => {
+    // 8:30pm ET on the Sunday is already Monday in UTC, which would put
+    // the afternoon's finished game a day back and move on to week four
+    expect(calendarWeek(games, 2026, new Date("2026-09-28T00:30:00Z"))).toBe(3);
+  });
+
+  it("waits a day for the score of a game that has just ended", () => {
+    const monday = [
+      game(2, "2026-09-20", { homeScore: 24 }),
+      game(2, "2026-09-21"),
+      game(3, "2026-09-24"),
+    ];
+    // the small hours of Tuesday, with Monday night not yet scored
+    const tuesday = new Date("2026-09-22T07:00:00Z");
+
+    expect(calendarWeek(monday, 2026, tuesday)).toBe(2);
+    expect(calendarWeek(
+      [{ ...monday[1]!, homeScore: 17 }, monday[2]!], 2026, tuesday,
+    )).toBe(3);
+    // a schedule still without the score a day on has stopped updating
+    expect(calendarWeek(monday, 2026, new Date("2026-09-23T14:00:00Z")))
+      .toBe(3);
   });
 
   it("is the last week once every game is past", () => {

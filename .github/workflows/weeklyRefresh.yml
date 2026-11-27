@@ -1,21 +1,26 @@
 name: weekly refresh
 
-# Scheduled runs have started three and a half to over four hours late,
-# and GitHub delays runs set on the hour the most, so both times are set
-# a few minutes past. The morning run goes Tuesday through Saturday,
-# because waivers clear on Tuesday night or Wednesday and the practice
-# reports come out Wednesday to Friday, so a lineup set on any of those
-# days sees the news. 11:17 UTC is 07:17 in the summer and 06:17 in the
-# winter on the US east coast, after Monday night is scored. Monday is
-# left out because its week is still being played. Sunday 09:23 UTC is
-# 05:23 and 04:23, early enough that a run four and a half hours late
-# still finishes around 10:00 ET, three hours before the early games.
-# Actions cron is UTC and does not follow daylight saving, so both sit
-# well clear of the boundary.
+# Every three hours, every day. GitHub starts a scheduled run late, and
+# in November 2026 the lateness reached seven to ten hours: the run set
+# for 11:17 UTC on Thanksgiving started at 20:09, after the first game
+# had kicked off, and the next one was not due until Friday afternoon,
+# with all three games played by then. A single run a day cannot be
+# aimed at a kickoff when it may start anywhere in the afternoon, so the
+# runs are close enough together that the site is never more than a few
+# hours behind, whenever GitHub gets to them. That covers Thursday,
+# Saturday and Monday games, a holiday slate and an early London kickoff
+# without naming any of them, and the next run makes up for one that
+# failed three hours later rather than a day later.
+#
+# A run that finds nothing new commits nothing: the injury snapshot is
+# left alone when nobody's status moved, and the commit step below skips
+# an unchanged site. A run takes about seven minutes, which a public
+# repository is not billed for. Each run pulls Sleeper's player file
+# once, the same cadence the page itself keeps on game days. The minute
+# is off the hour because GitHub delays runs set on the hour the most.
 on:
   schedule:
-    - cron: "17 11 * * 2-6"
-    - cron: "23 9 * * 0"
+    - cron: "17 */3 * * *"
   workflow_dispatch:
     inputs:
       season:

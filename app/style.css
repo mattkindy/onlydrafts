@@ -1113,6 +1113,27 @@
   /* inside the hour it is worth reading first */
   .hlock.soon { color: var(--mark); font-weight: 700; }
   .hlock.soon b { color: var(--mark); }
+  /* each questionable starter played and sat, under a rule of its own */
+  .hif { position: relative; z-index: 1; margin-top: var(--s3);
+    padding-top: var(--s3); border-top: 1px solid var(--edge); }
+  .hiftitle { display: block; font-size: var(--t1); font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
+    margin-bottom: var(--s2); }
+  .hif ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+  .hif li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center; gap: var(--s3); }
+  .ifwho { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+  .ifwho b { font-size: var(--t2); font-weight: 700; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ifmeta { font-size: var(--t1); color: var(--muted); }
+  .iffig { display: flex; flex-direction: column; align-items: flex-end;
+    min-width: 3.2rem; }
+  .iffig i { font-style: normal; font-size: var(--t1); font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .iffig b { font-size: var(--t3); font-weight: 800;
+    font-variant-numeric: tabular-nums; color: var(--ink); }
+  .iffig b.up { color: var(--go); }
+  .iffig b.down { color: var(--no); }
   .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--go);
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--go) 60%, transparent);
     animation: pulse 1.6s ease-out infinite; }

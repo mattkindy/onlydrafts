@@ -172,6 +172,20 @@ export async function loadGames(): Promise<GameRow[]> {
     }));
 }
 
+const EASTERN_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+});
+
+/**
+ * The date on the east coast, as YYYY-MM-DD, which is how nflverse writes
+ * a game's `gameday`. A UTC date runs five hours ahead of it, so from
+ * about 7pm ET a Thursday night game already reads as yesterday's, before
+ * it has kicked off.
+ */
+export function easternDate(at: Date = new Date()): string {
+  return EASTERN_DATE.format(at);
+}
+
 /**
  * The season being played or drafted for. A new one starts in March, so
  * January and February still belong to the previous year's season.

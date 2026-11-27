@@ -8,7 +8,7 @@
  * its players, or a schedule file too stale to know which week is next.
  */
 
-import type { GameRow } from "../src/data/nflverse.js";
+import { easternDate, type GameRow } from "../src/data/nflverse.js";
 import type { Forecast } from "../src/data/weatherWeekly.js";
 import { HOME } from "../src/features/climate.js";
 
@@ -39,12 +39,20 @@ export function sleeperPriced(players: { adpBy?: AdpBy | null }[]): number {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const dayOf = (at: Date) => at.toISOString().slice(0, 10);
+/** a gameday is the date on the east coast, so today is too */
+const dayOf = (at: Date) => easternDate(at);
 
 /**
  * The week the calendar says is next: the first with a game today or
  * later. The build takes its week from which games have a score, so a
  * schedule file that stopped updating builds a week already played.
+ *
+ * A game from yesterday with no score yet still counts as to come. The
+ * score reaches the schedule file some hours after the game ends, and a
+ * Monday night game ends near midnight, so without the day's grace a run
+ * in the small hours of Tuesday would fail for the file being an ordinary
+ * few hours behind. One that stopped updating is still caught, a day
+ * later.
  */
 export function calendarWeek(
   games: GameRow[], season: number, today: Date,
@@ -55,7 +63,11 @@ export function calendarWeek(
     return 1;
   }
 
-  const ahead = ofSeason.filter((g) => g.gameday && g.gameday >= dayOf(today));
+  const now = dayOf(today);
+  const yesterday = dayOf(new Date(today.getTime() - DAY_MS));
+  const ahead = ofSeason.filter((g) => g.gameday && (
+    g.gameday >= now ||
+      (g.gameday >= yesterday && g.homeScore === undefined)));
 
   if (ahead.length === 0) {
     return Math.max(...ofSeason.map((g) => g.week));
